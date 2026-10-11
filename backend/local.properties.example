@@ -1,0 +1,40 @@
+# CHI CAN DIEN GIA TRI SAU DAU =. KHONG THEM NGOAC KEP HOAC ${...}.
+# Database hien tai: thors. Khong chay lai SQL, khong tao them bang.
+spring.datasource.url=jdbc:mysql://thors-thors.g.aivencloud.com:10006/thors?sslMode=REQUIRED&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true
+spring.datasource.username=avnadmin
+spring.datasource.password=
+
+# Email OTP. Dien SMTP that roi doi false thanh true.
+thors.delivery.email-enabled=false
+thors.delivery.email-from=
+spring.mail.host=smtp.gmail.com
+spring.mail.port=587
+spring.mail.username=
+spring.mail.password=
+spring.mail.properties.mail.smtp.auth=true
+spring.mail.properties.mail.smtp.starttls.enable=true
+spring.mail.properties.mail.smtp.starttls.required=true
+
+# SMS OTP: Twilio. Khong bat neu chua co thong tin hop le.
+thors.delivery.sms-enabled=false
+thors.delivery.sms-account-sid=
+thors.delivery.sms-auth-token=
+thors.delivery.sms-from=
+
+# Google OAuth Web application. Redirect URI phai trung Google Console.
+thors.google.enabled=false
+thors.google.client-id=
+thors.google.client-secret=
+thors.google.redirect-uri=http://localhost:3000/login/oauth2/code/google
+
+# De trong: backend tu sinh khoa ngau nhien moi lan chay.
+# Khi dung nhieu backend, dien cung mot khoa ngau nhien toi thieu 32 ky tu.
+thors.auth.otp-secret=
+
+# Chi bat lan dau neu database CHUA CO Admin. Khong tao du lieu mau.
+# Admin tao ra cung phai xac minh OTP truoc khi su dung.
+thors.bootstrap.enabled=false
+thors.bootstrap.name=THORS Admin
+thors.bootstrap.email=
+thors.bootstrap.phone=
+thors.bootstrap.password=

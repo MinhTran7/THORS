@@ -1,0 +1,11 @@
+.env
+backend/local.properties
+**/.env
+!**/.env.example
+frontend/node_modules/
+frontend/dist/
+backend/target/
+*.log
+.DS_Store
+.idea/
+.vscode/

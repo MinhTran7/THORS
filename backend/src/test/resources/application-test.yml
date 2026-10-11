@@ -1,0 +1,21 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:thors_test;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE;NON_KEYWORDS=USER
+    username: sa
+    password: ""
+    hikari:
+      connection-init-sql: "SET TIME ZONE 'UTC'"
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:test-schema.sql
+thors:
+  auth:
+    otp-secret: test-only-key-at-least-32-characters-long
+  bootstrap:
+    enabled: false
+  google:
+    enabled: false
+logging:
+  level:
+    root: WARN

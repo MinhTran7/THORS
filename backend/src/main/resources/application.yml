@@ -1,0 +1,64 @@
+server:
+  port: ${PORT:8080}
+  forward-headers-strategy: none
+  servlet:
+    session:
+      timeout: 30m
+      cookie:
+        http-only: true
+        secure: ${SESSION_COOKIE_SECURE:false}
+        same-site: lax
+spring:
+  config:
+    import: "optional:file:./backend/local.properties,optional:file:./local.properties"
+  application:
+    name: thors-backend
+  datasource:
+    url: ${THORS_DB_URL:jdbc:mysql://thors-thors.g.aivencloud.com:10006/thors?sslMode=REQUIRED&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true}
+    username: ${THORS_DB_USER:avnadmin}
+    password: ${THORS_DB_PASSWORD:}
+    hikari:
+      connection-init-sql: "SET time_zone = '+00:00'"
+      transaction-isolation: TRANSACTION_READ_COMMITTED
+  sql:
+    init:
+      mode: never
+  mail:
+    host: ${SMTP_HOST:localhost}
+    port: ${SMTP_PORT:1025}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
+    properties:
+      mail.smtp.auth: ${SMTP_AUTH:false}
+      mail.smtp.starttls.enable: ${SMTP_STARTTLS:false}
+      mail.smtp.starttls.required: ${SMTP_STARTTLS:false}
+      mail.smtp.connectiontimeout: 10000
+      mail.smtp.timeout: 10000
+      mail.smtp.writetimeout: 10000
+  jackson:
+    time-zone: UTC
+thors:
+  frontend-url: ${THORS_FRONTEND_URL:http://localhost:3000}
+  auth:
+    otp-secret: ${THORS_OTP_SECRET:}
+    otp-seconds: 300
+    resend-seconds: 60
+    max-sends-per-hour: 10
+  delivery:
+    email-enabled: ${EMAIL_ENABLED:false}
+    email-from: ${EMAIL_FROM:}
+    sms-enabled: ${SMS_ENABLED:false}
+    sms-account-sid: ${TWILIO_ACCOUNT_SID:}
+    sms-auth-token: ${TWILIO_AUTH_TOKEN:}
+    sms-from: ${TWILIO_FROM:}
+  google:
+    enabled: ${GOOGLE_ENABLED:false}
+    client-id: ${GOOGLE_CLIENT_ID:}
+    client-secret: ${GOOGLE_CLIENT_SECRET:}
+    redirect-uri: ${GOOGLE_REDIRECT_URI:http://localhost:3000/login/oauth2/code/google}
+  bootstrap:
+    enabled: ${BOOTSTRAP_ADMIN_ENABLED:false}
+    name: ${BOOTSTRAP_ADMIN_NAME:THORS Admin}
+    email: ${BOOTSTRAP_ADMIN_EMAIL:}
+    phone: ${BOOTSTRAP_ADMIN_PHONE:}
+    password: ${BOOTSTRAP_ADMIN_PASSWORD:}
