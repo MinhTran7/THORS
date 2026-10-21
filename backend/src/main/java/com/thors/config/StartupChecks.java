@@ -18,11 +18,11 @@ public class StartupChecks implements ApplicationRunner {
   private final JdbcTemplate db;
 
   public StartupChecks(
-      Settings settings,
-      AccountRepository users,
-      PasswordEncoder passwords,
-      TransactionTemplate tx,
-      JdbcTemplate db) {
+          Settings settings,
+          AccountRepository users,
+          PasswordEncoder passwords,
+          TransactionTemplate tx,
+          JdbcTemplate db) {
     this.settings = settings;
     this.users = users;
     this.passwords = passwords;
@@ -32,13 +32,11 @@ public class StartupChecks implements ApplicationRunner {
 
   public void run(ApplicationArguments args) {
     if (settings.google().enabled()
-        && (settings.google().clientId().isBlank() || settings.google().clientSecret().isBlank()))
+            && (settings.google().clientId().isBlank() || settings.google().clientSecret().isBlank()))
       throw new IllegalStateException("Set Google OAuth credentials before enabling Google login.");
     try {
-      db.queryForList("SELECT user_id,role_id,full_name,username,password_hash,email,phone,account_status,"
-          + "email_verified_at,phone_verified_at,verification_code_hash,verification_purpose,"
-          + "verification_expires_at,verification_sent_at,verification_used_at,verification_attempt_count"
-          + " FROM `user` WHERE 1=0");
+      db.queryForList("SELECT user_id,role_id,full_name,password_hash,email,phone,address,"
+              + "account_status,created_at,avatar_url,updated_at FROM `user` WHERE 1=0");
       db.queryForList("SELECT log_id,user_id,action_type,entity_affected,entity_id,old_value,new_value,actor_type,performed_at FROM audit_log WHERE 1=0");
       db.queryForList("SELECT role_id,role_name FROM `role` WHERE 1=0");
     } catch (org.springframework.dao.DataAccessException e) {
@@ -46,23 +44,23 @@ public class StartupChecks implements ApplicationRunner {
     }
     if (settings.bootstrap().enabled())
       tx.executeWithoutResult(
-          s -> {
-            users.lockIdentityRegistry();
-            db.queryForList("SELECT role_id FROM `role` WHERE role_name='ADMIN' FOR UPDATE");
-            if (users.countAdmin() == 0) {
-              var b = settings.bootstrap();
-              ContactNormalizer.password(b.password());
-              users.create(
-                  "ADMIN",
-                  ContactNormalizer.name(b.name()),
-                  passwords.encode(b.password()),
-                  ContactNormalizer.email(b.email()),
-                  ContactNormalizer.phone(b.phone()),
-                  "PENDING_VERIFICATION",
-                  null,
-                  null,
-                  false);
-            }
-          });
+              s -> {
+                users.lockIdentityRegistry();
+                db.queryForList("SELECT role_id FROM `role` WHERE role_name='ADMIN' FOR UPDATE");
+                if (users.countAdmin() == 0) {
+                  var b = settings.bootstrap();
+                  ContactNormalizer.password(b.password());
+                  users.create(
+                          "ADMIN",
+                          ContactNormalizer.name(b.name()),
+                          passwords.encode(b.password()),
+                          ContactNormalizer.email(b.email()),
+                          ContactNormalizer.phone(b.phone()),
+                          "ACTIVE",
+                          null,
+                          null,
+                          false);
+                }
+              });
   }
 }

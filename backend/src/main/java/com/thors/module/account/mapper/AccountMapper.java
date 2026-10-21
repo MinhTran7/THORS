@@ -8,15 +8,16 @@ public final class AccountMapper {
 
   public static AccountView view(Account a) {
     return new AccountView(
-        a.id(),
-        a.role(),
-        a.fullName(),
-        a.email(),
-        a.phone(),
-        a.status(),
-        a.emailVerifiedAt() != null,
-        a.phoneVerifiedAt() != null,
-        a.googleSubject() != null,
-        !a.passwordHash().startsWith("!"));
+            a.id(),
+            a.role(),
+            a.fullName(),
+            a.email(),
+            a.phone(),
+            a.status(),
+            a.verified("EMAIL"),
+            a.verified("SMS"),
+            a.googleSubject() != null,
+            !a.passwordHash().startsWith("!"),
+            a.avatarUrl());
   }
 }

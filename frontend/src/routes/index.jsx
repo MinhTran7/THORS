@@ -7,8 +7,14 @@ import ForgotPage from 'features/auth/pages/ForgotPage';
 import VerifyPage from 'features/auth/pages/VerifyPage';
 import ResetPage from 'features/auth/pages/ResetPage';
 import GoogleCallback from 'features/auth/pages/GoogleCallback';
-import ProfilePage from 'features/account/ProfilePage';
-import AccountsPage from 'features/account/AccountsPage';
+import ProfilePage from 'features/account/pages/ProfilePage';
+import UpdateProfilePage from 'features/account/pages/UpdateProfilePage';
+import ChangePasswordPage from 'features/account/pages/ChangePasswordPage';
+import StaffListPage from 'features/account/pages/StaffListPage';
+import StaffDetailPage from 'features/account/pages/StaffDetailPage';
+import StaffFormPage from 'features/account/pages/StaffFormPage';
+import AccountListPage from 'features/account/pages/AccountListPage';
+import SystemLogPage from 'features/account/pages/SystemLogPage';
 import WorkspacePage from 'features/account/WorkspacePage';
 import { AuthShell } from 'features/auth/components/AuthForm';
 import { Button, Typography } from '@mui/material';
@@ -29,7 +35,24 @@ export default createBrowserRouter([
         children: [
           { path: '/workspace', element: <WorkspacePage /> },
           { path: '/profile', element: <ProfilePage /> },
-          { element: <RequireAuth roles={['ADMIN', 'OWNER']} />, children: [{ path: '/accounts', element: <AccountsPage /> }] }
+          { path: '/profile/edit', element: <UpdateProfilePage /> },
+          { path: '/profile/password', element: <ChangePasswordPage /> },
+          {
+            element: <RequireAuth roles={['ADMIN']} />,
+            children: [
+              { path: '/accounts', element: <AccountListPage /> },
+              { path: '/system-log', element: <SystemLogPage /> }
+            ]
+          },
+          {
+            element: <RequireAuth roles={['OWNER']} />,
+            children: [
+              { path: '/staff', element: <StaffListPage /> },
+              { path: '/staff/new', element: <StaffFormPage /> },
+              { path: '/staff/:id', element: <StaffDetailPage /> },
+              { path: '/staff/:id/edit', element: <StaffFormPage /> }
+            ]
+          }
         ]
       }
     ]
