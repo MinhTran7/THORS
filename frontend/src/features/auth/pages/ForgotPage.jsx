@@ -2,16 +2,14 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Alert, Typography } from '@mui/material';
 import * as Yup from 'yup';
 import { AuthShell, FieldsForm, Field } from '../components/AuthForm';
-import ChannelPicker, { useCapabilities } from '../components/ChannelPicker';
 import { identity } from '../validation';
 import { post } from 'services/http';
 export default function ForgotPage() {
   const navigate = useNavigate();
-  const capabilities = useCapabilities();
   return (
-    <AuthShell title="Quên mật khẩu" subtitle="Nhận OTP qua email hoặc số điện thoại đã xác minh.">
+    <AuthShell title="Quên mật khẩu" subtitle="Nhận OTP qua email đã xác minh.">
       <FieldsForm
-        initialValues={{ identifier: '', channel: 'EMAIL' }}
+        initialValues={{ identifier: '' }}
         schema={Yup.object({ identifier: identity })}
         submitLabel="Gửi mã xác minh"
         onSubmit={async (v) => {
@@ -21,13 +19,12 @@ export default function ForgotPage() {
       >
         {(form) => (
           <>
-            <Field form={form} name="identifier" label="Email hoặc số điện thoại" autoComplete="username" />
-            <ChannelPicker form={form} capabilities={capabilities} />
+            <Field form={form} name="identifier" label="Email" autoComplete="username" />
           </>
         )}
       </FieldsForm>
       <Alert severity="info">
-        Owner có thể liên hệ Admin nếu không còn truy cập được email hoặc điện thoại. Admin liên hệ quản trị nội bộ để khôi phục.
+        Owner có thể liên hệ Admin nếu không còn truy cập được email. Admin liên hệ quản trị nội bộ để khôi phục.
       </Alert>
       <Typography component={Link} to="/login" color="primary">
         Quay lại đăng nhập

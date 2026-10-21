@@ -21,7 +21,7 @@ import * as Yup from 'yup';
 import MainCard from 'components/MainCard';
 import { useAuth } from 'features/auth/AuthProvider';
 import { FieldsForm, Field } from 'features/auth/components/AuthForm';
-import { registerSchema, password, confirmation } from 'features/auth/validation';
+import { password, confirmation } from 'features/auth/validation';
 import { api, post } from 'services/http';
 const roles = { ADMIN: 'Admin', OWNER: 'Chủ cửa hàng', STAFF: 'Nhân viên', FAMILY_MEMBER: 'Thành viên gia đình', CUSTOMER: 'Khách hàng' };
 const statuses = { ACTIVE: 'Đang hoạt động', PENDING_VERIFICATION: 'Chờ xác minh', LOCKED: 'Đã khóa', DISABLED: 'Đã vô hiệu hóa' };
@@ -115,7 +115,13 @@ export default function AccountsPage() {
           {dialog?.mode === 'create' ? (
             <FieldsForm
               initialValues={{ fullName: '', email: '', phone: '', role: allowedRoles[0], password: '', confirmPassword: '' }}
-              schema={registerSchema.omit(['channel'])}
+              schema={Yup.object({
+                fullName: Yup.string().trim().required('Nhập họ tên.').max(100),
+                email: Yup.string().trim().email('Email không hợp lệ.').required('Nhập email.'),
+                phone: Yup.string().nullable(),
+                password,
+                confirmPassword: confirmation
+              })}
               submitLabel="Tạo tài khoản"
               onSubmit={async (v) => {
                 await post('/accounts', v);

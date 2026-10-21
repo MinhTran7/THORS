@@ -32,22 +32,22 @@ public class AccountService {
   public Account create(Account actor, Create r) {
     manager(actor);
     boolean allowed =
-        "ADMIN".equals(actor.role())
-            ? "OWNER".equals(r.role())
-            : List.of("STAFF", "FAMILY_MEMBER").contains(r.role());
+            "ADMIN".equals(actor.role())
+                    ? "OWNER".equals(r.role())
+                    : List.of("STAFF", "FAMILY_MEMBER").contains(r.role());
     if (!allowed) throw new ApiException(403, "ROLE", "Không được tạo vai trò này.");
     AuthService.confirm(r.password(), r.confirmPassword());
     var a =
-        users.create(
-            r.role(),
-            ContactNormalizer.name(r.fullName()),
-            passwords.encode(r.password()),
-            ContactNormalizer.email(r.email()),
-            ContactNormalizer.phone(r.phone()),
-            "PENDING_VERIFICATION",
-            actor.id(),
-            null,
-            false);
+            users.create(
+                    r.role(),
+                    ContactNormalizer.name(r.fullName()),
+                    passwords.encode(r.password()),
+                    ContactNormalizer.email(r.email()),
+                    ContactNormalizer.phoneInput(r.phone()),
+                    "PENDING_VERIFICATION",
+                    actor.id(),
+                    null,
+                    false);
     return a;
   }
 
@@ -58,14 +58,13 @@ public class AccountService {
     if (r.status() != null && !r.status().equals(target.status())) {
       if (id == actor.id())
         throw new ApiException(
-            400, "SELF_LOCK", "Không thể thay trạng thái tài khoản của chính mình.");
+                400, "SELF_LOCK", "Không thể thay trạng thái tài khoản của chính mình.");
       if (!List.of("ACTIVE", "LOCKED", "DISABLED").contains(r.status()))
         throw new ApiException(400, "STATUS", "Trạng thái không hợp lệ.");
       if ("ACTIVE".equals(r.status())
-          && target.emailVerifiedAt() == null
-          && target.phoneVerifiedAt() == null)
+              && target.emailVerifiedAt() == null)
         throw new ApiException(
-            400, "UNVERIFIED", "Tài khoản cần xác minh OTP trước khi kích hoạt.");
+                400, "UNVERIFIED", "Tài khoản cần xác minh OTP trước khi kích hoạt.");
       users.status(id, r.status());
       codes.invalidateAll(id);
     }
@@ -77,17 +76,17 @@ public class AccountService {
   public void resetByManager(Account actor, int id, Password r) {
     var target = target(actor, id);
     boolean allowed =
-        "ADMIN".equals(actor.role())
-            ? "OWNER".equals(target.role())
-            : List.of("STAFF", "FAMILY_MEMBER").contains(target.role());
+            "ADMIN".equals(actor.role())
+                    ? "OWNER".equals(target.role())
+                    : List.of("STAFF", "FAMILY_MEMBER").contains(target.role());
     if (!allowed)
       throw new ApiException(
-          403, "RESET_ROLE", "Vai trò này cần khôi phục mật khẩu theo luồng riêng.");
+              403, "RESET_ROLE", "Vai trò này cần khôi phục mật khẩu theo luồng riêng.");
     AuthService.confirm(r.password(), r.confirmPassword());
     users.password(id, passwords.encode(r.password()), true);
     codes.invalidateAll(id);
     users.audit(
-        actor.id(), "PASSWORD_RESET_ADMIN", id, "Initial password replaced; verification required");
+            actor.id(), "PASSWORD_RESET_ADMIN", id, "Initial password replaced; verification required");
   }
 
   @Transactional
@@ -103,10 +102,10 @@ public class AccountService {
     var a = users.lock(actor.id());
     if (a.phone() != null)
       throw new ApiException(400, "PHONE_EXISTS", "Tài khoản đã có số điện thoại.");
-    String p = ContactNormalizer.phone(input);
+    String p = ContactNormalizer.phoneInput(input);
     if (p == null) throw new ApiException(400, "PHONE", "Nhập số điện thoại.");
     users.addPhone(a.id(), p);
-    users.audit(a.id(), "PHONE_ADDED", a.id(), "Unverified phone added");
+    users.audit(a.id(), "PHONE_ADDED", a.id(), "Contact phone added");
     return users.byId(a.id()).orElseThrow();
   }
 
@@ -114,7 +113,7 @@ public class AccountService {
     manager(actor);
     var a = users.lock(id);
     if ("OWNER".equals(actor.role())
-        && (!java.util.Objects.equals(a.createdBy(), actor.id())
+            && (!java.util.Objects.equals(a.createdBy(), actor.id())
             || !List.of("STAFF", "FAMILY_MEMBER").contains(a.role())))
       throw new ApiException(403, "OWNERSHIP", "Không được quản lý tài khoản này.");
     return a;
