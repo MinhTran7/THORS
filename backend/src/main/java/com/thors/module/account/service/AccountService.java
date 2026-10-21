@@ -67,7 +67,7 @@ public class AccountService {
     var a = users.lock(actor.id());
     if (a.phone() != null)
       throw new ApiException(400, "PHONE_EXISTS", "Tài khoản đã có số điện thoại.");
-    String p = ContactNormalizer.phone(input);
+    String p = ContactNormalizer.phoneInput(input);
     if (p == null) throw new ApiException(400, "PHONE", "Nhập số điện thoại.");
     users.addPhone(a.id(), p);
     users.audit(a.id(), "PHONE_ADDED", a.id(), "Phone added");

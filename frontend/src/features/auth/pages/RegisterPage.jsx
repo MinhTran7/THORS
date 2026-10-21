@@ -1,16 +1,18 @@
+import ShopAuthShell from '../components/ShopAuthShell';
+import { GoogleOutlined, FacebookFilled } from '@ant-design/icons';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button, Divider, Typography } from '@mui/material';
-import { AuthShell, FieldsForm, Field } from '../components/AuthForm';
-import ChannelPicker, { useCapabilities } from '../components/ChannelPicker';
+import { FieldsForm, Field } from '../components/AuthForm';
+import { useCapabilities } from '../components/ChannelPicker';
 import { registerSchema } from '../validation';
 import { post } from 'services/http';
 export default function RegisterPage() {
   const navigate = useNavigate();
   const capabilities = useCapabilities();
   return (
-    <AuthShell title="Tạo tài khoản" subtitle="Đăng ký tài khoản khách hàng để sử dụng THORS.">
+    <ShopAuthShell variant="register" title="Tạo tài khoản" subtitle="Chào bạn! Cùng bắt đầu hành trình với THORS.">
       <FieldsForm
-        initialValues={{ fullName: '', email: '', phone: '', password: '', confirmPassword: '', channel: 'EMAIL' }}
+        initialValues={{ fullName: '', identifier: '', password: '', confirmPassword: '' }}
         schema={registerSchema}
         submitLabel="Đăng ký và nhận OTP"
         onSubmit={async (v) => {
@@ -21,26 +23,40 @@ export default function RegisterPage() {
         {(form) => (
           <>
             <Field form={form} name="fullName" label="Họ tên" autoComplete="name" />
-            <Field form={form} name="email" label="Email" type="email" autoComplete="email" />
-            <Field form={form} name="phone" label="Số điện thoại" autoComplete="tel" />
+            <Field form={form} name="identifier" label="Email" autoComplete="username" />
             <Field form={form} name="password" label="Mật khẩu" type="password" autoComplete="new-password" />
+            <p className="shop-auth__signup-note">Mật khẩu từ 10 ký tự. Bạn sẽ nhận mã OTP để xác minh email.</p>
             <Field form={form} name="confirmPassword" label="Xác nhận mật khẩu" type="password" autoComplete="new-password" />
-            <ChannelPicker form={form} capabilities={capabilities} />
           </>
         )}
       </FieldsForm>
-      <Divider>hoặc</Divider>
-      <Button
-        variant="outlined"
-        size="large"
-        disabled={!capabilities?.google}
-        onClick={() => window.location.assign('/oauth2/authorization/google')}
-      >
-        Đăng ký bằng Google
-      </Button>
+      <Divider>hoặc đăng ký với</Divider>
+      <div className="shop-auth__social-row">
+        <Button
+          variant="outlined"
+          size="large"
+          startIcon={<GoogleOutlined style={{ color: '#4285f4' }} />}
+          disabled={!capabilities?.google}
+          onClick={() => window.location.assign('/oauth2/authorization/google')}
+        >
+          Google
+        </Button>
+        <Button
+          variant="outlined"
+          size="large"
+          startIcon={<FacebookFilled style={{ color: '#1877f2' }} />}
+          disabled={!capabilities?.facebook}
+          onClick={() => {
+            sessionStorage.setItem('thorsReturnTo', '/');
+            window.location.assign('/oauth2/authorization/facebook');
+          }}
+        >
+          Facebook
+        </Button>
+      </div>
       <Typography component={Link} to="/login" color="primary" sx={{ textAlign: 'center' }}>
         Đã có tài khoản? Đăng nhập
       </Typography>
-    </AuthShell>
+    </ShopAuthShell>
   );
 }

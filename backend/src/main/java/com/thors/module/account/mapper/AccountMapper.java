@@ -14,8 +14,8 @@ public final class AccountMapper {
             a.email(),
             a.phone(),
             a.status(),
-            a.verified("EMAIL"),
-            a.verified("SMS"),
+            a.emailVerifiedAt() != null,
+            false, // SMS verification is no longer supported; preserve API shape.
             a.googleSubject() != null,
             !a.passwordHash().startsWith("!"),
             a.avatarUrl());

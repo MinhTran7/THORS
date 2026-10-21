@@ -6,6 +6,7 @@ import RegisterPage from 'features/auth/pages/RegisterPage';
 import ForgotPage from 'features/auth/pages/ForgotPage';
 import VerifyPage from 'features/auth/pages/VerifyPage';
 import ResetPage from 'features/auth/pages/ResetPage';
+import FacebookComplete from 'features/auth/pages/FacebookComplete';
 import GoogleCallback from 'features/auth/pages/GoogleCallback';
 import ProfilePage from 'features/account/pages/ProfilePage';
 import UpdateProfilePage from 'features/account/pages/UpdateProfilePage';
@@ -26,6 +27,8 @@ export default createBrowserRouter([
   { path: '/forgot-password', element: <ForgotPage /> },
   { path: '/auth/verify', element: <VerifyPage /> },
   { path: '/auth/reset-password', element: <ResetPage /> },
+  { path: '/auth/facebook/complete', element: <FacebookComplete /> },
+  { path: '/auth/facebook/callback', element: <GoogleCallback provider="facebook" /> },
   { path: '/auth/google/callback', element: <GoogleCallback /> },
   {
     element: <RequireAuth />,

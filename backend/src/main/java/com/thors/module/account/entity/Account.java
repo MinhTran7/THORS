@@ -14,6 +14,7 @@ public record Account(
         String avatarUrl,
         String status,
         LocalDateTime createdAt,
+        LocalDateTime emailVerifiedAt,
         String googleSubject,
         long authVersion,
         Integer createdBy) {
@@ -30,7 +31,6 @@ public record Account(
    * còn PENDING_VERIFICATION) được coi là đã xác minh; kênh SMS còn cần có số điện thoại.
    */
   public boolean verified(String channel) {
-    if (pending()) return false;
-    return "EMAIL".equals(channel) ? email != null : phone != null;
+    return "EMAIL".equals(channel) && emailVerifiedAt != null;
   }
 }

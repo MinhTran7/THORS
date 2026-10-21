@@ -7,7 +7,7 @@ public class AccountRequests {
           @NotBlank String role,
           @NotBlank String fullName,
           @NotBlank @Email String email,
-          @NotBlank String phone,
+          String phone,
           @NotBlank String password,
           @NotBlank String confirmPassword) {}
 
