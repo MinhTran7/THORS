@@ -10,6 +10,7 @@ import com.thors.common.ApiException;
 import com.thors.integration.otp.OtpSender;
 import com.thors.module.account.entity.Account;
 import com.thors.module.account.repository.AccountRepository;
+import com.thors.module.account.service.AccountService;
 import com.thors.module.auth.entity.OtpChallenge;
 import com.thors.module.auth.service.GoogleAccountService;
 import com.thors.module.auth.service.OtpService;
@@ -624,12 +625,15 @@ class AuthIntegrationTest {
     mvc.perform(get("/api/accounts").session(session)).andExpect(status().isUnauthorized());
   }
 
+  @Autowired
+  AccountService accounts;
   @Test
   void managerResetRequiresActivationAndInvalidatesOldSession() throws Exception {
     var admin = fixture("ADMIN", "admin@example.com", null, null);
     var owner = fixture("OWNER", "owner@example.com", null, admin.id());
     var previous = login(owner);
     var manager = login(admin);
+    accounts.requestOwnerReset(owner.email());
     assertEquals(200, request("/api/accounts/" + owner.id() + "/reset-password", Map.of("password", "New-password-123", "confirmPassword", "New-password-123"), manager).getResponse().getStatus());
     assertTrue(users.byId(owner.id()).orElseThrow().pending());
     mvc.perform(get("/api/auth/me").session(previous)).andExpect(status().isUnauthorized());
