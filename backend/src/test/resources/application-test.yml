@@ -16,6 +16,10 @@ thors:
     enabled: false
   google:
     enabled: false
+cloudinary:
+  cloud-name: test-cloud
+  api-key: test-key
+  api-secret: test-secret
 logging:
   level:
     root: WARN
