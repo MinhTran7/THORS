@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Alert, Button, Chip, Stack, Typography, Divider } from '@mui/material';
 import * as Yup from 'yup';
@@ -13,6 +13,10 @@ export default function ProfilePage() {
   const capabilities = useCapabilities();
   const navigate = useNavigate();
   const [error, setError] = useState('');
+  const [facebookLinked, setFacebookLinked] = useState(null);
+  useEffect(() => {
+    api('/auth/facebook/status').then((r) => setFacebookLinked(r.linked)).catch((e) => setError(e.message));
+  }, []);
   async function action(fn) {
     setError('');
     try {
@@ -44,32 +48,27 @@ export default function ProfilePage() {
             {(form) => <Field form={form} name="fullName" label="Họ tên" />}
           </FieldsForm>
           <Divider />
-          <Stack direction="row" sx={{ alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
-            <Typography>{account.email}</Typography>
-            <Chip
-              size="small"
-              color={account.emailVerified ? 'success' : 'warning'}
-              label={account.emailVerified ? 'Đã xác minh' : 'Chưa xác minh'}
-            />
-            {!account.emailVerified && (
-              <Button disabled={!capabilities?.email} onClick={() => verify('EMAIL')}>
-                Xác minh email
-              </Button>
-            )}
-          </Stack>
+          {account.email ? (
+            <Stack direction="row" sx={{ alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
+              <Typography>{account.email}</Typography>
+              <Chip
+                size="small"
+                color={account.emailVerified ? 'success' : 'warning'}
+                label={account.emailVerified ? 'Đã xác minh' : 'Chưa xác minh'}
+              />
+              {!account.emailVerified && (
+                <Button disabled={!capabilities?.email} onClick={() => verify('EMAIL')}>
+                  Xác minh email
+                </Button>
+              )}
+            </Stack>
+          ) : (
+            <Typography>Email: Chưa cung cấp</Typography>
+          )}
           {account.phone ? (
             <Stack direction="row" sx={{ alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
               <Typography>{account.phone}</Typography>
-              <Chip
-                size="small"
-                color={account.phoneVerified ? 'success' : 'warning'}
-                label={account.phoneVerified ? 'Đã xác minh' : 'Chưa xác minh'}
-              />
-              {!account.phoneVerified && (
-                <Button disabled={!capabilities?.sms} onClick={() => verify('SMS')}>
-                  Xác minh điện thoại
-                </Button>
-              )}
+              <Chip size="small" label="Số liên hệ" />
             </Stack>
           ) : (
             <FieldsForm
@@ -79,7 +78,7 @@ export default function ProfilePage() {
               onSubmit={async (v) => {
                 await post('/accounts/profile/phone', v);
                 await reload();
-                return 'Đã bổ sung số điện thoại. Hãy xác minh bằng SMS.';
+                return 'Đã bổ sung số điện thoại liên hệ.';
               }}
             >
               {(form) => <Field form={form} name="phone" label="Số điện thoại" autoComplete="tel" />}
@@ -92,12 +91,14 @@ export default function ProfilePage() {
           <Typography>
             {account.googleLinked
               ? 'Đã liên kết Google. Bạn có thể đăng nhập trực tiếp bằng Google.'
-              : 'Liên kết tài khoản Google có cùng email để đăng nhập nhanh.'}
+              : account.email
+                ? 'Liên kết tài khoản Google có cùng email để đăng nhập nhanh.'
+                : 'Tài khoản hiện chỉ có số điện thoại, chưa thể liên kết Google.'}
           </Typography>
           {!account.googleLinked && (
             <Button
               variant="outlined"
-              disabled={!capabilities?.google}
+              disabled={!capabilities?.google || !account.email}
               onClick={() =>
                 action(async () => {
                   const r = await post('/auth/google/link');
@@ -109,6 +110,18 @@ export default function ProfilePage() {
               Liên kết Google
             </Button>
           )}
+        </Stack>
+      </MainCard>
+      <MainCard title="Liên kết Facebook">
+        <Stack spacing={2}>
+          <Typography>{facebookLinked ? 'Đã liên kết Facebook. Bạn có thể đăng nhập trực tiếp bằng Facebook.'
+            : 'Liên kết Facebook và xác minh email THORS bằng OTP để đăng nhập nhanh.'}</Typography>
+          {facebookLinked === false && <Button variant="outlined" disabled={!capabilities?.facebook}
+            onClick={() => action(async () => {
+              const r = await post('/auth/facebook/link');
+              sessionStorage.setItem('thorsReturnTo', '/profile');
+              window.location.assign(r.url);
+            })}>Liên kết Facebook</Button>}
         </Stack>
       </MainCard>
       {account.passwordEnabled ? (
@@ -140,7 +153,7 @@ export default function ProfilePage() {
       ) : (
         <MainCard title="Mật khẩu THORS">
           <Typography>
-            Tài khoản đang dùng Google. Bạn có thể dùng chức năng quên mật khẩu qua email đã xác minh để thiết lập mật khẩu THORS.
+            Tài khoản đang dùng đăng nhập mạng xã hội. Bạn có thể dùng chức năng quên mật khẩu qua email đã xác minh để thiết lập mật khẩu THORS.
           </Typography>
         </MainCard>
       )}

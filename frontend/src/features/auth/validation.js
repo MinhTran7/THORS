@@ -1,21 +1,34 @@
 import * as Yup from 'yup';
+
 export const password = Yup.string()
   .required('Nhập mật khẩu.')
   .min(10, 'Mật khẩu cần ít nhất 10 ký tự.')
   .max(64, 'Mật khẩu tối đa 64 ký tự.')
-  .test('bytes', 'Mật khẩu tối đa 72 byte.', (v) => !v || new TextEncoder().encode(v).length <= 72);
+  .test(
+    'bytes',
+    'Mật khẩu tối đa 72 byte.',
+    (v) => !v || new TextEncoder().encode(v).length <= 72
+  );
+
 export const confirmation = Yup.string()
   .required('Xác nhận mật khẩu.')
   .oneOf([Yup.ref('password')], 'Mật khẩu xác nhận không khớp.');
-export const identity = Yup.string().trim().required('Nhập email hoặc số điện thoại.');
+
+export const identity = Yup.string()
+  .trim()
+  .email('Email không hợp lệ.')
+  .required('Nhập email.');
+
 export const registerSchema = Yup.object({
-  fullName: Yup.string().trim().required('Nhập họ tên.').max(100),
-  email: Yup.string().email('Email không hợp lệ.').required('Nhập email.').max(100),
-  phone: Yup.string().required('Nhập số điện thoại.'),
+  fullName: Yup.string()
+    .trim()
+    .required('Nhập họ tên.')
+    .max(100, 'Họ tên tối đa 100 ký tự.'),
+  identifier: identity,
   password,
-  confirmPassword: confirmation,
-  channel: Yup.string().oneOf(['EMAIL', 'SMS']).required()
+  confirmPassword: confirmation
 });
+
 export const safeReturn = (path) =>
   typeof path === 'string' &&
   path.startsWith('/') &&

@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:h2:mem:thors_test;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE;NON_KEYWORDS=USER
+    url: jdbc:h2:mem:thors_test;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE;NON_KEYWORDS=USER;LOCK_TIMEOUT=15000
     username: sa
     password: ""
     hikari:
