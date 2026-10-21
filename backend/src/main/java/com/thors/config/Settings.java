@@ -4,19 +4,21 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties("thors")
 public record Settings(
-    String frontendUrl, Auth auth, Delivery delivery, Google google, Bootstrap bootstrap) {
+        String frontendUrl, Auth auth, Delivery delivery, Google google, Bootstrap bootstrap, Facebook facebook) {
   public record Auth(String otpSecret, int otpSeconds, int resendSeconds, int maxSendsPerHour) {}
 
   public record Delivery(
-      boolean emailEnabled,
-      String emailFrom,
-      boolean smsEnabled,
-      String smsAccountSid,
-      String smsAuthToken,
-      String smsFrom) {}
+          boolean emailEnabled,
+          String emailFrom,
+          boolean smsEnabled,
+          String smsAccountSid,
+          String smsAuthToken,
+          String smsFrom) {}
 
   public record Google(boolean enabled, String clientId, String clientSecret, String redirectUri) {}
 
+  public record Facebook(boolean enabled, String clientId, String clientSecret, String redirectUri, String apiVersion) {}
+
   public record Bootstrap(
-      boolean enabled, String name, String email, String phone, String password) {}
+          boolean enabled, String name, String email, String phone, String password) {}
 }

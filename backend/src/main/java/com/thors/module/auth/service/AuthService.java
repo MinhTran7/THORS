@@ -14,43 +14,55 @@ public class AuthService {
   private final AccountRepository users;
   private final PasswordEncoder passwords;
   private final OtpRepository codes;
+  private final OtpService otp;
   private final String dummy;
 
-  public AuthService(AccountRepository users, PasswordEncoder passwords, OtpRepository codes) {
+  public AuthService(AccountRepository users, PasswordEncoder passwords, OtpRepository codes, OtpService otp) {
     this.users = users;
     this.passwords = passwords;
     this.codes = codes;
+    this.otp = otp;
     this.dummy = passwords.encode(java.util.UUID.randomUUID().toString());
   }
 
   @Transactional
-  public Account register(Register r) {
+  public com.thors.module.auth.entity.OtpChallenge register(Register r) {
     confirm(r.password(), r.confirmPassword());
-    String email = ContactNormalizer.email(r.email());
-    String phone = ContactNormalizer.phone(r.phone());
-    if (phone == null) throw new ApiException(400, "PHONE", "Nhập số điện thoại.");
-    return users.create(
-        "CUSTOMER",
-        ContactNormalizer.name(r.fullName()),
-        passwords.encode(r.password()),
-        email,
-        phone,
-        "PENDING_VERIFICATION",
-        null,
-        null,
-        false);
+    String email = ContactNormalizer.email(r.identifier());
+    otp.requireAvailable("EMAIL");
+    var account = users.create(
+            "CUSTOMER",
+            ContactNormalizer.name(r.fullName()),
+            passwords.encode(r.password()),
+            email,
+            null,
+            "PENDING_VERIFICATION",
+            null,
+            null,
+            false);
+    // Account, audit and OTP writes roll back together if delivery fails.
+    return otp.issue(account.id(), "REGISTER", "EMAIL", false);
   }
 
+  @Transactional(noRollbackFor = ApiException.class)
   public Account authenticate(String identifier, String password) {
-    var a = users.byIdentifier(ContactNormalizer.identifier(identifier));
+    var a = users.byIdentifier(ContactNormalizer.email(identifier));
+    if (a.isPresent()) a = java.util.Optional.of(users.lock(a.get().id()));
     String hash = a.map(Account::passwordHash).orElse(dummy);
     boolean correct =
-        passwords.matches(password == null ? "" : password, hash.startsWith("!") ? dummy : hash);
-    if (a.isEmpty() || hash.startsWith("!") || !correct)
-      throw new ApiException(401, "CREDENTIALS", "Email/số điện thoại hoặc mật khẩu không đúng.");
+            passwords.matches(password == null ? "" : password, hash.startsWith("!") ? dummy : hash);
+    boolean coolingDown = a.isPresent() && codes.loginCoolingDown(a.get().id());
+    if (a.isEmpty() || hash.startsWith("!") || !correct) {
+      if (a.isPresent() && !coolingDown) codes.loginFailure(a.get().id());
+      // Identical error for missing accounts, incorrect passwords and blocked guessing.
+      throw new ApiException(401, "CREDENTIALS", "Email hoặc mật khẩu không đúng. Nếu đã sai 5 lần liên tiếp, vui lòng đợi 15 phút.");
+    }
+    if (coolingDown)
+      throw new ApiException(429, "LOGIN_COOLDOWN", "Đã nhập sai mật khẩu 5 lần. Vui lòng đợi hết 15 phút kể từ lần sai thứ 5.");
     var account = a.get();
     if (!account.active() && !account.pending())
       throw new ApiException(403, "ACCOUNT_BLOCKED", "Tài khoản đã bị khóa hoặc vô hiệu hóa.");
+    codes.loginSuccess(account.id());
     return account;
   }
 
@@ -70,9 +82,9 @@ public class AuthService {
     confirm(request.password(), request.confirmPassword());
     var a = users.lock(actor.id());
     if (a.authVersion() != actor.authVersion()
-        || !a.active()
-        || a.passwordHash().startsWith("!")
-        || !passwords.matches(request.currentPassword(), a.passwordHash()))
+            || !a.active()
+            || a.passwordHash().startsWith("!")
+            || !passwords.matches(request.currentPassword(), a.passwordHash()))
       throw new ApiException(400, "PASSWORD_CURRENT", "Mật khẩu hiện tại không đúng.");
     users.password(a.id(), passwords.encode(request.password()), false);
     codes.invalidateAll(a.id());

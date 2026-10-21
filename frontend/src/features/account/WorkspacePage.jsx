@@ -759,14 +759,14 @@ export default function WorkspacePage() {
             >
               View Profile
             </Button>
-
-            {account?.role === 'ADMIN' && (
-              <Button
-                component={Link}
-                to="/accounts"
-                variant="outlined"
-              >
-                Manage Accounts
+            {account.role === 'ADMIN' && (
+              <Button component={Link} to="/accounts" variant="outlined">
+                Quản lý tài khoản
+              </Button>
+            )}
+            {account.role === 'OWNER' && (
+              <Button component={Link} to="/staff" variant="outlined">
+                Quản lý nhân viên
               </Button>
             )}
           </Stack>

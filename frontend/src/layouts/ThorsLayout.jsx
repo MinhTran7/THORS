@@ -1,622 +1,193 @@
-
-import { useState } from 'react';
-import {
-  Link,
-  Outlet,
-  useLocation,
-  useNavigate
-} from 'react-router-dom';
-
-import {
-  Alert,
-  AppBar,
-  Avatar,
-  Box,
-  Breadcrumbs,
-  Divider,
-  Drawer,
-  IconButton,
-  List,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  Stack,
-  Toolbar,
-  Tooltip,
-  Typography
-} from '@mui/material';
-
-import {
-  AppstoreOutlined,
-  BellOutlined,
-  HomeOutlined,
-  LogoutOutlined,
-  MenuOutlined,
-  ShopOutlined,
-  TeamOutlined,
-  UserOutlined
-} from '@ant-design/icons';
-
+import { useMemo, useState } from 'react';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Alert, Box, Drawer, IconButton, List, ListItemButton, ListItemIcon, ListItemText, Tooltip, Typography } from '@mui/material';
+import { Stack } from 'features/account/components/Flex';
+import { BellOutlined, LogoutOutlined, MenuOutlined } from '@ant-design/icons';
 import { useAuth } from 'features/auth/AuthProvider';
+import { ROLE_LABEL, ROLE_TITLE, STORE_NAME } from 'features/account/constants';
+import { formatToday } from 'features/account/format';
+import { brand } from 'features/account/tokens';
+import UserAvatar from 'features/account/components/UserAvatar';
+import { CrumbsContext } from './crumbs';
+import { navFor } from './navigation';
+import ThorsMark from './ThorsMark';
 
-const DRAWER_WIDTH = 240;
-const HEADER_HEIGHT = 64;
-
-const COLORS = {
-  sidebar: '#FFFFFF',
-  background: '#FAFBFC',
-  border: '#E9EEF3',
-  text: '#202D42',
-  muted: '#75869F',
-  cyan: '#8DE9F2',
-  cyanLight: '#EAFBFD'
-};
-
-const roleLabels = {
-  ADMIN: 'Admin',
-  OWNER: 'Shop Owner',
-  FAMILY_MEMBER: 'Family Member',
-  STAFF: 'Staff',
-  CUSTOMER: 'Customer'
-};
-
-const getInitials = (name) => {
-  const words = (name || '').trim().split(/\s+/).filter(Boolean);
-
-  if (words.length === 0) return 'U';
-
-  return words
-    .slice(0, 2)
-    .map((word) => word.charAt(0).toUpperCase())
-    .join('');
-};
+const SIDEBAR_WIDTH = 248;
 
 export default function ThorsLayout() {
   const { account, logout } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
-
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const { pathname } = useLocation();
+  const [mobile, setMobile] = useState(false);
   const [error, setError] = useState('');
+  const [crumbs, setCrumbs] = useState([]);
+  const crumbContext = useMemo(() => ({ setCrumbs }), []);
+  const links = navFor(account.role);
+  const isAdmin = account.role === 'ADMIN';
 
-  const role = account?.role;
-  const fullName = account?.fullName || 'User';
-  const roleName = roleLabels[role] || role || 'User';
-
-  const isOwner = role === 'OWNER';
-  const canManageAccounts = ['ADMIN', 'OWNER'].includes(role);
-
-  // ==========================================
-  // SIDEBAR NAVIGATION
-  // ==========================================
-
-  const links = [
-    {
-      path: '/workspace',
-      label: 'Dashboard',
-      icon: <HomeOutlined />
-    },
-
-    ...(isOwner
-      ? [
-          {
-            path: '/products',
-            label: 'Products',
-            icon: <ShopOutlined />
-          },
-          {
-            path: '/categories',
-            label: 'Categories',
-            icon: <AppstoreOutlined />
-          }
-        ]
-      : []),
-
-    ...(canManageAccounts
-      ? [
-          {
-            path: '/accounts',
-            label: isOwner ? 'Staff' : 'Accounts',
-            icon: <TeamOutlined />
-          }
-        ]
-      : []),
-
-    {
-      path: '/profile',
-      label: 'Profile',
-      icon: <UserOutlined />
-    }
-  ];
-
-  // ==========================================
-  // ACTIVE NAVIGATION
-  // ==========================================
-
-  const isActive = (path) => {
-    return (
-      location.pathname === path ||
-      location.pathname.startsWith(`${path}/`)
-    );
-  };
-
-  const activeLink = links.find((item) =>
-    isActive(item.path)
-  );
-
-  const currentPage = activeLink?.label || 'Workspace';
-
-  // ==========================================
-  // CURRENT DATE
-  // ==========================================
-
-  const currentDate = new Date().toLocaleDateString('en-GB', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric'
-  });
-
-  // ==========================================
-  // LOGOUT
-  // ==========================================
-
-  const handleLogout = async () => {
+  async function signOut() {
     try {
-      setError('');
       await logout();
-      navigate('/login', { replace: true });
-    } catch (err) {
-      setError(
-        err?.message || 'Unable to log out. Please try again.'
-      );
+      navigate('/login');
+    } catch (e) {
+      setError(e.message);
     }
-  };
+  }
 
-  // ==========================================
-  // SIDEBAR CONTENT
-  // ==========================================
-
-  const sidebarContent = (
-    <Box
-      sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-        bgcolor: COLORS.sidebar
-      }}
-    >
-      {/* LOGO */}
-      <Stack
-        direction="row"
-        alignItems="center"
-        spacing={1.5}
-        sx={{
-          height: HEADER_HEIGHT,
-          px: 2.5,
-          borderBottom: `1px solid ${COLORS.border}`
-        }}
-      >
-        <Box
-          sx={{
-            width: 22,
-            height: 22,
-            position: 'relative',
-            flexShrink: 0
-          }}
-        >
-          <Box
-            sx={{
-              width: 20,
-              height: 13,
-              borderRadius: '4px',
-              bgcolor: '#E991BC',
-              border: '1.5px solid #29384C'
-            }}
-          />
-
-          <Box
-            sx={{
-              position: 'absolute',
-              width: 3,
-              height: 9,
-              left: 9,
-              top: 13,
-              bgcolor: '#29384C',
-              borderRadius: 1
-            }}
-          />
-        </Box>
-
-        <Typography
-          fontSize={20}
-          fontWeight={800}
-          letterSpacing={1}
-          sx={{ color: COLORS.text }}
-        >
-          THORS
-        </Typography>
+  const sidebar = (
+    <Stack sx={{ height: '100%', bgcolor: brand.surface, p: 2 }}>
+      <Stack direction="row" spacing={1.25} alignItems="center" sx={{ px: 1, py: 1.5 }}>
+        <ThorsMark />
+        <Typography sx={{ fontSize: 22, fontWeight: 700, letterSpacing: 1.5, color: brand.ink }}>THORS</Typography>
       </Stack>
-
-      {/* WORKSPACE CARD */}
-      <Box
-        sx={{
-          mx: 2,
-          mt: 2.5,
-          mb: 2.5,
-          px: 1.5,
-          py: 1.5,
-          borderRadius: 2,
-          bgcolor: '#F7F9FB'
-        }}
-      >
-        <Typography
-          fontSize={12}
-          fontWeight={700}
-          color={COLORS.text}
-        >
-          THORS Studio
+      <Box sx={{ bgcolor: '#F5F6F1', borderRadius: '12px', p: 1.75, mt: 1, mb: 2.5 }}>
+        <Typography variant="subtitle2" sx={{ color: brand.ink, fontWeight: 700 }}>
+          {isAdmin ? 'System workspace' : STORE_NAME}
         </Typography>
-
-        <Typography
-          fontSize={11}
-          color={COLORS.muted}
-          sx={{ mt: 0.5 }}
-        >
-          {roleName} workspace
+        <Typography variant="caption" sx={{ color: brand.muted }}>
+          {isAdmin ? ROLE_TITLE.ADMIN : `${ROLE_LABEL[account.role]} workspace`}
         </Typography>
       </Box>
-
-      {/* WORKSPACE LABEL */}
-      <Typography
-        sx={{
-          px: 2.5,
-          mb: 1,
-          fontSize: 10,
-          fontWeight: 700,
-          color: COLORS.muted,
-          letterSpacing: 0.8
-        }}
-      >
-        WORKSPACE
-      </Typography>
-
-      {/* NAVIGATION */}
-      <List
-        disablePadding
-        sx={{
-          px: 1.5,
-          flexGrow: 1
-        }}
-      >
-        {links.map((item) => {
-          const selected = isActive(item.path);
-
+      <Typography sx={{ fontSize: 10.5, letterSpacing: 1, color: brand.muted, px: 1.5, mb: 0.75 }}>WORKSPACE</Typography>
+      <List disablePadding component="nav" aria-label="Main navigation">
+        {links.map(({ to, label, icon }) => {
+          const active = pathname === to || pathname.startsWith(`${to}/`);
           return (
             <ListItemButton
-              key={item.path}
+              key={to}
               component={Link}
-              to={item.path}
-              selected={selected}
-              onClick={() => setMobileOpen(false)}
+              to={to}
+              onClick={() => setMobile(false)}
+              aria-current={active ? 'page' : undefined}
               sx={{
-                minHeight: 43,
+                borderRadius: '10px',
                 mb: 0.5,
-                px: 1.5,
-                borderRadius: 1.5,
-                color: COLORS.text,
                 position: 'relative',
-
-                '&:hover': {
-                  bgcolor: '#F3F8FA'
-                },
-
-                '&.Mui-selected': {
-                  bgcolor: COLORS.cyanLight,
-                  color: COLORS.text
-                },
-
-                '&.Mui-selected:hover': {
-                  bgcolor: COLORS.cyanLight
-                },
-
-                '&.Mui-selected::after': {
-                  content: '""',
-                  position: 'absolute',
-                  right: 9,
-                  top: '25%',
-                  height: '50%',
-                  width: 3,
-                  borderRadius: 2,
-                  bgcolor: COLORS.cyan
-                }
+                bgcolor: active ? brand.cyanSoft : 'transparent',
+                '&:hover': { bgcolor: active ? brand.cyanSoft : '#F6F6F1' },
+                '&::after': active
+                  ? { content: '""', position: 'absolute', right: 6, top: 10, bottom: 10, width: 3, borderRadius: 2, bgcolor: brand.cyan }
+                  : {}
               }}
             >
-              <ListItemIcon
-                sx={{
-                  minWidth: 34,
-                  color: selected
-                    ? COLORS.text
-                    : COLORS.muted,
-                  fontSize: 17
-                }}
-              >
-                {item.icon}
-              </ListItemIcon>
-
+              <ListItemIcon sx={{ minWidth: 34, color: brand.ink }}>{icon}</ListItemIcon>
               <ListItemText
-                primary={item.label}
-                primaryTypographyProps={{
-                  fontSize: 13,
-                  fontWeight: selected ? 700 : 500
-                }}
+                primary={label}
+                slotProps={{ primary: { sx: { fontSize: 14, fontWeight: active ? 600 : 500, color: brand.ink } } }}
               />
             </ListItemButton>
           );
         })}
       </List>
-
-      {/* USER PROFILE FOOTER */}
-      <Divider sx={{ borderColor: COLORS.border }} />
-
-      <Stack
-        direction="row"
-        alignItems="center"
-        spacing={1.2}
-        sx={{
-          px: 2,
-          py: 2
-        }}
-      >
-        <Avatar
-          sx={{
-            width: 34,
-            height: 34,
-            bgcolor: COLORS.cyanLight,
-            color: COLORS.text,
-            fontSize: 11,
-            fontWeight: 700
-          }}
-        >
-          {getInitials(fullName)}
-        </Avatar>
-
-        <Box
-          sx={{
-            minWidth: 0,
-            flexGrow: 1
-          }}
-        >
-          <Typography
-            fontSize={12}
-            fontWeight={700}
-            color={COLORS.text}
-            noWrap
-          >
-            {fullName}
+      <Box sx={{ flexGrow: 1 }} />
+      <Stack direction="row" spacing={1.25} alignItems="center" sx={{ px: 1, py: 1.5, borderTop: `1px solid ${brand.line}` }}>
+        <UserAvatar name={account.fullName} src={account.avatarUrl} size={32} />
+        <Box sx={{ minWidth: 0, flexGrow: 1 }}>
+          <Typography variant="subtitle2" noWrap sx={{ color: brand.ink }}>
+            {account.fullName}
           </Typography>
-
-          <Typography
-            fontSize={10}
-            color={COLORS.muted}
-            noWrap
-          >
-            {roleName}
+          <Typography variant="caption" noWrap sx={{ color: brand.muted, display: 'block' }}>
+            {ROLE_TITLE[account.role]}
           </Typography>
         </Box>
-
-        <Tooltip title="Log out">
-          <IconButton
-            size="small"
-            onClick={handleLogout}
-            aria-label="Log out"
-            sx={{
-              color: COLORS.text
-            }}
-          >
+        <Tooltip title="Sign out">
+          <IconButton size="small" aria-label="Sign out" onClick={signOut}>
             <LogoutOutlined />
           </IconButton>
         </Tooltip>
       </Stack>
-    </Box>
+    </Stack>
   );
 
-  // ==========================================
-  // MAIN LAYOUT
-  // ==========================================
+  const headerCrumbs = [ROLE_LABEL[account.role], ...crumbs];
 
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        minHeight: '100vh',
-        bgcolor: COLORS.background
-      }}
-    >
-      {/* DESKTOP SIDEBAR */}
-      <Drawer
-        variant="permanent"
-        sx={{
-          display: { xs: 'none', md: 'block' },
-          width: DRAWER_WIDTH,
-          flexShrink: 0,
-
-          '& .MuiDrawer-paper': {
-            width: DRAWER_WIDTH,
-            boxSizing: 'border-box',
-            borderRight: `1px solid ${COLORS.border}`,
-            bgcolor: COLORS.sidebar
-          }
-        }}
-      >
-        {sidebarContent}
-      </Drawer>
-
-      {/* MOBILE SIDEBAR */}
-      <Drawer
-        variant="temporary"
-        open={mobileOpen}
-        onClose={() => setMobileOpen(false)}
-        ModalProps={{
-          keepMounted: true
-        }}
-        sx={{
-          display: { xs: 'block', md: 'none' },
-
-          '& .MuiDrawer-paper': {
-            width: DRAWER_WIDTH,
-            boxSizing: 'border-box',
-            bgcolor: COLORS.sidebar
-          }
-        }}
-      >
-        {sidebarContent}
-      </Drawer>
-
-      {/* RIGHT CONTENT AREA */}
-      <Box
-        sx={{
-          flexGrow: 1,
-          minWidth: 0,
-          display: 'flex',
-          flexDirection: 'column'
-        }}
-      >
-        {/* TOP HEADER */}
-        <AppBar
-          position="sticky"
-          elevation={0}
+    <CrumbsContext.Provider value={crumbContext}>
+      <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: brand.page }}>
+        <Box
+          component="aside"
           sx={{
-            height: HEADER_HEIGHT,
-            bgcolor: '#FFFFFF',
-            color: COLORS.text,
-            borderBottom: `1px solid ${COLORS.border}`,
-            zIndex: 1100
+            display: { xs: 'none', md: 'block' },
+            width: SIDEBAR_WIDTH,
+            flexShrink: 0,
+            borderRight: `1px solid ${brand.line}`,
+            position: 'sticky',
+            top: 0,
+            height: '100vh'
           }}
         >
-          <Toolbar
-            sx={{
-              minHeight: `${HEADER_HEIGHT}px !important`,
-              px: { xs: 2, md: 3 }
-            }}
+          {sidebar}
+        </Box>
+        <Drawer
+          variant="temporary"
+          open={mobile}
+          onClose={() => setMobile(false)}
+          sx={{ display: { md: 'none' }, '& .MuiDrawer-paper': { width: SIDEBAR_WIDTH } }}
+        >
+          {sidebar}
+        </Drawer>
+        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+          <Stack
+            component="header"
+            direction="row"
+            alignItems="center"
+            spacing={1.5}
+            sx={{ height: 56, px: { xs: 2, md: 4 }, borderBottom: `1px solid ${brand.line}`, bgcolor: brand.surface }}
           >
-            {/* MOBILE MENU */}
-            <IconButton
-              onClick={() => setMobileOpen(true)}
-              sx={{
-                display: { xs: 'inline-flex', md: 'none' },
-                mr: 1,
-                color: COLORS.text
-              }}
-              aria-label="Open navigation"
-            >
+            <IconButton aria-label="Open menu" sx={{ display: { md: 'none' } }} onClick={() => setMobile(true)}>
               <MenuOutlined />
             </IconButton>
-
-            {/* BREADCRUMB */}
-            <Breadcrumbs
-              separator="/"
-              sx={{
-                flexGrow: 1,
-                '& .MuiBreadcrumbs-separator': {
-                  mx: 1,
-                  color: COLORS.muted
-                }
-              }}
-            >
-              <Typography
-                fontSize={12}
-                color={COLORS.muted}
-              >
-                {roleName}
-              </Typography>
-
-              <Typography
-                fontSize={12}
-                fontWeight={600}
-                color={COLORS.text}
-              >
-                {currentPage}
-              </Typography>
-            </Breadcrumbs>
-
-            {/* HEADER ACTIONS */}
             <Stack
               direction="row"
+              spacing={0.75}
               alignItems="center"
-              spacing={1.5}
+              component="nav"
+              aria-label="Breadcrumb"
+              sx={{ flexGrow: 1, minWidth: 0 }}
             >
-              <Typography
-                sx={{
-                  display: { xs: 'none', sm: 'block' },
-                  fontSize: 11,
-                  color: COLORS.muted
-                }}
-              >
-                {currentDate}
-              </Typography>
-
-              {/* NOTIFICATION ICON - UI ONLY */}
-              <Tooltip title="Notifications">
-                <Box
-                  component="span"
-                  sx={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    width: 32,
-                    height: 32,
-                    color: COLORS.text
-                  }}
-                >
-                  <BellOutlined style={{ fontSize: 17 }} />
-                </Box>
-              </Tooltip>
-
-              {/* USER AVATAR */}
-              <Tooltip title={`${fullName} - ${roleName}`}>
-                <Avatar
-                  sx={{
-                    width: 32,
-                    height: 32,
-                    bgcolor: COLORS.cyanLight,
-                    color: COLORS.text,
-                    fontSize: 11,
-                    fontWeight: 700
-                  }}
-                >
-                  {getInitials(fullName)}
-                </Avatar>
-              </Tooltip>
+              {headerCrumbs.map((label, index) => (
+                <Stack key={`${label}-${index}`} direction="row" spacing={0.75} alignItems="center">
+                  {index > 0 && (
+                    <Typography variant="caption" sx={{ color: brand.muted }}>
+                      /
+                    </Typography>
+                  )}
+                  <Typography
+                    variant="caption"
+                    noWrap
+                    sx={{
+                      color: index === headerCrumbs.length - 1 ? brand.ink : brand.muted,
+                      fontWeight: index === headerCrumbs.length - 1 ? 600 : 400,
+                      fontSize: 13
+                    }}
+                  >
+                    {label}
+                  </Typography>
+                </Stack>
+              ))}
             </Stack>
-          </Toolbar>
-        </AppBar>
-
-        {/* MAIN CONTENT */}
-        <Box
-          component="main"
-          sx={{
-            flexGrow: 1,
-            width: '100%',
-            minWidth: 0,
-            px: { xs: 2, md: 3.5 },
-            py: { xs: 3, md: 3.5 },
-            bgcolor: COLORS.background
-          }}
-        >
-          {error && (
-            <Alert
-              severity="error"
-              onClose={() => setError('')}
-              sx={{ mb: 2 }}
-            >
-              {error}
-            </Alert>
-          )}
-
-          <Outlet />
+            <Typography variant="caption" sx={{ color: brand.muted, display: { xs: 'none', sm: 'block' } }}>
+              {formatToday()}
+            </Typography>
+            <Tooltip title="No new notifications">
+              <IconButton aria-label="Notifications" size="small">
+                <BellOutlined />
+              </IconButton>
+            </Tooltip>
+            <Link to="/profile" aria-label="Your profile">
+              <UserAvatar name={account.fullName} src={account.avatarUrl} size={30} />
+            </Link>
+          </Stack>
+          <Box component="main" sx={{ px: { xs: 2, md: 4 }, py: { xs: 3, md: 4 }, maxWidth: 1240 }}>
+            {error && (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                {error}
+              </Alert>
+            )}
+            <Outlet />
+          </Box>
         </Box>
       </Box>
-    </Box>
+    </CrumbsContext.Provider>
   );
 }
