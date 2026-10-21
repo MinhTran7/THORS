@@ -67,7 +67,7 @@ export default createBrowserRouter([
               { path: '/staff', element: <StaffListPage /> },
               { path: '/staff/new', element: <StaffFormPage /> },
               { path: '/staff/:id', element: <StaffDetailPage /> },
-              { path: '/staff/:id/edit', element: <StaffFormPage /> }
+              { path: '/staff/:id/edit', element: <StaffFormPage /> },
                     // Category & Product (của DongNV)
       { path: '/categories', element: <CategoryPage /> },
       { path: '/products', element: <ProductPage /> },
