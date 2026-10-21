@@ -125,7 +125,10 @@ public class AccountService {
 
   // ---------------------------------------------------------------- Create
 
-  /** Create Staff Account: Owner tạo STAFF/FAMILY_MEMBER; Admin chỉ tạo OWNER. Tài khoản ACTIVE ngay. */
+  /**
+   * Create Staff Account: Owner tạo STAFF/FAMILY_MEMBER; Admin chỉ tạo OWNER. Tài khoản mới ở trạng
+   * thái PENDING_VERIFICATION, phải xác minh email/OTP mới thành ACTIVE (giống main).
+   */
   @Transactional
   public Account create(Account actor, Create r) {
     manager(actor);
@@ -141,7 +144,7 @@ public class AccountService {
             passwords.encode(r.password()),
             ContactNormalizer.email(r.email()),
             ContactNormalizer.phone(r.phone()),
-            "ACTIVE",
+            "PENDING_VERIFICATION",
             actor.id(),
             null,
             false);
@@ -150,6 +153,8 @@ public class AccountService {
   @Transactional
   public Account edit(Account actor, int id, Edit r) {
     var target = target(actor, id);
+    // Kiểm tra trạng thái trước khi ghi gì vào DB để lỗi 400 không để lại thay đổi dở dang.
+    if (r.status() != null) checkStatus(actor, target, r.status());
     users.name(id, ContactNormalizer.name(r.fullName()));
     if (r.status() != null) applyStatus(actor, target, r.status());
     users.audit(actor.id(), "ACCOUNT_EDIT", id, "Account details/status updated");
@@ -160,7 +165,7 @@ public class AccountService {
 
   /**
    * Change Staff Account Status. Owner chỉ kích hoạt (ACTIVE) hoặc vô hiệu hóa (DISABLED) tài khoản
-   * mình tạo; khóa (LOCKED) chỉ Admin được làm.
+   * mình tạo; khóa (LOCKED) chỉ Admin được làm. Không thể ép ACTIVE khi tài khoản chưa xác minh.
    */
   @Transactional
   public Account changeStatus(Account actor, int id, String status) {
@@ -186,14 +191,18 @@ public class AccountService {
     return users.byId(id).orElseThrow();
   }
 
-  /** Dùng chung cho edit, changeStatus, lock và unlock. Cùng trạng thái thì không làm gì. */
-  private void applyStatus(Account actor, Account target, String status) {
+  /** Các kiểm tra hợp lệ của việc đổi trạng thái (không ghi DB). */
+  private void checkStatus(Account actor, Account target, String status) {
     if (status.equals(target.status())) return;
     if (target.id() == actor.id())
       throw new ApiException(
               400, "SELF_LOCK", "Không thể thay trạng thái tài khoản của chính mình.");
     if (!List.of("ACTIVE", "LOCKED", "DISABLED").contains(status))
       throw new ApiException(400, "STATUS", "Trạng thái không hợp lệ.");
+    // Tài khoản chưa xác minh email/OTP không được ép sang ACTIVE (kể cả Admin).
+    if ("ACTIVE".equals(status) && "PENDING_VERIFICATION".equals(target.status()))
+      throw new ApiException(
+              400, "ACCOUNT_UNVERIFIED", "Tài khoản chưa xác minh, không thể kích hoạt thủ công.");
     if (!"ADMIN".equals(actor.role())) {
       if ("LOCKED".equals(status))
         throw new ApiException(403, "LOCK_ADMIN_ONLY", "Chỉ quản trị viên được khóa tài khoản.");
@@ -201,6 +210,12 @@ public class AccountService {
         throw new ApiException(
                 403, "LOCKED_BY_ADMIN", "Tài khoản đang bị quản trị viên khóa, chỉ Admin mở khóa được.");
     }
+  }
+
+  /** Dùng chung cho edit, changeStatus, lock và unlock. Cùng trạng thái thì không làm gì. */
+  private void applyStatus(Account actor, Account target, String status) {
+    if (status.equals(target.status())) return;
+    checkStatus(actor, target, status);
     users.status(target.id(), status);
     codes.invalidateAll(target.id());
     users.audit(
@@ -221,7 +236,8 @@ public class AccountService {
 
   /**
    * Reset Shop Owner Password (Admin): chỉ khi Owner đã gửi yêu cầu. Owner cũng đặt lại được mật
-   * khẩu cho STAFF/FAMILY_MEMBER do mình tạo (không cần yêu cầu).
+   * khẩu cho STAFF/FAMILY_MEMBER do mình tạo (không cần yêu cầu). Sau khi đặt lại, tài khoản đang
+   * ACTIVE quay về PENDING_VERIFICATION và phải kích hoạt lại bằng OTP với mật khẩu mới.
    */
   @Transactional
   public void resetByManager(Account actor, int id, Password r) {
@@ -236,12 +252,13 @@ public class AccountService {
               400, "NO_RESET_REQUEST", "Chủ cửa hàng chưa gửi yêu cầu đặt lại mật khẩu.");
     AuthService.confirm(r.password(), r.confirmPassword());
     users.password(id, passwords.encode(r.password()), false);
+    if ("ACTIVE".equals(target.status())) users.status(id, "PENDING_VERIFICATION");
     codes.invalidateAll(id);
     users.audit(
             actor.id(),
             "PASSWORD_RESET_ADMIN",
             id,
-            "Password replaced by " + actor.role() + "; sessions revoked");
+            "Password replaced by " + actor.role() + "; activation required; sessions revoked");
   }
 
   /** Owner quên mật khẩu gửi yêu cầu (chưa đăng nhập). Luôn im lặng để không lộ tài khoản có tồn tại. */
