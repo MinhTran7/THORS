@@ -111,7 +111,7 @@ export default function StaffListPage() {
         subtitle="Manage the people who help your store run smoothly."
         action={
           <BrandButton component={RouterLink} to="/staff/new" startIcon={<PlusOutlined />}>
-            Add Staff
+            Add Member
           </BrandButton>
         }
       />
