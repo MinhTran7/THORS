@@ -34,6 +34,8 @@ import AddProductPage from '../features/product/AddProductPage';
 import ProductDetailPage from 'features/product/ProductDetailPage';
 //update product
 import EditProductPage from 'features/product/EditProductPage';
+//sales
+import InStoreSalesPage from 'features/sales/InStoreSalesPage';
 export default createBrowserRouter([
   { path: '/', element: <Navigate to="/workspace" replace /> },
   { path: '/login', element: <LoginPage /> },
@@ -73,7 +75,9 @@ export default createBrowserRouter([
       { path: '/products', element: <ProductPage /> },
       { path: '/products/add', element: <AddProductPage /> },
       { path: '/products/:productId', element: <ProductDetailPage /> },
-      { path: '/products/:productId/edit', element: <EditProductPage /> }
+      { path: '/products/:productId/edit', element: <EditProductPage /> },
+
+              { path: '/in-store-sales', element: <InStoreSalesPage /> },
             ]
           }
         ]

@@ -1,4 +1,4 @@
-import { AppstoreOutlined, FileTextOutlined, ShopOutlined, TeamOutlined, UserOutlined } from '@ant-design/icons';
+import { AppstoreOutlined, FileTextOutlined, ShopOutlined, TeamOutlined, UserOutlined, ShoppingCartOutlined } from '@ant-design/icons';
 
 const dashboard = { to: '/workspace', label: 'Dashboard', icon: <AppstoreOutlined /> };
 const profile = { to: '/profile', label: 'Profile', icon: <UserOutlined /> };
@@ -16,6 +16,7 @@ export const NAVIGATION = {
     { to: '/products', label: 'Products', icon: <ShopOutlined /> },
     { to: '/categories', label: 'Categories', icon: <AppstoreOutlined /> },
     { to: '/staff', label: 'Family', icon: <TeamOutlined /> },
+    { to: '/in-store-sales', label: 'In-store Sales', icon: <ShoppingCartOutlined /> },
     profile
   ]
 };
