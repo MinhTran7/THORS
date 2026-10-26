@@ -19,7 +19,21 @@ import {
 } from '@mui/material';
 import { UserOutlined, TeamOutlined, HomeOutlined, LogoutOutlined, MenuOutlined } from '@ant-design/icons';
 import { useAuth } from 'features/auth/AuthProvider';
+<<<<<<< Updated upstream
 const labels = { ADMIN: 'Admin', OWNER: 'Chủ cửa hàng', FAMILY_MEMBER: 'Thành viên gia đình', STAFF: 'Nhân viên', CUSTOMER: 'Khách hàng' };
+=======
+import { ROLE_LABEL, ROLE_TITLE, STORE_NAME } from 'features/account/constants';
+import { formatToday } from 'features/account/format';
+import { brand } from 'features/account/tokens';
+import UserAvatar from 'features/account/components/UserAvatar';
+import { CrumbsContext } from './crumbs';
+import { navFor } from './navigation';
+import ThorsMark from './ThorsMark';
+import CartButton from 'components/CartButton';
+
+const SIDEBAR_WIDTH = 248;
+
+>>>>>>> Stashed changes
 export default function ThorsLayout() {
   const { account, logout } = useAuth();
   const navigate = useNavigate();
@@ -80,8 +94,119 @@ export default function ThorsLayout() {
                 }
               }}
             >
+<<<<<<< Updated upstream
               Đăng xuất
             </Button>
+=======
+              <ListItemIcon sx={{ minWidth: 34, color: brand.ink }}>{icon}</ListItemIcon>
+              <ListItemText
+                primary={label}
+                slotProps={{ primary: { sx: { fontSize: 14, fontWeight: active ? 600 : 500, color: brand.ink } } }}
+              />
+            </ListItemButton>
+          );
+        })}
+      </List>
+      <Box sx={{ flexGrow: 1 }} />
+      <Stack direction="row" spacing={1.25} alignItems="center" sx={{ px: 1, py: 1.5, borderTop: `1px solid ${brand.line}` }}>
+        <UserAvatar name={account.fullName} src={account.avatarUrl} size={32} />
+        <Box sx={{ minWidth: 0, flexGrow: 1 }}>
+          <Typography variant="subtitle2" noWrap sx={{ color: brand.ink }}>
+            {account.fullName}
+          </Typography>
+          <Typography variant="caption" noWrap sx={{ color: brand.muted, display: 'block' }}>
+            {ROLE_TITLE[account.role]}
+          </Typography>
+        </Box>
+        <Tooltip title="Sign out">
+          <IconButton size="small" aria-label="Sign out" onClick={signOut}>
+            <LogoutOutlined />
+          </IconButton>
+        </Tooltip>
+      </Stack>
+    </Stack>
+  );
+
+  const headerCrumbs = [ROLE_LABEL[account.role], ...crumbs];
+
+  return (
+    <CrumbsContext.Provider value={crumbContext}>
+      <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: brand.page }}>
+        <Box
+          component="aside"
+          sx={{
+            display: { xs: 'none', md: 'block' },
+            width: SIDEBAR_WIDTH,
+            flexShrink: 0,
+            borderRight: `1px solid ${brand.line}`,
+            position: 'sticky',
+            top: 0,
+            height: '100vh'
+          }}
+        >
+          {sidebar}
+        </Box>
+        <Drawer
+          variant="temporary"
+          open={mobile}
+          onClose={() => setMobile(false)}
+          sx={{ display: { md: 'none' }, '& .MuiDrawer-paper': { width: SIDEBAR_WIDTH } }}
+        >
+          {sidebar}
+        </Drawer>
+        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+          <Stack
+            component="header"
+            direction="row"
+            alignItems="center"
+            spacing={1.5}
+            sx={{ height: 56, px: { xs: 2, md: 4 }, borderBottom: `1px solid ${brand.line}`, bgcolor: brand.surface }}
+          >
+            <IconButton aria-label="Open menu" sx={{ display: { md: 'none' } }} onClick={() => setMobile(true)}>
+              <MenuOutlined />
+            </IconButton>
+            <Stack
+              direction="row"
+              spacing={0.75}
+              alignItems="center"
+              component="nav"
+              aria-label="Breadcrumb"
+              sx={{ flexGrow: 1, minWidth: 0 }}
+            >
+              {headerCrumbs.map((label, index) => (
+                <Stack key={`${label}-${index}`} direction="row" spacing={0.75} alignItems="center">
+                  {index > 0 && (
+                    <Typography variant="caption" sx={{ color: brand.muted }}>
+                      /
+                    </Typography>
+                  )}
+                  <Typography
+                    variant="caption"
+                    noWrap
+                    sx={{
+                      color: index === headerCrumbs.length - 1 ? brand.ink : brand.muted,
+                      fontWeight: index === headerCrumbs.length - 1 ? 600 : 400,
+                      fontSize: 13
+                    }}
+                  >
+                    {label}
+                  </Typography>
+                </Stack>
+              ))}
+            </Stack>
+            <Typography variant="caption" sx={{ color: brand.muted, display: { xs: 'none', sm: 'block' } }}>
+              {formatToday()}
+            </Typography>
+            {account.role === 'CUSTOMER' && <CartButton />}
+            <Tooltip title="No new notifications">
+              <IconButton aria-label="Notifications" size="small">
+                <BellOutlined />
+              </IconButton>
+            </Tooltip>
+            <Link to="/profile" aria-label="Your profile">
+              <UserAvatar name={account.fullName} src={account.avatarUrl} size={30} />
+            </Link>
+>>>>>>> Stashed changes
           </Stack>
         </Toolbar>
       </AppBar>

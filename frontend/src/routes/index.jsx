@@ -10,9 +10,27 @@ import GoogleCallback from 'features/auth/pages/GoogleCallback';
 import ProfilePage from 'features/account/ProfilePage';
 import AccountsPage from 'features/account/AccountsPage';
 import WorkspacePage from 'features/account/WorkspacePage';
+<<<<<<< Updated upstream
 import { AuthShell } from 'features/auth/components/AuthForm';
 import { Button, Typography } from '@mui/material';
 import { Link } from 'react-router-dom';
+=======
+
+// Category Management
+import CategoryPage from 'features/category/CategoryPage';
+
+// Category Management
+import CartPage from 'features/cart/CartPage';
+
+// Product Management
+import ProductPage from '../features/product/ProductPage';
+// add product
+import AddProductPage from '../features/product/AddProductPage';
+// product detail
+import ProductDetailPage from 'features/product/ProductDetailPage';
+//update product
+import EditProductPage from 'features/product/EditProductPage';
+>>>>>>> Stashed changes
 export default createBrowserRouter([
   { path: '/', element: <Navigate to="/workspace" replace /> },
   { path: '/login', element: <LoginPage /> },
@@ -29,7 +47,38 @@ export default createBrowserRouter([
         children: [
           { path: '/workspace', element: <WorkspacePage /> },
           { path: '/profile', element: <ProfilePage /> },
+<<<<<<< Updated upstream
           { element: <RequireAuth roles={['ADMIN', 'OWNER']} />, children: [{ path: '/accounts', element: <AccountsPage /> }] }
+=======
+          { path: '/profile/edit', element: <UpdateProfilePage /> },
+          { path: '/profile/password', element: <ChangePasswordPage /> },
+          {
+            element: <RequireAuth roles={['CUSTOMER']} />,
+            children: [{ path: '/cart', element: <CartPage /> }]
+          },
+          {
+            element: <RequireAuth roles={['ADMIN']} />,
+            children: [
+              { path: '/accounts', element: <AccountListPage /> },
+              { path: '/system-log', element: <SystemLogPage /> }
+            ]
+          },
+          {
+            element: <RequireAuth roles={['OWNER']} />,
+            children: [
+              { path: '/staff', element: <StaffListPage /> },
+              { path: '/staff/new', element: <StaffFormPage /> },
+              { path: '/staff/:id', element: <StaffDetailPage /> },
+              { path: '/staff/:id/edit', element: <StaffFormPage /> },
+                    // Category & Product (của DongNV)
+      { path: '/categories', element: <CategoryPage /> },
+      { path: '/products', element: <ProductPage /> },
+      { path: '/products/add', element: <AddProductPage /> },
+      { path: '/products/:productId', element: <ProductDetailPage /> },
+      { path: '/products/:productId/edit', element: <EditProductPage /> }
+            ]
+          }
+>>>>>>> Stashed changes
         ]
       }
     ]
