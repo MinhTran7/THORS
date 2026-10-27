@@ -19,7 +19,7 @@ import {
   ToggleButtonGroup,
   Typography
 } from '@mui/material';
-import { SearchOutlined, DeleteOutlined, PlusOutlined, MinusOutlined, ShoppingCartOutlined, CheckCircleOutlined } from '@ant-design/icons';
+import { SearchOutlined, DeleteOutlined, PlusOutlined, MinusOutlined, ShoppingCartOutlined } from '@ant-design/icons';
 import { getProducts, getProductById } from '../../services/productService';
 
 const C = {
@@ -29,20 +29,18 @@ const C = {
   main: '#8DE9F2',
   selected: '#DDF7FA',
   bg: '#F8FAFC',
-  disabled: '#F0F3F7'
+  disabled: '#F0F3F7',
+  cancelHover: '#FFFBE7'
 };
 
 const money = (value) => `${Number(value || 0).toLocaleString('vi-VN')} ₫`;
 const isActive = (value) => String(value ?? '').toUpperCase() === 'ACTIVE';
-const getId = (product) => product?.productId ?? product?.id;
-const getVariantId = (variant) => variant?.detailId ?? variant?.variantId ?? variant?.id;
-const getStock = (variant) => Number(variant?.stockQuantity ?? variant?.stock ?? 0);
-const getPrice = (variant) => Number(variant?.price ?? variant?.salePrice ?? variant?.sale_price ?? 0);
-
-const getList = (data) => {
-  if (Array.isArray(data)) return data;
-  return data?.content ?? data?.data ?? [];
-};
+const getId = (p) => p?.productId ?? p?.id;
+const getVariantId = (v) => v?.detailId ?? v?.variantId ?? v?.id;
+const getStock = (v) => Number(v?.stockQuantity ?? v?.stock ?? 0);
+const getPrice = (v) => Number(v?.price ?? v?.salePrice ?? v?.sale_price ?? 0);
+const getList = (data) => (Array.isArray(data) ? data : (data?.content ?? data?.data ?? []));
+const getProductStock = (p) => Number(p?.stockQuantity ?? p?.totalStock ?? p?.stock ?? p?.quantity ?? 0);
 
 const buttonSx = {
   textTransform: 'none',
@@ -65,9 +63,9 @@ function ChoiceButton({ label, selected, disabled, onClick }) {
         fontSize: 12,
         lineHeight: 1.2,
         borderWidth: selected ? 1.5 : 1,
-        borderColor: selected ? `${C.main} !important` : `${C.border} !important`,
-        bgcolor: disabled ? `${C.disabled} !important` : selected ? `${C.selected} !important` : '#fff',
-        color: disabled ? '#9AA7B7 !important' : C.text,
+        borderColor: selected ? C.main : C.border,
+        bgcolor: disabled ? C.disabled : selected ? C.selected : '#fff',
+        color: disabled ? '#9AA7B7' : C.text,
         '&:hover': {
           bgcolor: disabled ? C.disabled : C.selected,
           borderColor: C.main
@@ -90,7 +88,7 @@ function ToggleGroup({ value, onChange, children, fullWidth = false }) {
       onChange={(_, next) => next && onChange(next)}
       sx={{
         display: 'flex',
-        flexWrap: 'wrap',
+        flexWrap: fullWidth ? 'nowrap' : 'wrap',
         gap: 1,
         '& .MuiToggleButtonGroup-grouped': {
           m: '0 !important',
@@ -100,7 +98,8 @@ function ToggleGroup({ value, onChange, children, fullWidth = false }) {
         '& .MuiToggleButton-root': {
           ...buttonSx,
           px: 1.5,
-          color: C.text
+          color: C.text,
+          ...(fullWidth ? { flex: 1, minWidth: 0 } : {})
         },
         '& .Mui-selected': {
           bgcolor: `${C.main} !important`,
@@ -127,6 +126,7 @@ export default function InStoreSalesPage() {
   const [discount, setDiscount] = useState('');
 
   const [variantProduct, setVariantProduct] = useState(null);
+  const [variantDialogOpen, setVariantDialogOpen] = useState(false);
   const [variants, setVariants] = useState([]);
   const [selectedSize, setSelectedSize] = useState('');
   const [selectedColor, setSelectedColor] = useState('');
@@ -137,8 +137,8 @@ export default function InStoreSalesPage() {
 
   useEffect(() => {
     getProducts()
-      .then((response) => {
-        setProducts(getList(response?.data ?? response).filter((p) => isActive(p.status)));
+      .then((res) => {
+        setProducts(getList(res?.data ?? res).filter((p) => isActive(p.status)));
       })
       .catch((err) => setError(err.message || 'Unable to load products.'))
       .finally(() => setLoading(false));
@@ -149,9 +149,9 @@ export default function InStoreSalesPage() {
   const visibleProducts = useMemo(() => {
     const keyword = search.trim().toLowerCase();
 
-    return products.filter((product) => {
-      const matchesCategory = category === 'All products' || product.categoryName === category;
-      const matchesSearch = [product.productName, product.sku].some((value) =>
+    return products.filter((p) => {
+      const matchesCategory = category === 'All products' || p.categoryName === category;
+      const matchesSearch = [p.productName, p.sku].some((value) =>
         String(value || '')
           .toLowerCase()
           .includes(keyword)
@@ -188,8 +188,8 @@ export default function InStoreSalesPage() {
     setLoadingVariants(true);
 
     try {
-      const response = await getProductById(id);
-      const data = response?.data ?? response;
+      const res = await getProductById(id);
+      const data = res?.data ?? res;
       const detail = data?.data ?? data;
       const item = detail?.product ?? detail;
       const rawVariants = detail?.variants ?? item?.variants ?? detail?.productVariants ?? item?.productVariants ?? [];
@@ -209,12 +209,13 @@ export default function InStoreSalesPage() {
         product.mainImageUrl ||
         '';
 
+      const first = activeVariants.find((v) => getStock(v) > 0) || activeVariants[0];
+
       setVariantProduct({ ...product, ...item, productId: id, image });
       setVariants(activeVariants);
-
-      const first = activeVariants.find((v) => getStock(v) > 0) || activeVariants[0];
       setSelectedSize(String(first?.size ?? ''));
       setSelectedColor(String(first?.color ?? ''));
+      setVariantDialogOpen(true);
     } catch (err) {
       setError(err.message || 'Could not load product variants.');
     } finally {
@@ -224,6 +225,10 @@ export default function InStoreSalesPage() {
   }
 
   function closeDialog() {
+    setVariantDialogOpen(false);
+  }
+
+  function resetDialog() {
     setVariantProduct(null);
     setVariants([]);
     setSelectedSize('');
@@ -232,6 +237,7 @@ export default function InStoreSalesPage() {
 
   function chooseSize(size) {
     setSelectedSize(size);
+
     const matching = variants.filter((v) => String(v.size ?? '') === size);
     const first = matching.find((v) => getStock(v) > 0) || matching[0];
     setSelectedColor(String(first?.color ?? ''));
@@ -342,6 +348,7 @@ export default function InStoreSalesPage() {
           {error}
         </Alert>
       )}
+
       {notice && (
         <Alert severity="info" sx={{ mb: 1.5 }} onClose={() => setNotice('')}>
           {notice}
@@ -400,7 +407,14 @@ export default function InStoreSalesPage() {
             >
               {visibleProducts.map((product) => {
                 const id = getId(product);
-                const image = product.imageUrl || product.thumbnailUrl || product.mainImageUrl || product.images?.[0]?.imageUrl;
+
+                  const image =
+                      product.primaryImageUrl ||
+                      product.imageUrl ||
+                      product.thumbnailUrl ||
+                      product.mainImageUrl ||
+                      product.images?.[0]?.imageUrl ||
+                      '';
                 const min = product.minPrice;
                 const max = product.maxPrice;
                 const price =
@@ -418,7 +432,10 @@ export default function InStoreSalesPage() {
                       cursor: 'pointer',
                       opacity: addingId === id ? 0.6 : 1,
                       transition: 'border-color .2s, transform .2s',
-                      '&:hover': { borderColor: C.main, transform: 'translateY(-2px)' }
+                      '&:hover': {
+                        borderColor: C.main,
+                        transform: 'translateY(-2px)'
+                      }
                     }}
                   >
                     <Box
@@ -438,17 +455,43 @@ export default function InStoreSalesPage() {
                           component="img"
                           src={image}
                           alt={product.productName}
-                          sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          sx={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover'
+                          }}
                         />
                       ) : (
                         <ShoppingCartOutlined style={{ fontSize: 32, color: '#B7C3D2' }} />
                       )}
                     </Box>
 
-                    <Typography sx={{ fontSize: 13, fontWeight: 700, minHeight: 36 }}>
-                      {product.productName || 'Unnamed product'}
-                    </Typography>
+                    <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
+                      <Typography
+                        sx={{
+                          flex: 1,
+                          minWidth: 0,
+                          fontSize: 13,
+                          fontWeight: 700
+                        }}
+                      >
+                        {product.productName || 'Unnamed product'}
+                      </Typography>
+
+                      <Typography
+                        sx={{
+                          flexShrink: 0,
+                          fontSize: 10.5,
+                          color: C.muted,
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        Stock: {getProductStock(product)}
+                      </Typography>
+                    </Stack>
+
                     <Typography sx={{ fontSize: 13, fontWeight: 700, mt: 1 }}>{price}</Typography>
+
                     {addingId === id && <CircularProgress size={16} sx={{ mt: 1 }} />}
                   </Card>
                 );
@@ -471,7 +514,15 @@ export default function InStoreSalesPage() {
           />
 
           {!cart.length ? (
-            <Box sx={{ py: 6, textAlign: 'center', bgcolor: C.bg, borderRadius: 2, mb: 2 }}>
+            <Box
+              sx={{
+                py: 6,
+                textAlign: 'center',
+                bgcolor: C.bg,
+                borderRadius: 2,
+                mb: 2
+              }}
+            >
               <ShoppingCartOutlined style={{ fontSize: 28, color: '#A9B6C8' }} />
               <Typography sx={{ mt: 1, fontSize: 13, fontWeight: 600 }}>Your invoice is empty</Typography>
               <Typography sx={{ fontSize: 12, color: C.muted }}>Click a product to choose its size and color.</Typography>
@@ -497,16 +548,34 @@ export default function InStoreSalesPage() {
                         <IconButton
                           size="small"
                           onClick={() => updateQuantity(line.key, -1)}
-                          sx={{ border: `1px solid ${C.border}`, borderRadius: 1, p: 0.5 }}
+                          sx={{
+                            border: `1px solid ${C.border}`,
+                            borderRadius: 1,
+                            p: 0.5
+                          }}
                         >
                           <MinusOutlined style={{ fontSize: 10 }} />
                         </IconButton>
-                        <Typography sx={{ minWidth: 20, textAlign: 'center', fontSize: 12 }}>{line.quantity}</Typography>
+
+                        <Typography
+                          sx={{
+                            minWidth: 20,
+                            textAlign: 'center',
+                            fontSize: 12
+                          }}
+                        >
+                          {line.quantity}
+                        </Typography>
+
                         <IconButton
                           size="small"
                           disabled={line.quantity >= line.stock}
                           onClick={() => updateQuantity(line.key, 1)}
-                          sx={{ border: `1px solid ${C.border}`, borderRadius: 1, p: 0.5 }}
+                          sx={{
+                            border: `1px solid ${C.border}`,
+                            borderRadius: 1,
+                            p: 0.5
+                          }}
                         >
                           <PlusOutlined style={{ fontSize: 10 }} />
                         </IconButton>
@@ -520,6 +589,7 @@ export default function InStoreSalesPage() {
                       </IconButton>
                     </Box>
                   </Stack>
+
                   <Divider sx={{ mt: 1.5, borderColor: C.border }} />
                 </Box>
               ))}
@@ -552,6 +622,7 @@ export default function InStoreSalesPage() {
             </Stack>
 
             <Typography sx={{ fontSize: 12, fontWeight: 700 }}>Payment method</Typography>
+
             <ToggleGroup value={payment} onChange={setPayment} fullWidth>
               <ToggleButton value="Cash">Cash</ToggleButton>
               <ToggleButton value="Bank transfer">Bank transfer</ToggleButton>
@@ -568,6 +639,7 @@ export default function InStoreSalesPage() {
                   onChange={(e) => setReceived(e.target.value)}
                   inputProps={{ min: 0 }}
                 />
+
                 <Stack direction="row" justifyContent="space-between" sx={{ p: 1.25, bgcolor: C.bg, borderRadius: 1.5 }}>
                   <Typography sx={{ fontSize: 12, color: C.muted }}>Change due</Typography>
                   <Typography sx={{ fontWeight: 700 }}>{money(change)}</Typography>
@@ -578,7 +650,6 @@ export default function InStoreSalesPage() {
             <Button
               fullWidth
               variant="contained"
-              startIcon={<CheckCircleOutlined />}
               onClick={completeSale}
               disabled={!cart.length}
               sx={{
@@ -601,7 +672,10 @@ export default function InStoreSalesPage() {
                 py: 1,
                 borderColor: C.border,
                 color: C.text,
-                '&:hover': { bgcolor: C.main, borderColor: C.main }
+                '&:hover': {
+                  bgcolor: C.cancelHover,
+                  borderColor: C.cancelHover
+                }
               }}
             >
               Clear invoice
@@ -610,20 +684,24 @@ export default function InStoreSalesPage() {
         </Card>
       </Box>
 
-      {/* Compact variant popup */}
+      {/* Variant popup */}
       <Dialog
-        open={Boolean(variantProduct)}
+        open={variantDialogOpen}
         onClose={closeDialog}
+        TransitionProps={{ onExited: resetDialog }}
         fullWidth
         maxWidth="xs"
         PaperProps={{
-          sx: {
-            width: '100%',
-            maxWidth: 360,
-            m: 1.5,
-            borderRadius: 3,
-            overflow: 'hidden'
-          }
+            sx: {
+                width: '100%',
+                maxWidth: 360,
+                m: 1.5,
+                borderRadius: 3,
+                overflow: 'hidden',
+                outline: 'none',
+                border: 'none',
+                boxShadow: '0 8px 32px rgba(32, 45, 66, 0.12)'
+            }
         }}
         sx={{
           '& .MuiDialog-container': { alignItems: 'center' },
@@ -651,21 +729,51 @@ export default function InStoreSalesPage() {
                 <Avatar
                   variant="rounded"
                   src={variantProduct?.image || ''}
-                  sx={{ width: 56, height: 56, bgcolor: C.bg, borderRadius: 1.5 }}
+                  sx={{
+                    width: 56,
+                    height: 56,
+                    bgcolor: C.bg,
+                    borderRadius: 1.5
+                  }}
                 >
                   <ShoppingCartOutlined />
                 </Avatar>
 
                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography sx={{ fontSize: 13, fontWeight: 800, lineHeight: 1.35 }}>{variantProduct?.productName}</Typography>
-                  <Typography sx={{ mt: 0.4, fontSize: 13, fontWeight: 800, color: '#087F8C' }}>{priceRange}</Typography>
+                  <Typography
+                    sx={{
+                      fontSize: 13,
+                      fontWeight: 800,
+                      lineHeight: 1.35
+                    }}
+                  >
+                    {variantProduct?.productName}
+                  </Typography>
+                  <Typography
+                    sx={{
+                      mt: 0.4,
+                      fontSize: 13,
+                      fontWeight: 800,
+                      color: '#087F8C'
+                    }}
+                  >
+                    {priceRange}
+                  </Typography>
                 </Box>
               </Stack>
 
               <Divider sx={{ mb: 1.5, borderColor: C.border }} />
 
               <Typography sx={{ fontSize: 12, fontWeight: 800, mb: 1 }}>Size</Typography>
-              <Stack direction="row" flexWrap="wrap" gap={1} sx={{ mb: 1.75 }}>
+
+              <Box
+                sx={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: '10px',
+                  mb: 2
+                }}
+              >
                 {sizes.map((size) => {
                   const hasStock = variants.some((v) => String(v.size ?? '') === size && getStock(v) > 0);
 
@@ -679,12 +787,13 @@ export default function InStoreSalesPage() {
                     />
                   );
                 })}
-              </Stack>
+              </Box>
 
               <Divider sx={{ mb: 1.5, borderColor: C.border }} />
 
               <Typography sx={{ fontSize: 12, fontWeight: 800, mb: 1 }}>Color</Typography>
-              <Stack direction="row" flexWrap="wrap" gap={1}>
+
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
                 {colors.map((color) => {
                   const variant = variants.find((v) => String(v.size ?? '') === selectedSize && String(v.color ?? '') === color);
 
@@ -693,17 +802,18 @@ export default function InStoreSalesPage() {
                       key={color || 'default-color'}
                       label={color || 'Default'}
                       selected={selectedColor === color}
-                      disabled={getStock(variant) <= 0}
+                      disabled={!variant || getStock(variant) <= 0}
                       onClick={() => setSelectedColor(color)}
                     />
                   );
                 })}
-              </Stack>
+              </Box>
 
               {selectedVariant && (
-                <Stack direction="row" justifyContent="space-between" sx={{ mt: 1.5 }}>
-                  <Typography sx={{ fontSize: 11, color: C.muted }}>Selected price</Typography>
-                  <Typography sx={{ fontSize: 12, fontWeight: 800 }}>{money(getPrice(selectedVariant))}</Typography>
+                <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 1.5, width: '100%' }}>
+                  <Typography sx={{ fontSize: 11, color: C.muted, mr: 2 }}>Selected price</Typography>
+
+                  <Typography sx={{ fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap' }}>{money(getPrice(selectedVariant))}</Typography>
                 </Stack>
               )}
             </>
@@ -712,6 +822,7 @@ export default function InStoreSalesPage() {
 
         <DialogActions sx={{ px: 2, py: 1.25, gap: 1 }}>
           <Button
+            type="button"
             onClick={closeDialog}
             sx={{
               ...buttonSx,
@@ -720,9 +831,11 @@ export default function InStoreSalesPage() {
               fontSize: 12,
               color: C.text,
               border: `1px solid ${C.border}`,
+              bgcolor: '#FFFFFF',
+              transition: 'background-color 0.15s ease',
               '&:hover': {
-                bgcolor: C.main,
-                borderColor: C.main
+                bgcolor: C.cancelHover,
+                borderColor: C.cancelHover
               }
             }}
           >

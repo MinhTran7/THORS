@@ -36,6 +36,7 @@ import ProductDetailPage from 'features/product/ProductDetailPage';
 import EditProductPage from 'features/product/EditProductPage';
 //sales
 import InStoreSalesPage from 'features/sales/InStoreSalesPage';
+import PromotionPage from 'features/promotion/PromotionPage';
 export default createBrowserRouter([
   { path: '/', element: <Navigate to="/workspace" replace /> },
   { path: '/login', element: <LoginPage /> },
@@ -70,14 +71,15 @@ export default createBrowserRouter([
               { path: '/staff/new', element: <StaffFormPage /> },
               { path: '/staff/:id', element: <StaffDetailPage /> },
               { path: '/staff/:id/edit', element: <StaffFormPage /> },
-                    // Category & Product (của DongNV)
-      { path: '/categories', element: <CategoryPage /> },
-      { path: '/products', element: <ProductPage /> },
-      { path: '/products/add', element: <AddProductPage /> },
-      { path: '/products/:productId', element: <ProductDetailPage /> },
-      { path: '/products/:productId/edit', element: <EditProductPage /> },
+              // Category & Product (của DongNV)
+              { path: '/categories', element: <CategoryPage /> },
+              { path: '/products', element: <ProductPage /> },
+              { path: '/products/add', element: <AddProductPage /> },
+              { path: '/products/:productId', element: <ProductDetailPage /> },
+              { path: '/products/:productId/edit', element: <EditProductPage /> },
 
               { path: '/in-store-sales', element: <InStoreSalesPage /> },
+              { path: '/promotions', element: <PromotionPage /> },
             ]
           }
         ]
