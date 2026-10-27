@@ -14,12 +14,15 @@ import WorkspacePage from 'features/account/WorkspacePage';
 import { AuthShell } from 'features/auth/components/AuthForm';
 import { Button, Typography } from '@mui/material';
 import { Link } from 'react-router-dom';
-=======
+
 
 // Category Management
 import CategoryPage from 'features/category/CategoryPage';
 
 // Category Management
+import CartPage from 'features/cart/CartPage';
+
+// Cart
 import CartPage from 'features/cart/CartPage';
 
 // Product Management
