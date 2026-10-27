@@ -1,4 +1,3 @@
-
 import { createBrowserRouter, Navigate, Link } from 'react-router-dom';
 import { Button, Typography } from '@mui/material';
 
@@ -34,6 +33,7 @@ import AddProductPage from '../features/product/AddProductPage';
 import ProductDetailPage from 'features/product/ProductDetailPage';
 //update product
 import EditProductPage from 'features/product/EditProductPage';
+
 export default createBrowserRouter([
   { path: '/', element: <Navigate to="/workspace" replace /> },
   { path: '/login', element: <LoginPage /> },
@@ -64,16 +64,18 @@ export default createBrowserRouter([
           {
             element: <RequireAuth roles={['OWNER']} />,
             children: [
-              { path: '/staff', element: <StaffListPage /> },
-              { path: '/staff/new', element: <StaffFormPage /> },
-              { path: '/staff/:id', element: <StaffDetailPage /> },
-              { path: '/staff/:id/edit', element: <StaffFormPage /> },
-                    // Category & Product (của DongNV)
-      { path: '/categories', element: <CategoryPage /> },
-      { path: '/products', element: <ProductPage /> },
-      { path: '/products/add', element: <AddProductPage /> },
-      { path: '/products/:productId', element: <ProductDetailPage /> },
-      { path: '/products/:productId/edit', element: <EditProductPage /> }
+              
+              { path: '/family', element: <StaffListPage /> },
+              { path: '/family/new', element: <StaffFormPage /> },
+              { path: '/family/:id', element: <StaffDetailPage /> },
+              { path: '/family/:id/edit', element: <StaffFormPage /> },
+
+              // Category & Product (của DongNV)
+              { path: '/categories', element: <CategoryPage /> },
+              { path: '/products', element: <ProductPage /> },
+              { path: '/products/add', element: <AddProductPage /> },
+              { path: '/products/:productId', element: <ProductDetailPage /> },
+              { path: '/products/:productId/edit', element: <EditProductPage /> }
             ]
           }
         ]

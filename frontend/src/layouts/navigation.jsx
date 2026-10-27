@@ -15,7 +15,7 @@ export const NAVIGATION = {
     dashboard,
     { to: '/products', label: 'Products', icon: <ShopOutlined /> },
     { to: '/categories', label: 'Categories', icon: <AppstoreOutlined /> },
-    { to: '/staff', label: 'Family', icon: <TeamOutlined /> },
+    { to: '/family', label: 'Family', icon: <TeamOutlined /> },
     profile
   ]
 };
