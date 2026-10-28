@@ -22,6 +22,13 @@ import AccountListPage from 'features/account/pages/AccountListPage';
 import SystemLogPage from 'features/account/pages/SystemLogPage';
 import WorkspacePage from 'features/account/WorkspacePage';
 
+// Notification Management
+import NotificationPage from 'features/notification/NotificationPage';
+
+// Online Order Management
+import OrderListPage from 'features/order/OrderListPage';
+import OrderDetailPage from 'features/order/OrderDetailPage';
+
 // Category Management
 import CategoryPage from 'features/category/CategoryPage';
 
@@ -33,7 +40,6 @@ import AddProductPage from '../features/product/AddProductPage';
 import ProductDetailPage from 'features/product/ProductDetailPage';
 //update product
 import EditProductPage from 'features/product/EditProductPage';
-
 export default createBrowserRouter([
   { path: '/', element: <Navigate to="/workspace" replace /> },
   { path: '/login', element: <LoginPage /> },
@@ -54,6 +60,15 @@ export default createBrowserRouter([
           { path: '/profile', element: <ProfilePage /> },
           { path: '/profile/edit', element: <UpdateProfilePage /> },
           { path: '/profile/password', element: <ChangePasswordPage /> },
+          { path: '/notifications', element: <NotificationPage /> },
+          {
+            // Customer xem đơn của mình; Owner và Family Member xem đơn online của cửa hàng
+            element: <RequireAuth roles={['CUSTOMER', 'OWNER', 'FAMILY_MEMBER']} />,
+            children: [
+              { path: '/orders', element: <OrderListPage /> },
+              { path: '/orders/:id', element: <OrderDetailPage /> }
+            ]
+          },
           {
             element: <RequireAuth roles={['ADMIN']} />,
             children: [
@@ -64,18 +79,16 @@ export default createBrowserRouter([
           {
             element: <RequireAuth roles={['OWNER']} />,
             children: [
-              
               { path: '/family', element: <StaffListPage /> },
               { path: '/family/new', element: <StaffFormPage /> },
               { path: '/family/:id', element: <StaffDetailPage /> },
               { path: '/family/:id/edit', element: <StaffFormPage /> },
-
-              // Category & Product (của DongNV)
-              { path: '/categories', element: <CategoryPage /> },
-              { path: '/products', element: <ProductPage /> },
-              { path: '/products/add', element: <AddProductPage /> },
-              { path: '/products/:productId', element: <ProductDetailPage /> },
-              { path: '/products/:productId/edit', element: <EditProductPage /> }
+                    // Category & Product (của DongNV)
+      { path: '/categories', element: <CategoryPage /> },
+      { path: '/products', element: <ProductPage /> },
+      { path: '/products/add', element: <AddProductPage /> },
+      { path: '/products/:productId', element: <ProductDetailPage /> },
+      { path: '/products/:productId/edit', element: <EditProductPage /> }
             ]
           }
         ]

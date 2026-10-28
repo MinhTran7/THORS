@@ -2,12 +2,13 @@ import { useMemo, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Alert, Box, Drawer, IconButton, List, ListItemButton, ListItemIcon, ListItemText, Tooltip, Typography } from '@mui/material';
 import { Stack } from 'features/account/components/Flex';
-import { BellOutlined, LogoutOutlined, MenuOutlined } from '@ant-design/icons';
+import { LogoutOutlined } from '@ant-design/icons';
 import { useAuth } from 'features/auth/AuthProvider';
 import { ROLE_LABEL, ROLE_TITLE, STORE_NAME } from 'features/account/constants';
-import { formatToday } from 'features/account/format';
 import { brand } from 'features/account/tokens';
 import UserAvatar from 'features/account/components/UserAvatar';
+import AppFooter from './AppFooter';
+import AppHeader from './AppHeader';
 import { CrumbsContext } from './crumbs';
 import { navFor } from './navigation';
 import ThorsMark from './ThorsMark';
@@ -126,59 +127,9 @@ export default function ThorsLayout() {
         >
           {sidebar}
         </Drawer>
-        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-          <Stack
-            component="header"
-            direction="row"
-            alignItems="center"
-            spacing={1.5}
-            sx={{ height: 56, px: { xs: 2, md: 4 }, borderBottom: `1px solid ${brand.line}`, bgcolor: brand.surface }}
-          >
-            <IconButton aria-label="Open menu" sx={{ display: { md: 'none' } }} onClick={() => setMobile(true)}>
-              <MenuOutlined />
-            </IconButton>
-            <Stack
-              direction="row"
-              spacing={0.75}
-              alignItems="center"
-              component="nav"
-              aria-label="Breadcrumb"
-              sx={{ flexGrow: 1, minWidth: 0 }}
-            >
-              {headerCrumbs.map((label, index) => (
-                <Stack key={`${label}-${index}`} direction="row" spacing={0.75} alignItems="center">
-                  {index > 0 && (
-                    <Typography variant="caption" sx={{ color: brand.muted }}>
-                      /
-                    </Typography>
-                  )}
-                  <Typography
-                    variant="caption"
-                    noWrap
-                    sx={{
-                      color: index === headerCrumbs.length - 1 ? brand.ink : brand.muted,
-                      fontWeight: index === headerCrumbs.length - 1 ? 600 : 400,
-                      fontSize: 13
-                    }}
-                  >
-                    {label}
-                  </Typography>
-                </Stack>
-              ))}
-            </Stack>
-            <Typography variant="caption" sx={{ color: brand.muted, display: { xs: 'none', sm: 'block' } }}>
-              {formatToday()}
-            </Typography>
-            <Tooltip title="No new notifications">
-              <IconButton aria-label="Notifications" size="small">
-                <BellOutlined />
-              </IconButton>
-            </Tooltip>
-            <Link to="/profile" aria-label="Your profile">
-              <UserAvatar name={account.fullName} src={account.avatarUrl} size={30} />
-            </Link>
-          </Stack>
-          <Box component="main" sx={{ px: { xs: 2, md: 4 }, py: { xs: 3, md: 4 }, maxWidth: 1240 }}>
+        <Box sx={{ flexGrow: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+          <AppHeader crumbs={headerCrumbs} onOpenMenu={() => setMobile(true)} onSignOut={signOut} />
+          <Box component="main" sx={{ px: { xs: 2, md: 4 }, py: { xs: 3, md: 4 }, maxWidth: 1240, width: '100%', flexGrow: 1 }}>
             {error && (
               <Alert severity="error" sx={{ mb: 2 }}>
                 {error}
@@ -186,6 +137,7 @@ export default function ThorsLayout() {
             )}
             <Outlet />
           </Box>
+          <AppFooter />
         </Box>
       </Box>
     </CrumbsContext.Provider>

@@ -10,6 +10,8 @@ import com.thors.module.account.mapper.AccountMapper;
 import com.thors.module.account.repository.AccountRepository;
 import com.thors.module.auth.repository.OtpRepository;
 import com.thors.module.auth.service.AuthService;
+import com.thors.module.notification.service.NotificationPublisher;
+import com.thors.module.notification.service.NotificationTypes;
 import java.util.List;
 import java.util.Objects;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -28,11 +30,17 @@ public class AccountService {
   private final AccountRepository users;
   private final OtpRepository codes;
   private final PasswordEncoder passwords;
+  private final NotificationPublisher notices;
 
-  public AccountService(AccountRepository users, OtpRepository codes, PasswordEncoder passwords) {
+  public AccountService(
+          AccountRepository users,
+          OtpRepository codes,
+          PasswordEncoder passwords,
+          NotificationPublisher notices) {
     this.users = users;
     this.codes = codes;
     this.passwords = passwords;
+    this.notices = notices;
   }
 
   // ---------------------------------------------------------------- View / Update Profile
@@ -259,6 +267,12 @@ public class AccountService {
             "PASSWORD_RESET_ADMIN",
             id,
             "Password replaced by " + actor.role() + "; activation required; sessions revoked");
+    notices.toUser(
+            id,
+            NotificationTypes.ACCOUNT_SECURITY,
+            "Mật khẩu đã được đặt lại",
+            "Mật khẩu của bạn vừa được " + (admin ? "quản trị viên" : "chủ cửa hàng")
+                    + " đặt lại. Hãy đăng nhập bằng mật khẩu mới và hoàn tất bước kích hoạt. Nếu bạn không yêu cầu việc này, hãy liên hệ quản trị viên.");
   }
 
   /** Owner quên mật khẩu gửi yêu cầu (chưa đăng nhập). Luôn im lặng để không lộ tài khoản có tồn tại. */
@@ -274,6 +288,14 @@ public class AccountService {
     var a = found.get();
     if (!"OWNER".equals(a.role()) || !a.active() || users.hasOpenResetRequest(a.id())) return;
     users.audit(null, "PASSWORD_RESET_REQUEST", a.id(), "Shop Owner submitted a password reset request");
+    // Admin không có cách nào khác để biết có yêu cầu, nên báo cho mọi Admin đang hoạt động.
+    notices.toRole(
+            "ADMIN",
+            NotificationTypes.PASSWORD_RESET_REQUEST,
+            "Yêu cầu đặt lại mật khẩu",
+            a.fullName() + " (Chủ cửa hàng) vừa gửi yêu cầu đặt lại mật khẩu. Hãy mở trang Tài khoản để xem yêu cầu và đặt mật khẩu mới.",
+            NotificationTypes.ENTITY_USER,
+            a.id());
   }
 
   /** Danh sách yêu cầu đặt lại mật khẩu của Owner chưa được xử lý (Admin). */
