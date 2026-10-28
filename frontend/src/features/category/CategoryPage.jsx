@@ -40,7 +40,6 @@ import {
   EditOutlined,
   EllipsisOutlined,
   EyeOutlined,
-  InfoCircleOutlined,
   PlusOutlined,
   SearchOutlined,
   TagsOutlined,

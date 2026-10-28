@@ -436,4 +436,51 @@ public class ProductRepository {
         return jdbcTemplate.update(sql, status, productId);
     }
 
+    public int countTransactionsByProductId(int productId) {
+        String sql = """
+            SELECT 
+                (SELECT COUNT(*) FROM order_item oi JOIN product_detail pd ON oi.detail_id = pd.detail_id WHERE pd.product_id = ?) +
+                (SELECT COUNT(*) FROM stock_receipt_item sri JOIN product_detail pd ON sri.detail_id = pd.detail_id WHERE pd.product_id = ?) +
+                (SELECT COUNT(*) FROM product_location pl JOIN product_detail pd ON pl.detail_id = pd.detail_id WHERE pd.product_id = ?) +
+                (SELECT COUNT(*) FROM stock_adjustment sa JOIN product_detail pd ON sa.detail_id = pd.detail_id WHERE pd.product_id = ?)
+            AS total_count
+            """;
+
+        Integer count = jdbcTemplate.queryForObject(sql, Integer.class, productId, productId, productId, productId);
+        return count != null ? count : 0;
+    }
+
+    public List<String> findCloudinaryPublicIds(int productId) {
+        String sql = """
+            SELECT cloud_public_id 
+            FROM product_image 
+            WHERE product_id = ? AND cloud_public_id IS NOT NULL AND cloud_public_id != ''
+            """;
+        return jdbcTemplate.queryForList(sql, String.class, productId);
+    }
+
+    public void deleteProductCascaded(int productId) {
+        // 1. Clean cart_item
+        jdbcTemplate.update("""
+            DELETE FROM cart_item 
+            WHERE detail_id IN (SELECT detail_id FROM product_detail WHERE product_id = ?)
+            """, productId);
+
+        // 2. Unlink image_search
+        jdbcTemplate.update("""
+            UPDATE image_search 
+            SET selected_product_id = NULL 
+            WHERE selected_product_id = ?
+            """, productId);
+
+        // 3. Delete product_image
+        jdbcTemplate.update("DELETE FROM product_image WHERE product_id = ?", productId);
+
+        // 4. Delete product_detail
+        jdbcTemplate.update("DELETE FROM product_detail WHERE product_id = ?", productId);
+
+        // 5. Delete product
+        jdbcTemplate.update("DELETE FROM product WHERE product_id = ?", productId);
+    }
+
 }

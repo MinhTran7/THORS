@@ -43,8 +43,9 @@ import {
   CameraOutlined,
   CheckOutlined,
   CloseOutlined,
+  DeleteOutlined,
   EditOutlined,
-  EyeOutlined,
+  FileExcelOutlined,
   PictureOutlined,
   PlusOutlined,
   SearchOutlined,
@@ -55,10 +56,12 @@ import {
   getProducts,
   getProductById,
   updateProduct,
-  changeProductStatus
+  changeProductStatus,
+  deleteProduct
 } from '../../services/productService';
 
 import { getCategories } from '../../services/categoryService';
+import ProductExcelDialog from './ProductExcelDialog';
 
 // ==========================================
 // CONFIGURATION
@@ -171,7 +174,7 @@ export default function ProductPage() {
   // STATES - SEARCH AND FILTER
   // ==========================================
 
-  const [activeTab, setActiveTab] = useState('ALL');
+  const [activeTab, setActiveTab] = useState('ACTIVE');
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -201,8 +204,16 @@ export default function ProductPage() {
 
   const [statusDialogProduct, setStatusDialogProduct] = useState(null);
   const [statusSaving, setStatusSaving] = useState(false);
+  const [excelDialogOpen, setExcelDialogOpen] = useState(false);
 
-  const busy = editingProductId !== null || saving || statusSaving;
+  // ==========================================
+  // STATES - DELETE PRODUCT
+  // ==========================================
+
+  const [deleteDialogProduct, setDeleteDialogProduct] = useState(null);
+  const [deleteSaving, setDeleteSaving] = useState(false);
+
+  const busy = editingProductId !== null || saving || statusSaving || deleteSaving;
 
   // ==========================================
   // LOAD PRODUCTS
@@ -255,6 +266,16 @@ export default function ProductPage() {
   // STATISTICS
   // ==========================================
 
+  const activeProducts = useMemo(
+    () => products.filter((product) => product.status === 'ACTIVE'),
+    [products]
+  );
+
+  const inactiveProducts = useMemo(
+    () => products.filter((product) => product.status === 'INACTIVE'),
+    [products]
+  );
+
   const onlineProducts = useMemo(
     () => products.filter(isOnlineProduct),
     [products]
@@ -286,11 +307,13 @@ export default function ProductPage() {
 
       let matchesTab = true;
 
-      if (activeTab === 'ONLINE') {
+      if (activeTab === 'ACTIVE') {
+        matchesTab = product.status === 'ACTIVE';
+      } else if (activeTab === 'INACTIVE') {
+        matchesTab = product.status === 'INACTIVE';
+      } else if (activeTab === 'ONLINE') {
         matchesTab = isOnlineProduct(product);
-      }
-
-      if (activeTab === 'LOW_STOCK') {
+      } else if (activeTab === 'LOW_STOCK') {
         matchesTab = isLowStockProduct(product);
       }
 
@@ -512,6 +535,63 @@ export default function ProductPage() {
   }
 
   // ==========================================
+  // DELETE PRODUCT (SAFE DELETE)
+  // ==========================================
+
+  function openDeleteDialog(product) {
+    if (busy || !product) return;
+
+    setError('');
+    setSuccess('');
+    setDeleteDialogProduct(product);
+  }
+
+  function closeDeleteDialog() {
+    if (deleteSaving) return;
+    setDeleteDialogProduct(null);
+  }
+
+  async function confirmDeleteProduct() {
+    if (!deleteDialogProduct || deleteSaving) return;
+
+    const productId = deleteDialogProduct.productId;
+    const productName = deleteDialogProduct.productName;
+
+    try {
+      setDeleteSaving(true);
+      setError('');
+      setSuccess('');
+
+      await deleteProduct(productId);
+
+      setProducts((previous) =>
+        previous.filter((product) => product.productId !== productId)
+      );
+
+      setDeleteDialogProduct(null);
+      setSuccess(`Đã xóa vĩnh viễn sản phẩm "${productName}" (ID: ${productId}).`);
+
+      try {
+        const updatedProducts = await getProducts();
+        if (Array.isArray(updatedProducts)) {
+          setProducts(updatedProducts);
+        }
+      } catch (refreshError) {
+        console.error('Delete succeeded but refresh failed:', refreshError);
+      }
+    } catch (err) {
+      console.error('Delete product failed:', err);
+      setError(
+        err?.message ||
+        'Không thể xóa sản phẩm. Sản phẩm có thể đã có lịch sử giao dịch trong hệ thống.'
+      );
+      setDeleteDialogProduct(null);
+    } finally {
+      setDeleteSaving(false);
+    }
+  }
+
+  // ==========================================
   // RENDER
   // ==========================================
 
@@ -550,25 +630,46 @@ export default function ProductPage() {
           </Typography>
         </Box>
 
-        <Button
-          variant="contained"
-          startIcon={<PlusOutlined />}
-          disabled={busy}
-          onClick={() => navigate('/products/add')}
-          sx={{
-            bgcolor: COLORS.cyan,
-            color: COLORS.text,
-            textTransform: 'none',
-            fontWeight: 600,
-            boxShadow: 'none',
-            '&:hover': {
-              bgcolor: '#6DDDE9',
-              boxShadow: 'none'
-            }
-          }}
-        >
-          Add Product
-        </Button>
+        <Stack direction="row" spacing={1.5} alignItems="center">
+          <Button
+            variant="outlined"
+            startIcon={<FileExcelOutlined />}
+            disabled={busy}
+            onClick={() => setExcelDialogOpen(true)}
+            sx={{
+              borderColor: COLORS.green,
+              color: COLORS.green,
+              textTransform: 'none',
+              fontWeight: 600,
+              '&:hover': {
+                borderColor: '#1e6b55',
+                bgcolor: '#F0F9F6'
+              }
+            }}
+          >
+            Nhập từ Excel
+          </Button>
+
+          <Button
+            variant="contained"
+            startIcon={<PlusOutlined />}
+            disabled={busy}
+            onClick={() => navigate('/products/add')}
+            sx={{
+              bgcolor: COLORS.cyan,
+              color: COLORS.text,
+              textTransform: 'none',
+              fontWeight: 600,
+              boxShadow: 'none',
+              '&:hover': {
+                bgcolor: '#6DDDE9',
+                boxShadow: 'none'
+              }
+            }}
+          >
+            Add Product
+          </Button>
+        </Stack>
       </Stack>
 
       {/* ======================================
@@ -603,9 +704,11 @@ export default function ProductPage() {
         sx={{ mb: 2.5 }}
       >
         {[
-          { key: 'ALL', label: 'All products', count: products.length },
-          { key: 'ONLINE', label: 'Online', count: onlineProducts.length },
-          { key: 'LOW_STOCK', label: 'Low stock', count: lowStockProducts.length }
+          { key: 'ACTIVE', label: 'Đang hoạt động', count: activeProducts.length },
+          { key: 'INACTIVE', label: 'Đã ẩn', count: inactiveProducts.length },
+          { key: 'ONLINE', label: 'Bán online', count: onlineProducts.length },
+          { key: 'LOW_STOCK', label: 'Sắp hết hàng', count: lowStockProducts.length },
+          { key: 'ALL', label: 'Tất cả sản phẩm', count: products.length }
         ].map((tab) => {
           const selected = activeTab === tab.key;
 
@@ -1108,6 +1211,28 @@ export default function ProductPage() {
                                 </IconButton>
                               </span>
                             </Tooltip>
+
+                            <Tooltip title="Xóa vĩnh viễn sản phẩm">
+                              <span>
+                                <IconButton
+                                  size="small"
+                                  disabled={busy}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    openDeleteDialog(product);
+                                  }}
+                                  sx={{
+                                    color: COLORS.red,
+                                    '&:hover': {
+                                      color: '#B83D3D',
+                                      bgcolor: '#FCECEC'
+                                    }
+                                  }}
+                                >
+                                  <DeleteOutlined style={{ fontSize: 14 }} />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
                           </Stack>
                         )}
                       </TableCell>
@@ -1225,6 +1350,62 @@ export default function ProductPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* ======================================
+          DELETE PRODUCT DIALOG
+      ====================================== */}
+      <Dialog open={Boolean(deleteDialogProduct)} onClose={closeDeleteDialog} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700, color: COLORS.red }}>
+          Xác nhận xóa vĩnh viễn sản phẩm
+        </DialogTitle>
+
+        <DialogContent>
+          <DialogContentText>
+            Bạn có chắc chắn muốn xóa sản phẩm{' '}
+            <strong>{deleteDialogProduct?.productName}</strong> (ID: {deleteDialogProduct?.productId})?
+          </DialogContentText>
+
+          <Alert severity="warning" sx={{ mt: 2 }}>
+            Hành động này sẽ xóa hoàn toàn sản phẩm, các biến thể và hình ảnh liên quan khỏi hệ thống nếu sản phẩm chưa phát sinh lịch sử giao dịch.
+            Nếu sản phẩm đã từng có đơn hàng hoặc phiếu kho, hệ thống sẽ ngăn chặn việc xóa để đảm bảo toàn vẹn dữ liệu.
+          </Alert>
+        </DialogContent>
+
+        <DialogActions sx={{ px: 3, pb: 2.5 }}>
+          <Button onClick={closeDeleteDialog} disabled={deleteSaving} sx={{ textTransform: 'none', color: COLORS.muted }}>
+            Hủy
+          </Button>
+
+          <Button
+            variant="contained"
+            disabled={deleteSaving}
+            onClick={confirmDeleteProduct}
+            startIcon={deleteSaving ? <CircularProgress size={16} color="inherit" /> : null}
+            sx={{
+              textTransform: 'none',
+              bgcolor: COLORS.red,
+              '&:hover': {
+                bgcolor: '#B83D3D'
+              }
+            }}
+          >
+            {deleteSaving ? 'Đang xóa...' : 'Xác nhận xóa'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ======================================
+          EXCEL BATCH IMPORT DIALOG
+      ====================================== */}
+      <ProductExcelDialog
+        open={excelDialogOpen}
+        onClose={() => setExcelDialogOpen(false)}
+        categories={categories}
+        onSuccess={(msg) => {
+          setSuccess(msg);
+          loadProducts();
+        }}
+      />
     </Box>
   );
 }
