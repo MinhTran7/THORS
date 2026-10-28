@@ -20,34 +20,51 @@ public class ApiErrors {
   @ExceptionHandler(MethodArgumentNotValidException.class)
   ResponseEntity<?> validation(MethodArgumentNotValidException e) {
     return ResponseEntity.badRequest()
-        .body(
-            Map.of(
-                "code",
-                "VALIDATION",
-                "message",
-                e.getBindingResult().getFieldErrors().stream()
-                    .map(x -> x.getDefaultMessage())
-                    .findFirst()
-                    .orElse("Thông tin không hợp lệ.")));
+            .body(
+                    Map.of(
+                            "code",
+                            "VALIDATION",
+                            "message",
+                            e.getBindingResult().getFieldErrors().stream()
+                                    .map(x -> x.getDefaultMessage())
+                                    .findFirst()
+                                    .orElse("Thông tin không hợp lệ.")));
   }
 
   @ExceptionHandler(DataIntegrityViolationException.class)
   ResponseEntity<?> duplicate(DataIntegrityViolationException e) {
     return ResponseEntity.status(409)
-        .body(
-            Map.of(
-                "code",
-                "CONFLICT",
-                "message",
-                "Thông tin đã được sử dụng hoặc có dữ liệu liên quan."));
+            .body(
+                    Map.of(
+                            "code",
+                            "CONFLICT",
+                            "message",
+                            "Thông tin đã được sử dụng hoặc có dữ liệu liên quan."));
+  }
+
+  @ExceptionHandler({
+          org.springframework.web.multipart.MaxUploadSizeExceededException.class,
+          org.springframework.http.converter.HttpMessageNotReadableException.class,
+          org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class
+  })
+  ResponseEntity<?> requestFormat(Exception e) {
+    return ResponseEntity.badRequest()
+            .body(
+                    Map.of(
+                            "code",
+                            "INVALID_REQUEST",
+                            "message",
+                            e instanceof org.springframework.web.multipart.MaxUploadSizeExceededException
+                                    ? "Ảnh tối đa 5 MB mỗi lần tải."
+                                    : "Thông tin gửi lên không đúng định dạng."));
   }
 
   @ExceptionHandler(Exception.class)
   ResponseEntity<?> unexpected(Exception e) {
     log.error("Unhandled request failure: {}", e.getClass().getSimpleName());
     return ResponseEntity.internalServerError()
-        .body(
-            Map.of(
-                "code", "SERVER_ERROR", "message", "Không thể xử lý yêu cầu. Vui lòng thử lại."));
+            .body(
+                    Map.of(
+                            "code", "SERVER_ERROR", "message", "Không thể xử lý yêu cầu. Vui lòng thử lại."));
   }
 }
