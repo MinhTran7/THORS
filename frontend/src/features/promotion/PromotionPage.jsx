@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Box,
@@ -24,68 +25,115 @@ import {
   TextField,
   Typography
 } from '@mui/material';
-import { EditOutlined, EyeOutlined, SearchOutlined, TagsOutlined } from '@ant-design/icons';
+import {
+  EditOutlined,
+  EyeOutlined,
+  SearchOutlined
+} from '@ant-design/icons';
+import {
+  changePromotionStatus,
+  getPromotionById,
+  getPromotions
+} from 'services/promotionService';
 
-import { changePromotionStatus, getPromotionById, getPromotions, updatePromotion } from 'services/promotionService';
-
-const COLORS = {
+const C = {
   text: '#202D42',
   muted: '#75869F',
-  border: '#E5EBF2',
+  border: '#E5E7E3',
   cyan: '#8DE9F2',
+  cyanHover: '#6DDDE9',
   cyanLight: '#EAFBFD',
-  yellowLight: '#FFFBE7'
+  yellowLight: '#FFFBE7',
+  bg: '#FAFAF8'
 };
 
 const PAGE_SIZE = 8;
 
-const EMPTY_FORM = {
-  name: '',
-  description: '',
-  discountType: 'PERCENT',
-  discountValue: '',
-  minOrderValue: '0',
-  maxDiscountAmount: '',
-  usageLimit: '',
-  startDate: '',
-  endDate: ''
-};
-
 const cardSx = {
-  border: `1px solid ${COLORS.border}`,
-  borderRadius: 2,
+  border: `1px solid ${C.border}`,
+  borderRadius: 2.5,
   boxShadow: 'none',
   bgcolor: '#fff'
 };
 
-const money = (value) => `${Number(value || 0).toLocaleString('vi-VN')} đ`;
+const buttonSx = {
+  bgcolor: C.cyan,
+  color: C.text,
+  fontWeight: 600,
+  boxShadow: 'none',
+  '&:hover': {
+    bgcolor: C.cyanHover,
+    boxShadow: 'none'
+  }
+};
 
-const dateText = (value) => (value ? new Date(`${value}T00:00:00`).toLocaleDateString('vi-VN') : '—');
+const money = (value) =>
+    `${Number(value || 0).toLocaleString('vi-VN')} đ`;
 
-const usageLimitText = (value) => (value == null || value === '' ? 'Không giới hạn' : Number(value).toLocaleString('vi-VN'));
+const dateText = (value) => {
+  if (!value) return '—';
 
-function displayStatus(promotion) {
-  const now = new Date();
+  const date = new Date(`${value}T00:00:00`);
 
-  const today = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-');
+  return Number.isNaN(date.getTime())
+      ? '—'
+      : date.toLocaleDateString('vi-VN');
+};
 
+const today = () => {
+  const date = new Date();
+
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0')
+  ].join('-');
+};
+
+function statusOf(promotion) {
   if (promotion.status !== 'ACTIVE') {
     return { label: 'Đã tắt', color: 'default' };
   }
 
-  if (today < promotion.startDate) {
+  const currentDate = today();
+
+  if (currentDate < promotion.startDate) {
     return { label: 'Sắp diễn ra', color: 'info' };
   }
 
-  if (today > promotion.endDate) {
+  if (currentDate > promotion.endDate) {
     return { label: 'Đã kết thúc', color: 'default' };
   }
 
   return { label: 'Đang diễn ra', color: 'success' };
 }
 
-function discountText(promotion) {
-  return promotion.discountType === 'PERCENT' ? `${Number(promotion.discountValue)}%` : money(promotion.discountValue);
+const discountText = (promotion) =>
+    promotion.discountType === 'PERCENT'
+        ? `${Number(promotion.discountValue)}%`
+        : money(promotion.discountValue);
+
+function StatCard({ title, value, color }) {
+  return (
+      <Card sx={{ ...cardSx, bgcolor: color, height: '100%' }}>
+        <CardContent sx={{ px: 2, py: '12px !important' }}>
+          <Typography fontSize={13} color={C.muted}>
+            {title}
+          </Typography>
+
+          <Typography
+              sx={{
+                mt: 0.5,
+                fontSize: 25,
+                fontWeight: 700,
+                color: C.text
+              }}
+          >
+            {value}
+          </Typography>
+        </CardContent>
+      </Card>
+  );
 }
 
 export default function PromotionPage() {
@@ -93,26 +141,19 @@ export default function PromotionPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [filter, setFilter] = useState('ALL');
   const [page, setPage] = useState(1);
 
   const [detail, setDetail] = useState(null);
-  const [edit, setEdit] = useState(null);
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [formError, setFormError] = useState('');
-  const [saving, setSaving] = useState(false);
-
   const [statusTarget, setStatusTarget] = useState(null);
   const [changingStatus, setChangingStatus] = useState(false);
 
-  async function loadPromotions() {
+  const loadPromotions = useCallback(async () => {
     setLoading(true);
 
     try {
       const data = await getPromotions();
-
       setPromotions(Array.isArray(data) ? data : []);
       setError('');
     } catch (e) {
@@ -120,49 +161,57 @@ export default function PromotionPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     loadPromotions();
-  }, []);
+  }, [loadPromotions]);
 
-  const filteredPromotions = useMemo(() => {
+  const filtered = useMemo(() => {
     const keyword = search.trim().toLocaleLowerCase('vi-VN');
 
     return promotions.filter((promotion) => {
-      const searchableText = [promotion.name || '', promotion.description || ''].join(' ').toLocaleLowerCase('vi-VN');
+      const searchableText =
+          `${promotion.name || ''} ${promotion.description || ''}`
+              .toLocaleLowerCase('vi-VN');
 
-      const matchesSearch = searchableText.includes(keyword);
-      const status = displayStatus(promotion);
+      if (!searchableText.includes(keyword)) return false;
 
-      const matchesStatus =
-        statusFilter === 'ALL' ||
-        (statusFilter === 'ACTIVE' && promotion.status === 'ACTIVE') ||
-        (statusFilter === 'INACTIVE' && promotion.status === 'INACTIVE') ||
-        (statusFilter === 'ONGOING' && status.label === 'Đang diễn ra') ||
-        (statusFilter === 'UPCOMING' && status.label === 'Sắp diễn ra') ||
-        (statusFilter === 'ENDED' && status.label === 'Đã kết thúc');
+      const status = statusOf(promotion).label;
 
-      return matchesSearch && matchesStatus;
+      switch (filter) {
+        case 'ACTIVE':
+          return promotion.status === 'ACTIVE';
+        case 'INACTIVE':
+          return promotion.status === 'INACTIVE';
+        case 'ONGOING':
+          return status === 'Đang diễn ra';
+        case 'UPCOMING':
+          return status === 'Sắp diễn ra';
+        case 'ENDED':
+          return status === 'Đã kết thúc';
+        default:
+          return true;
+      }
     });
-  }, [promotions, search, statusFilter]);
+  }, [promotions, search, filter]);
 
-  const pageCount = Math.max(1, Math.ceil(filteredPromotions.length / PAGE_SIZE));
+  const pageCount = Math.max(
+      1,
+      Math.ceil(filtered.length / PAGE_SIZE)
+  );
 
   const currentPage = Math.min(page, pageCount);
 
-  const rows = filteredPromotions.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const rows = filtered.slice(
+      (currentPage - 1) * PAGE_SIZE,
+      currentPage * PAGE_SIZE
+  );
 
-  const activeCount = promotions.filter((promotion) => promotion.status === 'ACTIVE').length;
-
-  const ongoingCount = promotions.filter((promotion) => displayStatus(promotion).label === 'Đang diễn ra').length;
-
-  function updateForm(field, value) {
-    setForm((previous) => ({
-      ...previous,
-      [field]: value
-    }));
-  }
+  const ongoingCount = promotions.filter(
+      (promotion) =>
+          statusOf(promotion).label === 'Đang diễn ra'
+  ).length;
 
   async function openDetail(promotion) {
     try {
@@ -174,104 +223,94 @@ export default function PromotionPage() {
     }
   }
 
-  function openEdit(promotion) {
-    setForm({
-      name: promotion.name || '',
-      description: promotion.description || '',
-      discountType: promotion.discountType || 'PERCENT',
-      discountValue: String(promotion.discountValue ?? ''),
-      minOrderValue: String(promotion.minOrderValue ?? 0),
-      maxDiscountAmount: promotion.maxDiscountAmount == null ? '' : String(promotion.maxDiscountAmount),
-      usageLimit: promotion.usageLimit == null ? '' : String(promotion.usageLimit),
-      startDate: promotion.startDate || '',
-      endDate: promotion.endDate || ''
-    });
-
-    setFormError('');
-    setEdit(promotion);
-    setDetail(null);
-  }
-
-  async function handleSave(event) {
-    event.preventDefault();
-
-    if (!edit || saving) return;
-
-    const usageLimit = form.usageLimit.trim() === '' ? null : Number(form.usageLimit);
-
-    if (usageLimit !== null && (!Number.isInteger(usageLimit) || usageLimit < 1)) {
-      setFormError('Giới hạn lượt sử dụng phải là số nguyên lớn hơn hoặc bằng 1, hoặc để trống.');
-      return;
-    }
-
-    setSaving(true);
-    setFormError('');
-
-    try {
-      await updatePromotion(edit.promotionId, {
-        ...form,
-        usageLimit
-      });
-
-      setEdit(null);
-      setSuccess('Đã cập nhật khuyến mãi.');
-      await loadPromotions();
-    } catch (e) {
-      setFormError(e?.message || 'Không thể cập nhật khuyến mãi.');
-    } finally {
-      setSaving(false);
-    }
-  }
-
   async function handleStatusChange() {
     if (!statusTarget || changingStatus) return;
 
     setChangingStatus(true);
 
     try {
-      const nextStatus = statusTarget.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+      const nextStatus =
+          statusTarget.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
 
-      await changePromotionStatus(statusTarget.promotionId, nextStatus);
+      await changePromotionStatus(
+          statusTarget.promotionId,
+          nextStatus
+      );
 
       setStatusTarget(null);
-      setSuccess(nextStatus === 'ACTIVE' ? 'Đã bật khuyến mãi.' : 'Đã tắt khuyến mãi.');
+      setSuccess(
+          nextStatus === 'ACTIVE'
+              ? 'Đã bật khuyến mãi.'
+              : 'Đã tắt khuyến mãi.'
+      );
 
       await loadPromotions();
     } catch (e) {
-      setError(e?.message || 'Không thể đổi trạng thái khuyến mãi.');
+      setError(
+          e?.message || 'Không thể đổi trạng thái khuyến mãi.'
+      );
     } finally {
       setChangingStatus(false);
     }
   }
 
   return (
-    <Box sx={{ p: { xs: 1, md: 3 }, maxWidth: 1500, mx: 'auto' }}>
+    <Box
+      sx={{
+        px: { xs: 1.5, md: 3 },
+        pt: 0,
+        pb: 2,
+        width: '100%',
+        maxWidth: 1500,
+        mx: 'auto',
+        bgcolor: C.bg,
+        minHeight: '100%',
+        boxSizing: 'border-box'
+      }}
+    >
+      {/* Page header */}
       <Stack
         direction={{ xs: 'column', sm: 'row' }}
         justifyContent="space-between"
-        alignItems={{ xs: 'flex-start', sm: 'center' }}
-        spacing={1}
-        sx={{ mb: 2.5 }}
+        alignItems={{ xs: 'stretch', sm: 'center' }}
+        spacing={1.5}
+        sx={{ mb: 2 }}
       >
-        <Box>
-          <Typography variant="h4" sx={{ color: COLORS.text, fontWeight: 600 }}>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography
+            variant="h5"
+            sx={{
+              color: C.text,
+              fontWeight: 700,
+              fontSize: { xs: 22, md: 26 }
+            }}
+          >
             Quản lý khuyến mãi
           </Typography>
 
-          <Typography sx={{ color: COLORS.muted, mt: 0.5 }}>Theo dõi ưu đãi và trạng thái áp dụng cho đơn hàng.</Typography>
+          <Typography fontSize={13} color={C.muted} sx={{ mt: 0.5 }}>
+            Quản lý chương trình giảm giá của cửa hàng.
+          </Typography>
         </Box>
 
-        <Chip
-          icon={<TagsOutlined />}
-          label={`${promotions.length} chương trình`}
+        <Button
+          variant="contained"
+          disabled
           sx={{
-            bgcolor: COLORS.cyanLight,
-            color: COLORS.text,
-            fontWeight: 600
+            ...buttonSx,
+            alignSelf: { xs: 'flex-start', sm: 'center' },
+            ml: { sm: 'auto' },
+            px: 2,
+            py: 1,
+            borderRadius: 2,
+            whiteSpace: 'nowrap'
           }}
-        />
+        >
+          Thêm khuyến mãi
+        </Button>
       </Stack>
 
+      {/* Notifications */}
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
           {error}
@@ -284,103 +323,90 @@ export default function PromotionPage() {
         </Alert>
       )}
 
-      <Grid container spacing={2} sx={{ mb: 2.5 }}>
-        <Grid item xs={12} sm={6} md={4}>
-          <Card sx={cardSx}>
-            <CardContent>
-              <Typography fontSize={12} color={COLORS.muted}>
-                Tổng khuyến mãi
-              </Typography>
-              <Typography variant="h4" sx={{ color: COLORS.text, mt: 1 }}>
-                {promotions.length}
-              </Typography>
-              <Typography fontSize={12} color={COLORS.muted}>
-                Tất cả chương trình đã tạo
-              </Typography>
-            </CardContent>
-          </Card>
+      {/* Compact statistics */}
+      <Grid container spacing={1.5} sx={{ mb: 2 }}>
+        <Grid item xs={6} sm={3} md={2}>
+          <StatCard title="Tổng khuyến mãi" value={promotions.length} color={C.cyanLight} />
         </Grid>
 
-        <Grid item xs={12} sm={6} md={4}>
-          <Card sx={{ ...cardSx, bgcolor: COLORS.cyanLight }}>
-            <CardContent>
-              <Typography fontSize={12} color={COLORS.muted}>
-                Đang bật
-              </Typography>
-              <Typography variant="h4" sx={{ color: COLORS.text, mt: 1 }}>
-                {activeCount}
-              </Typography>
-              <Typography fontSize={12} color={COLORS.muted}>
-                Đã được bật thủ công
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid item xs={12} sm={6} md={4}>
-          <Card sx={{ ...cardSx, bgcolor: COLORS.yellowLight }}>
-            <CardContent>
-              <Typography fontSize={12} color={COLORS.muted}>
-                Đang diễn ra
-              </Typography>
-              <Typography variant="h4" sx={{ color: COLORS.text, mt: 1 }}>
-                {ongoingCount}
-              </Typography>
-              <Typography fontSize={12} color={COLORS.muted}>
-                Trong khoảng ngày áp dụng
-              </Typography>
-            </CardContent>
-          </Card>
+        <Grid item xs={6} sm={3} md={2}>
+          <StatCard title="Đang diễn ra" value={ongoingCount} color={C.yellowLight} />
         </Grid>
       </Grid>
 
+      {/* Search, filter and table */}
       <Card sx={cardSx}>
-        <CardContent sx={{ p: 2.5 }}>
-          <Grid container spacing={1.5}>
-            <Grid item xs={12} md={8}>
-              <TextField
-                fullWidth
-                size="small"
-                placeholder="Tìm theo tên hoặc mô tả..."
-                value={search}
-                onChange={(event) => {
-                  setSearch(event.target.value);
-                  setPage(1);
-                }}
-                InputProps={{
-                  startAdornment: (
-                    <SearchOutlined
-                      style={{
-                        marginRight: 10,
-                        color: COLORS.muted
-                      }}
-                    />
-                  )
-                }}
-              />
-            </Grid>
+        <CardContent
+          sx={{
+            p: { xs: 1.5, md: 1.5 },
+            pb: '12px !important'
+          }}
+        >
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 2,
+              width: '100%'
+            }}
+          >
+            <TextField
+              fullWidth
+              size="small"
+              placeholder="Tìm theo tên hoặc mô tả..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              InputProps={{
+                startAdornment: (
+                  <SearchOutlined
+                    style={{
+                      marginRight: 12,
+                      color: C.muted,
+                      fontSize: 18
+                    }}
+                  />
+                )
+              }}
+              sx={{
+                flex: 1,
+                minWidth: 0,
+                '& .MuiOutlinedInput-root': {
+                  height: 44,
+                  borderRadius: 2,
+                  bgcolor: '#fff'
+                }
+              }}
+            />
 
-            <Grid item xs={12} md={4}>
-              <TextField
-                select
-                fullWidth
-                size="small"
-                label="Lọc trạng thái"
-                value={statusFilter}
-                onChange={(event) => {
-                  setStatusFilter(event.target.value);
-                  setPage(1);
-                }}
-              >
-                <MenuItem value="ALL">Tất cả trạng thái</MenuItem>
-                <MenuItem value="ACTIVE">Đã bật</MenuItem>
-                <MenuItem value="INACTIVE">Đã tắt</MenuItem>
-                <MenuItem value="ONGOING">Đang diễn ra</MenuItem>
-                <MenuItem value="UPCOMING">Sắp diễn ra</MenuItem>
-                <MenuItem value="ENDED">Đã kết thúc</MenuItem>
-              </TextField>
-            </Grid>
-          </Grid>
+            <TextField
+              select
+              size="small"
+              value={filter}
+              onChange={(e) => {
+                setFilter(e.target.value);
+                setPage(1);
+              }}
+              sx={{
+                width: 232,
+                flexShrink: 0,
+                '& .MuiOutlinedInput-root': {
+                  height: 44,
+                  borderRadius: 2,
+                  bgcolor: '#fff'
+                }
+              }}
+            >
+              <MenuItem value="ALL">Tất cả trạng thái</MenuItem>
+              <MenuItem value="ACTIVE">Đã bật</MenuItem>
+              <MenuItem value="INACTIVE">Đã tắt</MenuItem>
+              <MenuItem value="ONGOING">Đang diễn ra</MenuItem>
+              <MenuItem value="UPCOMING">Sắp diễn ra</MenuItem>
+              <MenuItem value="ENDED">Đã kết thúc</MenuItem>
+            </TextField>
+          </Box>
         </CardContent>
 
         {loading ? (
@@ -395,91 +421,163 @@ export default function PromotionPage() {
           </Box>
         ) : (
           <>
-            <TableContainer sx={{ overflowX: 'auto' }}>
-              <Table size="small" sx={{ minWidth: 950 }}>
+            <TableContainer
+              sx={{
+                overflowX: 'auto',
+                borderTop: `1px solid ${C.border}`
+              }}
+            >
+              <Table
+                size="medium"
+                sx={{
+                  width: '100%',
+                  tableLayout: 'fixed',
+
+                  '& th': {
+                    bgcolor: '#FAFAF8',
+                    color: '#607087',
+                    fontWeight: 600,
+                    fontSize: 13,
+                    py: 1.5,
+                    borderBottom: `1px solid ${C.border}`,
+                    whiteSpace: 'nowrap'
+                  },
+
+                  '& td': {
+                    borderColor: C.border,
+                    py: 1.5,
+                    verticalAlign: 'middle'
+                  },
+
+                  '& tbody tr:last-child td': {
+                    borderBottom: 0
+                  }
+                }}
+              >
                 <TableHead>
-                  <TableRow sx={{ bgcolor: '#F8FAFC' }}>
-                    <TableCell>Tên khuyến mãi</TableCell>
-                    <TableCell>Giảm giá</TableCell>
-                    <TableCell>Đơn tối thiểu</TableCell>
-                    <TableCell>Lượt sử dụng tối đa</TableCell>
-                    <TableCell>Thời gian</TableCell>
-                    <TableCell>Trạng thái</TableCell>
-                    <TableCell align="right">Thao tác</TableCell>
+                  <TableRow>
+                    <TableCell sx={{ width: '28%' }}>Khuyến mãi</TableCell>
+
+                    <TableCell sx={{ width: '16%' }}>Giảm giá</TableCell>
+
+                    <TableCell sx={{ width: '22%' }}>Thời gian</TableCell>
+
+                    <TableCell sx={{ width: '16%' }}>Trạng thái</TableCell>
+
+                    <TableCell align="right" sx={{ width: '18%' }}>
+                      Thao tác
+                    </TableCell>
                   </TableRow>
                 </TableHead>
 
                 <TableBody>
                   {rows.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} align="center" sx={{ py: 6, color: COLORS.muted }}>
-                        Không có khuyến mãi phù hợp.
+                      <TableCell colSpan={5} align="center" sx={{ py: 6, color: C.muted }}>
+                        {promotions.length === 0 ? 'Chưa có chương trình khuyến mãi.' : 'Không có khuyến mãi phù hợp.'}
                       </TableCell>
                     </TableRow>
                   ) : (
                     rows.map((promotion) => {
-                      const status = displayStatus(promotion);
+                      const status = statusOf(promotion);
 
                       return (
                         <TableRow hover key={promotion.promotionId}>
                           <TableCell>
-                            <Typography fontWeight={600} color={COLORS.text}>
+                            <Typography fontSize={13} fontWeight={600} color={C.text} sx={{ overflowWrap: 'anywhere' }}>
                               {promotion.name}
                             </Typography>
-                            <Typography fontSize={12} color={COLORS.muted}>
-                              {promotion.description || 'Không có mô tả'}
-                            </Typography>
+
+                            {promotion.description && (
+                              <Typography
+                                fontSize={12}
+                                color={C.muted}
+                                sx={{
+                                  mt: 0.5,
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  display: '-webkit-box',
+                                  WebkitLineClamp: 2,
+                                  WebkitBoxOrient: 'vertical'
+                                }}
+                              >
+                                {promotion.description}
+                              </Typography>
+                            )}
                           </TableCell>
 
                           <TableCell>
-                            <Typography fontWeight={600}>{discountText(promotion)}</Typography>
+                            <Typography fontSize={13} fontWeight={700} color={C.text}>
+                              {discountText(promotion)}
+                            </Typography>
 
                             {promotion.discountType === 'PERCENT' && promotion.maxDiscountAmount != null && (
-                              <Typography fontSize={11} color={COLORS.muted}>
+                              <Typography fontSize={11} color={C.muted} sx={{ mt: 0.4 }}>
                                 Tối đa {money(promotion.maxDiscountAmount)}
                               </Typography>
                             )}
                           </TableCell>
 
-                          <TableCell>{money(promotion.minOrderValue)}</TableCell>
-
-                          <TableCell>{usageLimitText(promotion.usageLimit)}</TableCell>
-
                           <TableCell>
                             <Typography fontSize={12}>{dateText(promotion.startDate)}</Typography>
-                            <Typography fontSize={12} color={COLORS.muted}>
+
+                            <Typography fontSize={12} color={C.muted} sx={{ mt: 0.4 }}>
                               đến {dateText(promotion.endDate)}
                             </Typography>
                           </TableCell>
 
                           <TableCell>
-                            <Stack spacing={0.5} alignItems="flex-start">
-                              <Chip
-                                size="small"
-                                label={status.label}
-                                color={status.color}
-                                variant={status.color === 'default' ? 'outlined' : 'filled'}
-                              />
-                              <Typography fontSize={11} color={COLORS.muted}>
-                                {promotion.status === 'ACTIVE' ? 'Đã bật' : 'Tắt thủ công'}
-                              </Typography>
-                            </Stack>
+                            <Chip
+                              size="small"
+                              label={status.label}
+                              color={status.color}
+                              variant={status.color === 'default' ? 'outlined' : 'filled'}
+                              sx={{
+                                fontSize: 11,
+                                maxWidth: '100%'
+                              }}
+                            />
                           </TableCell>
 
                           <TableCell align="right">
-                            <Stack direction="row" justifyContent="flex-end" spacing={0.5}>
-                              <Button size="small" startIcon={<EyeOutlined />} onClick={() => openDetail(promotion)}>
-                                Chi tiết
-                              </Button>
-
-                              <Button size="small" startIcon={<EditOutlined />} onClick={() => openEdit(promotion)}>
-                                Sửa
+                            <Stack direction="row" spacing={0.25} justifyContent="flex-end" alignItems="center">
+                              <Button
+                                size="small"
+                                title="Xem chi tiết"
+                                aria-label="Xem chi tiết"
+                                onClick={() => openDetail(promotion)}
+                                sx={{
+                                  minWidth: 32,
+                                  px: 0.5,
+                                  color: C.text
+                                }}
+                              >
+                                <EyeOutlined />
                               </Button>
 
                               <Button
                                 size="small"
-                                color={promotion.status === 'ACTIVE' ? 'warning' : 'success'}
+                                title="Chỉnh sửa"
+                                aria-label="Chỉnh sửa"
+                                disabled
+                                sx={{
+                                  minWidth: 32,
+                                  px: 0.5,
+                                  color: '#267D89'
+                                }}
+                              >
+                                <EditOutlined />
+                              </Button>
+
+                              <Button
+                                size="small"
                                 onClick={() => setStatusTarget(promotion)}
+                                sx={{
+                                  minWidth: 0,
+                                  px: 0.75,
+                                  fontSize: 11,
+                                  color: promotion.status === 'ACTIVE' ? '#A66A00' : '#267D53'
+                                }}
                               >
                                 {promotion.status === 'ACTIVE' ? 'Tắt' : 'Bật'}
                               </Button>
@@ -493,16 +591,23 @@ export default function PromotionPage() {
               </Table>
             </TableContainer>
 
-            <Stack
-              direction={{ xs: 'column', sm: 'row' }}
-              justifyContent="space-between"
-              alignItems="center"
-              spacing={2}
-              sx={{ px: 2.5, py: 1.5 }}
+            {/* Pagination */}
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                px: 2,
+                py: 1.5,
+                borderTop: `1px solid ${C.border}`,
+                minHeight: 54,
+                gap: 1,
+                flexWrap: 'wrap'
+              }}
             >
-              <Typography fontSize={12} color={COLORS.muted}>
-                Hiển thị {filteredPromotions.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0}–
-                {Math.min(currentPage * PAGE_SIZE, filteredPromotions.length)} / {filteredPromotions.length} khuyến mãi
+              <Typography fontSize={12} color={C.muted}>
+                Hiển thị {filtered.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0}–{Math.min(currentPage * PAGE_SIZE, filtered.length)} /{' '}
+                {filtered.length} khuyến mãi
               </Typography>
 
               <Pagination
@@ -512,86 +617,91 @@ export default function PromotionPage() {
                 size="small"
                 shape="rounded"
                 sx={{
-                  '& .Mui-selected': {
-                    bgcolor: `${COLORS.cyan} !important`,
-                    color: COLORS.text
+                  '& .MuiPaginationItem-root.Mui-selected': {
+                    bgcolor: C.cyan,
+                    color: C.text
+                  },
+                  '& .MuiPaginationItem-root.Mui-selected:hover': {
+                    bgcolor: C.cyanHover
                   }
                 }}
               />
-            </Stack>
+            </Box>
           </>
         )}
       </Card>
 
       {/* Promotion detail */}
       <Dialog open={Boolean(detail)} onClose={() => setDetail(null)} fullWidth maxWidth="sm">
-        <DialogTitle>Chi tiết khuyến mãi</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 700, color: C.text }}>Chi tiết khuyến mãi</DialogTitle>
 
-        <DialogContent>
+        <DialogContent dividers>
           {detail && (
-            <Stack spacing={2} sx={{ mt: 1 }}>
+            <Stack spacing={2.5} sx={{ pt: 1 }}>
               <Box>
-                <Typography fontSize={12} color={COLORS.muted}>
+                <Typography fontSize={12} color={C.muted}>
                   Tên khuyến mãi
                 </Typography>
                 <Typography fontWeight={600}>{detail.name}</Typography>
               </Box>
 
               <Box>
-                <Typography fontSize={12} color={COLORS.muted}>
+                <Typography fontSize={12} color={C.muted}>
                   Mô tả
                 </Typography>
-                <Typography>{detail.description || '—'}</Typography>
+                <Typography>{detail.description || 'Không có mô tả'}</Typography>
               </Box>
 
               <Grid container spacing={2}>
                 <Grid item xs={6}>
-                  <Typography fontSize={12} color={COLORS.muted}>
+                  <Typography fontSize={12} color={C.muted}>
                     Mức giảm
                   </Typography>
                   <Typography fontWeight={600}>{discountText(detail)}</Typography>
                 </Grid>
 
                 <Grid item xs={6}>
-                  <Typography fontSize={12} color={COLORS.muted}>
+                  <Typography fontSize={12} color={C.muted}>
                     Đơn tối thiểu
                   </Typography>
                   <Typography>{money(detail.minOrderValue)}</Typography>
                 </Grid>
 
                 <Grid item xs={6}>
-                  <Typography fontSize={12} color={COLORS.muted}>
-                    Giảm tối đa
+                  <Typography fontSize={12} color={C.muted}>
+                    Mức giảm tối đa
                   </Typography>
                   <Typography>{detail.maxDiscountAmount == null ? 'Không giới hạn' : money(detail.maxDiscountAmount)}</Typography>
                 </Grid>
 
                 <Grid item xs={6}>
-                  <Typography fontSize={12} color={COLORS.muted}>
+                  <Typography fontSize={12} color={C.muted}>
                     Lượt sử dụng tối đa
                   </Typography>
-                  <Typography>{usageLimitText(detail.usageLimit)}</Typography>
-                </Grid>
-
-                <Grid item xs={6}>
-                  <Typography fontSize={12} color={COLORS.muted}>
-                    Trạng thái
+                  <Typography>
+                    {detail.usageLimit == null ? 'Không giới hạn' : Number(detail.usageLimit).toLocaleString('vi-VN')}
                   </Typography>
-                  <Chip size="small" label={displayStatus(detail).label} />
                 </Grid>
 
                 <Grid item xs={6}>
-                  <Typography fontSize={12} color={COLORS.muted}>
+                  <Typography fontSize={12} color={C.muted}>
                     Ngày bắt đầu
                   </Typography>
                   <Typography>{dateText(detail.startDate)}</Typography>
                 </Grid>
 
                 <Grid item xs={6}>
-                  <Typography fontSize={12} color={COLORS.muted}>
+                  <Typography fontSize={12} color={C.muted}>
                     Ngày kết thúc
                   </Typography>
                   <Typography>{dateText(detail.endDate)}</Typography>
+                </Grid>
+
+                <Grid item xs={12}>
+                  <Typography fontSize={12} color={C.muted}>
+                    Trạng thái
+                  </Typography>
+                  <Chip size="small" label={statusOf(detail).label} />
                 </Grid>
               </Grid>
             </Stack>
@@ -600,167 +710,17 @@ export default function PromotionPage() {
 
         <DialogActions sx={{ p: 2 }}>
           <Button onClick={() => setDetail(null)}>Đóng</Button>
-
-          {detail && (
-            <Button
-              variant="contained"
-              onClick={() => openEdit(detail)}
-              sx={{
-                bgcolor: COLORS.cyan,
-                color: COLORS.text,
-                '&:hover': { bgcolor: '#6DDDE9' }
-              }}
-            >
-              Chỉnh sửa
-            </Button>
-          )}
         </DialogActions>
-      </Dialog>
-
-      {/* Edit promotion */}
-      <Dialog open={Boolean(edit)} onClose={() => !saving && setEdit(null)} fullWidth maxWidth="sm">
-        <Box component="form" onSubmit={handleSave}>
-          <DialogTitle>Chỉnh sửa khuyến mãi</DialogTitle>
-
-          <DialogContent>
-            <Stack spacing={2} sx={{ mt: 1 }}>
-              {formError && <Alert severity="error">{formError}</Alert>}
-
-              <TextField
-                required
-                label="Tên khuyến mãi"
-                value={form.name}
-                inputProps={{ maxLength: 100 }}
-                onChange={(event) => updateForm('name', event.target.value)}
-              />
-
-              <TextField
-                label="Mô tả"
-                multiline
-                minRows={2}
-                value={form.description}
-                inputProps={{ maxLength: 255 }}
-                onChange={(event) => updateForm('description', event.target.value)}
-              />
-
-              <TextField
-                select
-                required
-                label="Loại giảm giá"
-                value={form.discountType}
-                onChange={(event) => updateForm('discountType', event.target.value)}
-              >
-                <MenuItem value="PERCENT">Theo phần trăm (%)</MenuItem>
-                <MenuItem value="FIXED">Số tiền cố định (VNĐ)</MenuItem>
-              </TextField>
-
-              <TextField
-                required
-                type="number"
-                label={form.discountType === 'PERCENT' ? 'Phần trăm giảm' : 'Số tiền giảm (VNĐ)'}
-                value={form.discountValue}
-                inputProps={{
-                  min: 0,
-                  max: form.discountType === 'PERCENT' ? 100 : undefined,
-                  step: form.discountType === 'PERCENT' ? '0.01' : '1'
-                }}
-                onChange={(event) => updateForm('discountValue', event.target.value)}
-              />
-
-              <TextField
-                required
-                type="number"
-                label="Giá trị đơn hàng tối thiểu (VNĐ)"
-                value={form.minOrderValue}
-                inputProps={{ min: 0, step: 1 }}
-                onChange={(event) => updateForm('minOrderValue', event.target.value)}
-              />
-
-              <TextField
-                type="number"
-                label="Giới hạn lượt sử dụng"
-                value={form.usageLimit}
-                inputProps={{ min: 1, step: 1 }}
-                helperText="Để trống nếu không giới hạn số lượt sử dụng."
-                onChange={(event) => updateForm('usageLimit', event.target.value)}
-              />
-
-              {form.discountType === 'PERCENT' && (
-                <TextField
-                  type="number"
-                  label="Mức giảm tối đa (VNĐ, để trống nếu không giới hạn)"
-                  value={form.maxDiscountAmount}
-                  inputProps={{ min: 0, step: 1 }}
-                  onChange={(event) => updateForm('maxDiscountAmount', event.target.value)}
-                />
-              )}
-
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    required
-                    type="date"
-                    label="Ngày bắt đầu"
-                    InputLabelProps={{ shrink: true }}
-                    value={form.startDate}
-                    onChange={(event) => updateForm('startDate', event.target.value)}
-                  />
-                </Grid>
-
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    required
-                    type="date"
-                    label="Ngày kết thúc"
-                    InputLabelProps={{ shrink: true }}
-                    value={form.endDate}
-                    onChange={(event) => updateForm('endDate', event.target.value)}
-                  />
-                </Grid>
-              </Grid>
-
-              <Alert severity="info">Trạng thái bật/tắt được quản lý riêng. Cập nhật thông tin không tự thay đổi trạng thái.</Alert>
-            </Stack>
-          </DialogContent>
-
-          <DialogActions sx={{ p: 2 }}>
-            <Button onClick={() => setEdit(null)} disabled={saving}>
-              Hủy
-            </Button>
-
-            <Button
-              type="submit"
-              variant="contained"
-              disabled={saving}
-              sx={{
-                bgcolor: COLORS.cyan,
-                color: COLORS.text,
-                '&:hover': { bgcolor: '#6DDDE9' }
-              }}
-            >
-              {saving ? 'Đang lưu...' : 'Lưu thay đổi'}
-            </Button>
-          </DialogActions>
-        </Box>
       </Dialog>
 
       {/* Confirm status change */}
       <Dialog open={Boolean(statusTarget)} onClose={() => !changingStatus && setStatusTarget(null)} maxWidth="xs" fullWidth>
-        <DialogTitle>{statusTarget?.status === 'ACTIVE' ? 'Tắt khuyến mãi?' : 'Bật khuyến mãi?'}</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 700 }}>{statusTarget?.status === 'ACTIVE' ? 'Tắt khuyến mãi?' : 'Bật khuyến mãi?'}</DialogTitle>
 
         <DialogContent>
           <Typography fontSize={14}>
             Bạn muốn {statusTarget?.status === 'ACTIVE' ? 'tắt' : 'bật'} chương trình <strong>{statusTarget?.name}</strong>?
           </Typography>
-
-          {statusTarget?.status === 'ACTIVE' && (
-            <Alert severity="warning" sx={{ mt: 2 }}>
-              Khách hàng sẽ không thể áp dụng khuyến mãi này cho đơn mới khi chương trình bị tắt. Đơn hàng đã chốt vẫn giữ thông tin giảm
-              giá cũ.
-            </Alert>
-          )}
         </DialogContent>
 
         <DialogActions sx={{ p: 2 }}>
@@ -768,12 +728,7 @@ export default function PromotionPage() {
             Hủy
           </Button>
 
-          <Button
-            variant="contained"
-            color={statusTarget?.status === 'ACTIVE' ? 'warning' : 'success'}
-            onClick={handleStatusChange}
-            disabled={changingStatus}
-          >
+          <Button variant="contained" onClick={handleStatusChange} disabled={changingStatus} sx={buttonSx}>
             {changingStatus ? 'Đang xử lý...' : 'Xác nhận'}
           </Button>
         </DialogActions>

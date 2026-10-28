@@ -37,6 +37,7 @@ import EditProductPage from 'features/product/EditProductPage';
 //sales
 import InStoreSalesPage from 'features/sales/InStoreSalesPage';
 import PromotionPage from 'features/promotion/PromotionPage';
+import AddPromotionPage from 'features/promotion/AddPromotionPage';
 export default createBrowserRouter([
   { path: '/', element: <Navigate to="/workspace" replace /> },
   { path: '/login', element: <LoginPage /> },
@@ -80,6 +81,7 @@ export default createBrowserRouter([
 
               { path: '/in-store-sales', element: <InStoreSalesPage /> },
               { path: '/promotions', element: <PromotionPage /> },
+              { path: '/promotions/add', element: <AddPromotionPage /> }
             ]
           }
         ]

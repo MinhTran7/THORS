@@ -5,7 +5,7 @@ import {
   TeamOutlined,
   UserOutlined,
   ShoppingCartOutlined,
-  TagsOutlined,
+  TagsOutlined
 } from '@ant-design/icons';
 
 const dashboard = { to: '/workspace', label: 'Dashboard', icon: <AppstoreOutlined /> };
