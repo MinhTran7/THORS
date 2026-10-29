@@ -1,8 +1,12 @@
 
-import { api } from './http';
+import { api, post } from './http';
 
 export async function getProducts() {
   return api('/products');
+}
+
+export async function createProductsBatch(products) {
+  return post('/products/batch', { products });
 }
 
 export async function createProduct(productData) {
@@ -176,74 +180,12 @@ export async function changeProductStatus(productId, status) {
   return result;
 }
 
-  // ==========================================
-  // CHANGE PRODUCT STATUS
-  // ==========================================
-
-  // 1. Open confirmation dialog
-  function openStatusDialog(product) {
-    if (editingProductId !== null || statusSaving) {
-      return;
-    }
-
-    setError('');
-    setSuccess('');
-    setStatusDialogProduct(product);
+export async function deleteProduct(productId) {
+  if (!productId || productId <= 0) {
+    throw new Error('ID sản phẩm không hợp lệ.');
   }
 
-  // 2. Close confirmation dialog
-  function closeStatusDialog() {
-    if (statusSaving) {
-      return;
-    }
-
-    setStatusDialogProduct(null);
-  }
-
-  // 3. Confirm and update product status
-  async function confirmChangeProductStatus() {
-    if (!statusDialogProduct || statusSaving) {
-      return;
-    }
-
-    const productId = statusDialogProduct.productId;
-    const newStatus =
-      statusDialogProduct.status === 'ACTIVE'
-        ? 'INACTIVE'
-        : 'ACTIVE';
-
-    try {
-      setStatusSaving(true);
-      setError('');
-      setSuccess('');
-
-      // Call PATCH API
-      await changeProductStatus(productId, newStatus);
-
-      // Update Product List
-      setProducts((previous) =>
-        previous.map((product) =>
-          product.productId === productId
-            ? { ...product, status: newStatus }
-            : product
-        )
-      );
-
-      setStatusDialogProduct(null);
-
-      setSuccess(
-        newStatus === 'ACTIVE'
-          ? 'Product activated successfully.'
-          : 'Product deactivated successfully.'
-      );
-    } catch (err) {
-      console.error('Change product status failed:', err);
-
-      setError(
-        err?.message ||
-          'Unable to change product status. Please try again.'
-      );
-    } finally {
-      setStatusSaving(false);
-    }
-  }
+  return api(`/products/${productId}`, {
+    method: 'DELETE'
+  });
+}
