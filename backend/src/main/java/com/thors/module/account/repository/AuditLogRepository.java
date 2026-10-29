@@ -18,17 +18,28 @@ public class AuditLogRepository {
     /**
      * Các action là dữ liệu nội bộ, không hiển thị trong System Logs: GOOGLE_LINK chứa hash liên kết
      * Google, PASSWORD_INVALIDATE/STATUS_INVALIDATE dùng để thu hồi session, OTP_SENT dùng để giới hạn
-     * số lần gửi OTP (và quá nhiều, gây nhiễu).
+     * số lần gửi OTP (và quá nhiều, gây nhiễu). LOGIN_SUCCESS do hệ thống ghi để đếm số lần sai liên
+     * tiếp khi đăng nhập; mỗi lần đăng nhập thành công đã có dòng LOGIN (Signed in) kèm địa chỉ IP
+     * nên dòng này chỉ trùng lặp.
      */
     public static final List<String> HIDDEN =
-            List.of("GOOGLE_LINK", "PASSWORD_INVALIDATE", "STATUS_INVALIDATE", "OTP_SENT");
+            List.of("GOOGLE_LINK", "PASSWORD_INVALIDATE", "STATUS_INVALIDATE", "OTP_SENT", "LOGIN_SUCCESS");
 
-    /** Đăng nhập thất bại. */
-    public static final List<String> FAILED = List.of("LOGIN_FAILED");
+    /** Đăng nhập thất bại (LOGIN_FAILURE là giá trị OtpRepository đang ghi; LOGIN_FAILED giữ cho dữ liệu cũ). */
+    public static final List<String> FAILED = List.of("LOGIN_FAILED", "LOGIN_FAILURE");
 
-    /** Sự kiện cần chú ý về bảo mật: khóa/vô hiệu hóa tài khoản, yêu cầu đặt lại mật khẩu của Owner. */
+    /**
+     * Sự kiện cần chú ý về bảo mật: khóa/vô hiệu hóa tài khoản, tạm dừng đăng nhập do sai mật khẩu
+     * nhiều lần, yêu cầu đặt lại mật khẩu của Owner.
+     */
     public static final List<String> WARNING =
-            List.of("ACCOUNT_LOCK", "ACCOUNT_DEACTIVATE", "PASSWORD_RESET_REQUEST");
+            List.of("ACCOUNT_LOCK", "ACCOUNT_DEACTIVATE", "PASSWORD_RESET_REQUEST", "LOGIN_LOCK");
+
+    /**
+     * Các dòng đăng nhập do hệ thống ghi (user_id NULL). Khi hiển thị, người thực hiện là chính tài
+     * khoản bị đăng nhập sai chứ không phải "System".
+     */
+    private static final Set<String> LOGIN_ATTEMPTS = Set.of("LOGIN_FAILED", "LOGIN_FAILURE", "LOGIN_LOCK");
 
     public static String statusOf(String action) {
         if (FAILED.contains(action)) return "FAILED";
@@ -57,11 +68,17 @@ public class AuditLogRepository {
                 String newValue = rs.getString("new_value");
                 // Đăng nhập ghi địa chỉ IP dưới dạng "IP x.x.x.x" trong new_value.
                 String ip = newValue != null && newValue.startsWith("IP ") ? newValue.substring(3) : null;
+                String actorName = rs.getString("actor_name");
+                String actorType = rs.getString("actor_type");
+                if (actorName == null && LOGIN_ATTEMPTS.contains(action)) {
+                    actorName = rs.getString("target_name");
+                    if (actorName != null) actorType = "USER";
+                }
                 return new Item(
                         rs.getLong("log_id"),
                         rs.getObject("user_id", Integer.class),
-                        rs.getString("actor_name"),
-                        rs.getString("actor_type"),
+                        actorName,
+                        actorType,
                         action,
                         statusOf(action),
                         rs.getString("entity_affected"),

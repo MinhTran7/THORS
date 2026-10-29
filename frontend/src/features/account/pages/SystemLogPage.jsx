@@ -29,6 +29,8 @@ import { useToast } from '../components/Toast';
 const ACTION_LABELS = {
   LOGIN: 'Signed in',
   LOGIN_FAILED: 'Sign-in attempt failed',
+  LOGIN_FAILURE: 'Sign-in attempt failed',
+  LOGIN_LOCK: 'Sign-in paused after repeated failures',
   ACCOUNT_CREATE: 'Account created',
   ACCOUNT_EDIT: 'Account updated',
   ACCOUNT_LOCK: 'Account locked',

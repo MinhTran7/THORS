@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
@@ -455,9 +454,10 @@ function OwnerDashboard({ account }) {
                     Add Category
                   </Button>
 
+                  {/* ĐỔI: /accounts -> /family, "Manage Staff" -> "Manage Family" */}
                   <Button
                     component={Link}
-                    to="/accounts"
+                    to="/family"
                     variant="outlined"
                     fullWidth
                     startIcon={<TeamOutlined />}
@@ -468,7 +468,7 @@ function OwnerDashboard({ account }) {
                       fontSize: 12
                     }}
                   >
-                    Manage Staff
+                    Manage Family
                   </Button>
                 </Stack>
 
@@ -663,6 +663,7 @@ function OwnerDashboard({ account }) {
                 </Typography>
               </Stack>
 
+              {/* ĐỔI: "Staff & family" -> "Family members" */}
               <Stack
                 direction="row"
                 justifyContent="space-between"
@@ -672,7 +673,7 @@ function OwnerDashboard({ account }) {
                   fontSize={12}
                   color={COLORS.muted}
                 >
-                  Staff & family
+                  Family members
                 </Typography>
 
                 <Typography
@@ -764,9 +765,10 @@ export default function WorkspacePage() {
                 Quản lý tài khoản
               </Button>
             )}
+            {/* ĐỔI: /staff -> /family */}
             {account.role === 'OWNER' && (
-              <Button component={Link} to="/staff" variant="outlined">
-                Quản lý nhân viên
+              <Button component={Link} to="/family" variant="outlined">
+                Quản lý thành viên gia đình
               </Button>
             )}
           </Stack>
