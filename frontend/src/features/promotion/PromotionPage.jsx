@@ -1,5 +1,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Alert,
   Box,
@@ -137,6 +138,8 @@ function StatCard({ title, value, color }) {
 }
 
 export default function PromotionPage() {
+  const navigate = useNavigate();
+
   const [promotions, setPromotions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -175,7 +178,9 @@ export default function PromotionPage() {
           `${promotion.name || ''} ${promotion.description || ''}`
               .toLocaleLowerCase('vi-VN');
 
-      if (!searchableText.includes(keyword)) return false;
+      if (!searchableText.includes(keyword)) {
+        return false;
+      }
 
       const status = statusOf(promotion).label;
 
@@ -224,7 +229,9 @@ export default function PromotionPage() {
   }
 
   async function handleStatusChange() {
-    if (!statusTarget || changingStatus) return;
+    if (!statusTarget || changingStatus) {
+      return;
+    }
 
     setChangingStatus(true);
 
@@ -295,7 +302,7 @@ export default function PromotionPage() {
 
         <Button
           variant="contained"
-          disabled
+          onClick={() => navigate('/promotions/add')}
           sx={{
             ...buttonSx,
             alignSelf: { xs: 'flex-start', sm: 'center' },
@@ -323,7 +330,7 @@ export default function PromotionPage() {
         </Alert>
       )}
 
-      {/* Compact statistics */}
+      {/* Statistics */}
       <Grid container spacing={1.5} sx={{ mb: 2 }}>
         <Grid item xs={6} sm={3} md={2}>
           <StatCard title="Tổng khuyến mãi" value={promotions.length} color={C.cyanLight} />
@@ -355,8 +362,8 @@ export default function PromotionPage() {
               size="small"
               placeholder="Tìm theo tên hoặc mô tả..."
               value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
+              onChange={(event) => {
+                setSearch(event.target.value);
                 setPage(1);
               }}
               InputProps={{
@@ -385,8 +392,8 @@ export default function PromotionPage() {
               select
               size="small"
               value={filter}
-              onChange={(e) => {
-                setFilter(e.target.value);
+              onChange={(event) => {
+                setFilter(event.target.value);
                 setPage(1);
               }}
               sx={{
@@ -457,13 +464,9 @@ export default function PromotionPage() {
                 <TableHead>
                   <TableRow>
                     <TableCell sx={{ width: '28%' }}>Khuyến mãi</TableCell>
-
                     <TableCell sx={{ width: '16%' }}>Giảm giá</TableCell>
-
                     <TableCell sx={{ width: '22%' }}>Thời gian</TableCell>
-
                     <TableCell sx={{ width: '16%' }}>Trạng thái</TableCell>
-
                     <TableCell align="right" sx={{ width: '18%' }}>
                       Thao tác
                     </TableCell>
