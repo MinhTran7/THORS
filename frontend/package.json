@@ -13,7 +13,8 @@
     "preview": "vite preview",
     "lint": "eslint \"src/**/*.{js,jsx}\"",
     "lint:fix": "eslint --fix \"src/**/*.{js,jsx,ts,tsx}\"",
-    "prettier": "prettier --write \"src/**/*.{js,jsx,ts,tsx}\""
+    "prettier": "prettier --write \"src/**/*.{js,jsx,ts,tsx}\"",
+    "test:warehouse": "node tests/run-warehouse.mjs"
   },
   "dependencies": {
     "@ant-design/colors": "8.0.1",
@@ -27,6 +28,7 @@
     "@mui/system": "9.0.1",
     "@mui/x-charts": "9.2.0",
     "@vitejs/plugin-react": "6.0.2",
+    "exceljs": "4.4.0",
     "formik": "2.4.9",
     "framer-motion": "12.39.0",
     "lodash-es": "4.18.1",
@@ -37,12 +39,12 @@
     "react-number-format": "5.4.5",
     "react-router": "7.15.1",
     "react-router-dom": "7.15.1",
-    "recharts": "^3.10.1",
     "simplebar-react": "3.3.2",
     "swr": "2.4.1",
     "vite": "8.0.13",
     "vite-jsconfig-paths": "2.0.1",
     "web-vitals": "5.2.0",
+    "xlsx": "^0.18.5",
     "yup": "1.7.1"
   },
   "browserslist": {
@@ -67,6 +69,7 @@
     "eslint-plugin-prettier": "5.5.5",
     "eslint-plugin-react": "7.37.5",
     "eslint-plugin-react-hooks": "7.1.1",
+    "playwright": "^1.62.1",
     "prettier": "3.8.3"
   },
   "engines": {

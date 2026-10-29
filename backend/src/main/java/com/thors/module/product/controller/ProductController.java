@@ -2,6 +2,7 @@
 package com.thors.module.product.controller;
 
 import com.thors.module.product.dto.CreateProductRequest;
+import com.thors.module.product.dto.BatchCreateProductRequest;
 import com.thors.module.product.entity.Product;
 import com.thors.module.product.service.ProductService;
 
@@ -25,6 +26,7 @@ import com.thors.module.product.dto.UpdateProductRequest;
 import org.springframework.web.bind.annotation.PutMapping;
 
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import com.thors.module.product.dto.ChangeProductStatusRequest;
 
 import java.io.IOException;
@@ -95,6 +97,21 @@ public class ProductController {
                         "message", "Product created successfully.",
                         "productId", productId
                 ));
+    }
+
+    // ==========================================
+    // BATCH ADD PRODUCTS - JSON
+    // ==========================================
+
+    @PostMapping(value = "/batch", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Map<String, Object>> createProductsBatch(
+            @RequestBody BatchCreateProductRequest request
+    ) {
+
+        Map<String, Object> result = productService.createProductsBatch(request);
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(result);
     }
 
     // ==========================================
@@ -180,6 +197,23 @@ public class ProductController {
                         "message", "Product status updated successfully.",
                         "productId", productId,
                         "status", request.getStatus()
+                )
+        );
+    }
+
+    // ==========================================
+    // DELETE PRODUCT (SAFE DELETE)
+    // ==========================================
+
+    @DeleteMapping("/{productId}")
+    public ResponseEntity<Map<String, Object>> deleteProduct(
+            @PathVariable int productId
+    ) {
+        productService.deleteProduct(productId);
+        return ResponseEntity.ok(
+                Map.of(
+                        "message", "Sản phẩm đã được xóa thành công.",
+                        "productId", productId
                 )
         );
     }

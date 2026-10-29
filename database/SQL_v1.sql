@@ -35,9 +35,9 @@ CREATE TABLE IF NOT EXISTS `audit_log` (
   KEY `ix_audit_log_2` (`user_id`,`performed_at`),
   CONSTRAINT `fk_audit_log_user_id` FOREIGN KEY (`user_id`) REFERENCES `user` (`user_id`),
   CONSTRAINT `ck_audit_log_1` CHECK ((`actor_type` in (_utf8mb4'USER',_utf8mb4'SYSTEM')))
-) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=245 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Dumping data for table thors_restore.audit_log: ~12 rows (approximately)
+-- Dumping data for table thors_restore.audit_log: ~233 rows (approximately)
 INSERT INTO `audit_log` (`log_id`, `user_id`, `action_type`, `entity_affected`, `old_value`, `new_value`, `performed_at`, `entity_id`, `actor_type`) VALUES
 	(1, NULL, 'ACCOUNT_CREATE', 'user', NULL, 'CUSTOMER', '2026-10-12 18:53:17', 1, 'SYSTEM'),
 	(2, NULL, 'OTP_SENT', 'user', NULL, 'REGISTER_EMAIL', '2026-10-12 18:53:18', 1, 'SYSTEM'),
@@ -50,7 +50,238 @@ INSERT INTO `audit_log` (`log_id`, `user_id`, `action_type`, `entity_affected`, 
 	(9, NULL, 'OTP_SENT', 'user', NULL, 'RESET_EMAIL', '2026-10-13 06:54:08', 1, 'SYSTEM'),
 	(10, NULL, 'PASSWORD_INVALIDATE', 'user', NULL, 'Existing sessions and reset grants revoked', '2026-10-13 06:55:10', 1, 'SYSTEM'),
 	(11, 1, 'PASSWORD_RESET', 'user', NULL, 'Password replaced; sessions revoked', '2026-10-13 06:55:10', 1, 'USER'),
-	(12, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-13 06:55:20', 1, 'SYSTEM');
+	(12, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-13 06:55:20', 1, 'SYSTEM'),
+	(13, NULL, 'ACCOUNT_CREATE', 'user', NULL, 'ADMIN', '2026-10-16 10:42:06', 3, 'SYSTEM'),
+	(14, NULL, 'ACCOUNT_CREATE', 'user', NULL, 'OWNER', '2026-10-16 10:42:06', 4, 'SYSTEM'),
+	(16, 3, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-16 10:42:53', 3, 'USER'),
+	(17, 3, 'PROFILE_UPDATE', 'user', NULL, 'Profile information updated', '2026-10-16 10:46:20', 3, 'USER'),
+	(18, NULL, 'ACCOUNT_CREATE', 'user', NULL, 'CUSTOMER', '2026-10-16 10:52:25', 5, 'SYSTEM'),
+	(19, 5, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-16 10:52:57', 5, 'USER'),
+	(20, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-16 10:54:40', 4, 'USER'),
+	(21, 4, 'ACCOUNT_CREATE', 'user', NULL, 'STAFF', '2026-10-16 10:55:16', 6, 'USER'),
+	(22, 4, 'ACCOUNT_CREATE', 'user', NULL, 'FAMILY_MEMBER', '2026-10-16 10:56:11', 7, 'USER'),
+	(23, NULL, 'STATUS_INVALIDATE', 'user', NULL, 'DISABLED', '2026-10-16 10:57:08', 7, 'SYSTEM'),
+	(24, 4, 'ACCOUNT_DEACTIVATE', 'user', NULL, 'ACTIVE -> DISABLED', '2026-10-16 10:57:08', 7, 'USER'),
+	(25, NULL, 'STATUS_INVALIDATE', 'user', NULL, 'ACTIVE', '2026-10-16 10:57:32', 7, 'SYSTEM'),
+	(26, 4, 'ACCOUNT_ACTIVATE', 'user', NULL, 'DISABLED -> ACTIVE', '2026-10-16 10:57:32', 7, 'USER'),
+	(27, 3, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-16 10:58:05', 3, 'USER'),
+	(28, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-16 10:59:30', 4, 'USER'),
+	(29, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-17 07:09:02', 1, 'SYSTEM'),
+	(30, NULL, 'OTP_SENT', 'user', NULL, 'CONTACT_EMAIL', '2026-10-17 07:09:17', 1, 'SYSTEM'),
+	(31, NULL, 'OTP_SENT', 'user', NULL, 'CONTACT_EMAIL', '2026-10-17 07:11:11', 2, 'SYSTEM'),
+	(32, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-19 09:30:01', 4, 'USER'),
+	(33, NULL, 'PASSWORD_RESET_REQUEST', 'user', NULL, 'Shop Owner submitted a password reset request', '2026-10-19 09:33:27', 4, 'SYSTEM'),
+	(34, 3, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-19 09:33:48', 3, 'USER'),
+	(35, NULL, 'PASSWORD_INVALIDATE', 'user', NULL, 'Existing sessions and reset grants revoked', '2026-10-19 09:34:19', 4, 'SYSTEM'),
+	(36, 3, 'PASSWORD_RESET_ADMIN', 'user', NULL, 'Password replaced by ADMIN; sessions revoked', '2026-10-19 09:34:19', 4, 'USER'),
+	(37, NULL, 'LOGIN_FAILED', 'user', NULL, 'Wrong credentials', '2026-10-19 09:34:50', 4, 'SYSTEM'),
+	(38, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-19 09:34:56', 4, 'USER'),
+	(39, NULL, 'LOGIN_FAILURE', 'user', NULL, 'LOGIN_FAILURE', '2026-10-21 17:26:40', 3, 'SYSTEM'),
+	(40, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-21 17:27:00', 4, 'SYSTEM'),
+	(41, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-21 17:27:00', 4, 'USER'),
+	(42, NULL, 'LOGIN_FAILURE', 'user', NULL, 'LOGIN_FAILURE', '2026-10-21 17:47:24', 4, 'SYSTEM'),
+	(43, NULL, 'LOGIN_FAILURE', 'user', NULL, 'LOGIN_FAILURE', '2026-10-21 17:48:35', 2, 'SYSTEM'),
+	(44, NULL, 'LOGIN_FAILURE', 'user', NULL, 'LOGIN_FAILURE', '2026-10-21 17:48:43', 2, 'SYSTEM'),
+	(45, NULL, 'LOGIN_FAILURE', 'user', NULL, 'LOGIN_FAILURE', '2026-10-21 17:48:55', 3, 'SYSTEM'),
+	(46, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-21 17:50:42', 1, 'SYSTEM'),
+	(47, 1, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-21 17:50:43', 1, 'USER'),
+	(48, NULL, 'LOGIN_FAILURE', 'user', NULL, 'LOGIN_FAILURE', '2026-10-21 17:51:41', 2, 'SYSTEM'),
+	(49, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-21 17:53:01', 4, 'SYSTEM'),
+	(50, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-21 17:53:02', 4, 'USER'),
+	(51, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-22 08:19:14', 4, 'SYSTEM'),
+	(52, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-22 08:19:15', 4, 'USER'),
+	(53, NULL, 'STATUS_INVALIDATE', 'user', NULL, 'DISABLED', '2026-10-22 08:21:07', 6, 'SYSTEM'),
+	(54, 4, 'ACCOUNT_DEACTIVATE', 'user', NULL, 'ACTIVE -> DISABLED', '2026-10-22 08:21:07', 6, 'USER'),
+	(55, NULL, 'STATUS_INVALIDATE', 'user', NULL, 'ACTIVE', '2026-10-22 08:21:12', 6, 'SYSTEM'),
+	(56, 4, 'ACCOUNT_ACTIVATE', 'user', NULL, 'DISABLED -> ACTIVE', '2026-10-22 08:21:12', 6, 'USER'),
+	(57, NULL, 'STATUS_INVALIDATE', 'user', NULL, 'DISABLED', '2026-10-22 08:21:17', 6, 'SYSTEM'),
+	(58, 4, 'ACCOUNT_DEACTIVATE', 'user', NULL, 'ACTIVE -> DISABLED', '2026-10-22 08:21:17', 6, 'USER'),
+	(59, NULL, 'STATUS_INVALIDATE', 'user', NULL, 'ACTIVE', '2026-10-22 08:21:20', 6, 'SYSTEM'),
+	(60, 4, 'ACCOUNT_ACTIVATE', 'user', NULL, 'DISABLED -> ACTIVE', '2026-10-22 08:21:21', 6, 'USER'),
+	(61, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-22 08:40:09', 4, 'SYSTEM'),
+	(62, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-22 08:40:09', 4, 'USER'),
+	(63, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-22 08:47:11', 4, 'SYSTEM'),
+	(64, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-22 08:47:11', 4, 'USER'),
+	(65, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-22 14:25:27', 4, 'SYSTEM'),
+	(66, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-22 14:25:28', 4, 'USER'),
+	(67, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-22 14:27:07', 4, 'SYSTEM'),
+	(68, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-22 14:27:07', 4, 'USER'),
+	(69, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-22 21:34:19', 4, 'SYSTEM'),
+	(70, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-22 21:34:20', 4, 'USER'),
+	(71, NULL, 'LOGIN_FAILURE', 'user', NULL, 'LOGIN_FAILURE', '2026-10-22 21:50:25', 4, 'SYSTEM'),
+	(72, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-22 21:50:30', 4, 'SYSTEM'),
+	(73, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-22 21:50:31', 4, 'USER'),
+	(74, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-22 21:55:26', 4, 'SYSTEM'),
+	(75, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-22 21:55:27', 4, 'USER'),
+	(76, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-22 22:38:11', 4, 'SYSTEM'),
+	(77, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-22 22:38:12', 4, 'USER'),
+	(78, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-22 23:10:25', 4, 'SYSTEM'),
+	(79, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-22 23:10:25', 4, 'USER'),
+	(80, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-22 23:26:25', 4, 'SYSTEM'),
+	(81, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-22 23:26:25', 4, 'USER'),
+	(82, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-22 23:43:12', 4, 'SYSTEM'),
+	(83, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-22 23:43:12', 4, 'USER'),
+	(84, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-22 23:46:18', 4, 'SYSTEM'),
+	(85, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-22 23:46:18', 4, 'USER'),
+	(86, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-22 23:56:10', 4, 'SYSTEM'),
+	(87, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-22 23:56:11', 4, 'USER'),
+	(88, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-22 23:59:56', 4, 'SYSTEM'),
+	(89, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-22 23:59:56', 4, 'USER'),
+	(90, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-23 06:53:56', 4, 'SYSTEM'),
+	(91, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-23 06:53:57', 4, 'USER'),
+	(92, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-23 07:25:21', 4, 'SYSTEM'),
+	(93, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-23 07:25:21', 4, 'USER'),
+	(94, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-23 10:21:12', 4, 'SYSTEM'),
+	(95, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-23 10:21:13', 4, 'USER'),
+	(96, 4, 'ACCOUNT_CREATE', 'user', NULL, 'FAMILY_MEMBER', '2026-10-23 10:34:24', 8, 'USER'),
+	(97, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-23 14:00:44', 4, 'SYSTEM'),
+	(98, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-23 14:00:44', 4, 'USER'),
+	(99, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-23 15:00:39', 4, 'SYSTEM'),
+	(100, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-23 15:00:40', 4, 'USER'),
+	(101, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-23 15:20:59', 4, 'SYSTEM'),
+	(102, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-23 15:21:00', 4, 'USER'),
+	(103, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-24 01:42:00', 4, 'SYSTEM'),
+	(104, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-24 01:42:00', 4, 'USER'),
+	(105, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-24 02:30:58', 4, 'SYSTEM'),
+	(106, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-24 02:30:58', 4, 'USER'),
+	(107, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-24 03:20:49', 4, 'SYSTEM'),
+	(108, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-24 03:20:49', 4, 'USER'),
+	(109, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-24 03:41:03', 4, 'SYSTEM'),
+	(110, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-24 03:41:03', 4, 'USER'),
+	(111, NULL, 'LOGIN_FAILURE', 'user', NULL, 'LOGIN_FAILURE', '2026-10-24 07:52:45', 5, 'SYSTEM'),
+	(112, NULL, 'LOGIN_FAILURE', 'user', NULL, 'LOGIN_FAILURE', '2026-10-24 07:52:59', 5, 'SYSTEM'),
+	(113, NULL, 'LOGIN_FAILURE', 'user', NULL, 'LOGIN_FAILURE', '2026-10-24 08:05:03', 5, 'SYSTEM'),
+	(114, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-24 08:35:47', 4, 'SYSTEM'),
+	(115, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-24 08:35:48', 4, 'USER'),
+	(116, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-24 09:07:51', 4, 'SYSTEM'),
+	(117, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-24 09:07:51', 4, 'USER'),
+	(118, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-24 16:07:59', 4, 'SYSTEM'),
+	(119, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-24 16:08:00', 4, 'USER'),
+	(120, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-25 04:05:17', 4, 'SYSTEM'),
+	(121, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-25 04:05:18', 4, 'USER'),
+	(122, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-25 07:33:44', 5, 'SYSTEM'),
+	(123, 5, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-25 07:33:45', 5, 'USER'),
+	(124, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-25 08:42:06', 4, 'SYSTEM'),
+	(125, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-25 08:42:06', 4, 'USER'),
+	(126, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-25 14:53:30', 5, 'SYSTEM'),
+	(127, 5, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-25 14:53:31', 5, 'USER'),
+	(128, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-25 15:08:19', 5, 'SYSTEM'),
+	(129, 5, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-25 15:08:19', 5, 'USER'),
+	(130, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-26 03:03:15', 5, 'SYSTEM'),
+	(131, 5, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-26 03:03:16', 5, 'USER'),
+	(132, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-26 03:31:36', 5, 'SYSTEM'),
+	(133, 5, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-26 03:31:36', 5, 'USER'),
+	(134, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-26 08:25:20', 4, 'SYSTEM'),
+	(135, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-26 08:25:21', 4, 'USER'),
+	(136, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-26 15:52:32', 4, 'SYSTEM'),
+	(137, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-26 15:52:33', 4, 'USER'),
+	(138, 2, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-27 05:29:22', 2, 'USER'),
+	(139, 2, 'RACK_SAVE', 'warehouse', NULL, 'E', '2026-10-27 05:41:59', 4, 'USER'),
+	(140, 2, 'RACK_SAVE', 'warehouse', NULL, 'E', '2026-10-27 05:42:09', 4, 'USER'),
+	(141, 2, 'RACK_SAVE', 'warehouse', NULL, 'E', '2026-10-27 05:42:16', 4, 'USER'),
+	(142, 2, 'RACK_SAVE', 'warehouse', NULL, 'C', '2026-10-27 05:42:23', 3, 'USER'),
+	(143, 2, 'RACK_SAVE', 'warehouse', NULL, 'C', '2026-10-27 05:42:30', 3, 'USER'),
+	(144, 2, 'RACK_SAVE', 'warehouse', NULL, 'B', '2026-10-27 05:42:38', 2, 'USER'),
+	(145, 2, 'RACK_SAVE', 'warehouse', NULL, 'A', '2026-10-27 05:42:47', 1, 'USER'),
+	(146, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-27 07:52:50', 4, 'SYSTEM'),
+	(147, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-27 07:52:50', 4, 'USER'),
+	(148, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-27 09:00:57', 4, 'SYSTEM'),
+	(149, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-27 09:00:58', 4, 'USER'),
+	(150, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-27 09:43:28', 4, 'SYSTEM'),
+	(151, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-27 09:43:28', 4, 'USER'),
+	(152, NULL, 'ACCOUNT_CREATE', 'user', NULL, 'CUSTOMER', '2026-10-27 09:51:28', 9, 'SYSTEM'),
+	(153, NULL, 'OTP_SENT', 'user', NULL, 'REGISTER_EMAIL', '2026-10-27 09:51:29', 9, 'SYSTEM'),
+	(154, NULL, 'OTP_SENT', 'user', NULL, 'REGISTER_EMAIL', '2026-10-27 09:52:52', 9, 'SYSTEM'),
+	(155, 9, 'ACCOUNT_VERIFIED', 'user', NULL, 'EMAIL', '2026-10-27 09:53:38', 9, 'USER'),
+	(156, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-27 09:53:55', 9, 'SYSTEM'),
+	(157, 9, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-27 09:53:56', 9, 'USER'),
+	(158, 2, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-27 09:55:53', 2, 'USER'),
+	(159, NULL, 'ACCOUNT_CREATE', 'user', NULL, 'CUSTOMER', '2026-10-27 09:56:26', 10, 'SYSTEM'),
+	(160, 10, 'GOOGLE_LINK', 'user', NULL, 'google:a02e1066863c8c0bb3c77109def49a34a10fab7323c3378abd4e680d937f06cf', '2026-10-27 09:56:27', 10, 'USER'),
+	(161, 10, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-27 09:56:27', 10, 'USER'),
+	(162, 2, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-27 09:57:30', 2, 'USER'),
+	(163, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-27 09:59:15', 4, 'SYSTEM'),
+	(164, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-27 09:59:16', 4, 'USER'),
+	(165, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-27 10:01:46', 4, 'SYSTEM'),
+	(166, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-27 10:01:46', 4, 'USER'),
+	(167, 2, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-27 10:53:48', 2, 'USER'),
+	(168, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-27 10:54:24', 4, 'SYSTEM'),
+	(169, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-27 10:54:24', 4, 'USER'),
+	(170, 2, 'RACK_SAVE', 'warehouse', NULL, 'C', '2026-10-27 11:07:39', 3, 'USER'),
+	(171, 2, 'RACK_SAVE', 'warehouse', NULL, 'E', '2026-10-27 11:07:48', 4, 'USER'),
+	(172, NULL, 'LOGIN_FAILURE', 'user', NULL, 'LOGIN_FAILURE', '2026-10-27 11:44:13', 3, 'SYSTEM'),
+	(173, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-27 11:44:33', 3, 'SYSTEM'),
+	(174, 3, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-27 11:44:33', 3, 'USER'),
+	(175, NULL, 'PASSWORD_INVALIDATE', 'user', NULL, 'Existing sessions and reset grants revoked', '2026-10-27 11:44:49', 3, 'SYSTEM'),
+	(176, 3, 'PASSWORD_CHANGE', 'user', NULL, 'Password replaced; sessions revoked', '2026-10-27 11:44:50', 3, 'USER'),
+	(177, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-27 11:45:00', 3, 'SYSTEM'),
+	(178, 3, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-27 11:45:00', 3, 'USER'),
+	(179, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-27 11:45:12', 4, 'SYSTEM'),
+	(180, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-27 11:45:12', 4, 'USER'),
+	(181, NULL, 'LOGIN_FAILURE', 'user', NULL, 'LOGIN_FAILURE', '2026-10-27 11:45:21', 5, 'SYSTEM'),
+	(182, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-27 11:45:30', 5, 'SYSTEM'),
+	(183, 5, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-27 11:45:30', 5, 'USER'),
+	(184, NULL, 'PASSWORD_INVALIDATE', 'user', NULL, 'Existing sessions and reset grants revoked', '2026-10-27 11:45:45', 5, 'SYSTEM'),
+	(185, 5, 'PASSWORD_CHANGE', 'user', NULL, 'Password replaced; sessions revoked', '2026-10-27 11:45:45', 5, 'USER'),
+	(186, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-27 11:45:51', 5, 'SYSTEM'),
+	(187, 5, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-27 11:45:52', 5, 'USER'),
+	(188, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-27 11:46:08', 7, 'SYSTEM'),
+	(189, 7, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-27 11:46:08', 7, 'USER'),
+	(190, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-27 15:28:32', 4, 'SYSTEM'),
+	(191, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-27 15:28:33', 4, 'USER'),
+	(192, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-27 15:42:29', 7, 'SYSTEM'),
+	(193, 7, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-27 15:42:29', 7, 'USER'),
+	(194, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-27 15:42:48', 4, 'SYSTEM'),
+	(195, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-27 15:42:48', 4, 'USER'),
+	(196, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-27 16:52:34', 4, 'SYSTEM'),
+	(197, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-27 16:52:35', 4, 'USER'),
+	(198, 2, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-27 17:11:27', 2, 'USER'),
+	(199, 2, 'RACK_LAYOUT_TIDY', 'warehouse', NULL, 'Xếp gọn theo hàng', '2026-10-27 17:12:02', 1, 'USER'),
+	(200, 2, 'RACK_LAYOUT_TIDY', 'warehouse', NULL, 'Xếp gọn theo hàng', '2026-10-27 17:12:02', 2, 'USER'),
+	(201, 2, 'RACK_LAYOUT_TIDY', 'warehouse', NULL, 'Xếp gọn theo hàng', '2026-10-27 17:12:02', 3, 'USER'),
+	(202, 2, 'RACK_LAYOUT_TIDY', 'warehouse', NULL, 'Xếp gọn theo hàng', '2026-10-27 17:12:02', 4, 'USER'),
+	(203, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-27 17:31:44', 4, 'SYSTEM'),
+	(204, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-27 17:31:45', 4, 'USER'),
+	(205, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-27 20:15:18', 5, 'SYSTEM'),
+	(206, 5, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-27 20:15:19', 5, 'USER'),
+	(207, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-27 20:27:12', 5, 'SYSTEM'),
+	(208, 5, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-27 20:27:13', 5, 'USER'),
+	(209, NULL, 'PASSWORD_INVALIDATE', 'user', NULL, 'Existing sessions and reset grants revoked', '2026-10-27 20:27:47', 5, 'SYSTEM'),
+	(210, 5, 'PASSWORD_CHANGE', 'user', NULL, 'Password replaced; sessions revoked', '2026-10-27 20:27:47', 5, 'USER'),
+	(211, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-27 20:27:58', 5, 'SYSTEM'),
+	(212, 5, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-27 20:27:58', 5, 'USER'),
+	(213, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-27 20:29:44', 5, 'SYSTEM'),
+	(214, 5, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-27 20:29:44', 5, 'USER'),
+	(215, NULL, 'PASSWORD_INVALIDATE', 'user', NULL, 'Existing sessions and reset grants revoked', '2026-10-27 20:29:59', 5, 'SYSTEM'),
+	(216, 5, 'PASSWORD_CHANGE', 'user', NULL, 'Password replaced; sessions revoked', '2026-10-27 20:29:59', 5, 'USER'),
+	(217, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-27 20:30:07', 5, 'SYSTEM'),
+	(218, 5, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-27 20:30:07', 5, 'USER'),
+	(219, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-27 20:30:23', 3, 'SYSTEM'),
+	(220, 3, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-27 20:30:24', 3, 'USER'),
+	(221, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-27 20:37:43', 3, 'SYSTEM'),
+	(222, 3, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-27 20:37:43', 3, 'USER'),
+	(223, NULL, 'LOGIN_FAILURE', 'user', NULL, 'LOGIN_FAILURE', '2026-10-27 20:38:05', 5, 'SYSTEM'),
+	(224, NULL, 'LOGIN_FAILURE', 'user', NULL, 'LOGIN_FAILURE', '2026-10-27 20:38:10', 5, 'SYSTEM'),
+	(225, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-27 20:38:14', 5, 'SYSTEM'),
+	(226, 5, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-27 20:38:15', 5, 'USER'),
+	(227, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-27 20:38:27', 3, 'SYSTEM'),
+	(228, 3, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-27 20:38:27', 3, 'USER'),
+	(229, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-27 20:47:31', 4, 'SYSTEM'),
+	(230, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-27 20:47:32', 4, 'USER'),
+	(231, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-27 20:47:54', 5, 'SYSTEM'),
+	(232, 5, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-27 20:47:54', 5, 'USER'),
+	(233, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-27 20:48:34', 4, 'SYSTEM'),
+	(234, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-27 20:48:35', 4, 'USER'),
+	(235, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-28 01:07:24', 4, 'SYSTEM'),
+	(236, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-28 01:07:24', 4, 'USER'),
+	(237, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-28 01:18:08', 5, 'SYSTEM'),
+	(238, 5, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-28 01:18:08', 5, 'USER'),
+	(239, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-28 01:20:23', 5, 'SYSTEM'),
+	(240, 5, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-28 01:20:24', 5, 'USER'),
+	(241, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-28 02:08:21', 4, 'SYSTEM'),
+	(242, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-28 02:08:21', 4, 'USER'),
+	(243, NULL, 'LOGIN_SUCCESS', 'user', NULL, 'LOGIN_SUCCESS', '2026-10-28 05:19:10', 4, 'SYSTEM'),
+	(244, 4, 'LOGIN', 'user', NULL, 'IP 0:0:0:0:0:0:0:1', '2026-10-28 05:19:11', 4, 'USER');
 
 -- Dumping structure for table thors_restore.cart
 CREATE TABLE IF NOT EXISTS `cart` (
@@ -87,9 +318,12 @@ CREATE TABLE IF NOT EXISTS `category` (
   `status` varchar(20) NOT NULL,
   PRIMARY KEY (`category_id`),
   UNIQUE KEY `uq_category_1` (`category_name`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Dumping data for table thors_restore.category: ~0 rows (approximately)
+-- Dumping data for table thors_restore.category: ~1 rows (approximately)
+INSERT INTO `category` (`category_id`, `category_name`, `description`, `status`) VALUES
+	(1, 'Áo', 'abc', 'ACTIVE'),
+	(2, 'Quần', 'Quần gia công chất liệu bền màu theo thời gian', 'ACTIVE');
 
 -- Dumping structure for table thors_restore.discount_code
 CREATE TABLE IF NOT EXISTS `discount_code` (
@@ -167,9 +401,12 @@ CREATE TABLE IF NOT EXISTS `notification` (
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`notification_id`),
   KEY `ix_notification_1` (`created_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Dumping data for table thors_restore.notification: ~0 rows (approximately)
+-- Dumping data for table thors_restore.notification: ~2 rows (approximately)
+INSERT INTO `notification` (`notification_id`, `title`, `message`, `type`, `related_entity_type`, `related_entity_id`, `created_at`) VALUES
+	(1, 'Password changed', 'Your password was changed and you were signed out on all devices. If this wasn\'t you, contact an administrator right away.', 'ACCOUNT_SECURITY', NULL, NULL, '2026-10-27 20:27:47'),
+	(2, 'Password changed', 'Your password was changed and you were signed out on all devices. If this wasn\'t you, contact an administrator right away.', 'ACCOUNT_SECURITY', NULL, NULL, '2026-10-27 20:29:59');
 
 -- Dumping structure for table thors_restore.order_item
 CREATE TABLE IF NOT EXISTS `order_item` (
@@ -219,6 +456,7 @@ CREATE TABLE IF NOT EXISTS `orders` (
   `items_amount` decimal(12,0) NOT NULL COMMENT 'Tổng quantity × unit_price tại lúc đặt',
   `promotion_discount_amount` decimal(12,0) NOT NULL DEFAULT '0' COMMENT 'Số tiền khuyến mãi thực tế đã chốt',
   `coupon_discount_amount` decimal(12,0) NOT NULL DEFAULT '0' COMMENT 'Số tiền mã giảm giá thực tế đã chốt',
+  `manual_discount_amount` decimal(12,0) NOT NULL DEFAULT '0' COMMENT 'Giảm giá trực tiếp tại quầy, tính bằng VNĐ',
   `shipping_fee` decimal(12,0) NOT NULL DEFAULT '0' COMMENT 'Phí khách trả; tại quầy bằng 0',
   `coupon_code_snapshot` varchar(30) DEFAULT NULL COMMENT 'Mã đã áp dụng, giữ khi mã gốc đổi',
   `promotion_name_snapshot` varchar(100) DEFAULT NULL COMMENT 'Tên khuyến mãi đã áp dụng',
@@ -323,9 +561,14 @@ CREATE TABLE IF NOT EXISTS `product` (
   KEY `ix_product_1` (`product_name`),
   KEY `fk_product_category_id` (`category_id`),
   CONSTRAINT `fk_product_category_id` FOREIGN KEY (`category_id`) REFERENCES `category` (`category_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Dumping data for table thors_restore.product: ~0 rows (approximately)
+-- Dumping data for table thors_restore.product: ~4 rows (approximately)
+INSERT INTO `product` (`product_id`, `category_id`, `product_name`, `description`, `status`) VALUES
+	(3, 1, 'cơm', '', 'ACTIVE'),
+	(4, 1, 'cho', '', 'ACTIVE'),
+	(5, 1, 'Áo baby doll', 'abcde', 'ACTIVE'),
+	(6, 2, 'Quần đùi gió', '', 'INACTIVE');
 
 -- Dumping structure for table thors_restore.product_detail
 CREATE TABLE IF NOT EXISTS `product_detail` (
@@ -344,9 +587,18 @@ CREATE TABLE IF NOT EXISTS `product_detail` (
   CONSTRAINT `ck_product_detail_1` CHECK ((`price` >= 0)),
   CONSTRAINT `ck_product_detail_2` CHECK ((`stock_quantity` >= 0)),
   CONSTRAINT `ck_product_detail_3` CHECK ((`online_sales_enabled` in (0,1)))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=11 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Dumping data for table thors_restore.product_detail: ~0 rows (approximately)
+-- Dumping data for table thors_restore.product_detail: ~8 rows (approximately)
+INSERT INTO `product_detail` (`detail_id`, `product_id`, `size`, `color`, `price`, `stock_quantity`, `online_sales_enabled`, `status`) VALUES
+	(3, 3, 'M', 'đen', 250000, 0, 0, 'ACTIVE'),
+	(4, 4, '37', 'đen', 250000, 0, 0, 'ACTIVE'),
+	(5, 5, 'S', 'Trắng', 190000, 0, 0, 'ACTIVE'),
+	(6, 5, 'M', 'Trắng', 220000, 0, 0, 'ACTIVE'),
+	(7, 6, 'M', 'Rêu', 150000, 0, 0, 'ACTIVE'),
+	(8, 6, 'L', 'Đen', 150000, 0, 0, 'ACTIVE'),
+	(9, 6, 'L', 'Rêu', 150000, 0, 0, 'ACTIVE'),
+	(10, 6, 'M', 'Đen', 150000, 0, 0, 'ACTIVE');
 
 -- Dumping structure for table thors_restore.product_image
 CREATE TABLE IF NOT EXISTS `product_image` (
@@ -361,9 +613,14 @@ CREATE TABLE IF NOT EXISTS `product_image` (
   KEY `ix_product_image_1` (`product_id`,`deleted_at`),
   CONSTRAINT `fk_product_image_product_id` FOREIGN KEY (`product_id`) REFERENCES `product` (`product_id`),
   CONSTRAINT `ck_product_image_1` CHECK ((`is_primary` in (0,1)))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Dumping data for table thors_restore.product_image: ~0 rows (approximately)
+-- Dumping data for table thors_restore.product_image: ~3 rows (approximately)
+INSERT INTO `product_image` (`image_id`, `product_id`, `image_url`, `is_primary`, `uploaded_at`, `cloud_public_id`, `deleted_at`) VALUES
+	(1, 3, 'https://res.cloudinary.com/zew6my0e/image/upload/v1792713615/thors/products/yjydaf0egwhf2w6px7nf.png', 1, '2026-10-23 00:00:16', 'thors/products/yjydaf0egwhf2w6px7nf', NULL),
+	(2, 4, 'https://res.cloudinary.com/zew6my0e/image/upload/v1792768959/thors/products/uwhwhkrihpurf9pltiwb.jpg', 1, '2026-10-23 15:22:40', 'thors/products/uwhwhkrihpurf9pltiwb', NULL),
+	(3, 5, 'https://res.cloudinary.com/zew6my0e/image/upload/v1792769066/thors/products/azc6smndnfmlzbphbp1v.jpg', 1, '2026-10-23 15:24:27', 'thors/products/azc6smndnfmlzbphbp1v', NULL),
+	(4, 6, 'https://res.cloudinary.com/zew6my0e/image/upload/v1792864967/thors/products/ff4fk6ijilwe9szmikzm.jpg', 1, '2026-10-24 18:02:48', 'thors/products/ff4fk6ijilwe9szmikzm', NULL);
 
 -- Dumping structure for table thors_restore.product_location
 CREATE TABLE IF NOT EXISTS `product_location` (
@@ -410,6 +667,7 @@ CREATE TABLE IF NOT EXISTS `promotion` (
   `discount_type` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT 'PERCENT: 0–100; FIXED: số tiền VNĐ nguyên',
   `min_order_value` decimal(12,0) NOT NULL DEFAULT '0',
   `max_discount_amount` decimal(12,0) DEFAULT NULL COMMENT 'Mức giảm tối đa khi giảm theo phần trăm',
+  `usage_limit` int DEFAULT NULL COMMENT 'NULL = không giới hạn; số nguyên dương = số lượt sử dụng tối đa',
   PRIMARY KEY (`promotion_id`),
   KEY `fk_promotion_created_by` (`created_by`),
   CONSTRAINT `fk_promotion_created_by` FOREIGN KEY (`created_by`) REFERENCES `user` (`user_id`),
@@ -419,7 +677,8 @@ CREATE TABLE IF NOT EXISTS `promotion` (
   CONSTRAINT `ck_promotion_4` CHECK ((`min_order_value` >= 0)),
   CONSTRAINT `ck_promotion_5` CHECK ((`max_discount_amount` >= 0)),
   CONSTRAINT `ck_promotion_6` CHECK (((`discount_type` <> _utf8mb4'PERCENT') or (`discount_value` <= 100))),
-  CONSTRAINT `ck_promotion_7` CHECK (((`discount_type` <> _utf8mb4'FIXED') or (`discount_value` = floor(`discount_value`))))
+  CONSTRAINT `ck_promotion_7` CHECK (((`discount_type` <> _utf8mb4'FIXED') or (`discount_value` = floor(`discount_value`)))),
+  CONSTRAINT `ck_promotion_usage_limit` CHECK (((`usage_limit` is null) or (`usage_limit` >= 1)))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Dumping data for table thors_restore.promotion: ~0 rows (approximately)
@@ -435,14 +694,14 @@ CREATE TABLE IF NOT EXISTS `rack` (
   PRIMARY KEY (`rack_id`),
   UNIQUE KEY `uq_rack_1` (`rack_code`),
   CONSTRAINT `ck_rack_1` CHECK ((`is_active` in (0,1)))
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Dumping data for table thors_restore.rack: ~4 rows (approximately)
 INSERT INTO `rack` (`rack_id`, `rack_code`, `zone`, `coordinate_x`, `coordinate_y`, `is_active`) VALUES
-	(1, 'A', NULL, 0.00, 0.00, 1),
-	(2, 'B', NULL, 1.00, 0.00, 1),
-	(3, 'C', NULL, 2.00, 0.00, 1),
-	(4, 'D', NULL, 3.00, 0.00, 1);
+	(1, 'A', '', 40.00, 40.00, 1),
+	(2, 'B', '', 254.00, 40.00, 1),
+	(3, 'C', '', 468.00, 40.00, 1),
+	(4, 'E', '', 682.00, 40.00, 1);
 
 -- Dumping structure for table thors_restore.return_request
 CREATE TABLE IF NOT EXISTS `return_request` (
@@ -629,20 +888,28 @@ CREATE TABLE IF NOT EXISTS `stock_adjustment` (
 -- Dumping structure for table thors_restore.stock_receipt
 CREATE TABLE IF NOT EXISTS `stock_receipt` (
   `receipt_id` int NOT NULL AUTO_INCREMENT,
-  `created_by` int NOT NULL COMMENT 'Chỉ OWNER hoặc STAFF; FAMILY_MEMBER không được tạo phiếu nhập',
+  `receipt_type` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT 'PURCHASE_ORDER: phiếu đặt; RECEIPT: phiếu nhập',
+  `source_receipt_id` int DEFAULT NULL COMMENT 'Phiếu nhập liên kết receipt_id của phiếu đặt gốc; phiếu đặt để NULL',
+  `manufacturer_name` varchar(200) DEFAULT NULL COMMENT 'Tên bên sản xuất ghi trên phiếu đặt',
+  `created_by` int NOT NULL COMMENT 'Phiếu đặt: OWNER tạo; phiếu nhập: OWNER hoặc FAMILY_MEMBER tạo',
   `receipt_date` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `note` varchar(255) DEFAULT NULL,
-  `status` varchar(30) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT 'DRAFT' COMMENT 'DRAFT / PENDING_CONFIRMATION / CONFIRMED / REJECTED',
-  `confirmed_by` int DEFAULT NULL COMMENT 'Chỉ OWNER; bắt buộc khi CONFIRMED',
-  `confirmed_at` datetime DEFAULT NULL COMMENT 'Mốc tăng tồn kho một lần',
+  `status` varchar(30) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT 'DRAFT' COMMENT 'DRAFT / PENDING_CONFIRMATION / CONFIRMED / REJECTED / CANCELLED / CLOSED',
+  `confirmed_by` int DEFAULT NULL COMMENT 'Người xác nhận phiếu; chỉ OWNER được thực hiện',
+  `confirmed_at` datetime DEFAULT NULL COMMENT 'Thời điểm xác nhận; chỉ phiếu nhập RECEIPT mới cộng tồn',
   `rejection_reason` varchar(255) DEFAULT NULL COMMENT 'Owner ghi lý do từ chối',
+  `closed_at` datetime DEFAULT NULL COMMENT 'Thời điểm Owner đóng phiếu đặt, kết thúc nhận hàng',
+  `close_reason` varchar(255) DEFAULT NULL COMMENT 'Lý do đóng phiếu đặt: nhận đủ hoặc ngừng nhận phần còn thiếu',
   PRIMARY KEY (`receipt_id`),
   KEY `ix_stock_receipt_1` (`status`,`receipt_date`),
   KEY `fk_stock_receipt_created_by` (`created_by`),
   KEY `fk_stock_receipt_confirmed_by` (`confirmed_by`),
+  KEY `ix_receipt_source` (`source_receipt_id`),
+  CONSTRAINT `fk_receipt_source` FOREIGN KEY (`source_receipt_id`) REFERENCES `stock_receipt` (`receipt_id`),
   CONSTRAINT `fk_stock_receipt_confirmed_by` FOREIGN KEY (`confirmed_by`) REFERENCES `user` (`user_id`),
   CONSTRAINT `fk_stock_receipt_created_by` FOREIGN KEY (`created_by`) REFERENCES `user` (`user_id`),
-  CONSTRAINT `ck_stock_receipt_1` CHECK ((`status` in (_utf8mb4'DRAFT',_utf8mb4'PENDING_CONFIRMATION',_utf8mb4'CONFIRMED',_utf8mb4'REJECTED')))
+  CONSTRAINT `ck_receipt_type` CHECK ((`receipt_type` in (_utf8mb4'PURCHASE_ORDER',_utf8mb4'RECEIPT'))),
+  CONSTRAINT `ck_stock_receipt_1` CHECK ((`status` in (_utf8mb4'DRAFT',_utf8mb4'PENDING_CONFIRMATION',_utf8mb4'CONFIRMED',_utf8mb4'REJECTED',_utf8mb4'CANCELLED',_utf8mb4'CLOSED')))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Dumping data for table thors_restore.stock_receipt: ~0 rows (approximately)
@@ -652,13 +919,18 @@ CREATE TABLE IF NOT EXISTS `stock_receipt_item` (
   `receipt_item_id` int NOT NULL AUTO_INCREMENT,
   `receipt_id` int NOT NULL,
   `detail_id` int NOT NULL,
-  `quantity_received` int NOT NULL,
+  `source_receipt_item_id` int DEFAULT NULL COMMENT 'Liên kết receipt_item_id của dòng đặt gốc; dòng đặt để NULL',
+  `quantity` int NOT NULL COMMENT 'Phiếu đặt: số lượng đặt; phiếu nhập: số lượng thực nhận của từng biến thể',
+  `unit_price` decimal(12,0) NOT NULL COMMENT 'Đơn giá đặt hoặc thực nhập bằng VNĐ',
   PRIMARY KEY (`receipt_item_id`),
   KEY `fk_stock_receipt_item_receipt_id` (`receipt_id`),
   KEY `fk_stock_receipt_item_detail_id` (`detail_id`),
+  KEY `ix_receipt_item_source` (`source_receipt_item_id`),
+  CONSTRAINT `fk_receipt_item_source` FOREIGN KEY (`source_receipt_item_id`) REFERENCES `stock_receipt_item` (`receipt_item_id`),
   CONSTRAINT `fk_stock_receipt_item_detail_id` FOREIGN KEY (`detail_id`) REFERENCES `product_detail` (`detail_id`),
   CONSTRAINT `fk_stock_receipt_item_receipt_id` FOREIGN KEY (`receipt_id`) REFERENCES `stock_receipt` (`receipt_id`),
-  CONSTRAINT `ck_stock_receipt_item_1` CHECK ((`quantity_received` > 0))
+  CONSTRAINT `ck_receipt_item_price` CHECK ((`unit_price` >= 0)),
+  CONSTRAINT `ck_stock_receipt_item_1` CHECK ((`quantity` > 0))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Dumping data for table thors_restore.stock_receipt_item: ~0 rows (approximately)
@@ -676,17 +948,29 @@ CREATE TABLE IF NOT EXISTS `user` (
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `avatar_url` varchar(500) DEFAULT NULL COMMENT 'Ảnh hồ sơ trên dịch vụ lưu ảnh',
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'Cập nhật khi sửa hồ sơ',
+  `email_verified_at` datetime DEFAULT NULL COMMENT 'Thời điểm email được xác minh thành công',
+  `verification_code_hash` varchar(255) DEFAULT NULL COMMENT 'Lưu mã HMAC-SHA256 của OTP, không lưu OTP gốc',
+  `verification_expires_at` datetime DEFAULT NULL COMMENT 'Thời điểm OTP hết hạn, mặc định sau 5 phút',
+  `verification_attempt_count` int NOT NULL DEFAULT '0' COMMENT 'Số lần nhập OTP sai, tối đa 5 lần',
   PRIMARY KEY (`user_id`),
   UNIQUE KEY `uq_user_2` (`email`),
   KEY `fk_user_role_id` (`role_id`),
   CONSTRAINT `fk_user_role_id` FOREIGN KEY (`role_id`) REFERENCES `role` (`role_id`),
   CONSTRAINT `ck_user_1` CHECK ((`account_status` in (_utf8mb4'PENDING_VERIFICATION',_utf8mb4'ACTIVE',_utf8mb4'LOCKED',_utf8mb4'DISABLED')))
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=11 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Dumping data for table thors_restore.user: ~2 rows (approximately)
-INSERT INTO `user` (`user_id`, `role_id`, `full_name`, `password_hash`, `email`, `phone`, `address`, `account_status`, `created_at`, `avatar_url`, `updated_at`) VALUES
-	(1, 5, 'Minh Trần', '$2a$12$G3JzNlCTWlHvj58eGF4OdOPSAfhNqAf9HfHOd3idPy1Qqfd5yxaNi', 'he187170tranminhlam@gmail.com', NULL, NULL, 'ACTIVE', '2026-10-12 18:53:16', NULL, '2026-10-13 06:55:10'),
-	(2, 5, 'Minh Trần Trần', '!GOOGLE_ONLY', 'nguyenhaiphong518@gmail.com', NULL, NULL, 'ACTIVE', '2026-10-13 06:52:48', NULL, '2026-10-13 06:52:48');
+-- Dumping data for table thors_restore.user: ~10 rows (approximately)
+INSERT INTO `user` (`user_id`, `role_id`, `full_name`, `password_hash`, `email`, `phone`, `address`, `account_status`, `created_at`, `avatar_url`, `updated_at`, `email_verified_at`, `verification_code_hash`, `verification_expires_at`, `verification_attempt_count`) VALUES
+	(1, 1, 'Minh Trần', '$2a$12$G3JzNlCTWlHvj58eGF4OdOPSAfhNqAf9HfHOd3idPy1Qqfd5yxaNi', 'he187170tranminhlam@gmail.com', NULL, NULL, 'ACTIVE', '2026-10-12 18:53:16', NULL, '2026-10-19 15:16:17', '2026-10-17 07:09:53', NULL, NULL, 0),
+	(2, 2, 'Minh Trần Trần', '!GOOGLE_ONLY', 'nguyenhaiphong518@gmail.com', NULL, NULL, 'ACTIVE', '2026-10-13 06:52:48', NULL, '2026-10-19 15:16:10', NULL, '3495e7a8-76e9-4370-aee9-27e9bb12c8cb:bd563a1b4aaffb497e57df1b59c4fd46d61e9d989b06dd65dd32b727f4a36aab', '2026-10-17 07:16:09', 0),
+	(3, 1, 'Admin TH', '$2a$12$DTCwzCI16SET6ZJfxbJDbeJk12WebnemFNAbJqkwT11ksjOdxqOEC', 'admin@thors.shop', '+84900000001', NULL, 'ACTIVE', '2026-10-16 10:42:06', NULL, '2026-10-27 11:44:49', NULL, NULL, NULL, 0),
+	(4, 2, 'Maya Chen', '$2a$12$3NS49E0vzEj4fIObYfDfFuWukcElLl14HXkEWh0GvB9AAd0YtYIB6', 'owner@thors.shop', '+84900000002', NULL, 'ACTIVE', '2026-10-16 10:42:06', NULL, '2026-10-19 09:34:19', NULL, NULL, NULL, 0),
+	(5, 5, 'Noah Williams', '$2a$12$0hFjlW7C5H62iZ2HWrH9deAxJP/zSAdlj79j/aUNMeIhvai4ZawCy', 'customer@thors.shop', '+84900000003', NULL, 'ACTIVE', '2026-10-16 10:52:25', NULL, '2026-10-27 20:29:59', NULL, NULL, NULL, 0),
+	(6, 4, 'test1', '$2a$12$0icK3p47iKwfdrqU2CzRPuybzonsTfTfBl5HSrLqYwtYDf5A/R9h6', 'abcxyz@gmail.com', '+84987654321', NULL, 'ACTIVE', '2026-10-16 10:55:16', NULL, '2026-10-22 08:21:20', NULL, NULL, NULL, 0),
+	(7, 3, 'family1', '$2a$12$YvH.F46bvVnQfMocVpCKWuoUaGtQs4ZnrDYtAqy1wr8WgRvVihg56', 'family1@gmail.com', '+84879654322', NULL, 'ACTIVE', '2026-10-16 10:56:11', NULL, '2026-10-16 10:57:32', NULL, NULL, NULL, 0),
+	(8, 3, 'test342', '$2a$12$Ywqxjwv/r05gOodazfYafO2YsGvxZ4RXbvuMfK/aOqcJqBxfxx0zK', 'test123@gmail.com', '+84123456789', NULL, 'PENDING_VERIFICATION', '2026-10-23 10:34:24', NULL, '2026-10-23 10:34:24', NULL, NULL, NULL, 0),
+	(9, 5, 'Huan', '$2a$12$.oSwYYuDtSj30GKXAFVEsOIkvW1BQ1X0Fro5asjxhcvtNGvR/fm3i', 'huanhyhy1@gmail.com', NULL, NULL, 'ACTIVE', '2026-10-27 09:51:28', NULL, '2026-10-27 09:53:37', '2026-10-27 09:53:37', NULL, NULL, 0),
+	(10, 5, 'Lam Trần', '!GOOGLE_ONLY', 'minhtran488930@gmail.com', NULL, NULL, 'ACTIVE', '2026-10-27 09:56:26', NULL, '2026-10-27 09:56:26', '2026-10-27 09:56:26', NULL, NULL, 0);
 
 -- Dumping structure for table thors_restore.user_notification
 CREATE TABLE IF NOT EXISTS `user_notification` (
@@ -702,9 +986,12 @@ CREATE TABLE IF NOT EXISTS `user_notification` (
   CONSTRAINT `fk_user_notification_notification_id` FOREIGN KEY (`notification_id`) REFERENCES `notification` (`notification_id`),
   CONSTRAINT `fk_user_notification_user_id` FOREIGN KEY (`user_id`) REFERENCES `user` (`user_id`),
   CONSTRAINT `ck_user_notification_1` CHECK ((`is_read` in (0,1)))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Dumping data for table thors_restore.user_notification: ~0 rows (approximately)
+-- Dumping data for table thors_restore.user_notification: ~2 rows (approximately)
+INSERT INTO `user_notification` (`user_notification_id`, `user_id`, `notification_id`, `is_read`, `read_at`) VALUES
+	(1, 5, 1, 1, '2026-10-27 20:28:06'),
+	(2, 5, 2, 1, '2026-10-28 01:20:28');
 
 -- Dumping structure for table thors_restore.work_shift
 CREATE TABLE IF NOT EXISTS `work_shift` (

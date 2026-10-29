@@ -58,13 +58,6 @@ function formatPrice(value) {
   return `${number.toLocaleString('vi-VN')} ₫`;
 }
 
-function isOnlineEnabled(value) {
-  return (
-    value === true ||
-    value === 1 ||
-    value === '1'
-  );
-}
 
 function InfoCard({ label, value, highlight = false }) {
   return (

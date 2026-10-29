@@ -1,6 +1,7 @@
 import {
   AppstoreOutlined,
   FileTextOutlined,
+  RollbackOutlined,
   ShopOutlined,
   TeamOutlined,
   UserOutlined,
@@ -23,6 +24,7 @@ export const NAVIGATION = {
     dashboard,
     { to: '/products', label: 'Products', icon: <ShopOutlined /> },
     { to: '/categories', label: 'Categories', icon: <AppstoreOutlined /> },
+    { to: '/returns', label: 'Hoàn hàng / Đổi trả', icon: <RollbackOutlined /> },
     { to: '/staff', label: 'Family', icon: <TeamOutlined /> },
     { to: '/in-store-sales', label: 'In-store Sales', icon: <ShoppingCartOutlined /> },
     { to: '/promotions', label: 'Khuyến mãi', icon: <TagsOutlined /> },

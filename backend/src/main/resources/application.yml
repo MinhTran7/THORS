@@ -9,12 +9,16 @@ server:
         secure: ${SESSION_COOKIE_SECURE:false}
         same-site: lax
 spring:
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 30MB
   config:
     import: "optional:file:./backend/local.properties,optional:file:./local.properties"
   application:
     name: thors-backend
   datasource:
-    url: ${THORS_DB_URL:jdbc:mysql://thors-thors.g.aivencloud.com:10006/thors_restore?sslMode=REQUIRED&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true}
+    url: ${THORS_DB_URL:jdbc:mysql://thors-thors.g.aivencloud.com:10006/thors?sslMode=REQUIRED&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true}
     username: ${THORS_DB_USER:avnadmin}
     password: ${THORS_DB_PASSWORD:}
     hikari:
