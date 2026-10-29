@@ -33,7 +33,7 @@ public class WarehouseLayout {
         policy.view(a);
 
         var variants = s.jdbc().queryForList("""
-SELECT d.detail_id,d.product_id,d.color,d.size,d.stock_quantity,d.status,p.product_name,
+SELECT d.detail_id,d.product_id,d.barcode,d.color,d.size,d.stock_quantity,d.status,p.product_name,
   COALESCE(l.assigned,0) AS assigned_quantity,d.stock_quantity-COALESCE(l.assigned,0) AS unassigned_quantity
 FROM product_detail d JOIN product p ON p.product_id=d.product_id
 LEFT JOIN (SELECT detail_id,SUM(quantity) AS assigned FROM product_location GROUP BY detail_id) l ON l.detail_id=d.detail_id

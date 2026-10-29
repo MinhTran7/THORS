@@ -15,23 +15,36 @@ public class WarehouseController {
     private final WarehouseLayout layout;
     private final WarehousePhotos photos;
     private final WarehousePolicy policy;
+    private final WarehouseBarcodes barcodes;
 
     public WarehouseController(
             SessionAccess sessions,
             WarehouseDocuments docs,
             WarehouseLayout layout,
             WarehousePhotos photos,
-            WarehousePolicy policy) {
+            WarehousePolicy policy,
+            WarehouseBarcodes barcodes) {
         this.sessions = sessions;
         this.docs = docs;
         this.layout = layout;
         this.photos = photos;
         this.policy = policy;
+        this.barcodes = barcodes;
     }
 
     @GetMapping("/snapshot")
     public Object snapshot() {
         return layout.snapshot(sessions.current());
+    }
+
+    @PostMapping("/barcodes/generate")
+    public Object generateBarcodes() {
+        return barcodes.generate(sessions.current());
+    }
+
+    @GetMapping("/barcodes/lookup")
+    public Object lookupBarcode(@RequestParam String code) {
+        return barcodes.lookup(sessions.current(), code);
     }
 
     @GetMapping("/documents")
