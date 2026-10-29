@@ -1,4 +1,3 @@
-
 import { createBrowserRouter, Navigate, Link } from 'react-router-dom';
 import { Button, Typography } from '@mui/material';
 
@@ -28,12 +27,13 @@ import CategoryPage from 'features/category/CategoryPage';
 
 // Product Management
 import ProductPage from '../features/product/ProductPage';
-// add product
 import AddProductPage from '../features/product/AddProductPage';
-// product detail
 import ProductDetailPage from 'features/product/ProductDetailPage';
-//update product
 import EditProductPage from 'features/product/EditProductPage';
+
+// Returns Management (Đổi trả / Hoàn hàng)
+import ReturnsPage from 'features/returns/ReturnsPage';
+
 export default createBrowserRouter([
   { path: '/', element: <Navigate to="/workspace" replace /> },
   { path: '/login', element: <LoginPage /> },
@@ -68,12 +68,14 @@ export default createBrowserRouter([
               { path: '/staff/new', element: <StaffFormPage /> },
               { path: '/staff/:id', element: <StaffDetailPage /> },
               { path: '/staff/:id/edit', element: <StaffFormPage /> },
-                    // Category & Product (của DongNV)
-      { path: '/categories', element: <CategoryPage /> },
-      { path: '/products', element: <ProductPage /> },
-      { path: '/products/add', element: <AddProductPage /> },
-      { path: '/products/:productId', element: <ProductDetailPage /> },
-      { path: '/products/:productId/edit', element: <EditProductPage /> }
+
+              // Category, Product & Returns (của DongNV)
+              { path: '/categories', element: <CategoryPage /> },
+              { path: '/products', element: <ProductPage /> },
+              { path: '/products/add', element: <AddProductPage /> },
+              { path: '/products/:productId', element: <ProductDetailPage /> },
+              { path: '/products/:productId/edit', element: <EditProductPage /> },
+              { path: '/returns', element: <ReturnsPage /> }
             ]
           }
         ]

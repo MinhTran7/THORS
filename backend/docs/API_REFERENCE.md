@@ -124,6 +124,19 @@ Nguồn: `backend/src/main/java/com/thors/module/product/controller/ProductContr
 | PATCH | `/api/products/{productId}/status` | application/json |
 | DELETE | `/api/products/{productId}` | Xóa an toàn sản phẩm chưa phát sinh lịch sử giao dịch |
 
+### ReturnController (Đổi trả & Hoàn hàng)
+
+Nguồn: `backend/src/main/java/com/thors/module/returns/controller/ReturnController.java`.
+
+| HTTP | Đường dẫn | Ghi chú |
+|---|---|---|
+| GET | `/api/returns/orders/{orderNumber}` | Tra cứu đơn hàng hợp lệ & lượng còn được trả |
+| GET | `/api/returns` | Danh sách yêu cầu hoàn hàng (lọc theo status, search, page) |
+| GET | `/api/returns/{id}` | Xem chi tiết yêu cầu hoàn hàng & các mặt hàng |
+| POST | `/api/returns` | Tạo yêu cầu đổi trả / hoàn hàng (application/json) |
+| POST | `/api/returns/{id}/process` | Xử lý quy trình: APPROVE, REJECT, RECEIVE, COMPLETE (nhập kho & hoàn tiền) |
+| POST | `/api/returns/seed-sample-order` | Tạo nhanh đơn hàng mẫu trạng thái COMPLETED để kiểm thử |
+
 ### WarehouseController
 
 Nguồn: `backend/src/main/java/com/thors/module/warehouse/WarehouseController.java`.

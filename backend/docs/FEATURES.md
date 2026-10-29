@@ -14,6 +14,7 @@ Checkpoint 28/10/2026. “Có source” trong bảng không phải xác nhận �
 | Audit log | List/filter/summary/actions; frontend có trang và xuất CSV. | Backend chỉ ADMIN; `/system-log` chưa nối router. |
 | Danh mục | Danh sách, tạo, sửa, đổi trạng thái. | FE và API có source; `/categories` chưa nối router. |
 | Sản phẩm | Danh sách/chi tiết/thống kê, tạo/sửa/đổi trạng thái, xóa an toàn (Safe delete), phân tách tab Đang hoạt động/Đã ẩn, biến thể màu–size–giá, ảnh, nhập hàng loạt từ Excel (.xlsx). | FE và API đầy đủ (`/products`, `/products/add`, `/products/batch`, DELETE `/products/{id}`); Đã có Dialog import Excel, gom nhóm biến thể, tải mẫu, xóa an toàn chống mất dữ liệu giao dịch. |
+| Đổi trả & Hoàn hàng | Tra cứu đơn hàng, tạo yêu cầu đổi/trả theo món hàng, duyệt yêu cầu, nhận hàng, tự động nhập lại kho (`RESTOCK`) và hoàn tiền. | FE (`/returns`, `ReturnsPage`, `CreateReturnDialog`, `ReturnDetailDialog`) và API đầy đủ (`/api/returns/**`), kiểm tra chặt chẽ số lượng còn được trả, tự động cập nhật tồn kho `product_detail` và ghi `stock_adjustment`. |
 | Dashboard | Workspace có gọi thống kê sản phẩm và các vùng hiển thị quản trị. | Không được coi các card/bảng template là doanh thu/đơn hàng đã tích hợp. |
 | Tồn kho | Tổng tồn/đã xếp/chưa xếp, tìm/lọc theo biến thể, lịch sử biến động. | Có `/warehouse/inventory`; cần chạy backend source đúng. |
 | Phiếu đặt | Nháp, sửa/gửi/xác nhận/hủy/đóng; nhà cung cấp; nhiều dòng biến thể. | Có `/warehouse/orders`; không tăng tồn khi xác nhận. |
