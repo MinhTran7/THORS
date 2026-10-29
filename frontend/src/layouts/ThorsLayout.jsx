@@ -4,7 +4,7 @@ import { Alert, Box, Drawer, IconButton, List, ListItemButton, ListItemIcon, Lis
 import { Stack } from 'features/account/components/Flex';
 import { LogoutOutlined } from '@ant-design/icons';
 import { useAuth } from 'features/auth/AuthProvider';
-import { ROLE_LABEL, ROLE_TITLE, STORE_NAME } from 'features/account/constants';
+import { ROLE_LABEL, STORE_NAME } from 'features/account/constants';
 import { brand } from 'features/account/tokens';
 import UserAvatar from 'features/account/components/UserAvatar';
 import AppFooter from './AppFooter';
@@ -19,74 +19,79 @@ export default function ThorsLayout() {
   const { account, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const canWarehouse = ['OWNER', 'FAMILY_MEMBER'].includes(account.role);
-  const warehouseIcons = [
-    <InboxOutlined />,
-    <ShoppingCartOutlined />,
-    <ImportOutlined />,
-    <RollbackOutlined />,
-    <LayoutOutlined />,
-    <TeamOutlined />,
-    <EnvironmentOutlined />
-  ];
   const [mobile, setMobile] = useState(false);
   const [error, setError] = useState('');
-  const links = [
-    ['/workspace', 'Trang chính', <HomeOutlined />],
-    ['/profile', 'Hồ sơ của tôi', <UserOutlined />],
-    ...(['ADMIN', 'OWNER'].includes(account.role) ? [['/accounts', 'Quản lý tài khoản', <TeamOutlined />]] : [])
-  ];
-  const drawer = (
-    <>
-      <Stack spacing={1} sx={{ p: 3 }}>
-        <Typography variant="h3" color="primary">
-          THORS
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          TH Omnichannel Retail System
-        </Typography>
+  const [crumbs, setCrumbs] = useState([]);
+  // setCrumbs là hàm ổn định của useState nên context chỉ tạo một lần.
+  const crumbContext = useMemo(() => ({ setCrumbs }), []);
+  const items = navFor(account.role);
+
+  async function signOut() {
+    setError('');
+    try {
+      await logout();
+      navigate('/login', { replace: true });
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  const isSelected = (to) => location.pathname === to || location.pathname.startsWith(`${to}/`);
+
+  const sidebar = (
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: brand.surface }}>
+      <Stack direction="row" alignItems="center" spacing={1.25} sx={{ px: 3, py: 2.5 }}>
+        <ThorsMark />
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="h5" sx={{ color: brand.ink, lineHeight: 1.2 }}>
+            THORS
+          </Typography>
+          <Typography variant="caption" noWrap sx={{ color: brand.muted, display: 'block' }}>
+            {STORE_NAME}
+          </Typography>
+        </Box>
       </Stack>
-      <Divider />
-      <List>
-        {links.map(([to, label, icon]) => (
-          <ListItemButton key={to} selected={location.pathname === to} component={Link} to={to} onClick={() => setMobile(false)}>
-            <ListItemIcon>{icon}</ListItemIcon>
-            <ListItemText primary={label} />
+
+      <List component="nav" aria-label="Menu chính" sx={{ px: 1.5, flexGrow: 1, overflowY: 'auto' }}>
+        {items.map(({ to, label, icon }) => (
+          <ListItemButton
+            key={to}
+            component={Link}
+            to={to}
+            selected={isSelected(to)}
+            onClick={() => setMobile(false)}
+            sx={{
+              borderRadius: '10px',
+              mb: 0.5,
+              color: brand.muted,
+              '&.Mui-selected, &.Mui-selected:hover': { bgcolor: '#E8F8FA', color: brand.ink, fontWeight: 600 }
+            }}
+          >
+            <ListItemIcon sx={{ color: 'inherit', minWidth: 36 }}>{icon}</ListItemIcon>
+            <ListItemText primary={label} primaryTypographyProps={{ fontSize: 14, fontWeight: 'inherit' }} />
           </ListItemButton>
         ))}
       </List>
-      {canWarehouse && (
-        <>
-          <Divider />
-          <Typography variant="caption" color="text.secondary" sx={{ px: 3, pt: 2.5, pb: 1, display: 'block' }}>
-            QUẢN LÝ KHO
+
+      <Stack direction="row" alignItems="center" spacing={1.25} sx={{ p: 2, borderTop: `1px solid ${brand.line}` }}>
+        <UserAvatar name={account.fullName} src={account.avatarUrl} size={36} />
+        <Box sx={{ minWidth: 0, flexGrow: 1 }}>
+          <Typography variant="subtitle2" noWrap sx={{ color: brand.ink }}>
+            {account.fullName}
           </Typography>
-          <List>
-            {warehouseMenu.map(([key, label], index) => (
-              <ListItemButton
-                key={key}
-                selected={location.pathname === `/warehouse/${key}`}
-                component={Link}
-                to={`/warehouse/${key}`}
-                onClick={() => setMobile(false)}
-                sx={{
-                  '&.Mui-selected': {
-                    bgcolor: 'primary.lighter',
-                    color: 'primary.main',
-                    borderRight: '3px solid',
-                    borderColor: 'primary.main'
-                  }
-                }}
-              >
-                <ListItemIcon sx={{ color: 'inherit' }}>{warehouseIcons[index]}</ListItemIcon>
-                <ListItemText primary={label} />
-              </ListItemButton>
-            ))}
-          </List>
-        </>
-      )}
-    </>
+          <Typography variant="caption" noWrap sx={{ color: brand.muted, display: 'block' }}>
+            {ROLE_LABEL[account.role] ?? account.role}
+          </Typography>
+        </Box>
+        <Tooltip title="Đăng xuất">
+          <IconButton aria-label="Đăng xuất" onClick={signOut}>
+            <LogoutOutlined />
+          </IconButton>
+        </Tooltip>
+      </Stack>
+    </Box>
   );
+
   return (
     <CrumbsContext.Provider value={crumbContext}>
       <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: brand.page }}>
@@ -113,7 +118,7 @@ export default function ThorsLayout() {
           {sidebar}
         </Drawer>
         <Box sx={{ flexGrow: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-          <AppHeader crumbs={headerCrumbs} onOpenMenu={() => setMobile(true)} onSignOut={signOut} />
+          <AppHeader crumbs={crumbs} onOpenMenu={() => setMobile(true)} onSignOut={signOut} />
           <Box component="main" sx={{ px: { xs: 2, md: 4 }, py: { xs: 3, md: 4 }, maxWidth: 1240, width: '100%', flexGrow: 1 }}>
             {error && (
               <Alert severity="error" sx={{ mb: 2 }}>
