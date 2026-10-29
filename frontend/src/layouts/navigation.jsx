@@ -15,23 +15,9 @@ import {
 } from '@ant-design/icons';
 import { warehouseMenu } from 'features/warehouse/model';
 
-const dashboard = {
-  to: '/workspace',
-  label: 'Dashboard',
-  icon: <AppstoreOutlined />
-};
-
-const profile = {
-  to: '/profile',
-  label: 'Profile',
-  icon: <UserOutlined />
-};
-
-const orders = {
-  to: '/orders',
-  label: 'Đơn hàng',
-  icon: <ShoppingOutlined />
-};
+const dashboard = { to: '/workspace', label: 'Dashboard', icon: <AppstoreOutlined /> };
+const profile = { to: '/profile', label: 'Profile', icon: <UserOutlined /> };
+const orders = { to: '/orders', label: 'Đơn hàng', icon: <ShoppingOutlined /> };
 
 const warehouseIcons = [
   <InboxOutlined />,
@@ -43,10 +29,10 @@ const warehouseIcons = [
   <EnvironmentOutlined />
 ];
 
-const warehouseItems = warehouseMenu.map(([key, label], index) => ({
+const warehouse = warehouseMenu.map(([key, label], index) => ({
   to: `/warehouse/${key}`,
   label,
-  icon: warehouseIcons[index] ?? <InboxOutlined />
+  icon: warehouseIcons[index]
 }));
 
 // Mỗi vai trò một menu.
@@ -63,18 +49,13 @@ export const NAVIGATION = {
     { to: '/categories', label: 'Categories', icon: <AppstoreOutlined /> },
     orders,
     { to: '/returns', label: 'Hoàn hàng / Đổi trả', icon: <RollbackOutlined /> },
-    { to: '/family', label: 'Family', icon: <TeamOutlined /> },
+    { to: '/staff', label: 'Family', icon: <TeamOutlined /> },
     { to: '/in-store-sales', label: 'In-store Sales', icon: <ShoppingCartOutlined /> },
     { to: '/promotions', label: 'Khuyến mãi', icon: <TagsOutlined /> },
-    ...warehouseItems,
+    ...warehouse,
     profile
   ],
-  FAMILY_MEMBER: [
-    dashboard,
-    orders,
-    ...warehouseItems,
-    profile
-  ],
+  FAMILY_MEMBER: [dashboard, orders, ...warehouse, profile],
   CUSTOMER: [dashboard, orders, profile]
 };
 
