@@ -14,6 +14,7 @@ import com.thors.module.account.entity.Account;
 import com.thors.module.account.repository.AccountRepository;
 import com.thors.module.account.service.AccountService;
 import com.thors.module.auth.repository.OtpRepository;
+import com.thors.module.notification.NotificationPublisher;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -38,6 +39,7 @@ class AccountUnitTest {
     OtpRepository codes;
     PasswordEncoder passwords;
     AccountService service;
+    NotificationPublisher notifications;
 
     // Người dùng mẫu (mỗi test có bản mới vì JUnit tạo một instance cho mỗi test).
     final Account admin = acc(1, "ADMIN", "ACTIVE", null);
@@ -52,7 +54,7 @@ class AccountUnitTest {
         passwords = mock(PasswordEncoder.class);
         notifications = mock(NotificationPublisher.class);
         when(passwords.encode(anyString())).thenReturn("ENC");
-        new AccountService(users, codes, passwords, notifications);
+        service = new AccountService(users, codes, passwords, notifications);
     }
 
     // ------------------------------------------------------------------ helpers
