@@ -1,6 +1,7 @@
 import {
   AppstoreOutlined,
   FileTextOutlined,
+  InboxOutlined,
   RollbackOutlined,
   ShopOutlined,
   ShoppingCartOutlined,
@@ -13,6 +14,7 @@ import {
 const dashboard = { to: '/workspace', label: 'Dashboard', icon: <AppstoreOutlined /> };
 const profile = { to: '/profile', label: 'Profile', icon: <UserOutlined /> };
 const orders = { to: '/orders', label: 'Đơn hàng', icon: <ShoppingOutlined /> };
+const warehouse = { to: '/warehouse', label: 'Kho', icon: <InboxOutlined /> };
 
 // Mỗi vai trò một menu. Các feature khác (Products, Categories...) thêm mục của mình vào đúng mảng của vai trò.
 export const NAVIGATION = {
@@ -28,12 +30,13 @@ export const NAVIGATION = {
     { to: '/categories', label: 'Categories', icon: <AppstoreOutlined /> },
     orders,
     { to: '/returns', label: 'Hoàn hàng / Đổi trả', icon: <RollbackOutlined /> },
-    { to: '/staff', label: 'Family', icon: <TeamOutlined /> },
+    { to: '/family', label: 'Family', icon: <TeamOutlined /> },
     { to: '/in-store-sales', label: 'In-store Sales', icon: <ShoppingCartOutlined /> },
     { to: '/promotions', label: 'Khuyến mãi', icon: <TagsOutlined /> },
+    { to: '/warehouse', label: 'Kho', icon: <ShopOutlined /> },
     profile
   ],
-  FAMILY_MEMBER: [dashboard, orders, profile],
+  FAMILY_MEMBER: [dashboard, orders, warehouse, profile],
   CUSTOMER: [dashboard, orders, profile]
 };
 
