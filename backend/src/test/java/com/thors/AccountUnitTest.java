@@ -51,7 +51,7 @@ class AccountUnitTest {
         codes = mock(OtpRepository.class);
         passwords = mock(PasswordEncoder.class);
         when(passwords.encode(anyString())).thenReturn("ENC");
-        service = new AccountService(users, codes, passwords);
+        new AccountService(users, codes, passwords, notifications);
     }
 
     // ------------------------------------------------------------------ helpers
