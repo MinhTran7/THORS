@@ -1,4 +1,3 @@
-
 import {
   useCallback,
   useEffect,
@@ -24,8 +23,6 @@ import {
   Divider,
   IconButton,
   InputAdornment,
-  Menu,
-  MenuItem,
   Pagination,
   Select,
   Stack,
@@ -38,16 +35,17 @@ import {
   TableRow,
   TextField,
   Tooltip,
-  Typography
+  Typography,
+  MenuItem
 } from '@mui/material';
 
 import {
   CameraOutlined,
   CheckOutlined,
   CloseOutlined,
+  DeleteOutlined,
   EditOutlined,
-  EllipsisOutlined,
-  EyeOutlined,
+  FileExcelOutlined,
   PictureOutlined,
   PlusOutlined,
   SearchOutlined,
@@ -58,10 +56,12 @@ import {
   getProducts,
   getProductById,
   updateProduct,
-  changeProductStatus
+  changeProductStatus,
+  deleteProduct
 } from '../../services/productService';
 
 import { getCategories } from '../../services/categoryService';
+import ProductExcelDialog from './ProductExcelDialog';
 
 // ==========================================
 // CONFIGURATION
@@ -174,7 +174,7 @@ export default function ProductPage() {
   // STATES - SEARCH AND FILTER
   // ==========================================
 
-  const [activeTab, setActiveTab] = useState('ALL');
+  const [activeTab, setActiveTab] = useState('ACTIVE');
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -184,13 +184,6 @@ export default function ProductPage() {
   // ==========================================
 
   const [page, setPage] = useState(1);
-
-  // ==========================================
-  // STATES - ACTION MENU
-  // ==========================================
-
-  const [menuAnchor, setMenuAnchor] = useState(null);
-  const [selectedProduct, setSelectedProduct] = useState(null);
 
   // ==========================================
   // STATES - INLINE EDIT
@@ -209,15 +202,18 @@ export default function ProductPage() {
   // STATES - CHANGE PRODUCT STATUS
   // ==========================================
 
-  const [statusDialogProduct, setStatusDialogProduct] =
-    useState(null);
-
+  const [statusDialogProduct, setStatusDialogProduct] = useState(null);
   const [statusSaving, setStatusSaving] = useState(false);
+  const [excelDialogOpen, setExcelDialogOpen] = useState(false);
 
-  const busy =
-    editingProductId !== null ||
-    saving ||
-    statusSaving;
+  // ==========================================
+  // STATES - DELETE PRODUCT
+  // ==========================================
+
+  const [deleteDialogProduct, setDeleteDialogProduct] = useState(null);
+  const [deleteSaving, setDeleteSaving] = useState(false);
+
+  const busy = editingProductId !== null || saving || statusSaving || deleteSaving;
 
   // ==========================================
   // LOAD PRODUCTS
@@ -231,9 +227,7 @@ export default function ProductPage() {
       const data = await getProducts();
 
       if (!Array.isArray(data)) {
-        throw new Error(
-          'Invalid product data returned by server.'
-        );
+        throw new Error('Invalid product data returned by server.');
       }
 
       setProducts(data);
@@ -256,15 +250,10 @@ export default function ProductPage() {
   const loadCategories = useCallback(async () => {
     try {
       const response = await getCategories();
-
       setCategories(normalizeCategories(response));
     } catch (err) {
       console.error('Failed to load categories:', err);
-
-      setError(
-        err?.message ||
-        'Unable to load categories.'
-      );
+      setError(err?.message || 'Unable to load categories.');
     }
   }, []);
 
@@ -276,6 +265,16 @@ export default function ProductPage() {
   // ==========================================
   // STATISTICS
   // ==========================================
+
+  const activeProducts = useMemo(
+    () => products.filter((product) => product.status === 'ACTIVE'),
+    [products]
+  );
+
+  const inactiveProducts = useMemo(
+    () => products.filter((product) => product.status === 'INACTIVE'),
+    [products]
+  );
 
   const onlineProducts = useMemo(
     () => products.filter(isOnlineProduct),
@@ -296,84 +295,53 @@ export default function ProductPage() {
 
     return products.filter((product) => {
       const matchesSearch =
-        String(product.productName || '')
-          .toLowerCase()
-          .includes(keyword) ||
-        String(product.productId)
-          .toLowerCase()
-          .includes(keyword);
+        String(product.productName || '').toLowerCase().includes(keyword) ||
+        String(product.productId).toLowerCase().includes(keyword);
 
       const matchesCategory =
         categoryFilter === 'ALL' ||
         String(product.categoryId) === categoryFilter;
 
       const matchesStatus =
-        statusFilter === 'ALL' ||
-        product.status === statusFilter;
+        statusFilter === 'ALL' || product.status === statusFilter;
 
       let matchesTab = true;
 
-      if (activeTab === 'ONLINE') {
+      if (activeTab === 'ACTIVE') {
+        matchesTab = product.status === 'ACTIVE';
+      } else if (activeTab === 'INACTIVE') {
+        matchesTab = product.status === 'INACTIVE';
+      } else if (activeTab === 'ONLINE') {
         matchesTab = isOnlineProduct(product);
-      }
-
-      if (activeTab === 'LOW_STOCK') {
+      } else if (activeTab === 'LOW_STOCK') {
         matchesTab = isLowStockProduct(product);
       }
 
-      return (
-        matchesSearch &&
-        matchesCategory &&
-        matchesStatus &&
-        matchesTab
-      );
+      return matchesSearch && matchesCategory && matchesStatus && matchesTab;
     });
-  }, [
-    products,
-    search,
-    categoryFilter,
-    statusFilter,
-    activeTab
-  ]);
+  }, [products, search, categoryFilter, statusFilter, activeTab]);
 
   // ==========================================
   // PAGINATION
   // ==========================================
 
-  const pageCount = Math.max(
-    1,
-    Math.ceil(filteredProducts.length / PAGE_SIZE)
-  );
-
+  const pageCount = Math.max(1, Math.ceil(filteredProducts.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
 
   const paginatedProducts = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE;
-
-    return filteredProducts.slice(
-      start,
-      start + PAGE_SIZE
-    );
+    return filteredProducts.slice(start, start + PAGE_SIZE);
   }, [filteredProducts, currentPage]);
 
-  const showingFrom = filteredProducts.length
-    ? (currentPage - 1) * PAGE_SIZE + 1
-    : 0;
-
-  const showingTo = Math.min(
-    currentPage * PAGE_SIZE,
-    filteredProducts.length
-  );
+  const showingFrom = filteredProducts.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0;
+  const showingTo = Math.min(currentPage * PAGE_SIZE, filteredProducts.length);
 
   function resetPage() {
     setPage(1);
   }
 
   function changeTab(value) {
-    if (busy) {
-      return;
-    }
-
+    if (busy) return;
     setActiveTab(value);
     resetPage();
   }
@@ -383,19 +351,8 @@ export default function ProductPage() {
   // ==========================================
 
   function viewProduct(productId) {
-    if (busy) {
-      return;
-    }
-
+    if (busy) return;
     navigate(`/products/${productId}`);
-  }
-
-  function editProduct(productId) {
-    if (busy) {
-      return;
-    }
-
-    navigate(`/products/${productId}/edit`);
   }
 
   // ==========================================
@@ -403,15 +360,11 @@ export default function ProductPage() {
   // ==========================================
 
   function startInlineEdit(product) {
-    if (busy) {
-      return;
-    }
+    if (busy) return;
 
     setError('');
     setSuccess('');
-
     setEditingProductId(product.productId);
-
     setEditForm({
       productName: product.productName || '',
       categoryId: String(product.categoryId ?? '')
@@ -423,17 +376,10 @@ export default function ProductPage() {
   // ==========================================
 
   function cancelInlineEdit() {
-    if (saving) {
-      return;
-    }
+    if (saving) return;
 
     setEditingProductId(null);
-
-    setEditForm({
-      productName: '',
-      categoryId: ''
-    });
-
+    setEditForm({ productName: '', categoryId: '' });
     setError('');
   }
 
@@ -442,9 +388,7 @@ export default function ProductPage() {
   // ==========================================
 
   async function saveInlineEdit(productId) {
-    if (saving || statusSaving) {
-      return;
-    }
+    if (saving || statusSaving) return;
 
     setError('');
     setSuccess('');
@@ -452,21 +396,15 @@ export default function ProductPage() {
     const productName = editForm.productName.trim();
     const categoryId = Number(editForm.categoryId);
 
-    // VALIDATE PRODUCT NAME
-
     if (!productName) {
       setError('Product name is required.');
       return;
     }
 
     if (productName.length > 200) {
-      setError(
-        'Product name must not exceed 200 characters.'
-      );
+      setError('Product name must not exceed 200 characters.');
       return;
     }
-
-    // VALIDATE CATEGORY
 
     if (!Number.isInteger(categoryId) || categoryId <= 0) {
       setError('Please select a category.');
@@ -474,8 +412,7 @@ export default function ProductPage() {
     }
 
     const selectedCategory = categories.find(
-      (category) =>
-        Number(category.categoryId) === categoryId
+      (category) => Number(category.categoryId) === categoryId
     );
 
     if (!selectedCategory) {
@@ -491,28 +428,17 @@ export default function ProductPage() {
     try {
       setSaving(true);
 
-      // GET COMPLETE PRODUCT DETAIL
-
       const productDetail = await getProductById(productId);
 
-      if (
-        !productDetail?.product ||
-        !Array.isArray(productDetail.variants)
-      ) {
-        throw new Error(
-          'Unable to retrieve product details.'
-        );
+      if (!productDetail?.product || !Array.isArray(productDetail.variants)) {
+        throw new Error('Unable to retrieve product details.');
       }
 
       const { product, variants } = productDetail;
 
       if (variants.length === 0) {
-        throw new Error(
-          'Product must have at least one variant.'
-        );
+        throw new Error('Product must have at least one variant.');
       }
-
-      // PRESERVE EXISTING VARIANTS
 
       const payload = {
         categoryId,
@@ -526,207 +452,142 @@ export default function ProductPage() {
         }))
       };
 
-      // CALL PUT API
-
       await updateProduct(productId, payload);
-
-      // RELOAD PRODUCTS
 
       const updatedProducts = await getProducts();
 
       if (!Array.isArray(updatedProducts)) {
-        throw new Error(
-          'Product saved, but unable to refresh the list.'
-        );
+        throw new Error('Product saved, but unable to refresh the list.');
       }
 
       setProducts(updatedProducts);
       setEditingProductId(null);
-
-      setEditForm({
-        productName: '',
-        categoryId: ''
-      });
-
+      setEditForm({ productName: '', categoryId: '' });
       setSuccess('Product updated successfully.');
     } catch (err) {
       console.error('Inline update failed:', err);
-
-      setError(
-        err?.message ||
-        'Unable to update product. Please try again.'
-      );
+      setError(err?.message || 'Unable to update product. Please try again.');
     } finally {
       setSaving(false);
     }
   }
 
   // ==========================================
-  // CHANGE PRODUCT STATUS - OPEN DIALOG
+  // CHANGE PRODUCT STATUS
   // ==========================================
 
   function openStatusDialog(product) {
-    if (busy || !product) {
-      return;
-    }
+    if (busy || !product) return;
 
     setError('');
     setSuccess('');
-
     setStatusDialogProduct(product);
   }
 
-  // ==========================================
-  // CHANGE PRODUCT STATUS - CLOSE DIALOG
-  // ==========================================
-
   function closeStatusDialog() {
-    if (statusSaving) {
-      return;
-    }
-
+    if (statusSaving) return;
     setStatusDialogProduct(null);
   }
 
-  // ==========================================
-  // CHANGE PRODUCT STATUS - CONFIRM
-  // ==========================================
-
   async function confirmChangeProductStatus() {
-    if (!statusDialogProduct || statusSaving) {
-      return;
-    }
+    if (!statusDialogProduct || statusSaving) return;
 
     const productId = statusDialogProduct.productId;
-
     const currentStatus = statusDialogProduct.status;
-
-    const newStatus =
-      currentStatus === 'ACTIVE'
-        ? 'INACTIVE'
-        : 'ACTIVE';
+    const newStatus = currentStatus === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
 
     try {
       setStatusSaving(true);
       setError('');
       setSuccess('');
 
-      // CALL PATCH API
-
       await changeProductStatus(productId, newStatus);
-
-      // UPDATE CURRENT LIST
 
       setProducts((previous) =>
         previous.map((product) =>
           product.productId === productId
-            ? {
-                ...product,
-                status: newStatus
-              }
+            ? { ...product, status: newStatus }
             : product
         )
       );
 
-      // CLOSE DIALOG
-
       setStatusDialogProduct(null);
-
       setSuccess(
         newStatus === 'ACTIVE'
           ? 'Product activated successfully.'
           : 'Product deactivated successfully.'
       );
 
-      // REFRESH DATA FROM BACKEND
-
       try {
         const updatedProducts = await getProducts();
-
         if (Array.isArray(updatedProducts)) {
           setProducts(updatedProducts);
         }
       } catch (refreshError) {
-        console.error(
-          'Product status saved but refresh failed:',
-          refreshError
-        );
+        console.error('Product status saved but refresh failed:', refreshError);
       }
     } catch (err) {
       console.error('Change product status failed:', err);
-
-      setError(
-        err?.message ||
-        'Unable to change product status. Please try again.'
-      );
+      setError(err?.message || 'Unable to change product status. Please try again.');
     } finally {
       setStatusSaving(false);
     }
   }
 
   // ==========================================
-  // ACTION MENU - OPEN
+  // DELETE PRODUCT (SAFE DELETE)
   // ==========================================
 
-  function openActionMenu(event, product) {
-    event.stopPropagation();
+  function openDeleteDialog(product) {
+    if (busy || !product) return;
 
-    if (busy) {
-      return;
-    }
-
-    setMenuAnchor(event.currentTarget);
-    setSelectedProduct(product);
+    setError('');
+    setSuccess('');
+    setDeleteDialogProduct(product);
   }
 
-  // ==========================================
-  // ACTION MENU - CLOSE
-  // ==========================================
-
-  function closeActionMenu() {
-    setMenuAnchor(null);
-    setSelectedProduct(null);
+  function closeDeleteDialog() {
+    if (deleteSaving) return;
+    setDeleteDialogProduct(null);
   }
 
-  // ==========================================
-  // ACTION MENU - VIEW
-  // ==========================================
+  async function confirmDeleteProduct() {
+    if (!deleteDialogProduct || deleteSaving) return;
 
-  function handleViewFromMenu() {
-    const productId = selectedProduct?.productId;
+    const productId = deleteDialogProduct.productId;
+    const productName = deleteDialogProduct.productName;
 
-    closeActionMenu();
+    try {
+      setDeleteSaving(true);
+      setError('');
+      setSuccess('');
 
-    if (productId != null) {
-      viewProduct(productId);
-    }
-  }
+      await deleteProduct(productId);
 
-  // ==========================================
-  // ACTION MENU - EDIT
-  // ==========================================
+      setProducts((previous) =>
+        previous.filter((product) => product.productId !== productId)
+      );
 
-  function handleEditFromMenu() {
-    const productId = selectedProduct?.productId;
+      setDeleteDialogProduct(null);
+      setSuccess(`Đã xóa vĩnh viễn sản phẩm "${productName}" (ID: ${productId}).`);
 
-    closeActionMenu();
-
-    if (productId != null) {
-      editProduct(productId);
-    }
-  }
-
-  // ==========================================
-  // ACTION MENU - CHANGE STATUS
-  // ==========================================
-
-  function handleStatusFromMenu() {
-    const product = selectedProduct;
-
-    closeActionMenu();
-
-    if (product) {
-      openStatusDialog(product);
+      try {
+        const updatedProducts = await getProducts();
+        if (Array.isArray(updatedProducts)) {
+          setProducts(updatedProducts);
+        }
+      } catch (refreshError) {
+        console.error('Delete succeeded but refresh failed:', refreshError);
+      }
+    } catch (err) {
+      console.error('Delete product failed:', err);
+      setError(
+        err?.message ||
+        'Không thể xóa sản phẩm. Sản phẩm có thể đã có lịch sử giao dịch trong hệ thống.'
+      );
+      setDeleteDialogProduct(null);
+    } finally {
+      setDeleteSaving(false);
     }
   }
 
@@ -744,10 +605,7 @@ export default function ProductPage() {
       <Stack
         direction={{ xs: 'column', sm: 'row' }}
         justifyContent="space-between"
-        alignItems={{
-          xs: 'flex-start',
-          sm: 'center'
-        }}
+        alignItems={{ xs: 'flex-start', sm: 'center' }}
         spacing={2}
         sx={{ mb: 2.5 }}
       >
@@ -772,25 +630,46 @@ export default function ProductPage() {
           </Typography>
         </Box>
 
-        <Button
-          variant="contained"
-          startIcon={<PlusOutlined />}
-          disabled={busy}
-          onClick={() => navigate('/products/add')}
-          sx={{
-            bgcolor: COLORS.cyan,
-            color: COLORS.text,
-            textTransform: 'none',
-            fontWeight: 600,
-            boxShadow: 'none',
-            '&:hover': {
-              bgcolor: '#6DDDE9',
-              boxShadow: 'none'
-            }
-          }}
-        >
-          Add Product
-        </Button>
+        <Stack direction="row" spacing={1.5} alignItems="center">
+          <Button
+            variant="outlined"
+            startIcon={<FileExcelOutlined />}
+            disabled={busy}
+            onClick={() => setExcelDialogOpen(true)}
+            sx={{
+              borderColor: COLORS.green,
+              color: COLORS.green,
+              textTransform: 'none',
+              fontWeight: 600,
+              '&:hover': {
+                borderColor: '#1e6b55',
+                bgcolor: '#F0F9F6'
+              }
+            }}
+          >
+            Nhập từ Excel
+          </Button>
+
+          <Button
+            variant="contained"
+            startIcon={<PlusOutlined />}
+            disabled={busy}
+            onClick={() => navigate('/products/add')}
+            sx={{
+              bgcolor: COLORS.cyan,
+              color: COLORS.text,
+              textTransform: 'none',
+              fontWeight: 600,
+              boxShadow: 'none',
+              '&:hover': {
+                bgcolor: '#6DDDE9',
+                boxShadow: 'none'
+              }
+            }}
+          >
+            Add Product
+          </Button>
+        </Stack>
       </Stack>
 
       {/* ======================================
@@ -798,11 +677,7 @@ export default function ProductPage() {
       ====================================== */}
 
       {error && (
-        <Alert
-          severity="error"
-          sx={{ mb: 2 }}
-          onClose={() => setError('')}
-        >
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
           {error}
         </Alert>
       )}
@@ -812,11 +687,7 @@ export default function ProductPage() {
       ====================================== */}
 
       {success && (
-        <Alert
-          severity="success"
-          sx={{ mb: 2 }}
-          onClose={() => setSuccess('')}
-        >
+        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess('')}>
           {success}
         </Alert>
       )}
@@ -833,21 +704,11 @@ export default function ProductPage() {
         sx={{ mb: 2.5 }}
       >
         {[
-          {
-            key: 'ALL',
-            label: 'All products',
-            count: products.length
-          },
-          {
-            key: 'ONLINE',
-            label: 'Online',
-            count: onlineProducts.length
-          },
-          {
-            key: 'LOW_STOCK',
-            label: 'Low stock',
-            count: lowStockProducts.length
-          }
+          { key: 'ACTIVE', label: 'Đang hoạt động', count: activeProducts.length },
+          { key: 'INACTIVE', label: 'Đã ẩn', count: inactiveProducts.length },
+          { key: 'ONLINE', label: 'Bán online', count: onlineProducts.length },
+          { key: 'LOW_STOCK', label: 'Sắp hết hàng', count: lowStockProducts.length },
+          { key: 'ALL', label: 'Tất cả sản phẩm', count: products.length }
         ].map((tab) => {
           const selected = activeTab === tab.key;
 
@@ -859,12 +720,8 @@ export default function ProductPage() {
               onClick={() => changeTab(tab.key)}
               sx={{
                 textTransform: 'none',
-                borderColor: selected
-                  ? COLORS.cyan
-                  : COLORS.border,
-                bgcolor: selected
-                  ? COLORS.cyan
-                  : '#FFFFFF',
+                borderColor: selected ? COLORS.cyan : COLORS.border,
+                bgcolor: selected ? COLORS.cyan : '#FFFFFF',
                 color: COLORS.text,
                 fontWeight: selected ? 700 : 500,
                 fontSize: 12,
@@ -895,18 +752,11 @@ export default function ProductPage() {
       >
         <Stack
           direction={{ xs: 'column', md: 'row' }}
-          alignItems={{
-            xs: 'flex-start',
-            md: 'center'
-          }}
+          alignItems={{ xs: 'flex-start', md: 'center' }}
           justifyContent="space-between"
           spacing={2}
         >
-          <Stack
-            direction="row"
-            spacing={1.5}
-            alignItems="center"
-          >
+          <Stack direction="row" spacing={1.5} alignItems="center">
             <Box
               sx={{
                 width: 42,
@@ -919,61 +769,40 @@ export default function ProductPage() {
                 color: COLORS.text
               }}
             >
-              <PictureOutlined
-                style={{ fontSize: 19 }}
-              />
+              <PictureOutlined style={{ fontSize: 19 }} />
             </Box>
 
             <Box>
-              <Typography
-                fontSize={13}
-                fontWeight={700}
-                color={COLORS.text}
-              >
+              <Typography fontSize={13} fontWeight={700} color={COLORS.text}>
                 AI Image Search
               </Typography>
-
-              <Typography
-                fontSize={11}
-                color={COLORS.muted}
-              >
-                Find a product in your inventory with
-                a photo. Upload an image or use your camera.
+              <Typography fontSize={11} color={COLORS.muted}>
+                Find a product in your inventory with a photo. Upload an image or use your camera.
               </Typography>
             </Box>
           </Stack>
 
           <Stack direction="row" spacing={1}>
-            <Tooltip
-              title="AI image search API is not connected yet"
-            >
+            <Tooltip title="AI image search API is not connected yet">
               <span>
                 <Button
                   disabled
                   variant="outlined"
                   startIcon={<UploadOutlined />}
-                  sx={{
-                    textTransform: 'none',
-                    fontSize: 11
-                  }}
+                  sx={{ textTransform: 'none', fontSize: 11 }}
                 >
                   Upload Image
                 </Button>
               </span>
             </Tooltip>
 
-            <Tooltip
-              title="Camera search is not connected yet"
-            >
+            <Tooltip title="Camera search is not connected yet">
               <span>
                 <Button
                   disabled
                   variant="outlined"
                   startIcon={<CameraOutlined />}
-                  sx={{
-                    textTransform: 'none',
-                    fontSize: 11
-                  }}
+                  sx={{ textTransform: 'none', fontSize: 11 }}
                 >
                   Use Camera
                 </Button>
@@ -987,13 +816,8 @@ export default function ProductPage() {
           SEARCH AND FILTER
       ====================================== */}
 
-      <Stack
-        direction={{ xs: 'column', md: 'row' }}
-        spacing={1}
-        sx={{ mb: 2.5 }}
-      >
+      <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} sx={{ mb: 2.5 }}>
         {/* SEARCH */}
-
         <TextField
           fullWidth
           size="small"
@@ -1015,14 +839,11 @@ export default function ProductPage() {
           }}
           sx={{
             bgcolor: '#FFFFFF',
-            '& .MuiOutlinedInput-root': {
-              borderRadius: 1.5
-            }
+            '& .MuiOutlinedInput-root': { borderRadius: 1.5 }
           }}
         />
 
         {/* CATEGORY FILTER */}
-
         <Select
           size="small"
           disabled={busy}
@@ -1038,22 +859,15 @@ export default function ProductPage() {
             fontSize: 12
           }}
         >
-          <MenuItem value="ALL">
-            All categories
-          </MenuItem>
-
+          <MenuItem value="ALL">All categories</MenuItem>
           {categories.map((category) => (
-            <MenuItem
-              key={category.categoryId}
-              value={String(category.categoryId)}
-            >
+            <MenuItem key={category.categoryId} value={String(category.categoryId)}>
               {category.categoryName}
             </MenuItem>
           ))}
         </Select>
 
         {/* STATUS FILTER */}
-
         <Select
           size="small"
           disabled={busy}
@@ -1069,17 +883,9 @@ export default function ProductPage() {
             fontSize: 12
           }}
         >
-          <MenuItem value="ALL">
-            All statuses
-          </MenuItem>
-
-          <MenuItem value="ACTIVE">
-            Active
-          </MenuItem>
-
-          <MenuItem value="INACTIVE">
-            Disabled
-          </MenuItem>
+          <MenuItem value="ALL">All statuses</MenuItem>
+          <MenuItem value="ACTIVE">Active</MenuItem>
+          <MenuItem value="INACTIVE">Disabled</MenuItem>
         </Select>
       </Stack>
 
@@ -1092,13 +898,10 @@ export default function ProductPage() {
           <Table
             sx={{
               minWidth: 1100,
-              '& .MuiTableCell-root': {
-                borderColor: COLORS.border
-              }
+              '& .MuiTableCell-root': { borderColor: COLORS.border }
             }}
           >
             {/* TABLE HEADER */}
-
             <TableHead>
               <TableRow sx={{ bgcolor: '#F7F9FC' }}>
                 {[
@@ -1112,6 +915,7 @@ export default function ProductPage() {
                 ].map((label) => (
                   <TableCell
                     key={label}
+                    align={label === 'Actions' ? 'center' : 'left'}
                     sx={{
                       fontSize: 11,
                       fontWeight: 600,
@@ -1119,34 +923,20 @@ export default function ProductPage() {
                       py: 1.75
                     }}
                   >
-                    {label}
+                    {label.toUpperCase()}
                   </TableCell>
                 ))}
               </TableRow>
             </TableHead>
 
             {/* TABLE BODY */}
-
             <TableBody>
-              {/* LOADING */}
-
               {loading && (
                 <TableRow>
-                  <TableCell
-                    colSpan={7}
-                    align="center"
-                    sx={{ py: 6 }}
-                  >
-                    <Stack
-                      alignItems="center"
-                      spacing={1}
-                    >
+                  <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
+                    <Stack alignItems="center" spacing={1}>
                       <CircularProgress size={28} />
-
-                      <Typography
-                        fontSize={12}
-                        color={COLORS.muted}
-                      >
+                      <Typography fontSize={12} color={COLORS.muted}>
                         Loading products...
                       </Typography>
                     </Stack>
@@ -1154,56 +944,31 @@ export default function ProductPage() {
                 </TableRow>
               )}
 
-              {/* PRODUCT ROWS */}
-
               {!loading &&
                 paginatedProducts.map((product) => {
-                  const isActive =
-                    product.status === 'ACTIVE';
-
-                  const isOnline =
-                    isOnlineProduct(product);
-
-                  const lowStock =
-                    isLowStockProduct(product);
-
-                  const isEditing =
-                    editingProductId === product.productId;
+                  const isActive = product.status === 'ACTIVE';
+                  const isOnline = isOnlineProduct(product);
+                  const lowStock = isLowStockProduct(product);
+                  const isEditing = editingProductId === product.productId;
 
                   return (
                     <TableRow
                       key={product.productId}
                       hover={!busy}
                       onClick={() => {
-                        if (!busy) {
-                          viewProduct(product.productId);
-                        }
+                        if (!busy) viewProduct(product.productId);
                       }}
                       sx={{
-                        cursor: busy
-                          ? 'default'
-                          : 'pointer',
-                        bgcolor: isEditing
-                          ? '#F0FCFE'
-                          : '#FFFFFF',
-                        '&:last-child td': {
-                          borderBottom: 0
-                        }
+                        cursor: busy ? 'default' : 'pointer',
+                        bgcolor: isEditing ? '#F0FCFE' : '#FFFFFF',
+                        '&:last-child td': { borderBottom: 0 }
                       }}
                     >
                       {/* PRODUCT NAME */}
-
                       <TableCell>
-                        <Stack
-                          direction="row"
-                          spacing={1.5}
-                          alignItems="center"
-                        >
+                        <Stack direction="row" spacing={1.5} alignItems="center">
                           <Avatar
-                            src={
-                              product.primaryImageUrl ||
-                              undefined
-                            }
+                            src={product.primaryImageUrl || undefined}
                             variant="rounded"
                             sx={{
                               width: 42,
@@ -1213,9 +978,7 @@ export default function ProductPage() {
                               flexShrink: 0
                             }}
                           >
-                            {product.productName
-                              ?.charAt(0)
-                              ?.toUpperCase() || 'P'}
+                            {product.productName?.charAt(0)?.toUpperCase() || 'P'}
                           </Avatar>
 
                           <Box sx={{ minWidth: 0 }}>
@@ -1225,57 +988,32 @@ export default function ProductPage() {
                                 size="small"
                                 value={editForm.productName}
                                 disabled={saving}
-                                onClick={(event) =>
-                                  event.stopPropagation()
-                                }
+                                onClick={(event) => event.stopPropagation()}
                                 onChange={(event) =>
                                   setEditForm((previous) => ({
                                     ...previous,
-                                    productName:
-                                      event.target.value
+                                    productName: event.target.value
                                   }))
                                 }
                                 onKeyDown={(event) => {
                                   event.stopPropagation();
-
                                   if (event.key === 'Enter') {
                                     event.preventDefault();
-
-                                    saveInlineEdit(
-                                      product.productId
-                                    );
+                                    saveInlineEdit(product.productId);
                                   }
-
                                   if (event.key === 'Escape') {
                                     cancelInlineEdit();
                                   }
                                 }}
-                                slotProps={{
-                                  htmlInput: {
-                                    maxLength: 200
-                                  }
-                                }}
-                                sx={{
-                                  minWidth: 180,
-                                  bgcolor: '#FFFFFF'
-                                }}
+                                slotProps={{ htmlInput: { maxLength: 200 } }}
+                                sx={{ minWidth: 180, bgcolor: '#FFFFFF' }}
                               />
                             ) : (
-                              <Typography
-                                fontSize={12}
-                                fontWeight={700}
-                                color={COLORS.text}
-                                noWrap
-                              >
+                              <Typography fontSize={12} fontWeight={700} color={COLORS.text} noWrap>
                                 {product.productName}
                               </Typography>
                             )}
-
-                            <Typography
-                              fontSize={10}
-                              color={COLORS.muted}
-                              sx={{ mt: 0.5 }}
-                            >
+                            <Typography fontSize={10} color={COLORS.muted} sx={{ mt: 0.5 }}>
                               ID: {product.productId}
                             </Typography>
                           </Box>
@@ -1283,7 +1021,6 @@ export default function ProductPage() {
                       </TableCell>
 
                       {/* CATEGORY */}
-
                       <TableCell>
                         {isEditing ? (
                           <Select
@@ -1291,127 +1028,72 @@ export default function ProductPage() {
                             fullWidth
                             disabled={saving}
                             value={editForm.categoryId}
-                            onClick={(event) =>
-                              event.stopPropagation()
-                            }
+                            onClick={(event) => event.stopPropagation()}
                             onChange={(event) =>
                               setEditForm((previous) => ({
                                 ...previous,
-                                categoryId:
-                                  event.target.value
+                                categoryId: event.target.value
                               }))
                             }
-                            sx={{
-                              minWidth: 145,
-                              bgcolor: '#FFFFFF',
-                              fontSize: 12
-                            }}
+                            sx={{ minWidth: 145, bgcolor: '#FFFFFF', fontSize: 12 }}
                           >
                             {categories.map((category) => {
-                              const isCurrent =
-                                String(category.categoryId) ===
-                                editForm.categoryId;
-
+                              const isCurrent = String(category.categoryId) === editForm.categoryId;
                               return (
                                 <MenuItem
                                   key={category.categoryId}
-                                  value={String(
-                                    category.categoryId
-                                  )}
-                                  disabled={
-                                    category.status !==
-                                      'ACTIVE' &&
-                                    !isCurrent
-                                  }
+                                  value={String(category.categoryId)}
+                                  disabled={category.status !== 'ACTIVE' && !isCurrent}
                                 >
                                   {category.categoryName}
-
-                                  {category.status !== 'ACTIVE'
-                                    ? ' (Inactive)'
-                                    : ''}
+                                  {category.status !== 'ACTIVE' ? ' (Inactive)' : ''}
                                 </MenuItem>
                               );
                             })}
                           </Select>
                         ) : (
-                          <Typography
-                            fontSize={11}
-                            color={COLORS.text}
-                          >
+                          <Typography fontSize={11} color={COLORS.text}>
                             {product.categoryName || '—'}
                           </Typography>
                         )}
                       </TableCell>
 
                       {/* SELLING PRICE */}
-
                       <TableCell>
-                        <Typography
-                          fontSize={11}
-                          color={COLORS.text}
-                        >
+                        <Typography fontSize={11} color={COLORS.text}>
                           {displayPrice(product)}
                         </Typography>
                       </TableCell>
 
                       {/* STOCK */}
-
                       <TableCell>
-                        <Typography
-                          fontSize={12}
-                          color={COLORS.text}
-                        >
+                        <Typography fontSize={12} color={COLORS.text}>
                           {product.totalStock ?? 0}
                         </Typography>
-
                         {lowStock && (
-                          <Typography
-                            fontSize={10}
-                            color="warning.main"
-                          >
+                          <Typography fontSize={10} color="warning.main">
                             Low stock
                           </Typography>
                         )}
                       </TableCell>
 
-                      {/* ==================================
-                          PRODUCT STATUS
-                      ================================== */}
-
+                      {/* PRODUCT STATUS */}
                       <TableCell>
-                        <Stack
-                          direction="row"
-                          spacing={0.5}
-                          alignItems="center"
-                        >
-                          <Tooltip
-                            title={
-                              isActive
-                                ? 'Deactivate Product'
-                                : 'Activate Product'
-                            }
-                          >
+                        <Stack direction="row" spacing={0.5} alignItems="center">
+                          <Tooltip title={isActive ? 'Deactivate Product' : 'Activate Product'}>
                             <span>
                               <Switch
                                 checked={isActive}
                                 size="small"
                                 disabled={busy}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                }}
+                                onClick={(event) => event.stopPropagation()}
                                 onChange={(event) => {
                                   event.stopPropagation();
-
                                   openStatusDialog(product);
                                 }}
                                 sx={{
-                                  '& .MuiSwitch-switchBase.Mui-checked': {
-                                    color: COLORS.green
-                                  },
-                                  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                                    backgroundColor:
-                                      COLORS.green
-                                  }
+                                  '& .MuiSwitch-switchBase.Mui-checked': { color: COLORS.green },
+                                  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: COLORS.green }
                                 }}
                               />
                             </span>
@@ -1419,67 +1101,35 @@ export default function ProductPage() {
 
                           <Chip
                             size="small"
-                            label={
-                              isActive
-                                ? 'Active'
-                                : 'Disabled'
-                            }
+                            label={isActive ? 'Active' : 'Disabled'}
                             sx={{
                               height: 23,
                               fontSize: 10,
-                              bgcolor: isActive
-                                ? '#E8F6F0'
-                                : '#F0F2F5',
-                              color: isActive
-                                ? COLORS.green
-                                : COLORS.muted
+                              bgcolor: isActive ? '#E8F6F0' : '#F0F2F5',
+                              color: isActive ? COLORS.green : COLORS.muted
                             }}
                           />
                         </Stack>
                       </TableCell>
 
                       {/* ONLINE SALE */}
-
                       <TableCell>
-                        <Stack
-                          direction="row"
-                          spacing={0.5}
-                          alignItems="center"
-                        >
-                          <Tooltip
-                            title={`${product.onlineVariantCount ?? 0}/${product.variantCount ?? 0} variants enabled for online sales`}
-                          >
+                        <Stack direction="row" spacing={0.5} alignItems="center">
+                          <Tooltip title={`${product.onlineVariantCount ?? 0}/${product.variantCount ?? 0} variants enabled for online sales`}>
                             <span>
-                              <Switch
-                                checked={isOnline}
-                                disabled
-                                size="small"
-                              />
+                              <Switch checked={isOnline} disabled size="small" />
                             </span>
                           </Tooltip>
-
-                          <Typography
-                            fontSize={11}
-                            color={COLORS.muted}
-                          >
+                          <Typography fontSize={11} color={COLORS.muted}>
                             {isOnline ? 'On' : 'Off'}
                           </Typography>
                         </Stack>
                       </TableCell>
 
-                      {/* ==================================
-                          ACTIONS
-                      ================================== */}
-
-                      <TableCell>
+                      {/* ACTIONS */}
+                      <TableCell align="center">
                         {isEditing ? (
-                          <Stack
-                            direction="row"
-                            alignItems="center"
-                            spacing={0.5}
-                          >
-                            {/* SAVE QUICK EDIT */}
-
+                          <Stack direction="row" alignItems="center" justifyContent="center" spacing={1}>
                             <Tooltip title="Save Changes">
                               <span>
                                 <IconButton
@@ -1487,31 +1137,18 @@ export default function ProductPage() {
                                   disabled={saving}
                                   onClick={(event) => {
                                     event.stopPropagation();
-
-                                    saveInlineEdit(
-                                      product.productId
-                                    );
+                                    saveInlineEdit(product.productId);
                                   }}
                                   sx={{
                                     color: COLORS.green,
                                     bgcolor: '#E8F6F0',
-                                    '&:hover': {
-                                      bgcolor: '#D4F0E4'
-                                    }
+                                    '&:hover': { bgcolor: '#D4F0E4' }
                                   }}
                                 >
-                                  {saving ? (
-                                    <CircularProgress
-                                      size={16}
-                                    />
-                                  ) : (
-                                    <CheckOutlined />
-                                  )}
+                                  {saving ? <CircularProgress size={16} /> : <CheckOutlined />}
                                 </IconButton>
                               </span>
                             </Tooltip>
-
-                            {/* CANCEL QUICK EDIT */}
 
                             <Tooltip title="Cancel">
                               <span>
@@ -1520,15 +1157,12 @@ export default function ProductPage() {
                                   disabled={saving}
                                   onClick={(event) => {
                                     event.stopPropagation();
-
                                     cancelInlineEdit();
                                   }}
                                   sx={{
                                     color: COLORS.red,
                                     bgcolor: '#FCECEC',
-                                    '&:hover': {
-                                      bgcolor: '#FADADA'
-                                    }
+                                    '&:hover': { bgcolor: '#FADADA' }
                                   }}
                                 >
                                   <CloseOutlined />
@@ -1537,22 +1171,13 @@ export default function ProductPage() {
                             </Tooltip>
                           </Stack>
                         ) : (
-                          <Stack
-                            direction="row"
-                            alignItems="center"
-                            spacing={0.5}
-                          >
-                            {/* VIEW PRODUCT */}
-
+                          <Stack direction="row" alignItems="center" justifyContent="center" spacing={1}>
                             <Button
                               size="small"
                               disabled={busy}
                               onClick={(event) => {
                                 event.stopPropagation();
-
-                                viewProduct(
-                                  product.productId
-                                );
+                                viewProduct(product.productId);
                               }}
                               sx={{
                                 minWidth: 0,
@@ -1565,8 +1190,6 @@ export default function ProductPage() {
                               View
                             </Button>
 
-                            {/* QUICK EDIT */}
-
                             <Tooltip title="Quick Edit">
                               <span>
                                 <IconButton
@@ -1574,39 +1197,42 @@ export default function ProductPage() {
                                   disabled={busy}
                                   onClick={(event) => {
                                     event.stopPropagation();
-
                                     startInlineEdit(product);
                                   }}
                                   sx={{
                                     color: COLORS.muted,
                                     '&:hover': {
                                       color: COLORS.text,
-                                      bgcolor:
-                                        COLORS.cyanLight
+                                      bgcolor: COLORS.cyanLight
                                     }
                                   }}
                                 >
-                                  <EditOutlined
-                                    style={{ fontSize: 14 }}
-                                  />
+                                  <EditOutlined style={{ fontSize: 14 }} />
                                 </IconButton>
                               </span>
                             </Tooltip>
 
-                            {/* MORE ACTIONS */}
-
-                            <IconButton
-                              size="small"
-                              disabled={busy}
-                              onClick={(event) =>
-                                openActionMenu(
-                                  event,
-                                  product
-                                )
-                              }
-                            >
-                              <EllipsisOutlined />
-                            </IconButton>
+                            <Tooltip title="Xóa vĩnh viễn sản phẩm">
+                              <span>
+                                <IconButton
+                                  size="small"
+                                  disabled={busy}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    openDeleteDialog(product);
+                                  }}
+                                  sx={{
+                                    color: COLORS.red,
+                                    '&:hover': {
+                                      color: '#B83D3D',
+                                      bgcolor: '#FCECEC'
+                                    }
+                                  }}
+                                >
+                                  <DeleteOutlined style={{ fontSize: 14 }} />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
                           </Stack>
                         )}
                       </TableCell>
@@ -1614,45 +1240,25 @@ export default function ProductPage() {
                   );
                 })}
 
-              {/* EMPTY RESULT */}
-
-              {!loading &&
-                filteredProducts.length === 0 && (
-                  <TableRow>
-                    <TableCell
-                      colSpan={7}
-                      align="center"
-                      sx={{ py: 6 }}
-                    >
-                      <Typography
-                        fontSize={13}
-                        fontWeight={600}
-                        color={COLORS.text}
-                      >
-                        {products.length === 0
-                          ? 'No products available'
-                          : 'No matching products found'}
-                      </Typography>
-
-                      <Typography
-                        fontSize={11}
-                        color={COLORS.muted}
-                        sx={{ mt: 1 }}
-                      >
-                        {products.length === 0
-                          ? 'Products will appear here after they are added.'
-                          : 'Try changing your search or filters.'}
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
-                )}
+              {!loading && filteredProducts.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
+                    <Typography fontSize={13} fontWeight={600} color={COLORS.text}>
+                      {products.length === 0
+                        ? 'No products available'
+                        : 'No matching products found'}
+                    </Typography>
+                    <Typography fontSize={11} color={COLORS.muted} sx={{ mt: 1 }}>
+                      {products.length === 0
+                        ? 'Products will appear here after they are added.'
+                        : 'Try changing your search or filters.'}
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </TableContainer>
-
-        {/* ======================================
-            PAGINATION
-        ====================================== */}
 
         <Divider />
 
@@ -1663,12 +1269,8 @@ export default function ProductPage() {
           spacing={2}
           sx={{ px: 2, py: 1.5 }}
         >
-          <Typography
-            fontSize={11}
-            color={COLORS.muted}
-          >
-            Showing {showingFrom}–{showingTo} of{' '}
-            {filteredProducts.length} products
+          <Typography fontSize={11} color={COLORS.muted}>
+            Showing {showingFrom}–{showingTo} of {filteredProducts.length} products
           </Typography>
 
           <Pagination
@@ -1688,207 +1290,122 @@ export default function ProductPage() {
         </Stack>
       </Card>
 
-      {/* ======================================
-          FOOTER
-      ====================================== */}
-
-      <Stack
-        direction={{ xs: 'column', sm: 'row' }}
-        justifyContent="space-between"
-        spacing={1}
-        sx={{ mt: 2.5 }}
-      >
-        <Typography
-          fontSize={11}
-          color={COLORS.muted}
-        >
-          Online product counts reflect variants
-          enabled for online sales.
+      <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" spacing={1} sx={{ mt: 2.5 }}>
+        <Typography fontSize={11} color={COLORS.muted}>
+          Online product counts reflect variants enabled for online sales.
         </Typography>
-
-        <Typography
-          fontSize={11}
-          color={COLORS.muted}
-        >
+        <Typography fontSize={11} color={COLORS.muted}>
           Inventory data loaded from THORS.
         </Typography>
       </Stack>
 
       {/* ======================================
-          ACTION MENU
-      ====================================== */}
-
-      <Menu
-        anchorEl={menuAnchor}
-        open={Boolean(menuAnchor)}
-        onClose={closeActionMenu}
-      >
-        {/* VIEW */}
-
-        <MenuItem onClick={handleViewFromMenu}>
-          <EyeOutlined
-            style={{ marginRight: 10 }}
-          />
-          View Product
-        </MenuItem>
-
-        {/* EDIT */}
-
-        <MenuItem onClick={handleEditFromMenu}>
-          <EditOutlined
-            style={{ marginRight: 10 }}
-          />
-          Edit Product
-        </MenuItem>
-
-        {/* CHANGE PRODUCT STATUS */}
-
-        <MenuItem onClick={handleStatusFromMenu}>
-          <Switch
-            size="small"
-            checked={
-              selectedProduct?.status === 'ACTIVE'
-            }
-            sx={{ mr: 1 }}
-            inputProps={{
-              'aria-label': 'Change product status'
-            }}
-          />
-
-          {selectedProduct?.status === 'ACTIVE'
-            ? 'Deactivate Product'
-            : 'Activate Product'}
-        </MenuItem>
-
-        {/* ONLINE SALES - NOT CONNECTED YET */}
-
-        <MenuItem disabled>
-          Enable/Disable Online Sales (Coming soon)
-        </MenuItem>
-      </Menu>
-
-      {/* ======================================
           CHANGE PRODUCT STATUS DIALOG
       ====================================== */}
 
-      <Dialog
-        open={Boolean(statusDialogProduct)}
-        onClose={closeStatusDialog}
-        maxWidth="xs"
-        fullWidth
-      >
-        {/* DIALOG TITLE */}
-
-        <DialogTitle
-          sx={{
-            fontWeight: 700,
-            color: COLORS.text
-          }}
-        >
-          {statusDialogProduct?.status === 'ACTIVE'
-            ? 'Deactivate Product'
-            : 'Activate Product'}
+      <Dialog open={Boolean(statusDialogProduct)} onClose={closeStatusDialog} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700, color: COLORS.text }}>
+          {statusDialogProduct?.status === 'ACTIVE' ? 'Deactivate Product' : 'Activate Product'}
         </DialogTitle>
-
-        {/* DIALOG CONTENT */}
 
         <DialogContent>
           <DialogContentText>
-            Are you sure you want to{' '}
-            {statusDialogProduct?.status === 'ACTIVE'
-              ? 'deactivate'
-              : 'activate'}{' '}
-            <strong>
-              {statusDialogProduct?.productName}
-            </strong>
-            ?
+            Are you sure you want to {statusDialogProduct?.status === 'ACTIVE' ? 'deactivate' : 'activate'}{' '}
+            <strong>{statusDialogProduct?.productName}</strong>?
           </DialogContentText>
 
-          {/* WARNING WHEN DEACTIVATING */}
-
           {statusDialogProduct?.status === 'ACTIVE' && (
-            <Alert
-              severity="warning"
-              sx={{ mt: 2 }}
-            >
-              This product will no longer be available
-              for customers to purchase online.
-              Existing product data and inventory
-              will be preserved.
+            <Alert severity="warning" sx={{ mt: 2 }}>
+              This product will no longer be available for customers to purchase online.
+              Existing product data and inventory will be preserved.
             </Alert>
           )}
 
-          {/* INFORMATION WHEN ACTIVATING */}
-
           {statusDialogProduct?.status === 'INACTIVE' && (
-            <Alert
-              severity="info"
-              sx={{ mt: 2 }}
-            >
-              This product will become active again.
-              Online availability still depends on
-              the settings of its variants.
+            <Alert severity="info" sx={{ mt: 2 }}>
+              This product will become active again. Online availability still depends on the settings of its variants.
             </Alert>
           )}
         </DialogContent>
 
-        {/* DIALOG ACTIONS */}
-
-        <DialogActions
-          sx={{
-            px: 3,
-            pb: 2.5
-          }}
-        >
-          {/* CANCEL */}
-
-          <Button
-            onClick={closeStatusDialog}
-            disabled={statusSaving}
-            sx={{
-              textTransform: 'none',
-              color: COLORS.muted
-            }}
-          >
+        <DialogActions sx={{ px: 3, pb: 2.5 }}>
+          <Button onClick={closeStatusDialog} disabled={statusSaving} sx={{ textTransform: 'none', color: COLORS.muted }}>
             Cancel
           </Button>
-
-          {/* CONFIRM */}
 
           <Button
             variant="contained"
             disabled={statusSaving}
             onClick={confirmChangeProductStatus}
-            startIcon={
-              statusSaving ? (
-                <CircularProgress
-                  size={16}
-                  color="inherit"
-                />
-              ) : null
-            }
+            startIcon={statusSaving ? <CircularProgress size={16} color="inherit" /> : null}
             sx={{
               textTransform: 'none',
-              bgcolor:
-                statusDialogProduct?.status === 'ACTIVE'
-                  ? COLORS.red
-                  : COLORS.green,
+              bgcolor: statusDialogProduct?.status === 'ACTIVE' ? COLORS.red : COLORS.green,
               '&:hover': {
-                bgcolor:
-                  statusDialogProduct?.status === 'ACTIVE'
-                    ? '#B83D3D'
-                    : '#1B6B54'
+                bgcolor: statusDialogProduct?.status === 'ACTIVE' ? '#B83D3D' : '#1B6B54'
               }
             }}
           >
-            {statusSaving
-              ? 'Saving...'
-              : statusDialogProduct?.status === 'ACTIVE'
-                ? 'Deactivate'
-                : 'Activate'}
+            {statusSaving ? 'Saving...' : statusDialogProduct?.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* ======================================
+          DELETE PRODUCT DIALOG
+      ====================================== */}
+      <Dialog open={Boolean(deleteDialogProduct)} onClose={closeDeleteDialog} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700, color: COLORS.red }}>
+          Xác nhận xóa vĩnh viễn sản phẩm
+        </DialogTitle>
+
+        <DialogContent>
+          <DialogContentText>
+            Bạn có chắc chắn muốn xóa sản phẩm{' '}
+            <strong>{deleteDialogProduct?.productName}</strong> (ID: {deleteDialogProduct?.productId})?
+          </DialogContentText>
+
+          <Alert severity="warning" sx={{ mt: 2 }}>
+            Hành động này sẽ xóa hoàn toàn sản phẩm, các biến thể và hình ảnh liên quan khỏi hệ thống nếu sản phẩm chưa phát sinh lịch sử giao dịch.
+            Nếu sản phẩm đã từng có đơn hàng hoặc phiếu kho, hệ thống sẽ ngăn chặn việc xóa để đảm bảo toàn vẹn dữ liệu.
+          </Alert>
+        </DialogContent>
+
+        <DialogActions sx={{ px: 3, pb: 2.5 }}>
+          <Button onClick={closeDeleteDialog} disabled={deleteSaving} sx={{ textTransform: 'none', color: COLORS.muted }}>
+            Hủy
+          </Button>
+
+          <Button
+            variant="contained"
+            disabled={deleteSaving}
+            onClick={confirmDeleteProduct}
+            startIcon={deleteSaving ? <CircularProgress size={16} color="inherit" /> : null}
+            sx={{
+              textTransform: 'none',
+              bgcolor: COLORS.red,
+              '&:hover': {
+                bgcolor: '#B83D3D'
+              }
+            }}
+          >
+            {deleteSaving ? 'Đang xóa...' : 'Xác nhận xóa'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ======================================
+          EXCEL BATCH IMPORT DIALOG
+      ====================================== */}
+      <ProductExcelDialog
+        open={excelDialogOpen}
+        onClose={() => setExcelDialogOpen(false)}
+        categories={categories}
+        onSuccess={(msg) => {
+          setSuccess(msg);
+          loadProducts();
+        }}
+      />
     </Box>
   );
 }

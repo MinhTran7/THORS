@@ -18,90 +18,75 @@ const SIDEBAR_WIDTH = 248;
 export default function ThorsLayout() {
   const { account, logout } = useAuth();
   const navigate = useNavigate();
-  const { pathname } = useLocation();
+  const location = useLocation();
+  const canWarehouse = ['OWNER', 'FAMILY_MEMBER'].includes(account.role);
+  const warehouseIcons = [
+    <InboxOutlined />,
+    <ShoppingCartOutlined />,
+    <ImportOutlined />,
+    <RollbackOutlined />,
+    <LayoutOutlined />,
+    <TeamOutlined />,
+    <EnvironmentOutlined />
+  ];
   const [mobile, setMobile] = useState(false);
   const [error, setError] = useState('');
-  const [crumbs, setCrumbs] = useState([]);
-  const crumbContext = useMemo(() => ({ setCrumbs }), []);
-  const links = navFor(account.role);
-  const isAdmin = account.role === 'ADMIN';
-
-  async function signOut() {
-    try {
-      await logout();
-      navigate('/login');
-    } catch (e) {
-      setError(e.message);
-    }
-  }
-
-  const sidebar = (
-    <Stack sx={{ height: '100%', bgcolor: brand.surface, p: 2 }}>
-      <Stack direction="row" spacing={1.25} alignItems="center" sx={{ px: 1, py: 1.5 }}>
-        <ThorsMark />
-        <Typography sx={{ fontSize: 22, fontWeight: 700, letterSpacing: 1.5, color: brand.ink }}>THORS</Typography>
+  const links = [
+    ['/workspace', 'Trang chính', <HomeOutlined />],
+    ['/profile', 'Hồ sơ của tôi', <UserOutlined />],
+    ...(['ADMIN', 'OWNER'].includes(account.role) ? [['/accounts', 'Quản lý tài khoản', <TeamOutlined />]] : [])
+  ];
+  const drawer = (
+    <>
+      <Stack spacing={1} sx={{ p: 3 }}>
+        <Typography variant="h3" color="primary">
+          THORS
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          TH Omnichannel Retail System
+        </Typography>
       </Stack>
-      <Box sx={{ bgcolor: '#F5F6F1', borderRadius: '12px', p: 1.75, mt: 1, mb: 2.5 }}>
-        <Typography variant="subtitle2" sx={{ color: brand.ink, fontWeight: 700 }}>
-          {isAdmin ? 'System workspace' : STORE_NAME}
-        </Typography>
-        <Typography variant="caption" sx={{ color: brand.muted }}>
-          {isAdmin ? ROLE_TITLE.ADMIN : `${ROLE_LABEL[account.role]} workspace`}
-        </Typography>
-      </Box>
-      <Typography sx={{ fontSize: 10.5, letterSpacing: 1, color: brand.muted, px: 1.5, mb: 0.75 }}>WORKSPACE</Typography>
-      <List disablePadding component="nav" aria-label="Main navigation">
-        {links.map(({ to, label, icon }) => {
-          const active = pathname === to || pathname.startsWith(`${to}/`);
-          return (
-            <ListItemButton
-              key={to}
-              component={Link}
-              to={to}
-              onClick={() => setMobile(false)}
-              aria-current={active ? 'page' : undefined}
-              sx={{
-                borderRadius: '10px',
-                mb: 0.5,
-                position: 'relative',
-                bgcolor: active ? brand.cyanSoft : 'transparent',
-                '&:hover': { bgcolor: active ? brand.cyanSoft : '#F6F6F1' },
-                '&::after': active
-                  ? { content: '""', position: 'absolute', right: 6, top: 10, bottom: 10, width: 3, borderRadius: 2, bgcolor: brand.cyan }
-                  : {}
-              }}
-            >
-              <ListItemIcon sx={{ minWidth: 34, color: brand.ink }}>{icon}</ListItemIcon>
-              <ListItemText
-                primary={label}
-                slotProps={{ primary: { sx: { fontSize: 14, fontWeight: active ? 600 : 500, color: brand.ink } } }}
-              />
-            </ListItemButton>
-          );
-        })}
+      <Divider />
+      <List>
+        {links.map(([to, label, icon]) => (
+          <ListItemButton key={to} selected={location.pathname === to} component={Link} to={to} onClick={() => setMobile(false)}>
+            <ListItemIcon>{icon}</ListItemIcon>
+            <ListItemText primary={label} />
+          </ListItemButton>
+        ))}
       </List>
-      <Box sx={{ flexGrow: 1 }} />
-      <Stack direction="row" spacing={1.25} alignItems="center" sx={{ px: 1, py: 1.5, borderTop: `1px solid ${brand.line}` }}>
-        <UserAvatar name={account.fullName} src={account.avatarUrl} size={32} />
-        <Box sx={{ minWidth: 0, flexGrow: 1 }}>
-          <Typography variant="subtitle2" noWrap sx={{ color: brand.ink }}>
-            {account.fullName}
+      {canWarehouse && (
+        <>
+          <Divider />
+          <Typography variant="caption" color="text.secondary" sx={{ px: 3, pt: 2.5, pb: 1, display: 'block' }}>
+            QUẢN LÝ KHO
           </Typography>
-          <Typography variant="caption" noWrap sx={{ color: brand.muted, display: 'block' }}>
-            {ROLE_TITLE[account.role]}
-          </Typography>
-        </Box>
-        <Tooltip title="Sign out">
-          <IconButton size="small" aria-label="Sign out" onClick={signOut}>
-            <LogoutOutlined />
-          </IconButton>
-        </Tooltip>
-      </Stack>
-    </Stack>
+          <List>
+            {warehouseMenu.map(([key, label], index) => (
+              <ListItemButton
+                key={key}
+                selected={location.pathname === `/warehouse/${key}`}
+                component={Link}
+                to={`/warehouse/${key}`}
+                onClick={() => setMobile(false)}
+                sx={{
+                  '&.Mui-selected': {
+                    bgcolor: 'primary.lighter',
+                    color: 'primary.main',
+                    borderRight: '3px solid',
+                    borderColor: 'primary.main'
+                  }
+                }}
+              >
+                <ListItemIcon sx={{ color: 'inherit' }}>{warehouseIcons[index]}</ListItemIcon>
+                <ListItemText primary={label} />
+              </ListItemButton>
+            ))}
+          </List>
+        </>
+      )}
+    </>
   );
-
-  const headerCrumbs = [ROLE_LABEL[account.role], ...crumbs];
-
   return (
     <CrumbsContext.Provider value={crumbContext}>
       <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: brand.page }}>
@@ -140,6 +125,6 @@ export default function ThorsLayout() {
           <AppFooter />
         </Box>
       </Box>
-    </CrumbsContext.Provider>
+    </Box>
   );
 }

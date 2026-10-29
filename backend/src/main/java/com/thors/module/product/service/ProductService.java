@@ -2,6 +2,7 @@
 package com.thors.module.product.service;
 
 import com.thors.module.product.dto.CreateProductRequest;
+import com.thors.module.product.dto.BatchCreateProductRequest;
 import com.thors.module.product.entity.Product;
 import com.thors.module.product.repository.ProductRepository;
 import com.thors.module.product.repository.ProductImageRepository;
@@ -118,6 +119,56 @@ public class ProductService {
         validateProduct(request);
 
         return saveProductAndVariants(request);
+    }
+
+    // ==========================================
+    // BATCH CREATE PRODUCTS
+    // ==========================================
+
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> createProductsBatch(
+            BatchCreateProductRequest batchRequest
+    ) {
+        if (batchRequest == null || batchRequest.getProducts() == null || batchRequest.getProducts().isEmpty()) {
+            throw new IllegalArgumentException("Product list must not be empty.");
+        }
+
+        List<CreateProductRequest> products = batchRequest.getProducts();
+        if (products.size() > 500) {
+            throw new IllegalArgumentException("Maximum 500 products per batch import.");
+        }
+
+        // Validate all products first before inserting
+        for (int i = 0; i < products.size(); i++) {
+            CreateProductRequest req = products.get(i);
+            try {
+                validateProduct(req);
+            } catch (IllegalArgumentException ex) {
+                String name = req != null && req.getProductName() != null ? req.getProductName() : ("#" + (i + 1));
+                throw new IllegalArgumentException("Product [" + name + "]: " + ex.getMessage());
+            }
+        }
+
+        int totalCreated = 0;
+        int totalVariants = 0;
+        List<Integer> createdProductIds = new ArrayList<>();
+
+        for (CreateProductRequest req : products) {
+            int productId = saveProductAndVariants(req);
+            createdProductIds.add(productId);
+            totalCreated++;
+            totalVariants += req.getVariants().size();
+        }
+
+        logger.info("Batch created {} products with {} total variants", totalCreated, totalVariants);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("message", "Batch import completed successfully.");
+        result.put("totalProducts", totalCreated);
+        result.put("totalVariants", totalVariants);
+        result.put("productIds", createdProductIds);
+
+        return result;
     }
 
     // ==========================================
@@ -254,6 +305,17 @@ public class ProductService {
                     request.getDescription().trim()
             );
         }
+
+        if (request.getImageUrl() != null && !request.getImageUrl().isBlank()) {
+            String url = request.getImageUrl().trim();
+            if (url.length() > 500) {
+                throw new IllegalArgumentException("Image URL must not exceed 500 characters.");
+            }
+            if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                throw new IllegalArgumentException("Image URL must start with http:// or https://");
+            }
+            request.setImageUrl(url);
+        }
     }
 
     // ==========================================
@@ -275,6 +337,16 @@ public class ProductService {
             productRepository.insertVariant(
                     productId,
                     variant
+            );
+        }
+
+        // Save primary image if imageUrl is provided (e.g. from Excel batch import)
+        if (request.getImageUrl() != null && !request.getImageUrl().isBlank()) {
+            productImageRepository.insertImage(
+                    productId,
+                    request.getImageUrl().trim(),
+                    null,
+                    true
             );
         }
 
@@ -733,6 +805,58 @@ public class ProductService {
                     "Unable to update product status."
             );
         }
+    }
+
+    // ==========================================
+    // DELETE PRODUCT (SAFE DELETE)
+    // ==========================================
+
+    @Transactional
+    public void deleteProduct(int productId) {
+
+        // 1. Validate product ID
+        if (productId <= 0) {
+            throw new IllegalArgumentException(
+                    "Invalid product ID."
+            );
+        }
+
+        // 2. Check whether product exists
+        Product product = productRepository.findById(productId);
+        if (product == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "Product not found."
+            );
+        }
+
+        // 3. Check for transaction constraints (orders, receipts, shelves, adjustments)
+        int transactionCount = productRepository.countTransactionsByProductId(productId);
+        if (transactionCount > 0) {
+            throw new IllegalArgumentException(
+                    "Sản phẩm đã có lịch sử giao dịch (đơn hàng, nhập kho hoặc vị trí kệ), không thể xóa vĩnh viễn. Vui lòng chuyển trạng thái sang Ẩn (INACTIVE)."
+            );
+        }
+
+        // 4. Clean up Cloudinary images if any
+        try {
+            List<String> publicIds = productRepository.findCloudinaryPublicIds(productId);
+            for (String pid : publicIds) {
+                if (pid != null && !pid.isBlank()) {
+                    try {
+                        productImageService.deleteImage(pid);
+                    } catch (Exception e) {
+                        logger.warn("Failed to delete Cloudinary image {}: {}", pid, e.getMessage());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to clean up Cloudinary images for product {}: {}", productId, e.getMessage());
+        }
+
+        // 5. Cascade delete all product data
+        productRepository.deleteProductCascaded(productId);
+        logger.info("Product {} deleted successfully", productId);
     }
 
 }
