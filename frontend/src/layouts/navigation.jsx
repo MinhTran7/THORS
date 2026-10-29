@@ -1,7 +1,10 @@
 import {
   AppstoreOutlined,
+  EnvironmentOutlined,
   FileTextOutlined,
+  ImportOutlined,
   InboxOutlined,
+  LayoutOutlined,
   RollbackOutlined,
   ShopOutlined,
   ShoppingCartOutlined,
@@ -10,13 +13,29 @@ import {
   TeamOutlined,
   UserOutlined
 } from '@ant-design/icons';
+import { warehouseMenu } from 'features/warehouse/model';
 
 const dashboard = { to: '/workspace', label: 'Dashboard', icon: <AppstoreOutlined /> };
 const profile = { to: '/profile', label: 'Profile', icon: <UserOutlined /> };
 const orders = { to: '/orders', label: 'Đơn hàng', icon: <ShoppingOutlined /> };
-const warehouse = { to: '/warehouse', label: 'Kho', icon: <InboxOutlined /> };
 
-// Mỗi vai trò một menu. Các feature khác (Products, Categories...) thêm mục của mình vào đúng mảng của vai trò.
+const warehouseIcons = [
+  <InboxOutlined />,
+  <ShoppingCartOutlined />,
+  <ImportOutlined />,
+  <RollbackOutlined />,
+  <LayoutOutlined />,
+  <TeamOutlined />,
+  <EnvironmentOutlined />
+];
+
+const warehouse = warehouseMenu.map(([key, label], index) => ({
+  to: `/warehouse/${key}`,
+  label,
+  icon: warehouseIcons[index]
+}));
+
+// Mỗi vai trò một menu.
 export const NAVIGATION = {
   ADMIN: [
     dashboard,
@@ -30,13 +49,13 @@ export const NAVIGATION = {
     { to: '/categories', label: 'Categories', icon: <AppstoreOutlined /> },
     orders,
     { to: '/returns', label: 'Hoàn hàng / Đổi trả', icon: <RollbackOutlined /> },
-    { to: '/family', label: 'Family', icon: <TeamOutlined /> },
+    { to: '/staff', label: 'Family', icon: <TeamOutlined /> },
     { to: '/in-store-sales', label: 'In-store Sales', icon: <ShoppingCartOutlined /> },
     { to: '/promotions', label: 'Khuyến mãi', icon: <TagsOutlined /> },
-    { to: '/warehouse', label: 'Kho', icon: <ShopOutlined /> },
+    ...warehouse,
     profile
   ],
-  FAMILY_MEMBER: [dashboard, orders, warehouse, profile],
+  FAMILY_MEMBER: [dashboard, orders, ...warehouse, profile],
   CUSTOMER: [dashboard, orders, profile]
 };
 
