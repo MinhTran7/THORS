@@ -91,6 +91,8 @@ public class SecurityConfig {
                                         "/login/oauth2/**",
                                         "/error")
                                 .permitAll()
+                                .requestMatchers("/api/warehouse", "/api/warehouse/**")
+                                .hasAnyRole("OWNER", "FAMILY_MEMBER")
                                 .anyRequest()
                                 .authenticated());
         http.requestCache(c -> c.disable())
