@@ -14,7 +14,7 @@ import com.thors.module.account.entity.Account;
 import com.thors.module.account.repository.AccountRepository;
 import com.thors.module.account.service.AccountService;
 import com.thors.module.auth.repository.OtpRepository;
-import com.thors.module.notification.NotificationPublisher;
+import com.thors.module.notification.service.NotificationPublisher;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
