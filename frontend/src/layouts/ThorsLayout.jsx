@@ -125,6 +125,6 @@ export default function ThorsLayout() {
           <AppFooter />
         </Box>
       </Box>
-    </Box>
+    </CrumbsContext.Provider>
   );
 }
