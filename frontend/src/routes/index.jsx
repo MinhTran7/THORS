@@ -25,6 +25,10 @@ import ProductPage from '../features/product/ProductPage';
 import AddProductPage from '../features/product/AddProductPage';
 import ProductDetailPage from 'features/product/ProductDetailPage';
 import EditProductPage from 'features/product/EditProductPage';
+//sales
+import InStoreSalesPage from 'features/sales/InStoreSalesPage';
+import PromotionPage from 'features/promotion/PromotionPage';
+import AddPromotionPage from 'features/promotion/AddPromotionPage';
 
 // Returns Management (Đổi trả / Hoàn hàng)
 import ReturnsPage from 'features/returns/ReturnsPage';
@@ -60,13 +64,21 @@ export default createBrowserRouter([
 {
   element: <RequireAuth roles={['OWNER']} />,
   children: [
+    { path: '/staff', element: <StaffListPage /> },
+    { path: '/staff/new', element: <StaffFormPage /> },
+    { path: '/staff/:id', element: <StaffDetailPage /> },
+    { path: '/staff/:id/edit', element: <StaffFormPage /> },
     // Category, Product & Returns (của DongNV)
     { path: '/categories', element: <CategoryPage /> },
     { path: '/products', element: <ProductPage /> },
     { path: '/products/add', element: <AddProductPage /> },
     { path: '/products/:productId', element: <ProductDetailPage /> },
     { path: '/products/:productId/edit', element: <EditProductPage /> },
-    { path: '/returns', element: <ReturnsPage /> }
+    { path: '/returns', element: <ReturnsPage /> },
+    // Sales & Promotion (của phuoc)
+    { path: '/in-store-sales', element: <InStoreSalesPage /> },
+    { path: '/promotions', element: <PromotionPage /> },
+    { path: '/promotions/add', element: <AddPromotionPage /> }
   ]
 }
         ]
