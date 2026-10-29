@@ -40,7 +40,6 @@ import {
   EditOutlined,
   EllipsisOutlined,
   EyeOutlined,
-  InfoCircleOutlined,
   PlusOutlined,
   SearchOutlined,
   TagsOutlined,
@@ -962,50 +961,7 @@ export default function CategoryPage() {
         </Stack>
       </Card>
 
-      {/* INFORMATION NOTE */}
 
-      <Box
-        sx={{
-          bgcolor: COLORS.yellowLight,
-          borderRadius: 2,
-          p: 2,
-          mt: 2.5
-        }}
-      >
-        <Stack
-          direction="row"
-          alignItems="flex-start"
-          spacing={1.5}
-        >
-          <InfoCircleOutlined
-            style={{
-              color: COLORS.text,
-              marginTop: 3
-            }}
-          />
-
-          <Box>
-            <Typography
-              fontSize={12}
-              fontWeight={700}
-              color={COLORS.text}
-            >
-              A tidy catalog starts here
-            </Typography>
-
-            <Typography
-              fontSize={11}
-              color={COLORS.muted}
-              sx={{ mt: 0.5 }}
-            >
-              Disabled categories remain in your
-              inventory records. Their products
-              are not deleted when a category
-              is disabled.
-            </Typography>
-          </Box>
-        </Stack>
-      </Box>
 
       {/* ACTION MENU */}
 

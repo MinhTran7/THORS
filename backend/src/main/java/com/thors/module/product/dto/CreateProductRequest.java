@@ -9,7 +9,16 @@ public class CreateProductRequest {
     private Integer categoryId;
     private String productName;
     private String description;
+    private String imageUrl;
     private List<VariantRequest> variants;
+
+    public String getImageUrl() {
+        return imageUrl;
+    }
+
+    public void setImageUrl(String imageUrl) {
+        this.imageUrl = imageUrl;
+    }
 
     public Integer getCategoryId() {
         return categoryId;

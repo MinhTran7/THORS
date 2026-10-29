@@ -61,7 +61,7 @@ public class ApiErrors {
 
   @ExceptionHandler(Exception.class)
   ResponseEntity<?> unexpected(Exception e) {
-    log.error("Unhandled request failure: {}", e.getClass().getSimpleName());
+      log.error("Unhandled request failure", e);
     return ResponseEntity.internalServerError()
             .body(
                     Map.of(
