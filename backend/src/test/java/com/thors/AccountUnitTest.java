@@ -50,6 +50,7 @@ class AccountUnitTest {
         users = mock(AccountRepository.class);
         codes = mock(OtpRepository.class);
         passwords = mock(PasswordEncoder.class);
+        notifications = mock(NotificationPublisher.class);
         when(passwords.encode(anyString())).thenReturn("ENC");
         new AccountService(users, codes, passwords, notifications);
     }
