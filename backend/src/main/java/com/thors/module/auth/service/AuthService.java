@@ -5,6 +5,8 @@ import com.thors.module.account.entity.Account;
 import com.thors.module.account.repository.AccountRepository;
 import com.thors.module.auth.dto.AuthRequests.*;
 import com.thors.module.auth.repository.OtpRepository;
+import com.thors.module.notification.service.NotificationPublisher;
+import com.thors.module.notification.service.NotificationTypes;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,13 +17,20 @@ public class AuthService {
   private final PasswordEncoder passwords;
   private final OtpRepository codes;
   private final OtpService otp;
+  private final NotificationPublisher notices;
   private final String dummy;
 
-  public AuthService(AccountRepository users, PasswordEncoder passwords, OtpRepository codes, OtpService otp) {
+  public AuthService(
+          AccountRepository users,
+          PasswordEncoder passwords,
+          OtpRepository codes,
+          OtpService otp,
+          NotificationPublisher notices) {
     this.users = users;
     this.passwords = passwords;
     this.codes = codes;
     this.otp = otp;
+    this.notices = notices;
     this.dummy = passwords.encode(java.util.UUID.randomUUID().toString());
   }
 
@@ -75,6 +84,11 @@ public class AuthService {
     users.password(user, passwords.encode(password), false);
     codes.invalidateAll(user);
     users.audit(user, "PASSWORD_RESET", user, "Password replaced; sessions revoked");
+    notices.toUser(
+            user,
+            NotificationTypes.ACCOUNT_SECURITY,
+            "Mật khẩu đã được đặt lại",
+            "Mật khẩu của bạn vừa được đặt lại và bạn đã bị đăng xuất khỏi mọi thiết bị. Nếu không phải bạn thực hiện, hãy liên hệ quản trị viên ngay.");
   }
 
   @Transactional
@@ -89,6 +103,11 @@ public class AuthService {
     users.password(a.id(), passwords.encode(request.password()), false);
     codes.invalidateAll(a.id());
     users.audit(a.id(), "PASSWORD_CHANGE", a.id(), "Password replaced; sessions revoked");
+    notices.toUser(
+            a.id(),
+            NotificationTypes.ACCOUNT_SECURITY,
+            "Mật khẩu đã được thay đổi",
+            "Mật khẩu của bạn vừa được thay đổi và bạn đã bị đăng xuất khỏi mọi thiết bị. Nếu không phải bạn thực hiện, hãy liên hệ quản trị viên ngay.");
   }
 
   public static void confirm(String p, String confirmation) {

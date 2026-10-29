@@ -14,6 +14,7 @@ import com.thors.module.account.service.AccountService;
 import com.thors.module.auth.entity.OtpChallenge;
 import com.thors.module.auth.service.GoogleAccountService;
 import com.thors.module.auth.service.OtpService;
+import com.thors.module.notification.service.NotificationPublisher;
 import java.util.*;
 import java.util.concurrent.*;
 import org.junit.jupiter.api.*;
@@ -64,6 +65,7 @@ class AuthIntegrationTest {
   @Autowired RecordingSender sender;
   @Autowired GoogleAccountService google;
   @Autowired OtpService otp;
+  @Autowired NotificationPublisher notices;
   final String password = "Strong-password-123";
 
   @BeforeEach
@@ -681,7 +683,7 @@ class AuthIntegrationTest {
     }
     assertEquals(429, request("/api/auth/login", Map.of("identifier", a.email(), "password", password), new MockHttpSession()).getResponse().getStatus());
     var restarted = new com.thors.module.auth.service.AuthService(
-            new AccountRepository(db), passwords, new com.thors.module.auth.repository.OtpRepository(db), otp);
+            new AccountRepository(db), passwords, new com.thors.module.auth.repository.OtpRepository(db), otp, notices);
     assertEquals("LOGIN_COOLDOWN", assertThrows(ApiException.class,
             () -> restarted.authenticate(a.email(), password)).code);
     var known = request("/api/auth/login", Map.of("identifier", a.email(), "password", "Wrong-password"), new MockHttpSession()).getResponse();

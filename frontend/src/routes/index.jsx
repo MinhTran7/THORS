@@ -17,6 +17,13 @@ import AccountsPage from 'features/account/pages/AccountListPage';
 import WorkspacePage from 'features/account/WorkspacePage';
 import { AuthShell } from 'features/auth/components/AuthForm';
 
+// Notification Management
+import NotificationPage from 'features/notification/NotificationPage';
+
+// Online Order Management
+import OrderListPage from 'features/order/OrderListPage';
+import OrderDetailPage from 'features/order/OrderDetailPage';
+
 // Category Management
 import CategoryPage from 'features/category/CategoryPage';
 
@@ -50,6 +57,17 @@ export default createBrowserRouter([
         children: [
           { path: '/workspace', element: <WorkspacePage /> },
           { path: '/profile', element: <ProfilePage /> },
+          { path: '/profile/edit', element: <UpdateProfilePage /> },
+          { path: '/profile/password', element: <ChangePasswordPage /> },
+          { path: '/notifications', element: <NotificationPage /> },
+          {
+            // Customer xem đơn của mình; Owner và Family Member xem đơn online của cửa hàng
+            element: <RequireAuth roles={['CUSTOMER', 'OWNER', 'FAMILY_MEMBER']} />,
+            children: [
+              { path: '/orders', element: <OrderListPage /> },
+              { path: '/orders/:id', element: <OrderDetailPage /> }
+            ]
+          },
           {
             element: <RequireAuth roles={['OWNER', 'FAMILY_MEMBER']} />,
             children: [
@@ -64,10 +82,10 @@ export default createBrowserRouter([
 {
   element: <RequireAuth roles={['OWNER']} />,
   children: [
-    { path: '/staff', element: <StaffListPage /> },
-    { path: '/staff/new', element: <StaffFormPage /> },
-    { path: '/staff/:id', element: <StaffDetailPage /> },
-    { path: '/staff/:id/edit', element: <StaffFormPage /> },
+    { path: '/family', element: <StaffListPage /> },
+    { path: '/family/new', element: <StaffFormPage /> },
+    { path: '/family/:id', element: <StaffDetailPage /> },
+    { path: '/family/:id/edit', element: <StaffFormPage /> },
     // Category, Product & Returns (của DongNV)
     { path: '/categories', element: <CategoryPage /> },
     { path: '/products', element: <ProductPage /> },
@@ -80,7 +98,7 @@ export default createBrowserRouter([
     { path: '/promotions', element: <PromotionPage /> },
     { path: '/promotions/add', element: <AddPromotionPage /> }
   ]
-}
+},
         ]
       }
     ]

@@ -41,13 +41,13 @@ import ResetPasswordDialog from '../components/ResetPasswordDialog';
 import { useToast } from '../components/Toast';
 import UserAvatar from '../components/UserAvatar';
 
-const ROLE_OPTIONS = [
-  { value: '', label: 'All roles' },
-  { value: 'STAFF', label: 'Staff' },
-  { value: 'FAMILY_MEMBER', label: 'Family' }
-];
+// Trang này chỉ quản lý Family member nên role luôn cố định.
+const FAMILY_ROLE = 'FAMILY_MEMBER';
+
+// Dùng 'ALL' thay cho '' để Select luôn hiển thị được nhãn "All statuses".
+const ALL = 'ALL';
 const STATUS_OPTIONS = [
-  { value: '', label: 'All statuses' },
+  { value: ALL, label: 'All statuses' },
   { value: 'ACTIVE', label: 'Active' },
   { value: 'DISABLED', label: 'Inactive' },
   { value: 'LOCKED', label: 'Locked' },
@@ -55,21 +55,26 @@ const STATUS_OPTIONS = [
 ];
 
 export default function StaffListPage() {
-  useCrumbs(['Staff']);
+  useCrumbs(['Family']);
   const location = useLocation();
   const [toast, showToast] = useToast();
   const [q, setQ] = useState('');
-  const [role, setRole] = useState('');
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState(ALL);
   const [page, setPage] = useState(0);
   const [busy, setBusy] = useState(null);
   const [menu, setMenu] = useState(null); // { anchor, account }
   const [resetting, setResetting] = useState(null);
   const search = useDebounced(q.trim());
 
-  const params = { q: search, role, status, page, size: PAGE_SIZE };
-  const list = useSWR(['staff-list', params], () => accountsApi.list(params), { keepPreviousData: true, revalidateOnFocus: false });
+  const params = { q: search, role: FAMILY_ROLE, status: status === ALL ? '' : status, page, size: PAGE_SIZE };
+  const list = useSWR(['family-list', params], () => accountsApi.list(params), { keepPreviousData: true, revalidateOnFocus: false });
   const summary = useSWR('accounts-summary', accountsApi.summary, { revalidateOnFocus: false });
+  // Đếm số family member đang active (summary.byStatus tính chung mọi role nên không dùng được).
+  const activeCount = useSWR(
+    ['family-active-count'],
+    () => accountsApi.list({ q: '', role: FAMILY_ROLE, status: 'ACTIVE', page: 0, size: 1 }),
+    { revalidateOnFocus: false }
+  );
 
   useEffect(() => {
     if (location.state?.toast) {
@@ -78,10 +83,9 @@ export default function StaffListPage() {
     }
   }, [location.state, showToast]);
 
-  const byRole = summary.data?.byRole ?? {};
-  const byStatus = summary.data?.byStatus ?? {};
-  const total = summary.data?.total ?? 0;
-  const active = byStatus.ACTIVE ?? 0;
+  const total = summary.data?.byRole?.[FAMILY_ROLE] ?? 0;
+  const active = activeCount.data?.total ?? 0;
+  const statsLoading = summary.isLoading || activeCount.isLoading;
 
   const filter = (setter) => (value) => {
     setter(value);
@@ -93,7 +97,7 @@ export default function StaffListPage() {
     setBusy(account.id);
     try {
       await accountsApi.setStatus(account.id, next);
-      await Promise.all([list.mutate(), summary.mutate()]);
+      await Promise.all([list.mutate(), summary.mutate(), activeCount.mutate()]);
       showToast(next === 'ACTIVE' ? `${account.fullName} can sign in again.` : `${account.fullName} was deactivated.`);
     } catch (e) {
       showToast(e.message, 'error');
@@ -107,36 +111,36 @@ export default function StaffListPage() {
   return (
     <Box>
       <PageHeader
-        title="Staff List"
-        subtitle="Manage the people who help your store run smoothly."
+        title="Family List"
+        subtitle="Manage the family members who can view your store."
         action={
-          <BrandButton component={RouterLink} to="/staff/new" startIcon={<PlusOutlined />}>
+          <BrandButton component={RouterLink} to="/family/new" startIcon={<PlusOutlined />}>
             Add Member
           </BrandButton>
         }
       />
       <StatRow>
         <StatCard
-          label="Team accounts"
+          label="Family members"
           value={total}
-          caption={`${byRole.STAFF ?? 0} staff · ${byRole.FAMILY_MEMBER ?? 0} family members`}
+          caption={`${total} family ${total === 1 ? 'member' : 'members'}`}
           icon={<TeamOutlined />}
-          loading={summary.isLoading}
+          loading={statsLoading}
         />
         <StatCard
           label="Active accounts"
           value={active}
           caption="Ready to access the store"
           icon={<UserSwitchOutlined />}
-          loading={summary.isLoading}
+          loading={statsLoading}
         />
         <StatCard
           label="Inactive accounts"
-          value={total - active}
+          value={Math.max(total - active, 0)}
           caption="Access temporarily disabled"
           icon={<UserDeleteOutlined />}
           warning
-          loading={summary.isLoading}
+          loading={statsLoading}
         />
       </StatRow>
 
@@ -144,7 +148,6 @@ export default function StaffListPage() {
         <Box sx={{ flex: 1 }}>
           <SearchField placeholder="Search by name, email or phone" value={q} onChange={filter(setQ)} />
         </Box>
-        <FilterSelect label="Filter by role" value={role} onChange={filter(setRole)} options={ROLE_OPTIONS} />
         <FilterSelect label="Filter by status" value={status} onChange={filter(setStatus)} options={STATUS_OPTIONS} />
       </Toolbar>
 
@@ -209,7 +212,7 @@ export default function StaffListPage() {
                         <Button
                           size="small"
                           component={RouterLink}
-                          to={`/staff/${account.id}`}
+                          to={`/family/${account.id}`}
                           sx={{ color: brand.ink, fontWeight: 600, minWidth: 0 }}
                         >
                           View
@@ -217,7 +220,7 @@ export default function StaffListPage() {
                         <IconButton
                           size="small"
                           component={RouterLink}
-                          to={`/staff/${account.id}/edit`}
+                          to={`/family/${account.id}/edit`}
                           aria-label={`Edit ${account.fullName}`}
                         >
                           <EditOutlined />
@@ -234,7 +237,7 @@ export default function StaffListPage() {
                   </TableRow>
                 );
               })}
-              {!list.isLoading && items.length === 0 && <EmptyRow colSpan={5}>No team accounts match your search.</EmptyRow>}
+              {!list.isLoading && items.length === 0 && <EmptyRow colSpan={5}>No family members match your search.</EmptyRow>}
             </TableBody>
           </Table>
         </Box>
@@ -243,7 +246,7 @@ export default function StaffListPage() {
           totalPages={list.data?.totalPages ?? 0}
           total={list.data?.total ?? 0}
           size={PAGE_SIZE}
-          noun="team accounts"
+          noun="family members"
           onPage={setPage}
         />
       </Box>

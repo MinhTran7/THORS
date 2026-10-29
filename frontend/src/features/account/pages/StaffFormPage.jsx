@@ -3,7 +3,7 @@ import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import useSWR from 'swr';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
-import { Alert, Box, MenuItem, TextField, Typography } from '@mui/material';
+import { Alert, Box, Typography } from '@mui/material';
 import { Stack } from '../components/Flex';
 import { InfoCircleOutlined } from '@ant-design/icons';
 import { useCrumbs } from 'layouts/crumbs';
@@ -15,20 +15,22 @@ import { RoleChip } from '../components/Chips';
 import { NoticeBox, PageHeader } from '../components/Blocks';
 import { FormField, PasswordInput, TextInput } from '../components/Form';
 
+// Chỉ còn tài khoản Family member nên role luôn cố định.
+const FAMILY_ROLE = 'FAMILY_MEMBER';
+
 const createSchema = Yup.object({
   fullName,
   email: Yup.string().trim().required('Enter an email address.').email('Enter a valid email address.'),
   phone: phone.required('Enter a phone number.'),
-  password: newPassword,
-  role: Yup.string().oneOf(['STAFF', 'FAMILY_MEMBER'])
+  password: newPassword
 });
 const editSchema = Yup.object({ fullName });
 
-// Tạo mới: /staff/new. Chỉnh sửa: /staff/:id/edit (backend chỉ cho sửa tên).
+// Tạo mới: /family/new. Chỉnh sửa: /family/:id/edit (backend chỉ cho sửa tên).
 export default function StaffFormPage() {
   const { id } = useParams();
   const editing = Boolean(id);
-  useCrumbs(['Staff', editing ? 'Edit Staff' : 'Add Staff']);
+  useCrumbs(['Family', editing ? 'Edit Family Member' : 'Add Family Member']);
   const navigate = useNavigate();
   const [error, setError] = useState('');
   const { data } = useSWR(editing ? ['account', id] : null, () => accountsApi.detail(id), { revalidateOnFocus: false });
@@ -40,22 +42,21 @@ export default function StaffFormPage() {
           fullName: data?.fullName ?? '',
           email: data?.email ?? '',
           phone: data?.phone ?? '',
-          role: data?.role ?? 'STAFF',
           password: '',
           activate: true
         }
-      : { fullName: '', email: '', phone: '', password: '', role: 'STAFF', activate: true },
+      : { fullName: '', email: '', phone: '', password: '', activate: true },
     validationSchema: editing ? editSchema : createSchema,
     onSubmit: async (values) => {
       setError('');
       try {
         if (editing) {
           await accountsApi.rename(id, values.fullName.trim());
-          navigate(`/staff/${id}`, { state: { toast: 'Account updated.' } });
+          navigate(`/family/${id}`, { state: { toast: 'Account updated.' } });
           return;
         }
         const created = await accountsApi.create({
-          role: values.role,
+          role: FAMILY_ROLE,
           fullName: values.fullName.trim(),
           email: values.email.trim(),
           phone: values.phone.trim(),
@@ -63,7 +64,7 @@ export default function StaffFormPage() {
           confirmPassword: values.password
         });
         if (!values.activate) await accountsApi.setStatus(created.id, 'DISABLED');
-        navigate('/staff', { state: { toast: `Account created for ${created.fullName}.` } });
+        navigate('/family', { state: { toast: `Account created for ${created.fullName}.` } });
       } catch (e) {
         setError(e.message);
       }
@@ -81,9 +82,12 @@ export default function StaffFormPage() {
   return (
     <Box>
       <PageHeader
-        back={{ to: editing ? `/staff/${id}` : '/staff', label: editing ? 'Staff detail' : 'Staff list / New account' }}
-        title={editing ? 'Edit Account' : 'Staff Form'}
-        subtitle={editing ? 'Update the name shown for this account.' : 'Create a secure account for a staff or family member.'}
+        back={{
+          to: editing ? `/family/${id}` : '/family',
+          label: editing ? 'Family member detail' : 'Family list / New member'
+        }}
+        title={editing ? 'Edit Family Member' : 'Family Member Form'}
+        subtitle={editing ? 'Update the name shown for this account.' : 'Create a secure account for a family member.'}
       />
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
@@ -96,7 +100,7 @@ export default function StaffFormPage() {
             Account details
           </Typography>
           <Typography variant="caption" sx={{ color: brand.muted }}>
-            {editing ? 'Email, phone and role cannot be changed here.' : 'All fields are required. Each person gets their own sign-in.'}
+            {editing ? 'Email and phone cannot be changed here.' : 'All fields are required. Each person gets their own sign-in.'}
           </Typography>
           <Stack spacing={2.5} sx={{ mt: 2.5 }}>
             <FormField label="Name" error={fieldError('fullName')}>
@@ -124,22 +128,6 @@ export default function StaffFormPage() {
                 />
               </FormField>
             )}
-            <FormField label="Role" helper="Available roles: Staff or Family">
-              <TextField
-                select
-                size="small"
-                fullWidth
-                disabled={editing}
-                slotProps={{ htmlInput: { 'aria-label': 'Role' } }}
-                {...bind('role')}
-                sx={{
-                  '& .MuiOutlinedInput-root': { bgcolor: brand.surface, borderRadius: '10px', '& fieldset': { borderColor: brand.line } }
-                }}
-              >
-                <MenuItem value="STAFF">Staff</MenuItem>
-                <MenuItem value="FAMILY_MEMBER">Family</MenuItem>
-              </TextField>
-            </FormField>
             {!editing && (
               <Stack
                 direction="row"
@@ -164,7 +152,7 @@ export default function StaffFormPage() {
               </Stack>
             )}
             <Stack direction="row" spacing={1.5} justifyContent="flex-end">
-              <OutlineButton component={RouterLink} to={editing ? `/staff/${id}` : '/staff'}>
+              <OutlineButton component={RouterLink} to={editing ? `/family/${id}` : '/family'}>
                 Cancel
               </OutlineButton>
               <BrandButton type="submit" disabled={form.isSubmitting || (editing && !data)}>
@@ -177,25 +165,15 @@ export default function StaffFormPage() {
         <Stack spacing={2.5}>
           <Box sx={{ ...cardSx, p: 3 }}>
             <Typography variant="h5" sx={{ color: brand.ink, mb: 2 }}>
-              Choose the right role
+              Family member access
             </Typography>
-            <Stack spacing={2}>
-              <Box>
-                <RoleChip role="STAFF" />
-                <Typography variant="caption" sx={{ color: brand.muted, display: 'block', mt: 0.75 }}>
-                  For your store team. Staff can manage products, update stock and view categories.
-                </Typography>
-              </Box>
-              <Box>
-                <RoleChip role="FAMILY_MEMBER" />
-                <Typography variant="caption" sx={{ color: brand.muted, display: 'block', mt: 0.75 }}>
-                  For trusted family members. Family accounts have view-only access to store information.
-                </Typography>
-              </Box>
-            </Stack>
+            <RoleChip role={FAMILY_ROLE} />
+            <Typography variant="caption" sx={{ color: brand.muted, display: 'block', mt: 0.75 }}>
+              For trusted family members. Family accounts have view-only access to store information.
+            </Typography>
           </Box>
           <NoticeBox title="Your store, your control" icon={<InfoCircleOutlined />}>
-            Only the Shop Owner can add accounts, change roles or activate and deactivate access.
+            Only the Shop Owner can add accounts or activate and deactivate access.
           </NoticeBox>
           <NoticeBox title="A secure start" icon={<InfoCircleOutlined />}>
             Share temporary credentials privately. Ask the new member to update their password after signing in.

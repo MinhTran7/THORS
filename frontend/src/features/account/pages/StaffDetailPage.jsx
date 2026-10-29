@@ -32,7 +32,7 @@ export default function StaffDetailPage() {
   const { id } = useParams();
   const location = useLocation();
   const { data, error, mutate } = useSWR(['account', id], () => accountsApi.detail(id), { revalidateOnFocus: false });
-  useCrumbs(['Staff', data?.fullName ?? '…']);
+  useCrumbs(['Family', data?.fullName ?? '…']);
   const [toast, showToast] = useToast();
   const [busy, setBusy] = useState(false);
 
@@ -62,11 +62,11 @@ export default function StaffDetailPage() {
   return (
     <Box>
       <PageHeader
-        back={{ to: '/staff', label: 'Staff List' }}
-        title="Staff Detail"
+        back={{ to: '/family', label: 'Family List' }}
+        title="Family Member Detail"
         subtitle="Account information, assigned role and access status."
         action={
-          <OutlineButton component={RouterLink} to={`/staff/${id}/edit`} startIcon={<EditOutlined />} disabled={!data}>
+          <OutlineButton component={RouterLink} to={`/family/${id}/edit`} startIcon={<EditOutlined />} disabled={!data}>
             Edit account
           </OutlineButton>
         }
