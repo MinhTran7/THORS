@@ -22,8 +22,11 @@ export async function api(path, options = {}) {
     response = await fetch(`/api${path}`, {
       method,
       credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json', ...(!['GET', 'HEAD'].includes(method) ? { [csrf.headerName]: csrf.token } : {}) },
-      ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {})
+      headers: {
+        ...(!options.form ? { 'Content-Type': 'application/json' } : {}),
+        ...(!['GET', 'HEAD'].includes(method) ? { [csrf.headerName]: csrf.token } : {})
+      },
+      ...(options.form ? { body: options.form } : options.body !== undefined ? { body: JSON.stringify(options.body) } : {})
     });
   } catch {
     throw new ApiError(0, 'CONNECTION', 'Không kết nối được với hệ thống. Vui lòng thử lại.');

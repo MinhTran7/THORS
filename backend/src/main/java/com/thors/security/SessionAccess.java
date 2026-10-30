@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 public class SessionAccess {
   private final AccountRepository users;
   private final HttpSessionSecurityContextRepository contexts =
-      new HttpSessionSecurityContextRepository();
+          new HttpSessionSecurityContextRepository();
 
   public SessionAccess(AccountRepository users) {
     this.users = users;
@@ -26,12 +26,12 @@ public class SessionAccess {
     if (auth == null || !(auth.getPrincipal() instanceof SessionUser p))
       throw new ApiException(401, "UNAUTHENTICATED", "Vui lòng đăng nhập.");
     var a =
-        users
-            .byId(p.userId())
-            .orElseThrow(
-                () -> new ApiException(401, "UNAUTHENTICATED", "Phiên đăng nhập không hợp lệ."));
+            users
+                    .byId(p.userId())
+                    .orElseThrow(
+                            () -> new ApiException(401, "UNAUTHENTICATED", "Phiên đăng nhập không hợp lệ."));
     if (!a.active() || a.authVersion() != p.authVersion()
-        || !a.passwordHash().equals(p.passwordHash()) || !a.role().equals(p.role()))
+            || !a.passwordHash().equals(p.passwordHash()) || !a.role().equals(p.role()))
       throw new ApiException(401, "SESSION_EXPIRED", "Phiên đăng nhập đã hết hiệu lực.");
     return a;
   }
@@ -40,12 +40,13 @@ public class SessionAccess {
     if (request.getSession(false) != null) request.changeSessionId();
     var context = SecurityContextHolder.createEmptyContext();
     context.setAuthentication(
-        new UsernamePasswordAuthenticationToken(
-            SessionUser.from(a), null, List.of(new SimpleGrantedAuthority("ROLE_" + a.role()))));
+            new UsernamePasswordAuthenticationToken(
+                    SessionUser.from(a), null, List.of(new SimpleGrantedAuthority("ROLE_" + a.role()))));
     SecurityContextHolder.setContext(context);
     contexts.saveContext(context, request, response);
     request.getSession().removeAttribute("OTP_CHALLENGE");
     request.getSession().removeAttribute("RESET_GRANT");
+    users.audit(a.id(), "LOGIN", a.id(), "IP " + request.getRemoteAddr());
   }
 
   public void clear(HttpServletRequest req, HttpServletResponse res) {

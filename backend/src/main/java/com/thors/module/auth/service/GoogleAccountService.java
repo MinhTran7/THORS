@@ -16,12 +16,12 @@ public class GoogleAccountService {
 
   @Transactional
   public Account resolve(
-      String subject,
-      String email,
-      String name,
-      boolean verified,
-      Integer linkUser,
-      Long linkVersion) {
+          String subject,
+          String email,
+          String name,
+          boolean verified,
+          Integer linkUser,
+          Long linkVersion) {
     if (!verified || subject == null || subject.isBlank() || subject.length() > 255)
       throw new ApiException(400, "GOOGLE_EMAIL", "Google chưa xác minh email.");
     users.lockIdentityRegistry();
@@ -30,11 +30,11 @@ public class GoogleAccountService {
       var actor = users.lock(linkUser);
       if (!actor.active() || linkVersion == null || actor.authVersion() != linkVersion)
         throw new ApiException(401, "LINK_EXPIRED", "Phiên liên kết đã hết hiệu lực.");
-      if (!ContactNormalizer.email(actor.email()).equals(ContactNormalizer.email(email)))
+      if (actor.email() == null || !ContactNormalizer.email(actor.email()).equals(ContactNormalizer.email(email)))
         throw new ApiException(
-            409,
-            "GOOGLE_EMAIL_MISMATCH",
-            "Hãy chọn tài khoản Google có cùng email với tài khoản THORS.");
+                409,
+                "GOOGLE_EMAIL_MISMATCH",
+                "Hãy chọn tài khoản Google có cùng email với tài khoản THORS.");
       if (linked.isPresent() && linked.get().id() != actor.id())
         throw new ApiException(409, "GOOGLE_IN_USE", "Google đã liên kết với tài khoản khác.");
       if (actor.googleSubject() != null && !actor.googleSubject().equals(users.googleKey(subject)))
@@ -52,18 +52,18 @@ public class GoogleAccountService {
     String normalized = ContactNormalizer.email(email);
     if (users.byIdentifier(normalized).isPresent())
       throw new ApiException(
-          409,
-          "GOOGLE_LINK_REQUIRED",
-          "Email đã có tài khoản THORS. Đăng nhập bằng mật khẩu để liên kết Google trước.");
+              409,
+              "GOOGLE_LINK_REQUIRED",
+              "Email đã có tài khoản THORS. Đăng nhập bằng mật khẩu để liên kết Google trước.");
     return users.create(
-        "CUSTOMER",
-        ContactNormalizer.name(name == null || name.isBlank() ? normalized : name),
-        "!GOOGLE_ONLY",
-        normalized,
-        null,
-        "ACTIVE",
-        null,
-        subject,
-        true);
+            "CUSTOMER",
+            ContactNormalizer.name(name == null || name.isBlank() ? normalized : name),
+            "!GOOGLE_ONLY",
+            normalized,
+            null,
+            "ACTIVE",
+            null,
+            subject,
+            true);
   }
 }

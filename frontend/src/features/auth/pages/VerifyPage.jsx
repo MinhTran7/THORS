@@ -32,13 +32,15 @@ export default function VerifyPage() {
     <AuthShell
       title="Nhập mã xác minh"
       subtitle={
-        context
-          ? `Mã OTP đã gửi qua ${context.channel === 'EMAIL' ? 'email' : 'SMS'} đến ${context.destination}.`
+        context && context.context !== 'RESET'
+          ? `Mã OTP đã gửi qua email đến ${context.destination}.`
           : 'Nếu tài khoản có kênh đã xác minh phù hợp, hệ thống sẽ gửi OTP.'
       }
     >
       {error && <Alert severity="error">{error}</Alert>}
-      <Typography color="text.secondary">OTP gồm 6 chữ số, có hiệu lực 5 phút và tối đa 5 lần nhập sai.</Typography>
+      <Typography color="text.secondary">
+        OTP gồm 6 chữ số, có hiệu lực 5 phút. Nhập sai 5 lần sẽ hủy mã và tạm dừng OTP 15 phút; sau đó cần gửi mã mới.
+      </Typography>
       <FieldsForm
         initialValues={{ code: '' }}
         schema={Yup.object({

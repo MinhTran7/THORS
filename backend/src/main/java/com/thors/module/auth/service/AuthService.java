@@ -5,6 +5,8 @@ import com.thors.module.account.entity.Account;
 import com.thors.module.account.repository.AccountRepository;
 import com.thors.module.auth.dto.AuthRequests.*;
 import com.thors.module.auth.repository.OtpRepository;
+import com.thors.module.notification.service.NotificationPublisher;
+import com.thors.module.notification.service.NotificationTypes;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,43 +16,62 @@ public class AuthService {
   private final AccountRepository users;
   private final PasswordEncoder passwords;
   private final OtpRepository codes;
+  private final OtpService otp;
+  private final NotificationPublisher notices;
   private final String dummy;
 
-  public AuthService(AccountRepository users, PasswordEncoder passwords, OtpRepository codes) {
+  public AuthService(
+          AccountRepository users,
+          PasswordEncoder passwords,
+          OtpRepository codes,
+          OtpService otp,
+          NotificationPublisher notices) {
     this.users = users;
     this.passwords = passwords;
     this.codes = codes;
+    this.otp = otp;
+    this.notices = notices;
     this.dummy = passwords.encode(java.util.UUID.randomUUID().toString());
   }
 
   @Transactional
-  public Account register(Register r) {
+  public com.thors.module.auth.entity.OtpChallenge register(Register r) {
     confirm(r.password(), r.confirmPassword());
-    String email = ContactNormalizer.email(r.email());
-    String phone = ContactNormalizer.phone(r.phone());
-    if (phone == null) throw new ApiException(400, "PHONE", "Nhập số điện thoại.");
-    return users.create(
-        "CUSTOMER",
-        ContactNormalizer.name(r.fullName()),
-        passwords.encode(r.password()),
-        email,
-        phone,
-        "PENDING_VERIFICATION",
-        null,
-        null,
-        false);
+    String email = ContactNormalizer.email(r.identifier());
+    otp.requireAvailable("EMAIL");
+    var account = users.create(
+            "CUSTOMER",
+            ContactNormalizer.name(r.fullName()),
+            passwords.encode(r.password()),
+            email,
+            null,
+            "PENDING_VERIFICATION",
+            null,
+            null,
+            false);
+    // Account, audit and OTP writes roll back together if delivery fails.
+    return otp.issue(account.id(), "REGISTER", "EMAIL", false);
   }
 
+  @Transactional(noRollbackFor = ApiException.class)
   public Account authenticate(String identifier, String password) {
-    var a = users.byIdentifier(ContactNormalizer.identifier(identifier));
+    var a = users.byIdentifier(ContactNormalizer.email(identifier));
+    if (a.isPresent()) a = java.util.Optional.of(users.lock(a.get().id()));
     String hash = a.map(Account::passwordHash).orElse(dummy);
     boolean correct =
-        passwords.matches(password == null ? "" : password, hash.startsWith("!") ? dummy : hash);
-    if (a.isEmpty() || hash.startsWith("!") || !correct)
-      throw new ApiException(401, "CREDENTIALS", "Email/số điện thoại hoặc mật khẩu không đúng.");
+            passwords.matches(password == null ? "" : password, hash.startsWith("!") ? dummy : hash);
+    boolean coolingDown = a.isPresent() && codes.loginCoolingDown(a.get().id());
+    if (a.isEmpty() || hash.startsWith("!") || !correct) {
+      if (a.isPresent() && !coolingDown) codes.loginFailure(a.get().id());
+      // Identical error for missing accounts, incorrect passwords and blocked guessing.
+      throw new ApiException(401, "CREDENTIALS", "Email hoặc mật khẩu không đúng. Nếu đã sai 5 lần liên tiếp, vui lòng đợi 15 phút.");
+    }
+    if (coolingDown)
+      throw new ApiException(429, "LOGIN_COOLDOWN", "Đã nhập sai mật khẩu 5 lần. Vui lòng đợi hết 15 phút kể từ lần sai thứ 5.");
     var account = a.get();
     if (!account.active() && !account.pending())
       throw new ApiException(403, "ACCOUNT_BLOCKED", "Tài khoản đã bị khóa hoặc vô hiệu hóa.");
+    codes.loginSuccess(account.id());
     return account;
   }
 
@@ -63,6 +84,11 @@ public class AuthService {
     users.password(user, passwords.encode(password), false);
     codes.invalidateAll(user);
     users.audit(user, "PASSWORD_RESET", user, "Password replaced; sessions revoked");
+    notices.toUser(
+            user,
+            NotificationTypes.ACCOUNT_SECURITY,
+            "Mật khẩu đã được đặt lại",
+            "Mật khẩu của bạn vừa được đặt lại và bạn đã bị đăng xuất khỏi mọi thiết bị. Nếu không phải bạn thực hiện, hãy liên hệ quản trị viên ngay.");
   }
 
   @Transactional
@@ -70,13 +96,18 @@ public class AuthService {
     confirm(request.password(), request.confirmPassword());
     var a = users.lock(actor.id());
     if (a.authVersion() != actor.authVersion()
-        || !a.active()
-        || a.passwordHash().startsWith("!")
-        || !passwords.matches(request.currentPassword(), a.passwordHash()))
+            || !a.active()
+            || a.passwordHash().startsWith("!")
+            || !passwords.matches(request.currentPassword(), a.passwordHash()))
       throw new ApiException(400, "PASSWORD_CURRENT", "Mật khẩu hiện tại không đúng.");
     users.password(a.id(), passwords.encode(request.password()), false);
     codes.invalidateAll(a.id());
     users.audit(a.id(), "PASSWORD_CHANGE", a.id(), "Password replaced; sessions revoked");
+    notices.toUser(
+            a.id(),
+            NotificationTypes.ACCOUNT_SECURITY,
+            "Mật khẩu đã được thay đổi",
+            "Mật khẩu của bạn vừa được thay đổi và bạn đã bị đăng xuất khỏi mọi thiết bị. Nếu không phải bạn thực hiện, hãy liên hệ quản trị viên ngay.");
   }
 
   public static void confirm(String p, String confirmation) {

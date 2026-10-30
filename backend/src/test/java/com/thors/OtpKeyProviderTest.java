@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class OtpKeyProviderTest {
   Settings settings(String key) {
-    return new Settings(null, new Settings.Auth(key, 300, 60, 10), null, null, null);
+    return new Settings(null, new Settings.Auth(key, 300, 60, 10), null, null, null, null);
   }
   @Test void blankKeyCreatesIndependentSecureKeys() {
     var one = new OtpKeyProvider(settings("")).value();

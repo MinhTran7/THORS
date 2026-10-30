@@ -6,31 +6,29 @@ public final class AuthRequests {
   private AuthRequests() {}
 
   public record Register(
-      @NotBlank(message = "Nhập họ tên.") String fullName,
-      @NotBlank(message = "Nhập email.") @Email(message = "Email không hợp lệ.") String email,
-      @NotBlank(message = "Nhập số điện thoại.") String phone,
-      @NotBlank(message = "Nhập mật khẩu.") String password,
-      @NotBlank(message = "Xác nhận mật khẩu.") String confirmPassword,
-      @NotBlank String channel) {}
+          @NotBlank(message = "Nhập họ tên.") String fullName,
+          @NotBlank(message = "Nhập email hoặc số điện thoại.") String identifier,
+          @NotBlank(message = "Nhập mật khẩu.") String password,
+          @NotBlank(message = "Xác nhận mật khẩu.") String confirmPassword) {}
 
   public record Login(
-      @NotBlank(message = "Nhập email hoặc số điện thoại.") String identifier,
-      @NotBlank(message = "Nhập mật khẩu.") String password) {}
+          @NotBlank(message = "Nhập email hoặc số điện thoại.") String identifier,
+          @NotBlank(message = "Nhập mật khẩu.") String password) {}
 
   public record Activation(
-      @NotBlank String identifier, @NotBlank String password, @NotBlank String channel) {}
+          @NotBlank String identifier, @NotBlank String password) {}
 
-  public record Forgot(@NotBlank String identifier, @NotBlank String channel) {}
+  public record Forgot(@NotBlank String identifier) {}
 
   public record Code(
-      @Pattern(regexp = "[0-9]{6}", message = "OTP gồm 6 chữ số.") @NotNull String code) {}
+          @Pattern(regexp = "[0-9]{6}", message = "OTP gồm 6 chữ số.") @NotNull String code) {}
 
   public record Reset(@NotBlank String password, @NotBlank String confirmPassword) {}
 
   public record Channel(@NotBlank String channel) {}
 
   public record ChangePassword(
-      @NotBlank String currentPassword,
-      @NotBlank String password,
-      @NotBlank String confirmPassword) {}
+          @NotBlank String currentPassword,
+          @NotBlank String password,
+          @NotBlank String confirmPassword) {}
 }

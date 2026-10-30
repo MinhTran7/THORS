@@ -44,6 +44,9 @@ import AddPromotionPage from 'features/promotion/AddPromotionPage';
 
 // Returns Management (Đổi trả / Hoàn hàng)
 import ReturnsPage from 'features/returns/ReturnsPage';
+
+// Cart (Giỏ hàng)
+import CartPage from 'features/cart/CartPage';
 export default createBrowserRouter([
   { path: '/', element: <Navigate to="/workspace" replace /> },
   { path: '/login', element: <LoginPage /> },
@@ -66,6 +69,11 @@ export default createBrowserRouter([
           { path: '/profile/edit', element: <UpdateProfilePage /> },
           { path: '/profile/password', element: <ChangePasswordPage /> },
           { path: '/notifications', element: <NotificationPage /> },
+          {
+            // Giỏ hàng chỉ dành cho khách hàng
+            element: <RequireAuth roles={['CUSTOMER']} />,
+            children: [{ path: '/cart', element: <CartPage /> }]
+          },
           {
             // Customer xem đơn của mình; Owner và Family Member xem đơn online của cửa hàng
             element: <RequireAuth roles={['CUSTOMER', 'OWNER', 'FAMILY_MEMBER']} />,
