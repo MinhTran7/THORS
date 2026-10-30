@@ -1,8 +1,8 @@
-
 package com.thors.module.promotion.entity;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 public record Promotion(
         Integer promotionId,
@@ -16,6 +16,8 @@ public record Promotion(
         String discountType,
         BigDecimal minOrderValue,
         BigDecimal maxDiscountAmount,
-        Integer usageLimit
+        Integer usageLimit,
+        String applyScope,
+        List<Integer> productIds
 ) {
 }

@@ -1,4 +1,3 @@
-
 package com.thors.module.promotion.repository;
 
 import com.thors.module.promotion.entity.Promotion;
@@ -13,6 +12,7 @@ import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
@@ -31,7 +31,8 @@ public class PromotionRepository {
                    discount_type,
                    min_order_value,
                    max_discount_amount,
-                   usage_limit
+                   usage_limit,
+                   apply_scope
             FROM promotion
             """;
 
@@ -71,7 +72,10 @@ public class PromotionRepository {
         ).stream().findFirst();
     }
 
-    public Optional<Promotion> findAvailableById(int id, LocalDateTime now) {
+    public Optional<Promotion> findAvailableById(
+            int id,
+            LocalDateTime now
+    ) {
         return jdbc.query(
                 SELECT_COLUMNS + """
                          WHERE promotion_id = ?
@@ -96,6 +100,7 @@ public class PromotionRepository {
             LocalDateTime startDate,
             LocalDateTime endDate,
             Integer usageLimit,
+            String applyScope,
             int createdBy
     ) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
@@ -113,10 +118,11 @@ public class PromotionRepository {
                         start_date,
                         end_date,
                         usage_limit,
+                        apply_scope,
                         status,
                         created_by
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?)
                     """,
                     Statement.RETURN_GENERATED_KEYS
             );
@@ -136,7 +142,8 @@ public class PromotionRepository {
                 statement.setInt(9, usageLimit);
             }
 
-            statement.setInt(10, createdBy);
+            statement.setString(10, applyScope);
+            statement.setInt(11, createdBy);
 
             return statement;
         }, keyHolder);
@@ -160,7 +167,8 @@ public class PromotionRepository {
             BigDecimal maxDiscountAmount,
             LocalDateTime startDate,
             LocalDateTime endDate,
-            Integer usageLimit
+            Integer usageLimit,
+            String applyScope
     ) {
         return jdbc.update(
                 """
@@ -173,7 +181,8 @@ public class PromotionRepository {
                     max_discount_amount = ?,
                     start_date = ?,
                     end_date = ?,
-                    usage_limit = ?
+                    usage_limit = ?,
+                    apply_scope = ?
                 WHERE promotion_id = ?
                 """,
                 name,
@@ -185,8 +194,73 @@ public class PromotionRepository {
                 Timestamp.valueOf(startDate),
                 Timestamp.valueOf(endDate),
                 usageLimit,
+                applyScope,
                 id
         );
+    }
+
+    public List<Integer> findProductIds(int promotionId) {
+        return jdbc.queryForList(
+                """
+                SELECT product_id
+                FROM promotion_product
+                WHERE promotion_id = ?
+                ORDER BY product_id
+                """,
+                Integer.class,
+                promotionId
+        );
+    }
+
+    public void replacePromotionProducts(
+            int promotionId,
+            List<Integer> productIds
+    ) {
+        jdbc.update(
+                "DELETE FROM promotion_product WHERE promotion_id = ?",
+                promotionId
+        );
+
+        if (productIds == null || productIds.isEmpty()) {
+            return;
+        }
+
+        jdbc.batchUpdate(
+                """
+                INSERT INTO promotion_product (promotion_id, product_id)
+                VALUES (?, ?)
+                """,
+                productIds,
+                productIds.size(),
+                (statement, productId) -> {
+                    statement.setInt(1, promotionId);
+                    statement.setInt(2, productId);
+                }
+        );
+    }
+
+    public int countActiveProducts(List<Integer> productIds) {
+        if (productIds == null || productIds.isEmpty()) {
+            return 0;
+        }
+
+        String placeholders = String.join(
+                ",",
+                Collections.nCopies(productIds.size(), "?")
+        );
+
+        Integer count = jdbc.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM product
+                WHERE status = 'ACTIVE'
+                  AND product_id IN (
+                """ + placeholders + ")",
+                Integer.class,
+                productIds.toArray()
+        );
+
+        return count == null ? 0 : count;
     }
 
     public int updateStatus(int id, String status) {

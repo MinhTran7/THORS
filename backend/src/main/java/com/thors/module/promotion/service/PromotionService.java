@@ -1,4 +1,3 @@
-
 package com.thors.module.promotion.service;
 
 import com.thors.common.ApiException;
@@ -14,6 +13,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 
 @Service
 public class PromotionService {
@@ -50,13 +50,16 @@ public class PromotionService {
         String role = currentRole();
 
         if ("OWNER".equals(role)) {
-            return repository.findById(id)
-                    .orElseThrow(this::notFound);
+            return withProductIds(
+                    repository.findById(id).orElseThrow(this::notFound)
+            );
         }
 
         if ("CUSTOMER".equals(role)) {
-            return repository.findAvailableById(id, LocalDateTime.now())
-                    .orElseThrow(this::notFound);
+            return withProductIds(
+                    repository.findAvailableById(id, LocalDateTime.now())
+                            .orElseThrow(this::notFound)
+            );
         }
 
         throw forbidden();
@@ -97,13 +100,18 @@ public class PromotionService {
         validateCreateDates(startDate, endDate);
         validateUsageLimit(usageLimit);
 
-        if ("FIXED".equals(type)
-                && maximum != null) {
+        if ("FIXED".equals(type) && maximum != null) {
             throw badRequest(
                     "PROMOTION_MAXIMUM_NOT_ALLOWED",
                     "Số tiền giảm tối đa chỉ áp dụng cho giảm giá theo phần trăm."
             );
         }
+
+        String applyScope = normalizeApplyScope(request.applyScope());
+        List<Integer> productIds = validateProductSelection(
+                applyScope,
+                request.productIds()
+        );
 
         int createdId = repository.create(
                 name,
@@ -115,11 +123,15 @@ public class PromotionService {
                 startDate,
                 endDate,
                 usageLimit,
+                applyScope,
                 sessionAccess.current().id()
         );
 
-        return repository.findById(createdId)
-                .orElseThrow(this::notFound);
+        repository.replacePromotionProducts(createdId, productIds);
+
+        return withProductIds(
+                repository.findById(createdId).orElseThrow(this::notFound)
+        );
     }
 
     @Transactional
@@ -167,7 +179,6 @@ public class PromotionService {
             );
         }
 
-        // Không cho sửa khuyến mãi đang bật thành khoảng thời gian đã kết thúc.
         if ("ACTIVE".equals(existing.status())
                 && !endDate.isAfter(LocalDateTime.now())) {
             throw badRequest(
@@ -175,6 +186,20 @@ public class PromotionService {
                     "Khuyến mãi đang bật phải có thời gian kết thúc trong tương lai."
             );
         }
+
+        String applyScope = request.applyScope() == null
+                ? normalizeApplyScope(existing.applyScope())
+                : normalizeApplyScope(request.applyScope());
+
+        List<Integer> requestedProductIds =
+                request.productIds() == null && request.applyScope() == null
+                        ? repository.findProductIds(id)
+                        : request.productIds();
+
+        List<Integer> productIds = validateProductSelection(
+                applyScope,
+                requestedProductIds
+        );
 
         int updated = repository.update(
                 id,
@@ -186,12 +211,81 @@ public class PromotionService {
                 maximum,
                 startDate,
                 endDate,
-                usageLimit
+                usageLimit,
+                applyScope
         );
 
         if (updated == 0) {
             throw notFound();
         }
+
+        repository.replacePromotionProducts(id, productIds);
+    }
+
+    private String normalizeApplyScope(String scope) {
+        String normalized = scope == null || scope.isBlank()
+                ? "ALL"
+                : scope.trim().toUpperCase(Locale.ROOT);
+
+        if (!"ALL".equals(normalized) && !"SELECTED".equals(normalized)) {
+            throw badRequest(
+                    "PROMOTION_SCOPE_INVALID",
+                    "Phạm vi áp dụng không hợp lệ."
+            );
+        }
+
+        return normalized;
+    }
+
+    private List<Integer> validateProductSelection(
+            String scope,
+            List<Integer> ids
+    ) {
+        if ("ALL".equals(scope)) {
+            return List.of();
+        }
+
+        if (ids == null || ids.isEmpty()) {
+            throw badRequest(
+                    "PROMOTION_PRODUCTS_REQUIRED",
+                    "Vui lòng chọn ít nhất một sản phẩm áp dụng."
+            );
+        }
+
+        List<Integer> uniqueIds = ids.stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+
+        if (uniqueIds.isEmpty()
+                || uniqueIds.size() != ids.size()
+                || repository.countActiveProducts(uniqueIds) != uniqueIds.size()) {
+            throw badRequest(
+                    "PROMOTION_PRODUCTS_INVALID",
+                    "Danh sách sản phẩm không hợp lệ hoặc có sản phẩm không còn hoạt động."
+            );
+        }
+
+        return uniqueIds;
+    }
+
+    private Promotion withProductIds(Promotion promotion) {
+        return new Promotion(
+                promotion.promotionId(),
+                promotion.name(),
+                promotion.description(),
+                promotion.discountValue(),
+                promotion.startDate(),
+                promotion.endDate(),
+                promotion.status(),
+                promotion.createdBy(),
+                promotion.discountType(),
+                promotion.minOrderValue(),
+                promotion.maxDiscountAmount(),
+                promotion.usageLimit(),
+                promotion.applyScope(),
+                repository.findProductIds(promotion.promotionId())
+        );
     }
 
     @Transactional
