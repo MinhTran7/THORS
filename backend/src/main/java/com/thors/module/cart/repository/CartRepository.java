@@ -18,7 +18,6 @@ public class CartRepository {
             pd.size AS size,
             pd.color AS color,
             pd.price AS price,
-            pd.stock_quantity AS stock,
             ci.quantity AS quantity,
             (
                 SELECT pi.image_url
@@ -59,7 +58,6 @@ public class CartRepository {
     /** Thông tin một biến thể (để kiểm tra trước khi thêm vào giỏ). Null nếu không tồn tại. */
     public Map<String, Object> findDetail(int detailId) {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
-            SELECT pd.stock_quantity AS stock,
                    (p.status = 'ACTIVE'
                     AND pd.status = 'ACTIVE'
                     AND pd.online_sales_enabled = 1) AS available
@@ -110,4 +108,3 @@ public class CartRepository {
             """, cartItemId, userId);
     }
 }
-
