@@ -2,6 +2,7 @@
 package com.thors.module.promotion.service;
 
 import com.thors.common.ApiException;
+import com.thors.module.promotion.dto.CreatePromotionRequest;
 import com.thors.module.promotion.dto.UpdatePromotionRequest;
 import com.thors.module.promotion.entity.Promotion;
 import com.thors.module.promotion.repository.PromotionRepository;
@@ -10,8 +11,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 public class PromotionService {
@@ -38,7 +40,7 @@ public class PromotionService {
         }
 
         if ("CUSTOMER".equals(role)) {
-            return repository.findAvailable(LocalDate.now());
+            return repository.findAvailable(LocalDateTime.now());
         }
 
         throw forbidden();
@@ -53,11 +55,71 @@ public class PromotionService {
         }
 
         if ("CUSTOMER".equals(role)) {
-            return repository.findAvailableById(id, LocalDate.now())
+            return repository.findAvailableById(id, LocalDateTime.now())
                     .orElseThrow(this::notFound);
         }
 
         throw forbidden();
+    }
+
+    @Transactional
+    public Promotion create(CreatePromotionRequest request) {
+        requireOwner();
+
+        if (request == null) {
+            throw badRequest(
+                    "PROMOTION_REQUIRED",
+                    "Vui lòng nhập thông tin khuyến mãi."
+            );
+        }
+
+        String name = request.name() == null
+                ? ""
+                : request.name().trim();
+
+        String description = normalizeDescription(request.description());
+
+        String type = request.discountType() == null
+                ? ""
+                : request.discountType().trim().toUpperCase(Locale.ROOT);
+
+        BigDecimal value = request.discountValue();
+        BigDecimal minimum = request.minOrderValue();
+        BigDecimal maximum = request.maxDiscountAmount();
+        LocalDateTime startDate = request.startDate();
+        LocalDateTime endDate = request.endDate();
+        Integer usageLimit = request.usageLimit();
+
+        validateName(name);
+        validateDescription(description);
+        validateDiscount(type, value);
+        validateOrderValues(minimum, maximum);
+        validateCreateDates(startDate, endDate);
+        validateUsageLimit(usageLimit);
+
+        if ("FIXED".equals(type)
+                && maximum != null) {
+            throw badRequest(
+                    "PROMOTION_MAXIMUM_NOT_ALLOWED",
+                    "Số tiền giảm tối đa chỉ áp dụng cho giảm giá theo phần trăm."
+            );
+        }
+
+        int createdId = repository.create(
+                name,
+                description,
+                type,
+                value,
+                minimum,
+                maximum,
+                startDate,
+                endDate,
+                usageLimit,
+                sessionAccess.current().id()
+        );
+
+        return repository.findById(createdId)
+                .orElseThrow(this::notFound);
     }
 
     @Transactional
@@ -71,36 +133,47 @@ public class PromotionService {
             );
         }
 
-        repository.findById(id).orElseThrow(this::notFound);
+        Promotion existing = repository.findById(id)
+                .orElseThrow(this::notFound);
 
         String name = request.name() == null
                 ? ""
                 : request.name().trim();
 
-        String description = request.description() == null
-                ? null
-                : request.description().trim();
+        String description = normalizeDescription(request.description());
 
         String type = request.discountType() == null
                 ? ""
-                : request.discountType().trim().toUpperCase();
+                : request.discountType().trim().toUpperCase(Locale.ROOT);
 
         BigDecimal value = request.discountValue();
         BigDecimal minimum = request.minOrderValue();
         BigDecimal maximum = request.maxDiscountAmount();
-        LocalDate startDate = request.startDate();
-        LocalDate endDate = request.endDate();
+        LocalDateTime startDate = request.startDate();
+        LocalDateTime endDate = request.endDate();
         Integer usageLimit = request.usageLimit();
 
         validateName(name);
         validateDescription(description);
         validateDiscount(type, value);
         validateOrderValues(minimum, maximum);
-        validateDates(startDate, endDate);
+        validateUpdateDates(startDate, endDate);
         validateUsageLimit(usageLimit);
 
-        if (description != null && description.isBlank()) {
-            description = null;
+        if ("FIXED".equals(type) && maximum != null) {
+            throw badRequest(
+                    "PROMOTION_MAXIMUM_NOT_ALLOWED",
+                    "Số tiền giảm tối đa chỉ áp dụng cho giảm giá theo phần trăm."
+            );
+        }
+
+        // Không cho sửa khuyến mãi đang bật thành khoảng thời gian đã kết thúc.
+        if ("ACTIVE".equals(existing.status())
+                && !endDate.isAfter(LocalDateTime.now())) {
+            throw badRequest(
+                    "PROMOTION_DATES_EXPIRED",
+                    "Khuyến mãi đang bật phải có thời gian kết thúc trong tương lai."
+            );
         }
 
         int updated = repository.update(
@@ -125,15 +198,47 @@ public class PromotionService {
     public void changeStatus(int id, String status) {
         requireOwner();
 
-        if (!"ACTIVE".equals(status) && !"INACTIVE".equals(status)) {
+        if (status == null) {
+            throw badRequest(
+                    "PROMOTION_STATUS_INVALID",
+                    "Trạng thái khuyến mãi không hợp lệ."
+            );
+        }
+
+        String normalizedStatus = status.trim().toUpperCase(Locale.ROOT);
+
+        if (!"ACTIVE".equals(normalizedStatus)
+                && !"INACTIVE".equals(normalizedStatus)) {
             throw badRequest(
                     "PROMOTION_STATUS_INVALID",
                     "Trạng thái chỉ được là ACTIVE hoặc INACTIVE."
             );
         }
 
-        repository.findById(id).orElseThrow(this::notFound);
-        repository.updateStatus(id, status);
+        Promotion promotion = repository.findById(id)
+                .orElseThrow(this::notFound);
+
+        if ("ACTIVE".equals(normalizedStatus)) {
+            LocalDateTime now = LocalDateTime.now();
+
+            if (promotion.endDate() == null
+                    || !promotion.endDate().isAfter(now)) {
+                throw badRequest(
+                        "PROMOTION_ALREADY_EXPIRED",
+                        "Khuyến mãi đã hết hạn. Hãy cập nhật thời gian trước khi bật lại."
+                );
+            }
+        }
+
+        repository.updateStatus(id, normalizedStatus);
+    }
+
+    private String normalizeDescription(String description) {
+        if (description == null || description.isBlank()) {
+            return null;
+        }
+
+        return description.trim();
     }
 
     private void validateName(String name) {
@@ -162,10 +267,10 @@ public class PromotionService {
             );
         }
 
-        if (value == null || value.compareTo(ZERO) < 0) {
+        if (value == null || value.compareTo(ZERO) <= 0) {
             throw badRequest(
                     "PROMOTION_VALUE_INVALID",
-                    "Giá trị giảm phải lớn hơn hoặc bằng 0."
+                    "Giá trị giảm giá phải lớn hơn 0."
             );
         }
 
@@ -205,13 +310,33 @@ public class PromotionService {
         }
     }
 
-    private void validateDates(LocalDate startDate, LocalDate endDate) {
+    private void validateCreateDates(
+            LocalDateTime startDate,
+            LocalDateTime endDate
+    ) {
+        LocalDateTime now = LocalDateTime.now();
+
+        if (startDate == null
+                || endDate == null
+                || startDate.isBefore(now)
+                || !endDate.isAfter(startDate)) {
+            throw badRequest(
+                    "PROMOTION_DATES_INVALID",
+                    "Thời gian bắt đầu phải từ hiện tại trở đi và thời gian kết thúc phải sau thời gian bắt đầu."
+            );
+        }
+    }
+
+    private void validateUpdateDates(
+            LocalDateTime startDate,
+            LocalDateTime endDate
+    ) {
         if (startDate == null
                 || endDate == null
                 || !endDate.isAfter(startDate)) {
             throw badRequest(
                     "PROMOTION_DATES_INVALID",
-                    "Ngày kết thúc phải sau ngày bắt đầu."
+                    "Thời gian kết thúc phải sau thời gian bắt đầu."
             );
         }
     }

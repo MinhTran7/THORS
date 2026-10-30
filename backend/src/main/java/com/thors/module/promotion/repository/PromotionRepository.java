@@ -4,10 +4,15 @@ package com.thors.module.promotion.repository;
 import com.thors.module.promotion.entity.Promotion;
 import com.thors.module.promotion.mapper.PromotionMapper;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
+import java.sql.PreparedStatement;
+import java.sql.Statement;
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -44,17 +49,17 @@ public class PromotionRepository {
         );
     }
 
-    public List<Promotion> findAvailable(LocalDate today) {
+    public List<Promotion> findAvailable(LocalDateTime now) {
         return jdbc.query(
                 SELECT_COLUMNS + """
                          WHERE status = 'ACTIVE'
                            AND start_date <= ?
-                           AND end_date >= ?
+                           AND end_date > ?
                          ORDER BY end_date ASC, promotion_id DESC
                         """,
                 mapper,
-                today,
-                today
+                Timestamp.valueOf(now),
+                Timestamp.valueOf(now)
         );
     }
 
@@ -66,19 +71,83 @@ public class PromotionRepository {
         ).stream().findFirst();
     }
 
-    public Optional<Promotion> findAvailableById(int id, LocalDate today) {
+    public Optional<Promotion> findAvailableById(int id, LocalDateTime now) {
         return jdbc.query(
                 SELECT_COLUMNS + """
                          WHERE promotion_id = ?
                            AND status = 'ACTIVE'
                            AND start_date <= ?
-                           AND end_date >= ?
+                           AND end_date > ?
                         """,
                 mapper,
                 id,
-                today,
-                today
+                Timestamp.valueOf(now),
+                Timestamp.valueOf(now)
         ).stream().findFirst();
+    }
+
+    public int create(
+            String name,
+            String description,
+            String discountType,
+            BigDecimal discountValue,
+            BigDecimal minOrderValue,
+            BigDecimal maxDiscountAmount,
+            LocalDateTime startDate,
+            LocalDateTime endDate,
+            Integer usageLimit,
+            int createdBy
+    ) {
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+
+        int inserted = jdbc.update(connection -> {
+            PreparedStatement statement = connection.prepareStatement(
+                    """
+                    INSERT INTO promotion (
+                        name,
+                        description,
+                        discount_type,
+                        discount_value,
+                        min_order_value,
+                        max_discount_amount,
+                        start_date,
+                        end_date,
+                        usage_limit,
+                        status,
+                        created_by
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?)
+                    """,
+                    Statement.RETURN_GENERATED_KEYS
+            );
+
+            statement.setString(1, name);
+            statement.setString(2, description);
+            statement.setString(3, discountType);
+            statement.setBigDecimal(4, discountValue);
+            statement.setBigDecimal(5, minOrderValue);
+            statement.setBigDecimal(6, maxDiscountAmount);
+            statement.setTimestamp(7, Timestamp.valueOf(startDate));
+            statement.setTimestamp(8, Timestamp.valueOf(endDate));
+
+            if (usageLimit == null) {
+                statement.setNull(9, java.sql.Types.INTEGER);
+            } else {
+                statement.setInt(9, usageLimit);
+            }
+
+            statement.setInt(10, createdBy);
+
+            return statement;
+        }, keyHolder);
+
+        if (inserted != 1 || keyHolder.getKey() == null) {
+            throw new IllegalStateException(
+                    "Không thể lấy ID của khuyến mãi vừa tạo."
+            );
+        }
+
+        return keyHolder.getKey().intValue();
     }
 
     public int update(
@@ -89,8 +158,8 @@ public class PromotionRepository {
             BigDecimal discountValue,
             BigDecimal minOrderValue,
             BigDecimal maxDiscountAmount,
-            LocalDate startDate,
-            LocalDate endDate,
+            LocalDateTime startDate,
+            LocalDateTime endDate,
             Integer usageLimit
     ) {
         return jdbc.update(
@@ -113,8 +182,8 @@ public class PromotionRepository {
                 discountValue,
                 minOrderValue,
                 maxDiscountAmount,
-                startDate,
-                endDate,
+                Timestamp.valueOf(startDate),
+                Timestamp.valueOf(endDate),
                 usageLimit,
                 id
         );

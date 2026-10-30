@@ -256,7 +256,7 @@ export default function AddPromotionPage() {
                   onChange={updateField('name')}
                   required
                   fullWidth
-                  inputProps={{ maxLength: 150 }}
+                  inputProps={{ maxLength: 100 }}
                   sx={fieldSx}
                 />
 

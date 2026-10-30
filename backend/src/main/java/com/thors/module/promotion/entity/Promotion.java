@@ -2,15 +2,15 @@
 package com.thors.module.promotion.entity;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 public record Promotion(
         Integer promotionId,
         String name,
         String description,
         BigDecimal discountValue,
-        LocalDate startDate,
-        LocalDate endDate,
+        LocalDateTime startDate,
+        LocalDateTime endDate,
         String status,
         Integer createdBy,
         String discountType,

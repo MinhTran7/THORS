@@ -2,7 +2,7 @@
 package com.thors.module.promotion.dto;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 public record UpdatePromotionRequest(
         String name,
@@ -11,8 +11,8 @@ public record UpdatePromotionRequest(
         BigDecimal discountValue,
         BigDecimal minOrderValue,
         BigDecimal maxDiscountAmount,
-        LocalDate startDate,
-        LocalDate endDate,
+        LocalDateTime startDate,
+        LocalDateTime endDate,
         Integer usageLimit
 ) {
 }
