@@ -19,6 +19,7 @@ import StaffListPage from 'features/account/pages/StaffListPage';
 import StaffFormPage from 'features/account/pages/StaffFormPage';
 import StaffDetailPage from 'features/account/pages/StaffDetailPage';
 import AccountsPage from 'features/account/pages/AccountListPage';
+import SystemLogPage from 'features/account/pages/SystemLogPage';
 import WorkspacePage from 'features/account/WorkspacePage';
 import { AuthShell } from 'features/auth/components/AuthForm';
 
@@ -44,6 +45,7 @@ import AddPromotionPage from 'features/promotion/AddPromotionPage';
 
 // Returns Management (Đổi trả / Hoàn hàng)
 import ReturnsPage from 'features/returns/ReturnsPage';
+
 export default createBrowserRouter([
   { path: '/', element: <Navigate to="/workspace" replace /> },
   { path: '/login', element: <LoginPage /> },
@@ -83,27 +85,34 @@ export default createBrowserRouter([
               }
             ]
           },
-{ element: <RequireAuth roles={['ADMIN', 'OWNER']} />, children: [{ path: '/accounts', element: <AccountsPage /> }] },
-{
-  element: <RequireAuth roles={['OWNER']} />,
-  children: [
-    { path: '/family', element: <StaffListPage /> },
-    { path: '/family/new', element: <StaffFormPage /> },
-    { path: '/family/:id', element: <StaffDetailPage /> },
-    { path: '/family/:id/edit', element: <StaffFormPage /> },
-    // Category, Product & Returns (của DongNV)
-    { path: '/categories', element: <CategoryPage /> },
-    { path: '/products', element: <ProductPage /> },
-    { path: '/products/add', element: <AddProductPage /> },
-    { path: '/products/:productId', element: <ProductDetailPage /> },
-    { path: '/products/:productId/edit', element: <EditProductPage /> },
-    { path: '/returns', element: <ReturnsPage /> },
-    // Sales & Promotion (của phuoc)
-    { path: '/in-store-sales', element: <InStoreSalesPage /> },
-    { path: '/promotions', element: <PromotionPage /> },
-    { path: '/promotions/add', element: <AddPromotionPage /> }
-  ]
-},
+          {
+            element: <RequireAuth roles={['ADMIN', 'OWNER']} />,
+            children: [{ path: '/accounts', element: <AccountsPage /> }]
+          },
+          {
+            element: <RequireAuth roles={['ADMIN']} />,
+            children: [{ path: '/system-log', element: <SystemLogPage /> }]
+          },
+          {
+            element: <RequireAuth roles={['OWNER']} />,
+            children: [
+              { path: '/family', element: <StaffListPage /> },
+              { path: '/family/new', element: <StaffFormPage /> },
+              { path: '/family/:id', element: <StaffDetailPage /> },
+              { path: '/family/:id/edit', element: <StaffFormPage /> },
+              // Category, Product & Returns (của DongNV)
+              { path: '/categories', element: <CategoryPage /> },
+              { path: '/products', element: <ProductPage /> },
+              { path: '/products/add', element: <AddProductPage /> },
+              { path: '/products/:productId', element: <ProductDetailPage /> },
+              { path: '/products/:productId/edit', element: <EditProductPage /> },
+              { path: '/returns', element: <ReturnsPage /> },
+              // Sales & Promotion (của phuoc)
+              { path: '/in-store-sales', element: <InStoreSalesPage /> },
+              { path: '/promotions', element: <PromotionPage /> },
+              { path: '/promotions/add', element: <AddPromotionPage /> }
+            ]
+          }
         ]
       }
     ]

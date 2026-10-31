@@ -33,7 +33,7 @@ export const NAVIGATION = {
     { to: '/family', label: 'Family', icon: <TeamOutlined /> },
     { to: '/in-store-sales', label: 'In-store Sales', icon: <ShoppingCartOutlined /> },
     { to: '/promotions', label: 'Khuyến mãi', icon: <TagsOutlined /> },
-    { to: '/warehouse', label: 'Kho', icon: <ShopOutlined /> },
+    warehouse,
     profile
   ],
   FAMILY_MEMBER: [dashboard, orders, warehouse, profile],
