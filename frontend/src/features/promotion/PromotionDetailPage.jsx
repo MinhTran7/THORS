@@ -424,7 +424,7 @@ export default function PromotionDetailPage() {
         <Button
           variant="contained"
           startIcon={<EditOutlined />}
-          onClick={() => navigate(`/promotions/edit/${promotion.promotionId}`)}
+          onClick={() => navigate(`/promotions/${promotion.promotionId}/edit`)}
           sx={{
             alignSelf: { xs: 'flex-start', sm: 'center' },
             bgcolor: C.cyan,

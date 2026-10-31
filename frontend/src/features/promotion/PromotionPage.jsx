@@ -293,7 +293,6 @@ export default function PromotionPage() {
             >
               Quản lý khuyến mãi
             </Typography>
-
           </Box>
 
           <Button
@@ -308,7 +307,7 @@ export default function PromotionPage() {
               py: 0,
               height: 40,
               minHeight: '40px',
-              fontSize: 11,
+              fontSize: 12,
               lineHeight: 1,
               textTransform: 'none',
               fontWeight: 600,
@@ -574,7 +573,7 @@ export default function PromotionPage() {
                                 size="small"
                                 title="Chỉnh sửa"
                                 aria-label="Chỉnh sửa"
-                                onClick={() => navigate(`/promotions/edit/${promotion.promotionId}`)}
+                                onClick={() => navigate(`/promotions/${promotion.promotionId}/edit`)}
                                 sx={{
                                   width: 34,
                                   height: 34,
