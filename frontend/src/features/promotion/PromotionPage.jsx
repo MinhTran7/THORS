@@ -93,10 +93,8 @@ const dateText = (value) => {
     return `${day}/${month}/${year}`;
 };
 
-/**
- * Trạng thái thời gian chỉ dựa vào ngày bắt đầu và kết thúc.
- * Không phụ thuộc promotion.status.
- */
+
+
 function getScheduleStatus(promotion) {
     const today = getLocalToday();
     const startDate = getDateOnly(promotion.startDate);
@@ -110,9 +108,9 @@ function getScheduleStatus(promotion) {
     return 'ONGOING';
 }
 
-/**
- * Trạng thái bật/tắt chỉ dựa vào trường status trong database.
- */
+
+
+
 function isPromotionActive(promotion) {
     return promotion.status === 'ACTIVE';
 }
