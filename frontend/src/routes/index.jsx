@@ -86,6 +86,12 @@ export default createBrowserRouter([
           },
           { element: <RequireAuth roles={['ADMIN', 'OWNER']} />, children: [{ path: '/accounts', element: <AccountsPage /> }] },
           {
+            element: <RequireAuth roles={['OWNER', 'FAMILY_MEMBER']} />,
+            children: [
+              { path: '/in-store-sales', element: <InStoreSalesPage /> }
+            ]
+          },
+          {
             element: <RequireAuth roles={['OWNER']} />,
             children: [
               { path: '/family', element: <StaffListPage /> },
@@ -99,8 +105,7 @@ export default createBrowserRouter([
               { path: '/products/:productId', element: <ProductDetailPage /> },
               { path: '/products/:productId/edit', element: <EditProductPage /> },
               { path: '/returns', element: <ReturnsPage /> },
-              // Sales & Promotion (của phuoc)
-              { path: '/in-store-sales', element: <InStoreSalesPage /> },
+              // Promotion (của phuoc)
               { path: '/promotions', element: <PromotionPage /> },
               { path: '/promotions/add', element: <AddPromotionPage /> },
               { path: '/promotions/:promotionId', element: <PromotionDetailPage /> },

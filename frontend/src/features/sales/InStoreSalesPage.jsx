@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Avatar,
@@ -21,6 +21,9 @@ import {
 } from '@mui/material';
 import { SearchOutlined, DeleteOutlined, PlusOutlined, MinusOutlined, ShoppingCartOutlined } from '@ant-design/icons';
 import { getProducts, getProductById } from '../../services/productService';
+import { api } from '../../services/http';
+import { useAuth } from '../auth/AuthProvider';
+import ReceiptDialog from './ReceiptDialog';
 
 const C = {
   text: '#202D42',
@@ -113,6 +116,8 @@ function ToggleGroup({ value, onChange, children, fullWidth = false }) {
 }
 
 export default function InStoreSalesPage() {
+  const { account } = useAuth();
+
   const [products, setProducts] = useState([]);
   const [category, setCategory] = useState('All products');
   const [search, setSearch] = useState('');
@@ -134,6 +139,19 @@ export default function InStoreSalesPage() {
 
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+
+  // Trạng thái gửi API — ngăn click nút Complete Sale nhiều lần
+  const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
+
+  // Dữ liệu sau khi tạo đơn thành công — mở ReceiptDialog
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [completedSale, setCompletedSale] = useState(null);
+  const [completedCart, setCompletedCart] = useState([]);
+  const [completedCustomer, setCompletedCustomer] = useState('');
+  const [completedReceived, setCompletedReceived] = useState(0);
+  const [completedChange, setCompletedChange] = useState(0);
+  const [completedAt, setCompletedAt] = useState(null);
 
   useEffect(() => {
     getProducts()
@@ -316,21 +334,80 @@ export default function InStoreSalesPage() {
     boxShadow: 'none'
   };
 
-  function completeSale() {
+  async function completeSale() {
     setError('');
     setNotice('');
 
+    // Validate client-side trước khi gửi API
     if (!cart.length) {
       setError('Add at least one product to the invoice.');
       return;
     }
 
-    if (payment === 'Cash' && receivedValue < total) {
-      setError('Amount received must cover the total.');
+    const discountNum = Math.round(Number(discount) || 0);
+
+    if (discountNum < 0 || !Number.isInteger(discountNum)) {
+      setError('Discount must be a non-negative whole number (VND).');
       return;
     }
 
-    setNotice('Invoice validated. No sale has been saved to the database.');
+    if (discountNum > subtotal) {
+      setError('Discount cannot exceed the subtotal.');
+      return;
+    }
+
+    if (payment === 'Cash' && receivedValue < total) {
+      setError('Amount received must be at least equal to the total.');
+      return;
+    }
+
+    // Chống gửi request trùng (double-submit)
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitting(true);
+
+    try {
+      const result = await api('/sales/in-store', {
+        method: 'POST',
+        body: {
+          items: cart.map((line) => ({
+            detailId: line.variantId,
+            quantity: line.quantity
+          })),
+          discountAmount: discountNum,
+          paymentMethod: payment === 'Cash' ? 'CASH' : 'BANK_TRANSFER',
+          customerName: customer.trim() || null
+        }
+      });
+
+      // Lưu dữ liệu hóa đơn để hiển thị ReceiptDialog
+      // Toàn bộ lấy từ Backend response, không tự sinh ở Frontend
+      setCompletedSale(result);
+      setCompletedCart([...cart]);
+      setCompletedCustomer(customer.trim());
+      setCompletedReceived(receivedValue);
+      setCompletedChange(payment === 'Cash' ? Math.max(0, receivedValue - total) : 0);
+      setCompletedAt(new Date());
+      setReceiptOpen(true);
+
+      // Làm sạch giỏ hàng sau khi thành công
+      clearInvoice();
+
+      // Làm mới danh sách sản phẩm để hiển thị tồn kho mới nhất từ server
+      getProducts()
+        .then((res) => {
+          setProducts(getList(res?.data ?? res).filter((p) => isActive(p.status)));
+        })
+        .catch(() => {
+          // Lỗi refresh nền không ảnh hưởng luồng bán hàng
+        });
+    } catch (err) {
+      // Giữ nguyên giỏ hàng, chỉ hiển thị lỗi
+      setError(err.message || 'Could not complete the sale. Please try again.');
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
+    }
   }
 
   function clearInvoice() {
@@ -339,6 +416,18 @@ export default function InStoreSalesPage() {
     setReceived('');
     setNotice('');
     setError('');
+  }
+
+  function handleReceiptClose() {
+    setReceiptOpen(false);
+    setCompletedSale(null);
+    setCompletedCart([]);
+    setCompletedCustomer('');
+    setCompletedReceived(0);
+    setCompletedChange(0);
+    setCompletedAt(null);
+    setCustomer('');
+    setPayment('Cash');
   }
 
   return (
@@ -651,7 +740,7 @@ export default function InStoreSalesPage() {
               fullWidth
               variant="contained"
               onClick={completeSale}
-              disabled={!cart.length}
+              disabled={!cart.length || submitting}
               sx={{
                 ...buttonSx,
                 py: 1.2,
@@ -660,7 +749,14 @@ export default function InStoreSalesPage() {
                 '&:hover': { bgcolor: '#6BDCE7' }
               }}
             >
-              Complete sale · {money(total)}
+              {submitting ? (
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <CircularProgress size={16} sx={{ color: C.text }} />
+                  <span>Processing…</span>
+                </Stack>
+              ) : (
+                `Complete sale · ${money(total)}`
+              )}
             </Button>
 
             <Button
@@ -683,6 +779,19 @@ export default function InStoreSalesPage() {
           </Stack>
         </Card>
       </Box>
+
+      {/* Receipt dialog — mở sau khi tạo hóa đơn thành công */}
+      <ReceiptDialog
+        open={receiptOpen}
+        onClose={handleReceiptClose}
+        saleData={completedSale}
+        cartItems={completedCart}
+        customerName={completedCustomer}
+        sellerName={account?.fullName ?? ''}
+        amountReceived={completedReceived}
+        changeDue={completedChange}
+        completedAt={completedAt}
+      />
 
       {/* Variant popup */}
       <Dialog
