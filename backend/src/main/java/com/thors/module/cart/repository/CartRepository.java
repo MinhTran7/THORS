@@ -18,6 +18,16 @@ public class CartRepository {
             pd.size AS size,
             pd.color AS color,
             pd.price AS price,
+            GREATEST(
+                pd.stock_quantity - COALESCE((
+                    SELECT SUM(oi.reserved_quantity)
+                    FROM order_item oi
+                    INNER JOIN orders o ON o.order_id = oi.order_id
+                    WHERE oi.detail_id = pd.detail_id
+                      AND o.stock_hold_status IN ('TEMPORARY', 'PAID')
+                ), 0),
+                0
+            ) AS stock,
             ci.quantity AS quantity,
             (
                 SELECT pi.image_url
@@ -58,6 +68,16 @@ public class CartRepository {
     /** Thông tin một biến thể (để kiểm tra trước khi thêm vào giỏ). Null nếu không tồn tại. */
     public Map<String, Object> findDetail(int detailId) {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
+            SELECT GREATEST(
+                pd.stock_quantity - COALESCE((
+                    SELECT SUM(oi.reserved_quantity)
+                    FROM order_item oi
+                    INNER JOIN orders o ON o.order_id = oi.order_id
+                    WHERE oi.detail_id = pd.detail_id
+                      AND o.stock_hold_status IN ('TEMPORARY', 'PAID')
+                ), 0),
+                0
+            ) AS stock,
                    (p.status = 'ACTIVE'
                     AND pd.status = 'ACTIVE'
                     AND pd.online_sales_enabled = 1) AS available

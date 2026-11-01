@@ -7,6 +7,7 @@ import { useAuth } from 'features/auth/AuthProvider';
 import NotificationBell from 'features/notification/NotificationBell';
 import CartButton from 'components/CartButton';
 import UserMenu from './UserMenu';
+import PendingCartHandler from 'features/shop/PendingCartHandler';
 
 // Header cố định ở đầu trang. Chỉ chứa những thứ cần ở mọi trang:
 // nút mở menu (mobile), breadcrumb, ngày, thông báo và menu tài khoản.
@@ -61,6 +62,7 @@ export default function AppHeader({ crumbs, onOpenMenu, onSignOut }) {
         {formatToday()}
       </Typography>
       {account?.role === 'CUSTOMER' && <CartButton />}
+      <PendingCartHandler />
       <NotificationBell />
       <UserMenu onSignOut={onSignOut} />
     </Stack>

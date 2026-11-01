@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, post } from 'services/http';
-
+import { checkoutFromCart } from './checkout';
+import { useNavigate } from 'react-router-dom';
 /**
  * Giỏ hàng THORS (kiểu Shopee), nối API backend:
  *  GET  /api/cart                      xem giỏ
@@ -27,6 +28,7 @@ const toUi = (r) => ({
 const canBuy = (i) => i.available && i.stock > 0 && i.qty <= i.stock;
 
 export default function CartPage({ onCheckout }) {
+    const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [selected, setSelected] = useState(() => new Set());
   const [confirmIds, setConfirmIds] = useState(null);
@@ -234,7 +236,7 @@ export default function CartPage({ onCheckout }) {
             <button
               className="thc-btn thc-btn-primary thc-block"
               disabled={picked.length === 0}
-              onClick={() => onCheckout?.(picked)}
+              onClick={() => checkoutFromCart(navigate, picked.map((i) => i.id))}
             >
               Mua hàng ({picked.length})
             </button>
