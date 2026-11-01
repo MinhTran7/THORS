@@ -1,3 +1,5 @@
+const LOCALE = 'vi-VN';
+
 // Backend trả LocalDateTime theo UTC, không kèm múi giờ ("2026-10-12T09:42:18").
 export function parseUtc(value) {
   if (!value) return null;
@@ -15,19 +17,19 @@ export const initials = (name = '') =>
     .join('') || '?';
 
 export const formatDate = (value) =>
-  parseUtc(value)?.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) ?? '—';
+  parseUtc(value)?.toLocaleDateString(LOCALE, { day: 'numeric', month: 'long', year: 'numeric' }) ?? '—';
 
-export const formatMonthYear = (value) => parseUtc(value)?.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) ?? '—';
+export const formatMonthYear = (value) => parseUtc(value)?.toLocaleDateString(LOCALE, { month: 'long', year: 'numeric' }) ?? '—';
 
 export const formatLogDate = (value) =>
-  parseUtc(value)?.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) ?? '—';
+  parseUtc(value)?.toLocaleDateString(LOCALE, { day: 'numeric', month: 'short', year: 'numeric' }) ?? '—';
 
 export const formatTime = (value) =>
-  parseUtc(value)?.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) ?? '';
+  parseUtc(value)?.toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) ?? '';
 
 export function formatToday(date = new Date()) {
-  const weekday = date.toLocaleDateString('en-GB', { weekday: 'long' });
-  const rest = date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  const weekday = date.toLocaleDateString(LOCALE, { weekday: 'long' });
+  const rest = date.toLocaleDateString(LOCALE, { day: 'numeric', month: 'long', year: 'numeric' });
   return `${weekday}, ${rest}`;
 }
 
@@ -46,6 +48,7 @@ export function tzLabel() {
 export const toYmd = (date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
+// Dự phòng cho mã hành động chưa có nhãn tiếng Việt: "ACCOUNT_LOCK" -> "Account lock".
 export const humanize = (code = '') => {
   const text = code.toLowerCase().replace(/_/g, ' ');
   return text.charAt(0).toUpperCase() + text.slice(1);

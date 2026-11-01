@@ -43,8 +43,6 @@ import org.springframework.test.web.servlet.MvcResult;
  * Integration test cho feature Account: HTTP request -> controller -> security -> service -> SQL (H2).
  *
  * <p>Mã IT-xxx-nnn khớp với "Test Case ID" trong file báo cáo Integration Test (Report-5.2).
- * Các test có ghi "Suspected defect" được viết theo hành vi ĐÚNG mong đợi, nên dự kiến sẽ FAIL cho
- * tới khi lỗi được sửa.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -618,7 +616,6 @@ class AccountIntegrationTest {
         assertEquals("ACTIVE", dbStatus(f1.id()));
     }
 
-    // Suspected defect DEF-02: expected to FAIL until fixed.
     @Test
     @DisplayName("IT-ADM-009 - A Shop Owner who forgot the password submits a reset request (no sign-in)")
     void ownerSubmitsResetRequest() throws Exception {
@@ -627,7 +624,6 @@ class AccountIntegrationTest {
         assertEquals(1, auditCount("PASSWORD_RESET_REQUEST", owner.id()));
     }
 
-    // Suspected defect DEF-02: expected to FAIL until fixed.
     @Test
     @DisplayName("IT-ADM-010 - The reset request answers the same for known and unknown identifiers")
     void resetRequestDoesNotRevealAccounts() throws Exception {
@@ -736,6 +732,7 @@ class AccountIntegrationTest {
         assertTrue(actions.containsAll(List.of("ACCOUNT_CREATE", "ACCOUNT_DEACTIVATE", "ACCOUNT_LOCK")));
         assertFalse(actions.contains("STATUS_INVALIDATE"));
         assertFalse(actions.contains("PASSWORD_INVALIDATE"));
+        assertFalse(actions.contains("LOGIN_SUCCESS"));
         var lock = firstItem(page, "ACCOUNT_LOCK");
         assertNotNull(lock);
         assertEquals(admin.id(), lock.get("actorId").asInt());
@@ -743,7 +740,7 @@ class AccountIntegrationTest {
         assertEquals(seed[1].id(), lock.get("entityId").asInt());
         assertEquals("Family Two", lock.get("targetName").asText());
         assertEquals("FAMILY_MEMBER", lock.get("targetRole").asText());
-        assertEquals("WARNING", lock.get("status").asText());
+        assertEquals("SUCCESS", lock.get("status").asText());
     }
 
     @Test
@@ -756,17 +753,19 @@ class AccountIntegrationTest {
     }
 
     @Test
-    @DisplayName("IT-LOG-003 - Filter logs by status WARNING, SUCCESS and FAILED")
+    @DisplayName("IT-LOG-003 - Filter logs by status SUCCESS and FAILED")
     void filterByStatus() throws Exception {
         seedLogs();
         var s = sessionFor(admin);
-        var warning = body(doGet("/api/audit-logs", s, "status", "WARNING", "size", "100"));
-        assertEquals(2, warning.get("total").asInt());
-        assertEquals(Set.of("ACCOUNT_DEACTIVATE", "ACCOUNT_LOCK"), new HashSet<>(actionsOf(warning)));
         var success = body(doGet("/api/audit-logs", s, "status", "SUCCESS", "size", "100"));
-        assertFalse(actionsOf(success).contains("ACCOUNT_LOCK"));
+        assertTrue(actionsOf(success).containsAll(List.of("ACCOUNT_CREATE", "ACCOUNT_DEACTIVATE", "ACCOUNT_LOCK")));
         success.get("items").forEach(i -> assertEquals("SUCCESS", i.get("status").asText()));
         assertEquals(0, body(doGet("/api/audit-logs", s, "status", "FAILED")).get("total").asInt());
+        assertEquals(401, status(loginAttempt("owner@example.com", "Wrong-password-999")));
+        var failed = body(doGet("/api/audit-logs", s, "status", "FAILED"));
+        assertEquals(1, failed.get("total").asInt());
+        assertEquals("LOGIN_FAILURE", failed.get("items").get(0).get("action").asText());
+        assertEquals("FAILED", failed.get("items").get(0).get("status").asText());
     }
 
     @Test
@@ -834,13 +833,15 @@ class AccountIntegrationTest {
     }
 
     @Test
-    @DisplayName("IT-LOG-010 - Daily statistics count events, alerts and locks")
+    @DisplayName("IT-LOG-010 - Daily statistics count events, successes and failures")
     void dailySummary() throws Exception {
         seedLogs();
         var s = body(doGet("/api/audit-logs/summary", sessionFor(admin), "offset", "0"));
         assertTrue(s.get("eventsToday").asLong() >= 7);
-        assertTrue(s.get("securityAlertsToday").asLong() >= 2);
-        assertEquals(1, s.get("locksToday").asLong());
+        assertEquals(s.get("eventsToday").asLong(), s.get("successfulToday").asLong());
+        assertEquals(0, s.get("failedToday").asLong());
+        assertEquals(0, s.get("failedSignInsToday").asLong());
+        assertEquals(0, s.get("pausedSignInsToday").asLong());
     }
 
     @Test
@@ -865,7 +866,6 @@ class AccountIntegrationTest {
         expectError(doGet("/api/audit-logs/actions", s), 403, "ROLE");
     }
 
-    // Suspected defect DEF-01: expected to FAIL until fixed.
     @Test
     @DisplayName("IT-LOG-013 - A wrong-password sign-in appears in the logs as FAILED and in the statistics")
     void failedSignInIsReportedAsFailed() throws Exception {
@@ -874,7 +874,9 @@ class AccountIntegrationTest {
         var s = sessionFor(admin);
         assertTrue(body(doGet("/api/audit-logs", s, "status", "FAILED")).get("total").asInt() >= 1,
                 "a failed sign-in must be listed with status FAILED");
-        assertEquals(1, body(doGet("/api/audit-logs/summary", s, "offset", "0")).get("failedSignInsToday").asLong());
+        var summary = body(doGet("/api/audit-logs/summary", s, "offset", "0"));
+        assertTrue(summary.get("failedToday").asLong() >= 1);
+        assertEquals(1, summary.get("failedSignInsToday").asLong());
     }
 
 
@@ -1000,7 +1002,6 @@ class AccountIntegrationTest {
         assertEquals(before, userCount());
     }
 
-    // Suspected defect DEF-03: expected to FAIL until fixed.
     @Test
     @DisplayName("IT-SEC-010 - Malformed input gives a 4xx error, not a server error")
     void malformedInputGivesClientError() throws Exception {

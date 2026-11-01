@@ -5,6 +5,15 @@ import java.util.List;
 
 public class OrderViews {
 
+    /** Một dòng sản phẩm rút gọn trong danh sách đơn: ảnh, tên, phân loại, số lượng, giá. */
+    public record Preview(
+            String productName,
+            String size,
+            String color,
+            int quantity,
+            long unitPrice,
+            String imageUrl) {}
+
     /** Một dòng trong danh sách đơn hàng. */
     public record ListItem(
             int id,
@@ -17,8 +26,29 @@ public class OrderViews {
             long totalAmount,
             String deliveryName,
             String deliveryPhone,
+            String deliveryAddress,
             long itemCount,
-            String firstItemName) {}
+            String firstItemName,
+            List<Preview> lines) {
+
+        public ListItem withLines(List<Preview> newLines) {
+            return new ListItem(
+                    id,
+                    orderNumber,
+                    orderDate,
+                    orderStatus,
+                    preparationStatus,
+                    paymentMethod,
+                    paymentStatus,
+                    totalAmount,
+                    deliveryName,
+                    deliveryPhone,
+                    deliveryAddress,
+                    itemCount,
+                    firstItemName,
+                    newLines);
+        }
+    }
 
     public record Page(List<ListItem> items, int page, int size, long total, int totalPages) {}
 

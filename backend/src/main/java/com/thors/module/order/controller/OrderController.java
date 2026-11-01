@@ -25,8 +25,30 @@ public class OrderController {
         return service.list(sessions.current(), status, q, page, size);
     }
 
+    /** GET /api/orders/counts: số đơn theo từng trạng thái (hiện trên các tab) */
+    @GetMapping("/counts")
+    Object counts() {
+        return service.counts(sessions.current());
+    }
+
     @GetMapping("/{id}")
     Object detail(@PathVariable int id) {
         return service.detail(sessions.current(), id);
+    }
+
+    /** POST /api/orders/test-sample (chỉ dùng khi test: tạo đơn online mẫu và phát thông báo) */
+    @PostMapping("/test-sample")
+    Object createSample() {
+        return service.createSample(sessions.current());
+    }
+
+    /** POST /api/orders/{id}/status?status=SHIPPING&carrier=SELF|GHN|GHTK|VIETTEL_POST|JT&reason= */
+    @PostMapping("/{id}/status")
+    Object changeStatus(
+            @PathVariable int id,
+            @RequestParam String status,
+            @RequestParam(required = false) String reason,
+            @RequestParam(required = false) String carrier) {
+        return service.changeStatus(sessions.current(), id, status, reason, carrier);
     }
 }

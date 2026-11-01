@@ -3,6 +3,7 @@ package com.thors.module.account.controller;
 import com.thors.module.account.dto.AccountRequests.*;
 import com.thors.module.account.mapper.AccountMapper;
 import com.thors.module.account.service.AccountService;
+import com.thors.module.account.service.AuditLogService;
 import com.thors.security.SessionAccess;
 import jakarta.validation.Valid;
 import java.util.Map;
@@ -12,10 +13,12 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/accounts")
 public class AccountController {
   private final AccountService service;
+  private final AuditLogService audits;
   private final SessionAccess sessions;
 
-  public AccountController(AccountService service, SessionAccess sessions) {
+  public AccountController(AccountService service, AuditLogService audits, SessionAccess sessions) {
     this.service = service;
+    this.audits = audits;
     this.sessions = sessions;
   }
 
@@ -34,6 +37,12 @@ public class AccountController {
   @PostMapping("/profile/phone")
   Object phone(@Valid @RequestBody Phone r) {
     return AccountMapper.view(service.phone(sessions.current(), r.phone()));
+  }
+
+  /** Lần đăng nhập gần nhất và các hoạt động gần đây của chính người đang đăng nhập. */
+  @GetMapping("/profile/activity")
+  Object activity(@RequestParam(defaultValue = "8") int limit) {
+    return audits.mine(sessions.current(), limit);
   }
 
   // ----- Owner / Admin -----
