@@ -11,6 +11,13 @@ public class CreateReturnRequest {
     private String reason;
     private String requestType = "RETURN"; // RETURN or EXCHANGE
     private boolean instantComplete; // If true, immediately inspect, restock & complete (In-store return)
+    private String bankCode;
+    private String bankAccountNumber;
+    private String bankAccountName;
+    private BigDecimal returnShippingFee;
+    private String returnShippingPayer = "CUSTOMER"; // CUSTOMER or SHOP
+    private String returnTrackingCode;
+    private String evidenceUrls;
     private List<ItemRequest> items;
 
     public static class ItemRequest {
@@ -116,6 +123,62 @@ public class CreateReturnRequest {
 
     public void setInstantComplete(boolean instantComplete) {
         this.instantComplete = instantComplete;
+    }
+
+    public String getBankCode() {
+        return bankCode;
+    }
+
+    public void setBankCode(String bankCode) {
+        this.bankCode = bankCode;
+    }
+
+    public String getBankAccountNumber() {
+        return bankAccountNumber;
+    }
+
+    public void setBankAccountNumber(String bankAccountNumber) {
+        this.bankAccountNumber = bankAccountNumber;
+    }
+
+    public String getBankAccountName() {
+        return bankAccountName;
+    }
+
+    public void setBankAccountName(String bankAccountName) {
+        this.bankAccountName = bankAccountName;
+    }
+
+    public BigDecimal getReturnShippingFee() {
+        return returnShippingFee;
+    }
+
+    public void setReturnShippingFee(BigDecimal returnShippingFee) {
+        this.returnShippingFee = returnShippingFee;
+    }
+
+    public String getReturnShippingPayer() {
+        return returnShippingPayer;
+    }
+
+    public void setReturnShippingPayer(String returnShippingPayer) {
+        this.returnShippingPayer = returnShippingPayer;
+    }
+
+    public String getReturnTrackingCode() {
+        return returnTrackingCode;
+    }
+
+    public void setReturnTrackingCode(String returnTrackingCode) {
+        this.returnTrackingCode = returnTrackingCode;
+    }
+
+    public String getEvidenceUrls() {
+        return evidenceUrls;
+    }
+
+    public void setEvidenceUrls(String evidenceUrls) {
+        this.evidenceUrls = evidenceUrls;
     }
 
     public List<ItemRequest> getItems() {

@@ -45,7 +45,25 @@ public class AuditLogViews {
     public record Summary(
             long eventsToday,
             long successfulToday,
-            long securityAlertsToday,
+            long failedToday,
             long failedSignInsToday,
-            long locksToday) {}
+            long pausedSignInsToday) {}
+
+    /**
+     * Một dòng hoạt động hiển thị cho chính chủ tài khoản ở trang hồ sơ. Cố ý không có tên người
+     * thực hiện, old/new value: chủ tài khoản chỉ cần biết chuyện gì xảy ra, khi nào, từ IP nào và
+     * có phải người quản lý làm hay không.
+     *
+     * @param byManager true khi người thực hiện là tài khoản khác (Admin/Owner)
+     */
+    public record Activity(
+            long id,
+            String action,
+            String status,
+            boolean byManager,
+            String ip,
+            LocalDateTime performedAt) {}
+
+    /** Dữ liệu cho phần Bảo mật và Hoạt động gần đây ở trang hồ sơ. */
+    public record ProfileActivity(Activity lastLogin, List<Activity> items) {}
 }

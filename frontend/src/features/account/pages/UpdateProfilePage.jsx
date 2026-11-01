@@ -10,7 +10,7 @@ import { useAuth } from 'features/auth/AuthProvider';
 import { useCrumbs } from 'layouts/crumbs';
 import { imageUploadEnabled, uploadImage } from 'services/imageUpload';
 import { accountsApi } from '../api';
-import { brand, cardSx } from '../tokens';
+import { brand, cardSx, fs } from '../tokens';
 import { fullName, phone } from '../validation';
 import { BrandButton, OutlineButton } from '../components/Brand';
 import { FormField, TextInput } from '../components/Form';
@@ -21,7 +21,7 @@ import UserAvatar from '../components/UserAvatar';
 const schema = Yup.object({ fullName, phone });
 
 export default function UpdateProfilePage() {
-  useCrumbs(['Profile', 'Update Profile']);
+  useCrumbs(['Hồ sơ', 'Cập nhật hồ sơ']);
   const { reload } = useAuth();
   const { data, mutate } = useSWR('account-profile', accountsApi.profile, { revalidateOnFocus: false });
   const [toast, showToast] = useToast();
@@ -48,7 +48,7 @@ export default function UpdateProfilePage() {
         });
         await Promise.all([mutate(), reload()]);
         setPhoto(undefined);
-        showToast('Your profile has been updated.');
+        showToast('Hồ sơ của bạn đã được cập nhật.');
       } catch (e) {
         setError(e.message);
       }
@@ -75,27 +75,27 @@ export default function UpdateProfilePage() {
   return (
     <Box>
       <PageHeader
-        back={{ to: '/profile', label: 'User Profile' }}
-        title="Update Profile"
-        subtitle="Keep your details current so we can stay in touch."
+        back={{ to: '/profile', label: 'Hồ sơ cá nhân' }}
+        title="Cập nhật hồ sơ"
+        subtitle="Giữ thông tin luôn mới để chúng tôi có thể liên lạc với bạn."
       />
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
           {error}
         </Alert>
       )}
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1fr) 340px' }, gap: 3, alignItems: 'start' }}>
-        <Box component="form" onSubmit={form.handleSubmit} noValidate sx={{ ...cardSx, p: 3 }}>
-          <Typography variant="h5" sx={{ color: brand.ink }}>
-            Personal details
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1fr) 380px' }, gap: 3, alignItems: 'start' }}>
+        <Box component="form" onSubmit={form.handleSubmit} noValidate sx={{ ...cardSx, p: 3.5 }}>
+          <Typography variant="h5" sx={{ color: brand.ink, fontSize: fs.cardTitle }}>
+            Thông tin chi tiết
           </Typography>
-          <Typography variant="caption" sx={{ color: brand.muted }}>
-            Your information is only visible to authorized account managers.
+          <Typography sx={{ color: brand.muted, fontSize: fs.caption, mt: 0.25 }}>
+            Thông tin của bạn chỉ hiển thị với người quản lý tài khoản có thẩm quyền.
           </Typography>
           <Stack spacing={2.5} sx={{ mt: 2.5 }}>
-            <FormField label="Name" error={fieldError('fullName')}>
+            <FormField label="Họ và tên" error={fieldError('fullName')}>
               <TextInput
-                label="Name"
+                label="Họ và tên"
                 name="fullName"
                 value={form.values.fullName}
                 onChange={form.handleChange}
@@ -104,9 +104,9 @@ export default function UpdateProfilePage() {
               />
             </FormField>
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2.5 }}>
-              <FormField label="Phone" error={fieldError('phone')}>
+              <FormField label="Số điện thoại" error={fieldError('phone')}>
                 <TextInput
-                  label="Phone"
+                  label="Số điện thoại"
                   name="phone"
                   autoComplete="tel"
                   value={form.values.phone}
@@ -119,29 +119,26 @@ export default function UpdateProfilePage() {
                 <TextInput label="Email" value={data?.email ?? ''} disabled />
               </FormField>
             </Box>
-            <NoticeBox title="Changing your contact details?" icon={<InfoCircleOutlined />}>
-              Your email is your sign-in, so it can&apos;t be changed here. A new phone number takes effect as soon as you save.
+            <NoticeBox title="Thay đổi thông tin liên hệ?" icon={<InfoCircleOutlined />}>
+              Email là tên đăng nhập của bạn nên không thể đổi tại đây. Số điện thoại mới có hiệu lực ngay sau khi bạn lưu.
             </NoticeBox>
-            <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} spacing={1.5}>
-              <Typography variant="caption" sx={{ color: brand.muted }}>
-                Your role and store permissions won&apos;t change.
-              </Typography>
-              <BrandButton type="submit" disabled={!changed || form.isSubmitting || uploading}>
-                {form.isSubmitting ? 'Saving…' : 'Save'}
+            <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="flex-end" alignItems={{ sm: 'center' }} spacing={1.5}>
+              <BrandButton type="submit" disabled={!changed || form.isSubmitting || uploading} sx={{ fontSize: fs.body }}>
+                {form.isSubmitting ? 'Đang lưu…' : 'Lưu'}
               </BrandButton>
             </Stack>
           </Stack>
         </Box>
 
         <Box>
-          <Box sx={{ ...cardSx, p: 3 }}>
-            <Typography variant="h5" sx={{ color: brand.ink, mb: 2 }}>
-              Profile photo
+          <Box sx={{ ...cardSx, p: 3.5 }}>
+            <Typography variant="h5" sx={{ color: brand.ink, mb: 2, fontSize: fs.cardTitle }}>
+              Ảnh đại diện
             </Typography>
             <Stack alignItems="center" spacing={0.75}>
               <UserAvatar name={form.values.fullName || data?.fullName} src={avatar} size={110} />
-              <Typography variant="caption" sx={{ color: brand.muted }}>
-                {photo === undefined ? 'Current avatar' : photo === '' ? 'Photo will be removed' : 'New photo (save to apply)'}
+              <Typography sx={{ color: brand.muted, fontSize: fs.caption }}>
+                {photo === undefined ? 'Ảnh hiện tại' : photo === '' ? 'Ảnh sẽ bị xóa' : 'Ảnh mới (lưu để áp dụng)'}
               </Typography>
             </Stack>
             <Box
@@ -171,12 +168,12 @@ export default function UpdateProfilePage() {
                 disabled={!imageUploadEnabled || uploading}
                 onChange={(event) => pickFile(event.target.files?.[0])}
               />
-              {uploading ? <CircularProgress size={22} /> : <CloudUploadOutlined style={{ fontSize: 22 }} />}
-              <Typography variant="subtitle2" sx={{ color: brand.ink, mt: 0.5 }}>
-                {uploading ? 'Uploading…' : 'Upload a new photo'}
+              {uploading ? <CircularProgress size={22} /> : <CloudUploadOutlined style={{ fontSize: 24 }} />}
+              <Typography variant="subtitle2" sx={{ color: brand.ink, mt: 0.5, fontSize: fs.body }}>
+                {uploading ? 'Đang tải lên…' : 'Tải ảnh mới lên'}
               </Typography>
-              <Typography variant="caption" sx={{ color: brand.muted }}>
-                {imageUploadEnabled ? 'JPG or PNG · up to 5 MB' : 'Photo upload is not configured yet.'}
+              <Typography sx={{ color: brand.muted, fontSize: fs.caption }}>
+                {imageUploadEnabled ? 'JPG hoặc PNG · tối đa 5 MB' : 'Chức năng tải ảnh chưa được cấu hình.'}
               </Typography>
             </Box>
             {photoError && (
@@ -184,17 +181,17 @@ export default function UpdateProfilePage() {
                 {photoError}
               </Alert>
             )}
-            <OutlineButton fullWidth sx={{ mt: 1.5 }} disabled={!avatar || uploading} onClick={() => setPhoto('')}>
-              Remove photo
+            <OutlineButton fullWidth sx={{ mt: 1.5, fontSize: fs.body }} disabled={!avatar || uploading} onClick={() => setPhoto('')}>
+              Xóa ảnh
             </OutlineButton>
           </Box>
-          <Typography variant="caption" sx={{ color: brand.muted, display: 'block', mt: 1.5 }}>
-            Choose a clear, square image. Your photo appears in your profile and workspace navigation.
+          <Typography sx={{ color: brand.muted, display: 'block', mt: 1.5, fontSize: fs.caption }}>
+            Hãy chọn ảnh vuông, rõ nét. Ảnh sẽ hiển thị trong hồ sơ và thanh điều hướng của bạn.
           </Typography>
         </Box>
       </Box>
-      <OutlineButton component={RouterLink} to="/profile" startIcon={<ArrowLeftOutlined />} sx={{ mt: 4 }}>
-        Back to Profile
+      <OutlineButton component={RouterLink} to="/profile" startIcon={<ArrowLeftOutlined />} sx={{ mt: 4, fontSize: fs.body }}>
+        Quay lại hồ sơ
       </OutlineButton>
       {toast}
     </Box>

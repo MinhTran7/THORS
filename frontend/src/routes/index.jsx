@@ -19,6 +19,7 @@ import StaffListPage from 'features/account/pages/StaffListPage';
 import StaffFormPage from 'features/account/pages/StaffFormPage';
 import StaffDetailPage from 'features/account/pages/StaffDetailPage';
 import AccountsPage from 'features/account/pages/AccountListPage';
+import SystemLogPage from 'features/account/pages/SystemLogPage';
 import WorkspacePage from 'features/account/WorkspacePage';
 import { AuthShell } from 'features/auth/components/AuthForm';
 
@@ -51,8 +52,18 @@ import ReturnsPage from 'features/returns/ReturnsPage';
 import CustomerAddressPage from 'features/customer/CustomerAddressPage';
 import AddAddressPage from 'features/customer/AddAddressPage';
 import EditAddressPage from 'features/customer/EditAddressPage';
+
+// Shop management
+import ShopPage from 'features/shop/ShopPage';
+import ShopProductPage from 'features/shop/ShopProductPage';
+
+// Cart (Giỏ hàng)
+import CartPage from 'features/cart/CartPage';
+import CheckoutPage from 'features/cart/CheckoutPage';
+import OrderSuccessPage from 'features/cart/OrderSuccessPage';
 export default createBrowserRouter([
-  { path: '/', element: <Navigate to="/workspace" replace /> },
+  { path: '/', element: <ShopPage /> },
+  { path: '/shop/products/:productId', element: <ShopProductPage /> },
   { path: '/login', element: <LoginPage /> },
   { path: '/register', element: <RegisterPage /> },
   { path: '/forgot-password', element: <ForgotPage /> },
@@ -61,6 +72,7 @@ export default createBrowserRouter([
   { path: '/auth/facebook/complete', element: <FacebookComplete /> },
   { path: '/auth/facebook/callback', element: <GoogleCallback provider="facebook" /> },
   { path: '/auth/google/callback', element: <GoogleCallback /> },
+
   {
     element: <RequireAuth />,
     children: [
@@ -72,6 +84,15 @@ export default createBrowserRouter([
           { path: '/profile/edit', element: <UpdateProfilePage /> },
           { path: '/profile/password', element: <ChangePasswordPage /> },
           { path: '/notifications', element: <NotificationPage /> },
+          {
+                      // Giỏ hàng và đặt hàng chỉ dành cho khách hàng
+                      element: <RequireAuth roles={['CUSTOMER']} />,
+                      children: [
+                        { path: '/cart', element: <CartPage /> },
+                        { path: '/checkout', element: <CheckoutPage /> },
+                        { path: '/order-success', element: <OrderSuccessPage /> }
+                      ]
+                    },
           {
             // Customer xem đơn của mình; Owner và Family Member xem đơn online của cửa hàng
             element: <RequireAuth roles={['CUSTOMER', 'OWNER', 'FAMILY_MEMBER']} />,
@@ -99,15 +120,23 @@ export default createBrowserRouter([
               }
             ]
           },
-          { element: <RequireAuth roles={['ADMIN', 'OWNER']} />, children: [{ path: '/accounts', element: <AccountsPage /> }] },
-          {
-            element: <RequireAuth roles={['OWNER', 'FAMILY_MEMBER']} />,
-            children: [
-              { path: '/in-store-sales', element: <InStoreSalesPage /> },
-              { path: '/in-store-sales/history', element: <InStoreSalesHistoryPage /> },
-              { path: '/in-store-sales/history/:orderId', element: <InStoreSaleDetailPage /> }
-            ]
-          },
+{
+  element: <RequireAuth roles={['ADMIN', 'OWNER']} />,
+  children: [{ path: '/accounts', element: <AccountsPage /> }]
+},
+{
+  element: <RequireAuth roles={['ADMIN']} />,
+  children: [{ path: '/system-log', element: <SystemLogPage /> }]
+},
+{
+  element: <RequireAuth roles={['OWNER', 'FAMILY_MEMBER']} />,
+  children: [
+    { path: '/in-store-sales', element: <InStoreSalesPage /> },
+    { path: '/in-store-sales/history', element: <InStoreSalesHistoryPage /> },
+    { path: '/in-store-sales/history/:orderId', element: <InStoreSaleDetailPage /> }
+  ]
+}
+          
           {
             element: <RequireAuth roles={['OWNER']} />,
             children: [

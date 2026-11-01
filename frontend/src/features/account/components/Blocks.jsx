@@ -2,7 +2,7 @@ import { Link as RouterLink } from 'react-router-dom';
 import { Box, Button, InputAdornment, MenuItem, TableCell, TableRow, TextField, Typography } from '@mui/material';
 import { Stack } from './Flex';
 import { ArrowLeftOutlined, InfoCircleOutlined, SearchOutlined } from '@ant-design/icons';
-import { brand, cardSx } from '../tokens';
+import { brand, cardSx, fs } from '../tokens';
 import { OutlineButton } from './Brand';
 
 export function PageHeader({ back, title, subtitle, action }) {
@@ -12,22 +12,18 @@ export function PageHeader({ back, title, subtitle, action }) {
         <Button
           component={RouterLink}
           to={back.to}
-          startIcon={<ArrowLeftOutlined style={{ fontSize: 11 }} />}
-          sx={{ color: brand.muted, fontSize: 11, letterSpacing: 0.6, textTransform: 'uppercase', p: 0, mb: 1, minWidth: 0 }}
+          startIcon={<ArrowLeftOutlined style={{ fontSize: 13 }} />}
+          sx={{ color: brand.muted, fontSize: fs.small, letterSpacing: 0.4, textTransform: 'uppercase', p: 0, mb: 1, minWidth: 0 }}
         >
           {back.label}
         </Button>
       )}
       <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'flex-start' }} spacing={2}>
         <Box>
-          <Typography variant="h3" sx={{ color: brand.ink, fontWeight: 500 }}>
+          <Typography variant="h3" sx={{ color: brand.ink, fontWeight: 500, fontSize: fs.pageTitle }}>
             {title}
           </Typography>
-          {subtitle && (
-            <Typography sx={{ color: brand.muted, mt: 0.75 }} variant="body2">
-              {subtitle}
-            </Typography>
-          )}
+          {subtitle && <Typography sx={{ color: brand.muted, mt: 0.75, fontSize: fs.body }}>{subtitle}</Typography>}
         </Box>
         {action}
       </Stack>
@@ -48,16 +44,14 @@ export function NoticeBox({ title, children, icon = <InfoCircleOutlined />, sx }
         ...sx
       }}
     >
-      <Box sx={{ color: brand.ink, pt: '2px' }}>{icon}</Box>
+      <Box sx={{ color: brand.ink, pt: '2px', fontSize: 16 }}>{icon}</Box>
       <Box>
         {title && (
-          <Typography variant="subtitle2" sx={{ color: brand.ink, fontWeight: 700 }}>
+          <Typography variant="subtitle2" sx={{ color: brand.ink, fontWeight: 700, fontSize: fs.body }}>
             {title}
           </Typography>
         )}
-        <Typography variant="caption" sx={{ color: brand.muted, display: 'block' }}>
-          {children}
-        </Typography>
+        <Typography sx={{ color: brand.muted, display: 'block', fontSize: fs.caption, lineHeight: 1.55 }}>{children}</Typography>
       </Box>
     </Box>
   );
@@ -66,24 +60,20 @@ export function NoticeBox({ title, children, icon = <InfoCircleOutlined />, sx }
 export function StatCard({ label, value, caption, icon, warning = false, loading = false }) {
   return (
     <Box
-      sx={{ ...cardSx, p: 2.5, bgcolor: warning ? brand.yellowSoft : brand.surface, borderColor: warning ? brand.yellowLine : brand.line }}
+      sx={{ ...cardSx, p: 2, bgcolor: warning ? brand.yellowSoft : brand.surface, borderColor: warning ? brand.yellowLine : brand.line }}
     >
       <Stack direction="row" justifyContent="space-between" alignItems="center">
-        <Typography variant="body2" sx={{ color: brand.muted }}>
-          {label}
-        </Typography>
-        <Box sx={{ color: brand.ink, fontSize: 18 }}>{icon}</Box>
+        <Typography sx={{ color: brand.muted, fontSize: fs.body }}>{label}</Typography>
+        <Box sx={{ color: brand.ink, fontSize: 20 }}>{icon}</Box>
       </Stack>
-      <Typography sx={{ fontSize: 34, lineHeight: 1.2, fontWeight: 500, color: brand.ink, my: 0.5 }}>{loading ? '—' : value}</Typography>
-      <Typography variant="caption" sx={{ color: brand.muted }}>
-        {caption}
-      </Typography>
+      <Typography sx={{ fontSize: 28, lineHeight: 1.2, fontWeight: 500, color: brand.ink, my: 0.25 }}>{loading ? '—' : value}</Typography>
+      <Typography sx={{ color: brand.muted, fontSize: fs.caption }}>{caption}</Typography>
     </Box>
   );
 }
 
 export function StatRow({ children }) {
-  return <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' }, gap: 2, mb: 3 }}>{children}</Box>;
+  return <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' }, gap: 2, mb: 2 }}>{children}</Box>;
 }
 
 export function SearchField({ placeholder, value, onChange }) {
@@ -104,7 +94,7 @@ export function SearchField({ placeholder, value, onChange }) {
         },
         htmlInput: { 'aria-label': placeholder }
       }}
-      sx={{ '& .MuiOutlinedInput-root': { bgcolor: brand.surface, borderRadius: '10px', '& fieldset': { borderColor: brand.line } } }}
+      sx={{ '& .MuiOutlinedInput-root': { bgcolor: brand.surface, borderRadius: '10px', fontSize: fs.body, '& fieldset': { borderColor: brand.line } } }}
     />
   );
 }
@@ -116,14 +106,14 @@ export function FilterSelect({ value, onChange, options, label, minWidth = 150 }
       size="small"
       value={value}
       onChange={(event) => onChange(event.target.value)}
-      slotProps={{ htmlInput: { 'aria-label': label } }}
+      slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': label } }}
       sx={{
         minWidth,
-        '& .MuiOutlinedInput-root': { bgcolor: brand.surface, borderRadius: '10px', '& fieldset': { borderColor: brand.line } }
+        '& .MuiOutlinedInput-root': { bgcolor: brand.surface, borderRadius: '10px', fontSize: fs.body, '& fieldset': { borderColor: brand.line } }
       }}
     >
       {options.map((option) => (
-        <MenuItem key={option.value} value={option.value}>
+        <MenuItem key={option.value} value={option.value} sx={{ fontSize: fs.body }}>
           {option.label}
         </MenuItem>
       ))}
@@ -141,7 +131,7 @@ export function Toolbar({ children }) {
 
 export const headCellSx = {
   color: brand.muted,
-  fontSize: 12,
+  fontSize: fs.caption,
   fontWeight: 600,
   py: 1.5,
   bgcolor: '#FAFAF6',
@@ -150,10 +140,24 @@ export const headCellSx = {
 
 export const bodyCellSx = { py: 1.5, borderBottom: `1px solid ${brand.line}` };
 
-function pageNumbers(page, totalPages) {
-  const start = Math.max(0, Math.min(page - 2, totalPages - 5));
-  const end = Math.min(totalPages, start + 5);
-  return Array.from({ length: end - start }, (_, index) => start + index);
+// Luôn có trang đầu và trang cuối; các trang ở giữa bị lược thì thay bằng "…" (kiểu chuỗi "gap-n").
+function pageItems(page, totalPages) {
+  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, index) => index);
+  const last = totalPages - 1;
+  const keep = new Set([0, last, page - 1, page, page + 1]);
+  if (page <= 2) [1, 2, 3].forEach((n) => keep.add(n));
+  if (page >= last - 2) [last - 3, last - 2, last - 1].forEach((n) => keep.add(n));
+  const sorted = [...keep].filter((n) => n >= 0 && n <= last).sort((a, b) => a - b);
+  const items = [];
+  sorted.forEach((n, i) => {
+    if (i > 0) {
+      const gap = n - sorted[i - 1];
+      if (gap === 2) items.push(n - 1);
+      else if (gap > 2) items.push(`gap-${n}`);
+    }
+    items.push(n);
+  });
+  return items;
 }
 
 export function Pager({ page, totalPages, total, size, noun, onPage }) {
@@ -161,14 +165,17 @@ export function Pager({ page, totalPages, total, size, noun, onPage }) {
   const to = Math.min(total, (page + 1) * size);
   return (
     <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} spacing={1.5} sx={{ p: 2 }}>
-      <Typography variant="caption" sx={{ color: brand.muted }}>
-        {`Showing ${from}–${to} of ${total} ${noun}`}
-      </Typography>
+      <Typography sx={{ color: brand.muted, fontSize: fs.caption }}>{`Hiển thị ${from}–${to} trong ${total} ${noun}`}</Typography>
       <Stack direction="row" spacing={1} alignItems="center">
         <OutlineButton size="small" disabled={page <= 0} onClick={() => onPage(page - 1)}>
-          Previous
+          Trước
         </OutlineButton>
-        {pageNumbers(page, Math.max(totalPages, 1)).map((index) => (
+        {pageItems(page, Math.max(totalPages, 1)).map((index) =>
+          typeof index === 'string' ? (
+            <Typography key={index} sx={{ color: brand.muted, px: 0.5 }}>
+              …
+            </Typography>
+          ) : (
           <Button
             key={index}
             size="small"
@@ -178,15 +185,17 @@ export function Pager({ page, totalPages, total, size, noun, onPage }) {
               minWidth: 36,
               borderRadius: '10px',
               fontWeight: 600,
+              fontSize: fs.caption,
               color: index === page ? brand.inkOnCyan : brand.ink,
               bgcolor: index === page ? brand.cyan : 'transparent'
             }}
           >
             {index + 1}
           </Button>
-        ))}
+          )
+        )}
         <OutlineButton size="small" disabled={page + 1 >= totalPages} onClick={() => onPage(page + 1)}>
-          Next
+          Sau
         </OutlineButton>
       </Stack>
     </Stack>
@@ -196,7 +205,7 @@ export function Pager({ page, totalPages, total, size, noun, onPage }) {
 export function EmptyRow({ colSpan, children }) {
   return (
     <TableRow>
-      <TableCell colSpan={colSpan} sx={{ py: 6, textAlign: 'center', color: brand.muted, borderBottom: 'none' }}>
+      <TableCell colSpan={colSpan} sx={{ py: 6, textAlign: 'center', color: brand.muted, borderBottom: 'none', fontSize: fs.body }}>
         {children}
       </TableCell>
     </TableRow>

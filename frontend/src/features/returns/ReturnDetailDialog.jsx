@@ -22,7 +22,8 @@ import {
   TextField,
   Stepper,
   Step,
-  StepLabel
+  StepLabel,
+  Grid
 } from '@mui/material';
 import {
   CheckOutlined,
@@ -30,9 +31,14 @@ import {
   InboxOutlined,
   DollarCircleOutlined,
   AuditOutlined,
-  CheckCircleFilled
+  CheckCircleFilled,
+  BankOutlined,
+  QrcodeOutlined,
+  CopyOutlined,
+  CheckCircleOutlined
 } from '@ant-design/icons';
 import { processReturnRequest, getReturnRequestById } from '../../services/returnService';
+import { generateVietQrUrl, getBankByCode } from '../../utils/vietqr';
 
 const COLORS = {
   text: '#202D42',
@@ -97,6 +103,7 @@ export default function ReturnDetailDialog({ open, onClose, returnData, onProces
   const [showCompleteForm, setShowCompleteForm] = useState(false);
   const [completeItems, setCompleteItems] = useState({}); // { [itemId]: { quantityReceived, quantityRestocked, refundAmount } }
   const [currentData, setCurrentData] = useState(returnData);
+  const [copied, setCopied] = useState(false);
 
   const initCompleteItems = (items) => {
     const initial = {};
@@ -248,6 +255,69 @@ export default function ReturnDetailDialog({ open, onClose, returnData, onProces
             </Box>
           </Stack>
         </Paper>
+
+        {/* ONLINE REFUND & SHIPPING INFO */}
+        {(data.bankAccountNumber || data.returnTrackingCode || data.evidenceUrls) && (
+          <Paper sx={{ p: 2, mb: 2.5, bgcolor: '#FAFCFF', border: `1px solid ${COLORS.cyan}`, borderRadius: 2 }}>
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
+              <BankOutlined style={{ color: '#0E7A88', fontSize: 16 }} />
+              <Typography fontSize={13} fontWeight={700} color={COLORS.text}>
+                Thông tin hoàn tiền & Vận chuyển bưu cục (Online)
+              </Typography>
+            </Stack>
+
+            <Grid container spacing={2}>
+              {data.bankAccountNumber && (
+                <>
+                  <Grid item xs={12} sm={4}>
+                    <Typography fontSize={11} color={COLORS.muted}>Ngân hàng thụ hưởng</Typography>
+                    <Typography fontSize={13} fontWeight={700} color={COLORS.text}>
+                      {getBankByCode(data.bankCode)?.name || data.bankCode || '—'}
+                    </Typography>
+                  </Grid>
+
+                  <Grid item xs={12} sm={4}>
+                    <Typography fontSize={11} color={COLORS.muted}>Số tài khoản nhận tiền</Typography>
+                    <Typography fontSize={13} fontWeight={700} color="#0E7A88">
+                      {data.bankAccountNumber}
+                    </Typography>
+                  </Grid>
+
+                  <Grid item xs={12} sm={4}>
+                    <Typography fontSize={11} color={COLORS.muted}>Chủ tài khoản</Typography>
+                    <Typography fontSize={13} fontWeight={700} color={COLORS.text}>
+                      {data.bankAccountName || data.customerName || '—'}
+                    </Typography>
+                  </Grid>
+                </>
+              )}
+
+              {data.returnTrackingCode && (
+                <Grid item xs={12} sm={6}>
+                  <Typography fontSize={11} color={COLORS.muted}>Mã vận đơn bưu cục gửi hoàn</Typography>
+                  <Typography fontSize={13} fontWeight={700} color={COLORS.text}>
+                    {data.returnTrackingCode}
+                  </Typography>
+                </Grid>
+              )}
+
+              {data.evidenceUrls && (
+                <Grid item xs={12} sm={6}>
+                  <Typography fontSize={11} color={COLORS.muted}>Ảnh minh chứng lỗi</Typography>
+                  <Typography fontSize={12} color="#0E7A88" sx={{ wordBreak: 'break-all' }}>
+                    {data.evidenceUrls.startsWith('http') ? (
+                      <a href={data.evidenceUrls} target="_blank" rel="noreferrer" style={{ color: '#0E7A88', fontWeight: 600 }}>
+                        Xem ảnh minh chứng ↗
+                      </a>
+                    ) : (
+                      data.evidenceUrls
+                    )}
+                  </Typography>
+                </Grid>
+              )}
+            </Grid>
+          </Paper>
+        )}
 
         {error && (
           <Alert severity="error" sx={{ mb: 2 }}>
@@ -402,6 +472,88 @@ export default function ReturnDetailDialog({ open, onClose, returnData, onProces
             </TableBody>
           </Table>
         </TableContainer>
+
+        {showCompleteForm && data.bankAccountNumber && (
+          <Paper sx={{ p: 2.5, my: 2, bgcolor: '#F0FCFE', border: `1.5px dashed #0E7A88`, borderRadius: 2 }}>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={3} alignItems="center">
+              <Box sx={{ textAlign: 'center', bgcolor: '#FFF', p: 1.5, borderRadius: 2, border: `1px solid ${COLORS.border}`, boxShadow: '0 2px 10px rgba(0,0,0,0.06)' }}>
+                <img
+                  src={generateVietQrUrl({
+                    bankCode: data.bankCode || 'MB',
+                    accountNumber: data.bankAccountNumber,
+                    accountName: data.bankAccountName || data.customerName,
+                    amount: Object.values(completeItems).reduce((sum, item) => sum + (Number(item.refundAmount) || 0), 0),
+                    memo: `THORS HOAN TIEN DON ${data.orderNumber}`
+                  })}
+                  alt="VietQR Chuyển khoản hoàn tiền"
+                  style={{ width: 175, height: 175, display: 'block', objectFit: 'contain' }}
+                />
+                <Typography fontSize={11} fontWeight={600} color={COLORS.muted} sx={{ mt: 0.5 }}>
+                  Mã VietQR NAPAS 247
+                </Typography>
+              </Box>
+
+              <Box sx={{ flex: 1, width: '100%' }}>
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
+                  <QrcodeOutlined style={{ color: '#0E7A88', fontSize: 18 }} />
+                  <Typography fontSize={15} fontWeight={700} color={COLORS.text}>
+                    Quét mã VietQR chuyển khoản hoàn tiền
+                  </Typography>
+                </Stack>
+
+                <Typography fontSize={12} color={COLORS.muted} sx={{ mb: 1.5 }}>
+                  Hệ thống đã tự động tính đúng tổng tiền hoàn và nạp thông tin tài khoản của khách. Bạn chỉ cần mở app ngân hàng quét mã trong 3 giây.
+                </Typography>
+
+                <Paper variant="outlined" sx={{ p: 1.5, bgcolor: '#FFF', borderRadius: 1.5 }}>
+                  <Grid container spacing={1.5}>
+                    <Grid item xs={6}>
+                      <Typography fontSize={11} color={COLORS.muted}>Ngân hàng thụ hưởng:</Typography>
+                      <Typography fontSize={13} fontWeight={700} color={COLORS.text}>
+                        {getBankByCode(data.bankCode)?.name || data.bankCode || '—'}
+                      </Typography>
+                    </Grid>
+
+                    <Grid item xs={6}>
+                      <Typography fontSize={11} color={COLORS.muted}>Số tài khoản:</Typography>
+                      <Stack direction="row" spacing={1} alignItems="center">
+                        <Typography fontSize={13} fontWeight={700} color="#0E7A88">
+                          {data.bankAccountNumber}
+                        </Typography>
+                        <Button
+                          size="small"
+                          startIcon={copied ? <CheckCircleOutlined /> : <CopyOutlined />}
+                          onClick={() => {
+                            navigator.clipboard.writeText(data.bankAccountNumber);
+                            setCopied(true);
+                            setTimeout(() => setCopied(false), 2000);
+                          }}
+                          sx={{ minWidth: 'auto', p: '2px 6px', fontSize: 11, textTransform: 'none' }}
+                        >
+                          {copied ? 'Đã chép' : 'Sao chép'}
+                        </Button>
+                      </Stack>
+                    </Grid>
+
+                    <Grid item xs={6}>
+                      <Typography fontSize={11} color={COLORS.muted}>Chủ tài khoản:</Typography>
+                      <Typography fontSize={13} fontWeight={700} color={COLORS.text}>
+                        {data.bankAccountName || data.customerName || '—'}
+                      </Typography>
+                    </Grid>
+
+                    <Grid item xs={6}>
+                      <Typography fontSize={11} color={COLORS.muted}>Số tiền chuyển hoàn:</Typography>
+                      <Typography fontSize={15} fontWeight={700} color={COLORS.green}>
+                        {formatPrice(Object.values(completeItems).reduce((sum, item) => sum + (Number(item.refundAmount) || 0), 0))}
+                      </Typography>
+                    </Grid>
+                  </Grid>
+                </Paper>
+              </Box>
+            </Stack>
+          </Paper>
+        )}
 
         {showCompleteForm && (
           <Alert severity="info" sx={{ mt: 1 }}>

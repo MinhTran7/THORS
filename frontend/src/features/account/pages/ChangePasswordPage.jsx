@@ -10,33 +10,33 @@ import { useCrumbs } from 'layouts/crumbs';
 import { clearCsrf } from 'services/http';
 import { isLowercaseChar, isNumber, isSpecialChar, isUppercaseChar } from 'utils/password-validation';
 import { accountsApi } from '../api';
-import { brand, cardSx } from '../tokens';
+import { brand, cardSx, fs } from '../tokens';
 import { confirmPassword, newPassword } from '../validation';
 import { BrandButton, OutlineButton } from '../components/Brand';
 import { FormField, PasswordInput } from '../components/Form';
 import { NoticeBox, PageHeader } from '../components/Blocks';
 
 const schema = Yup.object({
-  currentPassword: Yup.string().required('Enter your current password.'),
+  currentPassword: Yup.string().required('Nhập mật khẩu hiện tại của bạn.'),
   password: newPassword,
   confirmPassword
 });
 
 function requirementsFor(value) {
   return [
-    { label: 'At least 10 characters', ok: value.length >= 10 },
-    { label: 'One uppercase and lowercase letter', ok: isUppercaseChar(value) && isLowercaseChar(value) },
-    { label: 'One number', ok: isNumber(value) },
-    { label: 'One special character', ok: isSpecialChar(value) }
+    { label: 'Ít nhất 10 ký tự', ok: value.length >= 10 },
+    { label: 'Có chữ hoa và chữ thường', ok: isUppercaseChar(value) && isLowercaseChar(value) },
+    { label: 'Có một chữ số', ok: isNumber(value) },
+    { label: 'Có một ký tự đặc biệt', ok: isSpecialChar(value) }
   ];
 }
 
 export default function ChangePasswordPage() {
-  useCrumbs(['Profile', 'Change Password']);
+  useCrumbs(['Hồ sơ', 'Đổi mật khẩu']);
   const { account, setAccount } = useAuth();
   const navigate = useNavigate();
   const [error, setError] = useState('');
-  // Shop Owner quên mật khẩu hiện tại: gửi yêu cầu để Admin đặt lại
+  // Shop Owner có thêm lựa chọn nhờ Admin đặt lại mật khẩu
   const [request, setRequest] = useState({ status: 'idle', message: '' });
 
   const form = useFormik({
@@ -48,7 +48,7 @@ export default function ChangePasswordPage() {
         await accountsApi.changePassword(values);
         setAccount(null);
         clearCsrf();
-        navigate(`/login?message=${encodeURIComponent('Your password was updated. Please sign in again.')}`);
+        navigate(`/login?message=${encodeURIComponent('Mật khẩu đã được cập nhật. Vui lòng đăng nhập lại.')}`);
       } catch (e) {
         setError(e.message);
       }
@@ -67,15 +67,15 @@ export default function ChangePasswordPage() {
 
   const requirements = requirementsFor(form.values.password);
   const met = requirements.filter((item) => item.ok).length;
-  const strengthLabel = !form.values.password ? ' ' : met === 4 ? 'Strong password' : met === 3 ? 'Good password' : 'Weak password';
+  const strengthLabel = !form.values.password ? ' ' : met === 4 ? 'Mật khẩu mạnh' : met === 3 ? 'Mật khẩu khá' : 'Mật khẩu yếu';
   const fieldError = (name) => (form.touched[name] && form.errors[name]) || '';
   const matches = form.values.confirmPassword && form.values.confirmPassword === form.values.password;
 
   if (!account.passwordEnabled) {
     return (
       <Box>
-        <PageHeader back={{ to: '/profile', label: 'User Profile' }} title="Change Password" />
-        <Alert severity="info">This account signs in with Google, so it has no THORS password to change.</Alert>
+        <PageHeader back={{ to: '/profile', label: 'Hồ sơ cá nhân' }} title="Đổi mật khẩu" />
+        <Alert severity="info">Tài khoản này đăng nhập bằng Google nên không có mật khẩu THORS để đổi.</Alert>
       </Box>
     );
   }
@@ -83,27 +83,27 @@ export default function ChangePasswordPage() {
   return (
     <Box>
       <PageHeader
-        back={{ to: '/profile', label: 'User Profile' }}
-        title="Change Password"
-        subtitle="A strong password helps keep your account and store secure."
+        back={{ to: '/profile', label: 'Hồ sơ cá nhân' }}
+        title="Đổi mật khẩu"
+        subtitle="Mật khẩu mạnh giúp giữ tài khoản của bạn an toàn."
       />
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
           {error}
         </Alert>
       )}
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1fr) 320px' }, gap: 3, alignItems: 'start' }}>
-        <Box component="form" onSubmit={form.handleSubmit} noValidate sx={{ ...cardSx, p: 3 }}>
-          <Typography variant="h5" sx={{ color: brand.ink }}>
-            Update your password
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1fr) 360px' }, gap: 3, alignItems: 'start' }}>
+        <Box component="form" onSubmit={form.handleSubmit} noValidate sx={{ ...cardSx, p: 3.5 }}>
+          <Typography variant="h5" sx={{ color: brand.ink, fontSize: fs.cardTitle }}>
+            Cập nhật mật khẩu
           </Typography>
-          <Typography variant="caption" sx={{ color: brand.muted }}>
-            {`For ${account.fullName} · ${account.email}`}
+          <Typography sx={{ color: brand.muted, fontSize: fs.caption, mt: 0.25 }}>
+            {`Cho ${account.fullName} · ${account.email}`}
           </Typography>
           <Stack spacing={2.5} sx={{ mt: 2.5 }}>
-            <FormField label="Current Password" error={fieldError('currentPassword')}>
+            <FormField label="Mật khẩu hiện tại" error={fieldError('currentPassword')}>
               <PasswordInput
-                label="Current Password"
+                label="Mật khẩu hiện tại"
                 name="currentPassword"
                 autoComplete="current-password"
                 value={form.values.currentPassword}
@@ -113,9 +113,9 @@ export default function ChangePasswordPage() {
               />
             </FormField>
             <Box>
-              <FormField label="New Password" error={fieldError('password')}>
+              <FormField label="Mật khẩu mới" error={fieldError('password')}>
                 <PasswordInput
-                  label="New Password"
+                  label="Mật khẩu mới"
                   name="password"
                   autoComplete="new-password"
                   value={form.values.password}
@@ -130,21 +130,19 @@ export default function ChangePasswordPage() {
                 ))}
               </Box>
               <Stack direction="row" justifyContent="space-between" sx={{ mt: 0.5 }}>
-                <Typography variant="caption" sx={{ color: brand.ink, fontWeight: 600 }}>
-                  {strengthLabel}
-                </Typography>
-                <Typography variant="caption" sx={{ color: brand.muted }}>
-                  {met === 4 ? 'All requirements met' : form.values.password ? `${met} of 4 requirements met` : ''}
+                <Typography sx={{ color: brand.ink, fontWeight: 600, fontSize: fs.caption }}>{strengthLabel}</Typography>
+                <Typography sx={{ color: brand.muted, fontSize: fs.caption }}>
+                  {met === 4 ? 'Đã đạt đủ yêu cầu' : form.values.password ? `Đạt ${met}/4 yêu cầu` : ''}
                 </Typography>
               </Stack>
             </Box>
             <FormField
-              label="Confirm Password"
+              label="Xác nhận mật khẩu"
               error={fieldError('confirmPassword')}
-              helper={matches ? 'Your new passwords match.' : undefined}
+              helper={matches ? 'Hai mật khẩu mới trùng khớp.' : undefined}
             >
               <PasswordInput
-                label="Confirm Password"
+                label="Xác nhận mật khẩu"
                 name="confirmPassword"
                 autoComplete="new-password"
                 value={form.values.confirmPassword}
@@ -153,15 +151,15 @@ export default function ChangePasswordPage() {
                 error={Boolean(fieldError('confirmPassword'))}
               />
             </FormField>
-            <NoticeBox title="You'll need to sign in again" icon={<InfoCircleOutlined />}>
-              Updating your password signs you out of other devices. Use your new password the next time you log in.
+            <NoticeBox title="Bạn sẽ cần đăng nhập lại" icon={<InfoCircleOutlined />}>
+              Đổi mật khẩu sẽ đăng xuất bạn khỏi các thiết bị khác. Hãy dùng mật khẩu mới ở lần đăng nhập tiếp theo.
             </NoticeBox>
             <Stack direction="row" spacing={1.5} justifyContent="flex-end">
-              <OutlineButton component={RouterLink} to="/profile">
-                Cancel
+              <OutlineButton component={RouterLink} to="/profile" sx={{ fontSize: fs.body }}>
+                Hủy
               </OutlineButton>
-              <BrandButton type="submit" disabled={form.isSubmitting}>
-                {form.isSubmitting ? 'Updating…' : 'Update'}
+              <BrandButton type="submit" disabled={form.isSubmitting} sx={{ fontSize: fs.body }}>
+                {form.isSubmitting ? 'Đang cập nhật…' : 'Cập nhật'}
               </BrandButton>
             </Stack>
           </Stack>
@@ -169,36 +167,31 @@ export default function ChangePasswordPage() {
 
         <Stack spacing={2.5}>
           <Box sx={{ ...cardSx, p: 3 }}>
-            <Typography variant="h5" sx={{ color: brand.ink, mb: 1.5 }}>
-              Make it a strong one
-            </Typography>
-            <SafetyCertificateOutlined style={{ fontSize: 24 }} />
+            <Stack direction="row" justifyContent="space-between" alignItems="center">
+              <Typography variant="h5" sx={{ color: brand.ink, fontSize: fs.cardTitle }}>
+                Hãy chọn mật khẩu mạnh
+              </Typography>
+              <SafetyCertificateOutlined style={{ fontSize: 24 }} />
+            </Stack>
             <Stack spacing={1} sx={{ mt: 1.5 }} component="ul" style={{ listStyle: 'none', margin: 0, padding: 0, marginTop: 12 }}>
               {requirements.map((item) => (
                 <Stack key={item.label} component="li" direction="row" spacing={1} alignItems="center">
-                  <CheckCircleFilled style={{ color: item.ok ? '#2BB5C4' : '#D5D7D0', fontSize: 14 }} />
-                  <Typography variant="caption" sx={{ color: brand.ink }}>
-                    {item.label}
-                  </Typography>
+                  <CheckCircleFilled style={{ color: item.ok ? '#2BB5C4' : '#D5D7D0', fontSize: 16 }} />
+                  <Typography sx={{ color: brand.ink, fontSize: fs.body }}>{item.label}</Typography>
                 </Stack>
               ))}
             </Stack>
-            <Typography variant="caption" sx={{ color: brand.muted, display: 'block', mt: 1.5 }}>
-              Only the first rule is required; the others make your password stronger.
+            <Typography sx={{ color: brand.muted, display: 'block', mt: 1.5, fontSize: fs.caption }}>
+              Chỉ quy tắc đầu tiên là bắt buộc; các quy tắc còn lại giúp mật khẩu mạnh hơn.
             </Typography>
           </Box>
-          <NoticeBox title="A little extra protection">
-            Choose a password you don&apos;t use elsewhere. Never share it with staff or family members, since each person should have their
-            own account.
-          </NoticeBox>
-          {account.role === 'OWNER' ? (
+          {account.role === 'OWNER' && (
             <Box sx={{ ...cardSx, p: 3 }}>
-              <Typography variant="subtitle2" sx={{ color: brand.ink }}>
-                Forgot your current password?
+              <Typography variant="subtitle2" sx={{ color: brand.ink, fontSize: fs.strong }}>
+                Nhờ quản trị viên đặt lại mật khẩu
               </Typography>
-              <Typography variant="caption" sx={{ color: brand.muted, display: 'block', mt: 0.5, mb: 1.5 }}>
-                Ask the administrator to reset it. They will set a new password and share it with you privately. When they do, you will be
-                signed out and can sign in with the new password.
+              <Typography sx={{ color: brand.muted, display: 'block', mt: 0.5, mb: 1.5, fontSize: fs.caption, lineHeight: 1.55 }}>
+                Quản trị viên sẽ đặt mật khẩu mới và gửi riêng cho bạn. Bạn sẽ bị đăng xuất và đăng nhập lại bằng mật khẩu mới.
               </Typography>
               {request.status === 'sent' && (
                 <Alert severity="success" sx={{ mb: 1.5 }}>
@@ -210,14 +203,15 @@ export default function ChangePasswordPage() {
                   {request.message}
                 </Alert>
               )}
-              <OutlineButton fullWidth onClick={sendResetRequest} disabled={request.status === 'sending' || request.status === 'sent'}>
-                {request.status === 'sending' ? 'Sending…' : request.status === 'sent' ? 'Request sent' : 'Send request to Admin'}
+              <OutlineButton
+                fullWidth
+                onClick={sendResetRequest}
+                disabled={request.status === 'sending' || request.status === 'sent'}
+                sx={{ fontSize: fs.body }}
+              >
+                {request.status === 'sending' ? 'Đang gửi…' : request.status === 'sent' ? 'Đã gửi yêu cầu' : 'Gửi yêu cầu cho Admin'}
               </OutlineButton>
             </Box>
-          ) : (
-            <Typography variant="caption" sx={{ color: brand.muted }}>
-              Forgot your current password? Use Forgot Password from the Login screen.
-            </Typography>
           )}
         </Stack>
       </Box>
