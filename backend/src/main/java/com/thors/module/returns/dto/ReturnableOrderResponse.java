@@ -7,6 +7,7 @@ import java.util.List;
 public class ReturnableOrderResponse {
 
     private int orderId;
+    private Integer userId;
     private String orderNumber;
     private String orderStatus;
     private String paymentStatus;
@@ -106,6 +107,14 @@ public class ReturnableOrderResponse {
 
     public void setOrderId(int orderId) {
         this.orderId = orderId;
+    }
+
+    public Integer getUserId() {
+        return userId;
+    }
+
+    public void setUserId(Integer userId) {
+        this.userId = userId;
     }
 
     public String getOrderNumber() {

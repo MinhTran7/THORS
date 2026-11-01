@@ -35,6 +35,7 @@ public class ReturnRepository {
         String sql = """
             SELECT 
                 order_id,
+                user_id,
                 order_number,
                 order_status,
                 payment_status,
@@ -52,6 +53,8 @@ public class ReturnRepository {
                 (rs, rowNum) -> {
                     ReturnableOrderResponse res = new ReturnableOrderResponse();
                     res.setOrderId(rs.getInt("order_id"));
+                    int uId = rs.getInt("user_id");
+                    res.setUserId(rs.wasNull() ? null : uId);
                     res.setOrderNumber(rs.getString("order_number"));
                     res.setOrderStatus(rs.getString("order_status"));
                     res.setPaymentStatus(rs.getString("payment_status"));
@@ -138,6 +141,30 @@ public class ReturnRepository {
         String customerName,
         String customerPhone
     ) {
+        return insertReturnRequest(
+            orderId, userId, reason, status, requestedAt, createdBy, requestType,
+            customerName, customerPhone, null, null, null, BigDecimal.ZERO, "CUSTOMER", null, null
+        );
+    }
+
+    public int insertReturnRequest(
+        int orderId,
+        Integer userId,
+        String reason,
+        String status,
+        LocalDateTime requestedAt,
+        int createdBy,
+        String requestType,
+        String customerName,
+        String customerPhone,
+        String bankCode,
+        String bankAccountNumber,
+        String bankAccountName,
+        BigDecimal returnShippingFee,
+        String returnShippingPayer,
+        String returnTrackingCode,
+        String evidenceUrls
+    ) {
         String sql = """
             INSERT INTO return_request (
                 order_id,
@@ -148,8 +175,15 @@ public class ReturnRepository {
                 created_by,
                 request_type,
                 customer_name,
-                customer_phone
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                customer_phone,
+                bank_code,
+                bank_account_number,
+                bank_account_name,
+                return_shipping_fee,
+                return_shipping_payer,
+                return_tracking_code,
+                evidence_urls
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
 
         KeyHolder keyHolder = new GeneratedKeyHolder();
@@ -169,6 +203,13 @@ public class ReturnRepository {
             ps.setString(7, requestType != null ? requestType : "RETURN");
             ps.setString(8, customerName);
             ps.setString(9, customerPhone);
+            ps.setString(10, bankCode);
+            ps.setString(11, bankAccountNumber);
+            ps.setString(12, bankAccountName);
+            ps.setBigDecimal(13, returnShippingFee != null ? returnShippingFee : BigDecimal.ZERO);
+            ps.setString(14, returnShippingPayer != null ? returnShippingPayer : "CUSTOMER");
+            ps.setString(15, returnTrackingCode);
+            ps.setString(16, evidenceUrls);
             return ps;
         }, keyHolder);
 
@@ -236,6 +277,13 @@ public class ReturnRepository {
                 cu.full_name AS created_by_name,
                 rr.processed_by,
                 pu.full_name AS processed_by_name,
+                rr.bank_code,
+                rr.bank_account_number,
+                rr.bank_account_name,
+                rr.return_shipping_fee,
+                rr.return_shipping_payer,
+                rr.return_tracking_code,
+                rr.evidence_urls,
                 COALESCE((SELECT SUM(rri.refund_amount) FROM return_request_item rri WHERE rri.return_request_id = rr.return_request_id), 0) AS total_refund_amount
             FROM return_request rr
             JOIN orders o ON rr.order_id = o.order_id
@@ -295,6 +343,13 @@ public class ReturnRepository {
             res.setProcessedByName(rs.getString("processed_by_name"));
 
             res.setTotalRefundAmount(rs.getBigDecimal("total_refund_amount"));
+            res.setBankCode(rs.getString("bank_code"));
+            res.setBankAccountNumber(rs.getString("bank_account_number"));
+            res.setBankAccountName(rs.getString("bank_account_name"));
+            res.setReturnShippingFee(rs.getBigDecimal("return_shipping_fee"));
+            res.setReturnShippingPayer(rs.getString("return_shipping_payer"));
+            res.setReturnTrackingCode(rs.getString("return_tracking_code"));
+            res.setEvidenceUrls(rs.getString("evidence_urls"));
             return res;
         }, params.toArray());
 
@@ -355,6 +410,13 @@ public class ReturnRepository {
                 cu.full_name AS created_by_name,
                 rr.processed_by,
                 pu.full_name AS processed_by_name,
+                rr.bank_code,
+                rr.bank_account_number,
+                rr.bank_account_name,
+                rr.return_shipping_fee,
+                rr.return_shipping_payer,
+                rr.return_tracking_code,
+                rr.evidence_urls,
                 COALESCE((SELECT SUM(rri.refund_amount) FROM return_request_item rri WHERE rri.return_request_id = rr.return_request_id), 0) AS total_refund_amount
             FROM return_request rr
             JOIN orders o ON rr.order_id = o.order_id
@@ -391,6 +453,13 @@ public class ReturnRepository {
                 r.setProcessedByName(rs.getString("processed_by_name"));
 
                 r.setTotalRefundAmount(rs.getBigDecimal("total_refund_amount"));
+                r.setBankCode(rs.getString("bank_code"));
+                r.setBankAccountNumber(rs.getString("bank_account_number"));
+                r.setBankAccountName(rs.getString("bank_account_name"));
+                r.setReturnShippingFee(rs.getBigDecimal("return_shipping_fee"));
+                r.setReturnShippingPayer(rs.getString("return_shipping_payer"));
+                r.setReturnTrackingCode(rs.getString("return_tracking_code"));
+                r.setEvidenceUrls(rs.getString("evidence_urls"));
                 return r;
             }, returnRequestId);
 
@@ -462,6 +531,28 @@ public class ReturnRepository {
             status,
             processedBy,
             processedAt != null ? Timestamp.valueOf(processedAt) : Timestamp.valueOf(LocalDateTime.now()),
+            returnRequestId
+        );
+    }
+
+    public void updateReturnOnlineInfo(
+        int returnRequestId,
+        BigDecimal returnShippingFee,
+        String returnShippingPayer,
+        String returnTrackingCode
+    ) {
+        String sql = """
+            UPDATE return_request
+            SET return_shipping_fee = COALESCE(?, return_shipping_fee),
+                return_shipping_payer = COALESCE(?, return_shipping_payer),
+                return_tracking_code = COALESCE(?, return_tracking_code)
+            WHERE return_request_id = ?
+            """;
+        jdbcTemplate.update(
+            sql,
+            returnShippingFee,
+            returnShippingPayer,
+            returnTrackingCode,
             returnRequestId
         );
     }
