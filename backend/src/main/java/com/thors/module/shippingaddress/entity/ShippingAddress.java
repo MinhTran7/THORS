@@ -11,6 +11,8 @@ public record ShippingAddress(
         String phone,
         String provinceCode,
         String provinceName,
+        String districtCode,
+        String districtName,
         String wardCode,
         String wardName,
         String addressDetail,

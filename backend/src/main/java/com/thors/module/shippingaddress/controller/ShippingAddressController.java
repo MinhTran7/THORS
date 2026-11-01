@@ -43,7 +43,7 @@ public class ShippingAddressController {
         return service.update(sessions.current(), addressId, request);
     }
 
-    @PatchMapping("/{addressId}/default")
+    @RequestMapping(value = "/{addressId}/default", method = {RequestMethod.PATCH, RequestMethod.PUT})
     public ShippingAddressResponse setDefault(@PathVariable int addressId) {
         return service.setDefault(sessions.current(), addressId);
     }

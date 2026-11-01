@@ -44,7 +44,6 @@ public class ShippingAddressService {
     public ShippingAddressResponse create(Account actor, ShippingAddressRequest request) {
         int userId = requireCustomer(actor);
         Validated v = validate(request);
-        addresses.lockCustomer(userId);
 
         int currentCount = addresses.countActiveByUser(userId);
         if (currentCount >= MAX_ACTIVE_ADDRESSES) {
@@ -54,33 +53,32 @@ public class ShippingAddressService {
         boolean makeDefault = currentCount == 0 || Boolean.TRUE.equals(request.isDefault());
         if (makeDefault) addresses.clearDefault(userId);
 
-        addresses.insert(userId, v.recipientName(), v.phone(), v.provinceCode(),
-                v.provinceName(), v.wardCode(), v.wardName(), v.addressDetail(),
+        int newId = addresses.insert(userId, v.recipientName(), v.phone(),
+                v.provinceCode(), v.provinceName(),
+                v.districtCode(), v.districtName(),
+                v.wardCode(), v.wardName(), v.addressDetail(),
                 v.latitude(), v.longitude(), makeDefault);
 
-        int newId = addresses.findLatestId(userId)
-                .orElseThrow(() -> new ApiException(500, "ADDRESS_CREATE_FAILED", "Không thể tạo địa chỉ giao hàng."));
         return addresses.findActiveById(userId, newId)
                 .map(ShippingAddressResponse::from)
-                .orElseThrow(() -> new ApiException(500, "ADDRESS_CREATE_FAILED", "Không thể đọc địa chỉ vừa tạo."));
+                .orElseThrow(() -> notFound());
     }
 
     @Transactional
     public ShippingAddressResponse update(Account actor, int addressId, ShippingAddressRequest request) {
         int userId = requireCustomer(actor);
         Validated v = validate(request);
-        addresses.lockCustomer(userId);
-        var existing = addresses.findActiveById(userId, addressId).orElseThrow(() -> notFound());
+        addresses.findActiveById(userId, addressId).orElseThrow(() -> notFound());
 
-        // isDefault=true sẽ chuyển mặc định. false/null không tự bỏ mặc định hiện tại,
-        // nhằm bảo đảm Customer không còn địa chỉ nào mà không có mặc định.
         if (Boolean.TRUE.equals(request.isDefault())) {
             addresses.clearDefault(userId);
             addresses.setDefault(userId, addressId);
         }
 
         int updated = addresses.update(userId, addressId, v.recipientName(), v.phone(),
-                v.provinceCode(), v.provinceName(), v.wardCode(), v.wardName(),
+                v.provinceCode(), v.provinceName(),
+                v.districtCode(), v.districtName(),
+                v.wardCode(), v.wardName(),
                 v.addressDetail(), v.latitude(), v.longitude());
         if (updated == 0) throw notFound();
 
@@ -92,7 +90,6 @@ public class ShippingAddressService {
     @Transactional
     public ShippingAddressResponse setDefault(Account actor, int addressId) {
         int userId = requireCustomer(actor);
-        addresses.lockCustomer(userId);
         addresses.findActiveById(userId, addressId).orElseThrow(() -> notFound());
         addresses.clearDefault(userId);
         if (addresses.setDefault(userId, addressId) == 0) throw notFound();
@@ -104,7 +101,6 @@ public class ShippingAddressService {
     @Transactional
     public void delete(Account actor, int addressId) {
         int userId = requireCustomer(actor);
-        addresses.lockCustomer(userId);
         var address = addresses.findActiveById(userId, addressId).orElseThrow(() -> notFound());
         if (address.isDefault()) {
             throw new ApiException(409, "DEFAULT_ADDRESS_CANNOT_DELETE",
@@ -115,16 +111,28 @@ public class ShippingAddressService {
 
     private static Validated validate(ShippingAddressRequest request) {
         if (request == null) throw new ApiException(400, "ADDRESS_REQUIRED", "Vui lòng nhập thông tin địa chỉ.");
-        String recipient = required(request.recipientName(), "RECIPIENT_NAME", "Tên người nhận là bắt buộc.", 100);
-        String phone = required(request.phone(), "PHONE", "Số điện thoại là bắt buộc.", 15);
-        if (!phone.matches("[0-9]{9,15}")) {
-            throw new ApiException(400, "PHONE_INVALID", "Số điện thoại phải gồm 9 đến 15 chữ số.");
+        String recipient = required(request.recipientName(), "RECIPIENT_NAME", "Họ và tên người nhận là bắt buộc.", 100);
+        if (recipient.length() < 2) {
+            throw new ApiException(400, "RECIPIENT_NAME_TOO_SHORT", "Họ và tên người nhận phải có ít nhất 2 ký tự.");
         }
+
+        String rawPhone = required(request.phone(), "PHONE", "Số điện thoại là bắt buộc.", 20);
+        String phone = rawPhone.replaceAll("[\\s.-]", "");
+        if (!phone.matches("^0[0-9]{9}$")) {
+            throw new ApiException(400, "PHONE_INVALID", "Số điện thoại phải gồm đúng 10 chữ số và bắt đầu bằng số 0.");
+        }
+
         String provinceCode = required(request.provinceCode(), "PROVINCE_CODE", "Vui lòng chọn tỉnh/thành phố.", 20);
         String provinceName = required(request.provinceName(), "PROVINCE_NAME", "Tên tỉnh/thành phố không hợp lệ.", 100);
+        String districtCode = required(request.districtCode(), "DISTRICT_CODE", "Vui lòng chọn quận/huyện.", 20);
+        String districtName = required(request.districtName(), "DISTRICT_NAME", "Tên quận/huyện không hợp lệ.", 100);
         String wardCode = required(request.wardCode(), "WARD_CODE", "Vui lòng chọn phường/xã.", 20);
         String wardName = required(request.wardName(), "WARD_NAME", "Tên phường/xã không hợp lệ.", 100);
+
         String detail = required(request.addressDetail(), "ADDRESS_DETAIL", "Vui lòng nhập số nhà, tên đường hoặc địa chỉ chi tiết.", 255);
+        if (detail.length() < 2) {
+            throw new ApiException(400, "ADDRESS_DETAIL_TOO_SHORT", "Địa chỉ chi tiết phải có ít nhất 2 ký tự.");
+        }
 
         BigDecimal lat = request.latitude();
         BigDecimal lng = request.longitude();
@@ -135,7 +143,7 @@ public class ShippingAddressService {
                 || lng.compareTo(BigDecimal.valueOf(-180)) < 0 || lng.compareTo(BigDecimal.valueOf(180)) > 0)) {
             throw new ApiException(400, "COORDINATES_INVALID", "Tọa độ bản đồ không hợp lệ.");
         }
-        return new Validated(recipient, phone, provinceCode, provinceName, wardCode, wardName, detail, lat, lng);
+        return new Validated(recipient, phone, provinceCode, provinceName, districtCode, districtName, wardCode, wardName, detail, lat, lng);
     }
 
     private static String required(String value, String code, String message, int maxLength) {
@@ -150,6 +158,7 @@ public class ShippingAddressService {
     }
 
     private record Validated(String recipientName, String phone, String provinceCode,
-                             String provinceName, String wardCode, String wardName,
+                             String provinceName, String districtCode, String districtName,
+                             String wardCode, String wardName,
                              String addressDetail, BigDecimal latitude, BigDecimal longitude) {}
 }
