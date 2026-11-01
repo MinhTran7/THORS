@@ -3,13 +3,17 @@ import { MenuOutlined } from '@ant-design/icons';
 import { Stack } from 'features/account/components/Flex';
 import { formatToday } from 'features/account/format';
 import { brand } from 'features/account/tokens';
+import { useAuth } from 'features/auth/AuthProvider';
 import NotificationBell from 'features/notification/NotificationBell';
+import CartButton from 'components/CartButton';
 import UserMenu from './UserMenu';
+import PendingCartHandler from 'features/shop/PendingCartHandler';
 
 // Header cố định ở đầu trang. Chỉ chứa những thứ cần ở mọi trang:
 // nút mở menu (mobile), breadcrumb, ngày, thông báo và menu tài khoản.
 // Nút riêng của từng trang (Add, Export...) đặt ở PageHeader của trang đó, không đặt ở đây.
 export default function AppHeader({ crumbs, onOpenMenu, onSignOut }) {
+  const { account } = useAuth();
   return (
     <Stack
       component="header"
@@ -57,6 +61,8 @@ export default function AppHeader({ crumbs, onOpenMenu, onSignOut }) {
       <Typography variant="caption" sx={{ color: brand.muted, display: { xs: 'none', sm: 'block' } }}>
         {formatToday()}
       </Typography>
+      {account?.role === 'CUSTOMER' && <CartButton />}
+      <PendingCartHandler />
       <NotificationBell />
       <UserMenu onSignOut={onSignOut} />
     </Stack>
