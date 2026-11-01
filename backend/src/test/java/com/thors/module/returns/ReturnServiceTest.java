@@ -132,8 +132,10 @@ class ReturnServiceTest {
     void createReturnRequest_success() {
         when(sessionAccess.current()).thenReturn(mockOwner);
         when(returnRepository.findOrderByNumber("ORD-123456")).thenReturn(Optional.of(mockOrder));
-        when(returnRepository.insertReturnRequest(anyInt(), any(), anyString(), anyString(), any(), anyInt(), anyString(), anyString(), anyString()))
-                .thenReturn(1);
+        when(returnRepository.insertReturnRequest(
+                anyInt(), any(), anyString(), anyString(), any(), anyInt(), anyString(), anyString(), anyString(),
+                any(), any(), any(), any(), any(), any(), any()
+        )).thenReturn(1);
 
         ReturnRequestResponse mockResponse = new ReturnRequestResponse();
         mockResponse.setReturnRequestId(1);
