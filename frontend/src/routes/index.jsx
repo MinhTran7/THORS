@@ -135,7 +135,7 @@ export default createBrowserRouter([
     { path: '/in-store-sales/history', element: <InStoreSalesHistoryPage /> },
     { path: '/in-store-sales/history/:orderId', element: <InStoreSaleDetailPage /> }
   ]
-}
+},
           
           {
             element: <RequireAuth roles={['OWNER']} />,
