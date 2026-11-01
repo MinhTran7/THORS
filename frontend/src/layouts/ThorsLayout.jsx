@@ -1,8 +1,20 @@
 import { useMemo, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Alert, Box, Drawer, IconButton, List, ListItemButton, ListItemIcon, ListItemText, Tooltip, Typography } from '@mui/material';
+import {
+  Alert,
+  Box,
+  Collapse,
+  Drawer,
+  IconButton,
+  List,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Tooltip,
+  Typography
+} from '@mui/material';
 import { Stack } from 'features/account/components/Flex';
-import { LogoutOutlined } from '@ant-design/icons';
+import { LogoutOutlined, DownOutlined, UpOutlined } from '@ant-design/icons';
 import { useAuth } from 'features/auth/AuthProvider';
 import { ROLE_LABEL, STORE_NAME } from 'features/account/constants';
 import { brand } from 'features/account/tokens';
@@ -22,6 +34,7 @@ export default function ThorsLayout() {
   const [mobile, setMobile] = useState(false);
   const [error, setError] = useState('');
   const [crumbs, setCrumbs] = useState([]);
+  const [openSubmenus, setOpenSubmenus] = useState({});
   // setCrumbs là hàm ổn định của useState nên context chỉ tạo một lần.
   const crumbContext = useMemo(() => ({ setCrumbs }), []);
   const items = navFor(account.role);
@@ -53,24 +66,98 @@ export default function ThorsLayout() {
       </Stack>
 
       <List component="nav" aria-label="Menu chính" sx={{ px: 1.5, flexGrow: 1, overflowY: 'auto' }}>
-        {items.map(({ to, label, icon }) => (
-          <ListItemButton
-            key={to}
-            component={Link}
-            to={to}
-            selected={isSelected(to)}
-            onClick={() => setMobile(false)}
-            sx={{
-              borderRadius: '10px',
-              mb: 0.5,
-              color: brand.muted,
-              '&.Mui-selected, &.Mui-selected:hover': { bgcolor: '#E8F8FA', color: brand.ink, fontWeight: 600 }
-            }}
-          >
-            <ListItemIcon sx={{ color: 'inherit', minWidth: 36 }}>{icon}</ListItemIcon>
-            <ListItemText primary={label} primaryTypographyProps={{ fontSize: 14, fontWeight: 'inherit' }} />
-          </ListItemButton>
-        ))}
+        {items.map((item) => {
+          if (item.children) {
+            const isChildActive = item.children.some(
+              (c) => location.pathname === c.to || location.pathname.startsWith(`${c.to}/`)
+            );
+            const isOpen = openSubmenus[item.label] ?? isChildActive;
+
+            return (
+              <Box key={item.label}>
+                <ListItemButton
+                  onClick={() => setOpenSubmenus((prev) => ({ ...prev, [item.label]: !isOpen }))}
+                  sx={{
+                    borderRadius: '10px',
+                    mb: 0.5,
+                    color: isChildActive ? brand.ink : brand.muted,
+                    bgcolor: 'transparent',
+                    fontWeight: isChildActive ? 600 : 400,
+                    '&:hover': { bgcolor: '#F6F8FA' }
+                  }}
+                >
+                  <ListItemIcon sx={{ color: 'inherit', minWidth: 36 }}>{item.icon}</ListItemIcon>
+                  <ListItemText primary={item.label} primaryTypographyProps={{ fontSize: 14, fontWeight: 'inherit' }} />
+                  {isOpen ? (
+                    <UpOutlined style={{ fontSize: 10, color: brand.muted }} />
+                  ) : (
+                    <DownOutlined style={{ fontSize: 10, color: brand.muted }} />
+                  )}
+                </ListItemButton>
+
+                <Collapse in={isOpen} timeout="auto" unmountOnExit>
+                  <List component="div" disablePadding sx={{ pl: 1.5, mb: 0.5 }}>
+                    {item.children.map((child) => {
+                      const selected = child.to === '/in-store-sales'
+                        ? location.pathname === '/in-store-sales'
+                        : (location.pathname === child.to || location.pathname.startsWith(`${child.to}/`));
+                      return (
+                        <ListItemButton
+                          key={child.to}
+                          component={Link}
+                          to={child.to}
+                          selected={selected}
+                          onClick={() => setMobile(false)}
+                          sx={{
+                            borderRadius: '10px',
+                            mb: 0.5,
+                            pl: 2,
+                            color: brand.muted,
+                            '&.Mui-selected, &.Mui-selected:hover': {
+                              bgcolor: '#E8F8FA',
+                              color: brand.ink,
+                              fontWeight: 600,
+                              '& .MuiListItemIcon-root': {
+                                color: '#1677FF'
+                              }
+                            }
+                          }}
+                        >
+                          {child.icon && (
+                            <ListItemIcon sx={{ color: 'inherit', minWidth: 32 }}>
+                              {child.icon}
+                            </ListItemIcon>
+                          )}
+                          <ListItemText primary={child.label} primaryTypographyProps={{ fontSize: 14, fontWeight: 'inherit' }} />
+                        </ListItemButton>
+                      );
+                    })}
+                  </List>
+                </Collapse>
+              </Box>
+            );
+          }
+
+          const { to, label, icon } = item;
+          return (
+            <ListItemButton
+              key={to}
+              component={Link}
+              to={to}
+              selected={isSelected(to)}
+              onClick={() => setMobile(false)}
+              sx={{
+                borderRadius: '10px',
+                mb: 0.5,
+                color: brand.muted,
+                '&.Mui-selected, &.Mui-selected:hover': { bgcolor: '#E8F8FA', color: brand.ink, fontWeight: 600 }
+              }}
+            >
+              <ListItemIcon sx={{ color: 'inherit', minWidth: 36 }}>{icon}</ListItemIcon>
+              <ListItemText primary={label} primaryTypographyProps={{ fontSize: 14, fontWeight: 'inherit' }} />
+            </ListItemButton>
+          );
+        })}
       </List>
 
       <Stack direction="row" alignItems="center" spacing={1.25} sx={{ p: 2, borderTop: `1px solid ${brand.line}` }}>

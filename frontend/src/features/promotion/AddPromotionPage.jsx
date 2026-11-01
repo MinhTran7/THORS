@@ -20,6 +20,7 @@ import {
   Radio,
   RadioGroup,
   Stack,
+  Switch,
   TextField,
   Typography
 } from '@mui/material';
@@ -28,7 +29,9 @@ import {
   SaveOutlined,
   SearchOutlined,
   FilterOutlined,
-  CloseCircleOutlined
+  CloseCircleOutlined,
+  CheckCircleOutlined,
+  ThunderboltOutlined
 } from '@ant-design/icons';
 
 import { createPromotion } from 'services/promotionService';
@@ -72,6 +75,16 @@ const fieldSx = {
   '& .MuiInputLabel-root.Mui-focused': {
     color: COLORS.dark
   }
+};
+
+const getCurrentDateTimeLocal = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
 };
 
 const initialForm = {
@@ -350,7 +363,7 @@ function ProductItem({ product, checked, onToggle }) {
 }
 
 // Kiểm tra dữ liệu trước khi tạo
-function validateForm(form) {
+function validateForm(form, startImmediately = false) {
   const name = form.name.trim();
   const discountValue = Number(form.discountValue);
   const minOrderValue = Number(form.minOrderValue || 0);
@@ -391,26 +404,43 @@ function validateForm(form) {
     return 'Số tiền giảm cố định phải là số nguyên VNĐ.';
   }
 
-  if (!form.startDate || !form.endDate) {
-    return 'Vui lòng chọn thời gian bắt đầu và kết thúc.';
-  }
+  if (startImmediately) {
+    if (!form.endDate) {
+      return 'Vui lòng chọn thời gian kết thúc.';
+    }
 
-  const now = new Date();
-  const start = new Date(form.startDate);
-  const end = new Date(form.endDate);
+    const start = new Date();
+    const end = new Date(form.endDate);
 
-  if (
-      Number.isNaN(start.getTime()) ||
-      start.getTime() < now.getTime()
-  ) {
-    return 'Thời gian bắt đầu không được ở trong quá khứ.';
-  }
+    if (
+        Number.isNaN(end.getTime()) ||
+        end.getTime() <= start.getTime()
+    ) {
+      return 'Thời gian kết thúc phải sau thời gian hiện tại.';
+    }
+  } else {
+    if (!form.startDate || !form.endDate) {
+      return 'Vui lòng chọn thời gian bắt đầu và kết thúc.';
+    }
 
-  if (
-      Number.isNaN(end.getTime()) ||
-      end.getTime() <= start.getTime()
-  ) {
-    return 'Thời gian kết thúc phải sau thời gian bắt đầu.';
+    const now = new Date();
+    const start = new Date(form.startDate);
+    const end = new Date(form.endDate);
+
+    // Cho phép khoảng đệm 15 phút
+    if (
+        Number.isNaN(start.getTime()) ||
+        start.getTime() < now.getTime() - 15 * 60 * 1000
+    ) {
+      return 'Thời gian bắt đầu không được ở trong quá khứ.';
+    }
+
+    if (
+        Number.isNaN(end.getTime()) ||
+        end.getTime() <= start.getTime()
+    ) {
+      return 'Thời gian kết thúc phải sau thời gian bắt đầu.';
+    }
   }
 
   if (
@@ -450,7 +480,12 @@ function validateForm(form) {
 export default function AddPromotionPage() {
   const navigate = useNavigate();
 
-  const [form, setForm] = useState(initialForm);
+  const [startImmediately, setStartImmediately] = useState(true);
+
+  const [form, setForm] = useState(() => ({
+    ...initialForm,
+    startDate: getCurrentDateTimeLocal()
+  }));
 
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -617,7 +652,7 @@ export default function AddPromotionPage() {
   const handleSubmit = async (event) => {
     event.preventDefault();
 
-    const validationError = validateForm(form);
+    const validationError = validateForm(form, startImmediately);
 
     if (validationError) {
       setError(validationError);
@@ -628,6 +663,8 @@ export default function AddPromotionPage() {
     setSaving(true);
 
     try {
+      const effectiveStartDate = startImmediately ? getCurrentDateTimeLocal() : form.startDate;
+
       await createPromotion({
         name: form.name.trim(),
         description: form.description.trim() || null,
@@ -642,7 +679,7 @@ export default function AddPromotionPage() {
             form.usageLimit === ''
                 ? null
                 : Number(form.usageLimit),
-        startDate: form.startDate,
+        startDate: effectiveStartDate,
         endDate: form.endDate,
         applyScope: form.applyScope,
         productIds:
@@ -1212,6 +1249,83 @@ export default function AddPromotionPage() {
                   Thời gian áp dụng
                 </SectionTitle>
 
+                {/* Tùy chọn Bắt đầu ngay bây giờ */}
+                <Box
+                    sx={{
+                      p: 2,
+                      mb: 2.5,
+                      borderRadius: 2.5,
+                      bgcolor: startImmediately ? '#F0FCFD' : '#F8FAFC',
+                      border: `1px solid ${startImmediately ? '#8DE9F2' : COLORS.border}`,
+                      transition: 'all 0.2s ease',
+                      display: 'flex',
+                      flexDirection: { xs: 'column', sm: 'row' },
+                      justifyContent: 'space-between',
+                      alignItems: { xs: 'flex-start', sm: 'center' },
+                      gap: 1.5
+                    }}
+                >
+                  <Stack direction="row" spacing={1.5} alignItems="center">
+                    <Box
+                        sx={{
+                          width: 38,
+                          height: 38,
+                          borderRadius: 2,
+                          bgcolor: startImmediately ? '#8DE9F2' : '#E2E8F0',
+                          color: startImmediately ? '#0E7490' : '#64748B',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: 18
+                        }}
+                    >
+                      <ThunderboltOutlined />
+                    </Box>
+                    <Box>
+                      <Typography sx={{ fontSize: 14, fontWeight: 700, color: COLORS.text }}>
+                        Bắt đầu ngay bây giờ
+                      </Typography>
+                      <Typography sx={{ fontSize: 12, color: COLORS.muted }}>
+                        {startImmediately
+                            ? 'Khuyến mãi sẽ có hiệu lực ngay lập tức sau khi bạn tạo'
+                            : 'Chủ động lên lịch trước thời điểm bắt đầu khuyến mãi'}
+                      </Typography>
+                    </Box>
+                  </Stack>
+
+                  <FormControlLabel
+                      control={
+                        <Switch
+                            checked={startImmediately}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setStartImmediately(checked);
+                              if (checked) {
+                                setForm((prev) => ({
+                                  ...prev,
+                                  startDate: getCurrentDateTimeLocal()
+                                }));
+                              }
+                            }}
+                            sx={{
+                              '& .MuiSwitch-switchBase.Mui-checked': {
+                                color: '#0E7490'
+                              },
+                              '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                                backgroundColor: '#8DE9F2'
+                              }
+                            }}
+                        />
+                      }
+                      label={
+                        <Typography sx={{ fontSize: 13, fontWeight: 700, color: startImmediately ? '#0E7490' : COLORS.muted }}>
+                          {startImmediately ? 'Áp dụng ngay' : 'Hẹn giờ'}
+                        </Typography>
+                      }
+                      sx={{ m: 0 }}
+                  />
+                </Box>
+
                 <Box
                     sx={{
                       display: 'grid',
@@ -1238,15 +1352,36 @@ export default function AddPromotionPage() {
                       </Box>
                     </Typography>
 
-                    <TextField
-                        type="datetime-local"
-                        value={form.startDate}
-                        onChange={updateField('startDate')}
-                        required
-                        fullWidth
-                        size="medium"
-                        sx={fieldSx}
-                    />
+                    {startImmediately ? (
+                      <Box
+                          sx={{
+                            height: 48,
+                            px: 2,
+                            borderRadius: 2,
+                            bgcolor: '#F0FCFD',
+                            border: `1px dashed #8DE9F2`,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 1,
+                            color: '#0E7490'
+                          }}
+                      >
+                        <CheckCircleOutlined style={{ fontSize: 16 }} />
+                        <Typography sx={{ fontSize: 13, fontWeight: 700 }}>
+                          Áp dụng ngay khi tạo (Thời gian thực)
+                        </Typography>
+                      </Box>
+                    ) : (
+                      <TextField
+                          type="datetime-local"
+                          value={form.startDate}
+                          onChange={updateField('startDate')}
+                          required
+                          fullWidth
+                          size="medium"
+                          sx={fieldSx}
+                      />
+                    )}
                   </Box>
 
                   {/* Thời gian kết thúc */}
@@ -1272,6 +1407,9 @@ export default function AddPromotionPage() {
                         required
                         fullWidth
                         size="medium"
+                        inputProps={{
+                          min: getCurrentDateTimeLocal()
+                        }}
                         sx={fieldSx}
                     />
                   </Box>
@@ -1280,11 +1418,16 @@ export default function AddPromotionPage() {
                 <Alert
                     severity="info"
                     sx={{
-                      mt: 2,
-                      borderRadius: 2
+                      mt: 2.5,
+                      borderRadius: 2.5,
+                      fontSize: 12.5,
+                      '& .MuiAlert-icon': { color: '#0E7490' },
+                      bgcolor: '#F0FCFD',
+                      color: COLORS.text,
+                      border: '1px solid #C7F1F6'
                     }}
                 >
-                  Khuyến mãi chỉ được áp dụng trong khoảng thời gian đã chọn khi trạng thái khuyến mãi là Đang hoạt động.
+                  Khuyến mãi chỉ được áp dụng trong khoảng thời gian đã chọn khi trạng thái là <strong>Đang hoạt động</strong>.
                 </Alert>
               </CardContent>
             </Card>

@@ -3,6 +3,9 @@ package com.thors.module.sales.service;
 import com.thors.common.ApiException;
 import com.thors.module.account.entity.Account;
 import com.thors.module.sales.dto.CreateInStoreSaleRequest;
+import com.thors.module.sales.dto.InStoreSaleDetailResponse;
+import com.thors.module.sales.dto.InStoreSaleListItem;
+import com.thors.module.sales.dto.InStoreSalePageResponse;
 import com.thors.module.sales.dto.InStoreSaleResponse;
 import com.thors.security.SessionAccess;
 import org.springframework.dao.EmptyResultDataAccessException;
@@ -16,6 +19,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -338,6 +342,196 @@ public class InStoreSalesService {
     /**
      * Tạo đơn bán tại quầy trong bảng orders dùng chung.
      */
+    /**
+     * Lấy danh sách lịch sử bán hàng trực tiếp tại quầy (chỉ lấy order_type = 'In-Store').
+     * Hỗ trợ tìm kiếm theo mã đơn, mã hóa đơn, tên khách hàng và lọc theo khoảng ngày.
+     */
+    @Transactional(readOnly = true)
+    public InStoreSalePageResponse listSales(
+            String q,
+            LocalDate fromDate,
+            LocalDate toDate,
+            int page,
+            int size
+    ) {
+        Account seller = sessionAccess.current();
+        validateSeller(seller);
+
+        int safePage = Math.max(page, 0);
+        int safeSize = Math.min(Math.max(size, 1), 50);
+
+        StringBuilder where = new StringBuilder(" WHERE o.order_type = 'In-Store'");
+        List<Object> args = new ArrayList<>();
+
+        if (q != null && !q.trim().isEmpty()) {
+            String like = "%" + q.trim().toLowerCase()
+                    .replace("\\", "\\\\")
+                    .replace("%", "\\%")
+                    .replace("_", "\\_") + "%";
+            where.append(" AND (LOWER(o.order_number) LIKE ? OR LOWER(COALESCE(i.invoice_number, '')) LIKE ?)");
+            args.add(like);
+            args.add(like);
+        }
+
+        if (fromDate != null) {
+            where.append(" AND o.order_date >= ?");
+            args.add(java.sql.Timestamp.valueOf(fromDate.atStartOfDay()));
+        }
+
+        if (toDate != null) {
+            where.append(" AND o.order_date <= ?");
+            args.add(java.sql.Timestamp.valueOf(toDate.atTime(23, 59, 59, 999_000_000)));
+        }
+
+        String countSql = "SELECT COUNT(*) FROM orders o LEFT JOIN invoice i ON i.order_id = o.order_id" + where;
+        Long total = jdbc.queryForObject(countSql, Long.class, args.toArray());
+        long totalItems = total == null ? 0 : total;
+
+        int totalPages = (int) Math.ceil((double) totalItems / safeSize);
+
+        String selectSql = """
+                SELECT
+                    o.order_id,
+                    o.order_number,
+                    i.invoice_number,
+                    o.order_date,
+                    o.delivery_name AS customer_name,
+                    u.full_name AS seller_name,
+                    o.total_amount,
+                    o.payment_method,
+                    o.payment_status,
+                    o.order_status
+                FROM orders o
+                LEFT JOIN invoice i ON i.order_id = o.order_id
+                LEFT JOIN `user` u ON u.user_id = o.created_by
+                """
+                + where
+                + " ORDER BY o.order_date DESC, o.order_id DESC LIMIT ? OFFSET ?";
+
+        List<Object> queryArgs = new ArrayList<>(args);
+        queryArgs.add(safeSize);
+        queryArgs.add((long) safePage * safeSize);
+
+        List<InStoreSaleListItem> items = jdbc.query(selectSql, (rs, rowNum) -> {
+            java.sql.Timestamp ts = rs.getTimestamp("order_date");
+            LocalDateTime orderDate = ts != null ? ts.toLocalDateTime() : null;
+            return new InStoreSaleListItem(
+                    rs.getInt("order_id"),
+                    rs.getString("order_number"),
+                    rs.getString("invoice_number"),
+                    orderDate,
+                    rs.getString("customer_name"),
+                    rs.getString("seller_name"),
+                    rs.getBigDecimal("total_amount"),
+                    rs.getString("payment_method"),
+                    rs.getString("payment_status"),
+                    rs.getString("order_status")
+            );
+        }, queryArgs.toArray());
+
+        return new InStoreSalePageResponse(items, safePage, safeSize, totalItems, totalPages);
+    }
+
+    /**
+     * Lấy chi tiết hóa đơn bán hàng tại quầy kèm danh sách mặt hàng đã bán.
+     */
+    public InStoreSaleDetailResponse getSaleDetail(int orderId) {
+        Account seller = sessionAccess.current();
+        validateSeller(seller);
+
+        String orderSql = """
+                SELECT
+                    o.order_id,
+                    o.order_number,
+                    i.invoice_number,
+                    o.order_date,
+                    o.delivery_name AS customer_name,
+                    u.full_name AS seller_name,
+                    COALESCE(o.items_amount, o.total_amount) AS subtotal,
+                    COALESCE(o.manual_discount_amount, 0) AS discount_amount,
+                    o.total_amount,
+                    o.payment_method,
+                    o.payment_status,
+                    o.order_status
+                FROM orders o
+                LEFT JOIN invoice i ON i.order_id = o.order_id
+                LEFT JOIN `user` u ON u.user_id = o.created_by
+                WHERE o.order_id = ? AND o.order_type = 'In-Store'
+                """;
+
+        List<InStoreSaleDetailResponse> ordersFound = jdbc.query(orderSql, (rs, rowNum) -> {
+            java.sql.Timestamp ts = rs.getTimestamp("order_date");
+            LocalDateTime orderDate = ts != null ? ts.toLocalDateTime() : null;
+            return new InStoreSaleDetailResponse(
+                    rs.getInt("order_id"),
+                    rs.getString("order_number"),
+                    rs.getString("invoice_number"),
+                    orderDate,
+                    rs.getString("customer_name"),
+                    rs.getString("seller_name"),
+                    rs.getBigDecimal("subtotal"),
+                    rs.getBigDecimal("discount_amount"),
+                    rs.getBigDecimal("total_amount"),
+                    rs.getString("payment_method"),
+                    rs.getString("payment_status"),
+                    rs.getString("order_status"),
+                    new ArrayList<>()
+            );
+        }, orderId);
+
+        if (ordersFound.isEmpty()) {
+            throw new ApiException(404, "NOT_FOUND", "Không tìm thấy hóa đơn bán hàng tại quầy.");
+        }
+
+        InStoreSaleDetailResponse base = ordersFound.get(0);
+
+        String itemsSql = """
+                SELECT
+                    oi.order_item_id,
+                    oi.detail_id,
+                    oi.product_name_snapshot,
+                    oi.size_snapshot,
+                    oi.color_snapshot,
+                    oi.quantity,
+                    oi.unit_price
+                FROM order_item oi
+                WHERE oi.order_id = ?
+                ORDER BY oi.order_item_id ASC
+                """;
+
+        List<InStoreSaleDetailResponse.SaleItemDetail> items = jdbc.query(itemsSql, (rs, rowNum) -> {
+            int qty = rs.getInt("quantity");
+            BigDecimal unitPrice = rs.getBigDecimal("unit_price");
+            BigDecimal lineTotal = unitPrice != null ? unitPrice.multiply(BigDecimal.valueOf(qty)) : BigDecimal.ZERO;
+            return new InStoreSaleDetailResponse.SaleItemDetail(
+                    rs.getInt("order_item_id"),
+                    rs.getObject("detail_id") != null ? rs.getInt("detail_id") : null,
+                    rs.getString("product_name_snapshot"),
+                    rs.getString("size_snapshot"),
+                    rs.getString("color_snapshot"),
+                    qty,
+                    unitPrice,
+                    lineTotal
+            );
+        }, orderId);
+
+        return new InStoreSaleDetailResponse(
+                base.orderId(),
+                base.orderNumber(),
+                base.invoiceNumber(),
+                base.orderDate(),
+                base.customerName(),
+                base.sellerName(),
+                base.subtotal(),
+                base.discountAmount(),
+                base.totalAmount(),
+                base.paymentMethod(),
+                base.paymentStatus(),
+                base.orderStatus(),
+                items
+        );
+    }
+
     private int insertOrder(
             int sellerId,
             String customerName,

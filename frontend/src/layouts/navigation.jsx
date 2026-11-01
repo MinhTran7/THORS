@@ -1,5 +1,6 @@
 import {
   AppstoreOutlined,
+  EnvironmentOutlined,
   FileTextOutlined,
   RollbackOutlined,
   ShopOutlined,
@@ -13,6 +14,17 @@ import {
 const dashboard = { to: '/workspace', label: 'Dashboard', icon: <AppstoreOutlined /> };
 const profile = { to: '/profile', label: 'Profile', icon: <UserOutlined /> };
 const orders = { to: '/orders', label: 'Đơn hàng', icon: <ShoppingOutlined /> };
+const addresses = { to: '/addresses', label: 'Địa chỉ của tôi', icon: <EnvironmentOutlined /> };
+
+// Mục bán hàng tại quầy dạng menu đa cấp xổ xuống
+const inStoreSales = {
+  label: 'Bán hàng tại quầy',
+  icon: <ShoppingCartOutlined />,
+  children: [
+    { to: '/in-store-sales', label: 'Bán hàng', icon: <ShoppingCartOutlined /> },
+    { to: '/in-store-sales/history', label: 'Lịch sử đơn', icon: <FileTextOutlined /> }
+  ]
+};
 
 // Mỗi vai trò một menu. Các feature khác (Products, Categories...) thêm mục của mình vào đúng mảng của vai trò.
 export const NAVIGATION = {
@@ -29,12 +41,17 @@ export const NAVIGATION = {
     orders,
     { to: '/returns', label: 'Hoàn hàng / Đổi trả', icon: <RollbackOutlined /> },
     { to: '/staff', label: 'Family', icon: <TeamOutlined /> },
-    { to: '/in-store-sales', label: 'In-store Sales', icon: <ShoppingCartOutlined /> },
+    inStoreSales,
     { to: '/promotions', label: 'Khuyến mãi', icon: <TagsOutlined /> },
     profile
   ],
-  FAMILY_MEMBER: [dashboard, orders, { to: '/in-store-sales', label: 'In-store Sales', icon: <ShoppingCartOutlined /> }, profile],
-  CUSTOMER: [dashboard, orders, profile]
+  FAMILY_MEMBER: [
+    dashboard,
+    orders,
+    inStoreSales,
+    profile
+  ],
+  CUSTOMER: [dashboard, orders, addresses, profile]
 };
 
 export const navFor = (role) => NAVIGATION[role] ?? [dashboard, profile];

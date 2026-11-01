@@ -23,6 +23,7 @@ import { SearchOutlined, DeleteOutlined, PlusOutlined, MinusOutlined, ShoppingCa
 import { getProducts, getProductById } from '../../services/productService';
 import { api } from '../../services/http';
 import { useAuth } from '../auth/AuthProvider';
+import { useCrumbs } from '../../layouts/crumbs';
 import ReceiptDialog from './ReceiptDialog';
 
 const C = {
@@ -117,6 +118,7 @@ function ToggleGroup({ value, onChange, children, fullWidth = false }) {
 
 export default function InStoreSalesPage() {
   const { account } = useAuth();
+  useCrumbs(['Bán hàng tại quầy', 'Bán hàng']);
 
   const [products, setProducts] = useState([]);
   const [category, setCategory] = useState('All products');
@@ -432,6 +434,15 @@ export default function InStoreSalesPage() {
 
   return (
     <Box sx={{ maxWidth: 1600, mx: 'auto', color: C.text }}>
+      <Box sx={{ mb: 2.5 }}>
+        <Typography variant="h3" sx={{ fontWeight: 800, color: C.text }}>
+          Bán hàng tại quầy
+        </Typography>
+        <Typography variant="body2" sx={{ color: C.muted, mt: 0.5 }}>
+          Tạo và xử lý đơn bán hàng trực tiếp tại quầy thanh toán.
+        </Typography>
+      </Box>
+
       {error && (
         <Alert severity="error" sx={{ mb: 1.5 }} onClose={() => setError('')}>
           {error}

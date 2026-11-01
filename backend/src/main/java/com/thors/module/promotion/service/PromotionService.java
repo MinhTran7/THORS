@@ -412,7 +412,7 @@ public class PromotionService {
 
         if (startDate == null
                 || endDate == null
-                || startDate.isBefore(now)
+                || startDate.isBefore(now.minusMinutes(15))
                 || !endDate.isAfter(startDate)) {
             throw badRequest(
                     "PROMOTION_DATES_INVALID",

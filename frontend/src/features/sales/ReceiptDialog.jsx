@@ -37,20 +37,6 @@ const formatDateTime = (date) => {
   );
 };
 
-/**
- * Dialog hiển thị hóa đơn hoàn tất và cho phép in.
- *
- * Props:
- *  - open:            boolean
- *  - onClose:         () => void  — đóng dialog và bắt đầu lượt bán mới
- *  - saleData:        InStoreSaleResponse từ Backend
- *  - cartItems:       mảng cart tại thời điểm hoàn tất
- *  - customerName:    string | ''
- *  - sellerName:      string      — account.fullName của người đang đăng nhập
- *  - amountReceived:  number      — số tiền khách đưa (chỉ cho Cash)
- *  - changeDue:       number      — tiền thừa (chỉ cho Cash)
- *  - completedAt:     Date        — thời điểm tạo đơn thành công
- */
 export default function ReceiptDialog({
   open,
   onClose,
@@ -60,12 +46,13 @@ export default function ReceiptDialog({
   sellerName = '',
   amountReceived = 0,
   changeDue = 0,
-  completedAt
+  completedAt,
+  closeText = 'Bán đơn mới'
 }) {
   if (!saleData) return null;
 
   const isCash = saleData.paymentMethod === 'CASH';
-  const displayCustomer = customerName.trim() || 'Walk-in customer';
+  const displayCustomer = customerName.trim() || 'Khách mua tại quầy';
   const displaySeller = sellerName.trim() || '—';
 
   function handlePrint() {
@@ -74,29 +61,52 @@ export default function ReceiptDialog({
 
   return (
     <>
-      {/* CSS chế độ in — chỉ in khối receipt-printable, ẩn toàn bộ layout */}
       <style>{`
         @media print {
-          html, body {
+          @page {
+            size: auto;
+            margin: 5mm;
+          }
+          /* Loại bỏ hoàn toàn ứng dụng (#root) và các overlay khác khỏi flow in */
+          body > *:not(.MuiDialog-root) {
+            display: none !important;
+          }
+          /* Ẩn backdrop xám và các nút bấm của Dialog */
+          .MuiBackdrop-root,
+          .MuiDialogActions-root {
+            display: none !important;
+          }
+          /* Reset container của Dialog để không chiếm chiều cao toàn màn hình */
+          .MuiDialog-root {
+            position: static !important;
+            inset: auto !important;
+            z-index: auto !important;
+          }
+          .MuiDialog-container {
+            display: block !important;
             height: auto !important;
-            overflow: hidden !important;
-            margin: 0 !important;
             padding: 0 !important;
           }
-          body * { visibility: hidden !important; }
-          #receipt-printable,
-          #receipt-printable * { visibility: visible !important; }
+          .MuiDialog-paper {
+            margin: 0 auto !important;
+            padding: 0 !important;
+            max-width: 80mm !important;
+            box-shadow: none !important;
+            border: none !important;
+            overflow: visible !important;
+          }
+          .MuiDialogContent-root {
+            padding: 0 !important;
+            overflow: visible !important;
+          }
           #receipt-printable {
-            position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 80mm !important;
-            padding: 6mm !important;
-            background: #fff !important;
-            font-size: 11px !important;
-            font-family: 'Courier New', Courier, monospace !important;
-            color: #000 !important;
+            width: 100% !important;
+            max-width: 80mm !important;
+            margin: 0 auto !important;
+            padding: 2mm !important;
+            box-sizing: border-box !important;
             page-break-after: avoid !important;
+            page-break-inside: avoid !important;
           }
         }
       `}</style>
@@ -132,10 +142,10 @@ export default function ReceiptDialog({
                 THORS
               </Typography>
               <Typography sx={{ fontSize: 10.5, color: C.muted }}>
-                Omnichannel Retail System
+                Hệ thống bán lẻ THORS
               </Typography>
-              <Typography sx={{ fontSize: 10.5, color: C.muted, mt: 0.25 }}>
-                In-store Sales Receipt
+              <Typography sx={{ fontSize: 11, fontWeight: 700, color: C.text, mt: 0.5, letterSpacing: 0.5 }}>
+                HÓA ĐƠN BÁN HÀNG
               </Typography>
             </Box>
 
@@ -143,11 +153,11 @@ export default function ReceiptDialog({
 
             {/* Thông tin hóa đơn — lấy từ Backend response */}
             <Stack spacing={0.4} sx={{ mb: 1.25, fontSize: 11 }}>
-              <ReceiptRow label="Invoice #" value={saleData.invoiceNumber} />
-              <ReceiptRow label="Order #" value={saleData.orderNumber} />
-              <ReceiptRow label="Date" value={formatDateTime(completedAt)} />
-              <ReceiptRow label="Cashier" value={displaySeller} />
-              <ReceiptRow label="Customer" value={displayCustomer} />
+              <ReceiptRow label="Số hóa đơn" value={saleData.invoiceNumber} />
+              <ReceiptRow label="Mã đơn hàng" value={saleData.orderNumber} />
+              <ReceiptRow label="Thời gian" value={formatDateTime(completedAt)} />
+              <ReceiptRow label="Thu ngân" value={displaySeller} />
+              <ReceiptRow label="Khách hàng" value={displayCustomer} />
             </Stack>
 
             <Divider sx={{ borderStyle: 'dashed', borderColor: C.border, mb: 1.25 }} />
@@ -167,7 +177,7 @@ export default function ReceiptDialog({
                     {line.name}
                   </Typography>
                   <Typography sx={{ fontSize: 10, color: C.muted }}>
-                    {line.size || 'Default'} / {line.color || 'Default'}
+                    {line.size ? `Size: ${line.size}` : 'Mặc định'} {line.color ? `/ Màu: ${line.color}` : ''}
                   </Typography>
                   <Stack direction="row" justifyContent="space-between">
                     <Typography sx={{ fontSize: 10.5, color: C.muted }}>
@@ -185,13 +195,13 @@ export default function ReceiptDialog({
 
             {/* Tổng kết tiền — lấy từ Backend response */}
             <Stack spacing={0.5} sx={{ mb: 1.25 }}>
-              <ReceiptRow label="Subtotal" value={money(saleData.itemsAmount)} />
+              <ReceiptRow label="Tạm tính" value={money(saleData.itemsAmount)} />
               {Number(saleData.discountAmount) > 0 && (
-                <ReceiptRow label="Discount" value={`− ${money(saleData.discountAmount)}`} />
+                <ReceiptRow label="Giảm giá" value={`− ${money(saleData.discountAmount)}`} />
               )}
               <Divider sx={{ borderStyle: 'dashed', borderColor: C.border }} />
               <ReceiptRow
-                label="TOTAL"
+                label="TỔNG TIỀN"
                 value={money(saleData.totalAmount)}
                 strong
               />
@@ -200,16 +210,19 @@ export default function ReceiptDialog({
             {/* Thông tin thanh toán — lấy từ Backend response */}
             <Stack spacing={0.4} sx={{ mb: 1 }}>
               <ReceiptRow
-                label="Payment"
-                value={saleData.paymentMethod === 'CASH' ? 'Cash' : 'Bank Transfer'}
+                label="Phương thức"
+                value={saleData.paymentMethod === 'CASH' ? 'Tiền mặt' : 'Chuyển khoản'}
               />
               {isCash && (
                 <>
-                  <ReceiptRow label="Received" value={money(amountReceived)} />
-                  <ReceiptRow label="Change" value={money(changeDue)} />
+                  <ReceiptRow label="Tiền khách đưa" value={money(amountReceived)} />
+                  <ReceiptRow label="Tiền thối lại" value={money(changeDue)} />
                 </>
               )}
-              <ReceiptRow label="Status" value={saleData.paymentStatus} />
+              <ReceiptRow
+                label="Trạng thái"
+                value={saleData.paymentStatus === 'PAID' || saleData.paymentStatus === 'SUCCESS' ? 'Đã thanh toán' : saleData.paymentStatus}
+              />
             </Stack>
 
             <Divider sx={{ borderStyle: 'dashed', borderColor: C.border, mb: 1 }} />
@@ -217,15 +230,14 @@ export default function ReceiptDialog({
             <Typography
               sx={{
                 textAlign: 'center',
-                fontSize: 10,
+                fontSize: 10.5,
                 color: C.muted,
-                letterSpacing: 0.5
+                letterSpacing: 0.3
               }}
             >
-              Thank you for shopping at THORS!
+              Cảm ơn quý khách đã mua sắm tại THORS!
             </Typography>
           </Box>
-          {/* ─── Kết thúc khối nội dung in ─── */}
         </DialogContent>
 
         <DialogActions sx={{ px: 2.5, pb: 2, pt: 0.5, gap: 1 }}>
@@ -243,13 +255,12 @@ export default function ReceiptDialog({
               '&:hover': { bgcolor: '#2C3E55' }
             }}
           >
-            Print Receipt
+            In hóa đơn
           </Button>
 
-          {/* Nút bắt đầu lượt bán mới */}
           <Button
             variant="contained"
-            startIcon={<PlusOutlined />}
+            startIcon={closeText === 'Bán đơn mới' ? <PlusOutlined /> : undefined}
             onClick={onClose}
             sx={{
               ...buttonSx,
@@ -260,7 +271,7 @@ export default function ReceiptDialog({
               '&:hover': { bgcolor: '#6BDCE7' }
             }}
           >
-            New Sale
+            {closeText}
           </Button>
         </DialogActions>
       </Dialog>
@@ -268,7 +279,6 @@ export default function ReceiptDialog({
   );
 }
 
-/** Dòng thông tin nhãn – giá trị trong hóa đơn */
 function ReceiptRow({ label, value, strong = false }) {
   return (
     <Stack direction="row" justifyContent="space-between" alignItems="baseline">
