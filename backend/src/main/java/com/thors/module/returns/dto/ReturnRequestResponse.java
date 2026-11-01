@@ -22,6 +22,13 @@ public class ReturnRequestResponse {
     private Integer processedBy;
     private String processedByName;
     private BigDecimal totalRefundAmount;
+    private String bankCode;
+    private String bankAccountNumber;
+    private String bankAccountName;
+    private BigDecimal returnShippingFee;
+    private String returnShippingPayer;
+    private String returnTrackingCode;
+    private String evidenceUrls;
     private List<ItemDetail> items;
 
     public static class ItemDetail {
@@ -270,6 +277,62 @@ public class ReturnRequestResponse {
 
     public void setTotalRefundAmount(BigDecimal totalRefundAmount) {
         this.totalRefundAmount = totalRefundAmount;
+    }
+
+    public String getBankCode() {
+        return bankCode;
+    }
+
+    public void setBankCode(String bankCode) {
+        this.bankCode = bankCode;
+    }
+
+    public String getBankAccountNumber() {
+        return bankAccountNumber;
+    }
+
+    public void setBankAccountNumber(String bankAccountNumber) {
+        this.bankAccountNumber = bankAccountNumber;
+    }
+
+    public String getBankAccountName() {
+        return bankAccountName;
+    }
+
+    public void setBankAccountName(String bankAccountName) {
+        this.bankAccountName = bankAccountName;
+    }
+
+    public BigDecimal getReturnShippingFee() {
+        return returnShippingFee;
+    }
+
+    public void setReturnShippingFee(BigDecimal returnShippingFee) {
+        this.returnShippingFee = returnShippingFee;
+    }
+
+    public String getReturnShippingPayer() {
+        return returnShippingPayer;
+    }
+
+    public void setReturnShippingPayer(String returnShippingPayer) {
+        this.returnShippingPayer = returnShippingPayer;
+    }
+
+    public String getReturnTrackingCode() {
+        return returnTrackingCode;
+    }
+
+    public void setReturnTrackingCode(String returnTrackingCode) {
+        this.returnTrackingCode = returnTrackingCode;
+    }
+
+    public String getEvidenceUrls() {
+        return evidenceUrls;
+    }
+
+    public void setEvidenceUrls(String evidenceUrls) {
+        this.evidenceUrls = evidenceUrls;
     }
 
     public List<ItemDetail> getItems() {

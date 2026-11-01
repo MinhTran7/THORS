@@ -123,20 +123,32 @@ public class ReturnService {
                 ? request.getCustomerPhone().trim()
                 : order.getCustomerPhone();
 
-        boolean isInstant = request.isInstantComplete();
+        boolean isCustomer = "CUSTOMER".equalsIgnoreCase(currentUser.role());
+        if (isCustomer && order.getUserId() != null && !order.getUserId().equals(currentUser.id())) {
+            throw new ApiException(403, "FORBIDDEN", "Bạn chỉ có thể yêu cầu hoàn hàng cho đơn hàng của chính mình.");
+        }
+
+        boolean isInstant = !isCustomer && request.isInstantComplete();
         String initialStatus = isInstant ? "COMPLETED" : "PENDING";
         LocalDateTime now = LocalDateTime.now();
 
         int returnRequestId = returnRepository.insertReturnRequest(
                 order.getOrderId(),
-                currentUser.id(),
+                order.getUserId() != null ? order.getUserId() : currentUser.id(),
                 reason.trim(),
                 initialStatus,
                 now,
                 currentUser.id(),
                 requestType,
                 customerName,
-                customerPhone
+                customerPhone,
+                request.getBankCode(),
+                request.getBankAccountNumber(),
+                request.getBankAccountName(),
+                request.getReturnShippingFee() != null ? request.getReturnShippingFee() : BigDecimal.ZERO,
+                request.getReturnShippingPayer() != null ? request.getReturnShippingPayer() : "CUSTOMER",
+                request.getReturnTrackingCode(),
+                request.getEvidenceUrls()
         );
 
         BigDecimal totalRefund = BigDecimal.ZERO;
@@ -246,6 +258,15 @@ public class ReturnService {
         }
 
         LocalDateTime now = LocalDateTime.now();
+
+        if (request.getReturnShippingFee() != null || request.getReturnShippingPayer() != null || request.getReturnTrackingCode() != null) {
+            returnRepository.updateReturnOnlineInfo(
+                returnRequestId,
+                request.getReturnShippingFee(),
+                request.getReturnShippingPayer(),
+                request.getReturnTrackingCode()
+            );
+        }
 
         switch (action) {
             case "APPROVE" -> {

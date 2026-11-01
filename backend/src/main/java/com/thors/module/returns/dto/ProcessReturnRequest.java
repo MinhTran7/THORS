@@ -7,6 +7,9 @@ public class ProcessReturnRequest {
 
     private String action; // APPROVE, REJECT, RECEIVE, COMPLETE
     private String note;
+    private BigDecimal returnShippingFee;
+    private String returnShippingPayer;
+    private String returnTrackingCode;
     private List<ProcessItemRequest> items;
 
     public static class ProcessItemRequest {
@@ -62,6 +65,30 @@ public class ProcessReturnRequest {
 
     public void setNote(String note) {
         this.note = note;
+    }
+
+    public BigDecimal getReturnShippingFee() {
+        return returnShippingFee;
+    }
+
+    public void setReturnShippingFee(BigDecimal returnShippingFee) {
+        this.returnShippingFee = returnShippingFee;
+    }
+
+    public String getReturnShippingPayer() {
+        return returnShippingPayer;
+    }
+
+    public void setReturnShippingPayer(String returnShippingPayer) {
+        this.returnShippingPayer = returnShippingPayer;
+    }
+
+    public String getReturnTrackingCode() {
+        return returnTrackingCode;
+    }
+
+    public void setReturnTrackingCode(String returnTrackingCode) {
+        this.returnTrackingCode = returnTrackingCode;
     }
 
     public List<ProcessItemRequest> getItems() {

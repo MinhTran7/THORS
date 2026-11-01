@@ -14,7 +14,8 @@
     "lint": "eslint \"src/**/*.{js,jsx}\"",
     "lint:fix": "eslint --fix \"src/**/*.{js,jsx,ts,tsx}\"",
     "prettier": "prettier --write \"src/**/*.{js,jsx,ts,tsx}\"",
-    "test:warehouse": "node tests/run-warehouse.mjs"
+    "test:warehouse": "node tests/run-warehouse.mjs",
+    "test:barcode": "node tests/run-barcode.mjs"
   },
   "dependencies": {
     "@ant-design/colors": "8.0.1",
@@ -28,9 +29,12 @@
     "@mui/system": "9.0.1",
     "@mui/x-charts": "9.2.0",
     "@vitejs/plugin-react": "6.0.2",
+    "@zxing/browser": "0.2.1",
+    "@zxing/library": "0.23.0",
     "exceljs": "4.4.0",
     "formik": "2.4.9",
     "framer-motion": "12.39.0",
+    "jsbarcode": "3.12.3",
     "lodash-es": "4.18.1",
     "prop-types": "15.8.1",
     "react": "19.2.6",

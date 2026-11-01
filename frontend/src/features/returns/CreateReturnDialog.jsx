@@ -23,10 +23,16 @@ import {
   Chip,
   RadioGroup,
   FormControlLabel,
-  Radio
+  Radio,
+  MenuItem,
+  Select,
+  InputLabel,
+  FormControl,
+  Grid
 } from '@mui/material';
-import { SearchOutlined, CheckCircleOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import { SearchOutlined, CheckCircleOutlined, ThunderboltOutlined, BankOutlined } from '@ant-design/icons';
 import { getReturnableOrder, createReturnRequest } from '../../services/returnService';
+import { VIETNAMESE_BANKS } from '../../utils/vietqr';
 
 const COLORS = {
   text: '#202D42',
@@ -57,6 +63,15 @@ export default function CreateReturnDialog({ open, onClose, onSuccess }) {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
 
+  // Online return state
+  const [bankCode, setBankCode] = useState('MB');
+  const [bankAccountNumber, setBankAccountNumber] = useState('');
+  const [bankAccountName, setBankAccountName] = useState('');
+  const [returnShippingFee, setReturnShippingFee] = useState(0);
+  const [returnShippingPayer, setReturnShippingPayer] = useState('CUSTOMER');
+  const [returnTrackingCode, setReturnTrackingCode] = useState('');
+  const [evidenceUrls, setEvidenceUrls] = useState('');
+
   const resetDialog = () => {
     setOrderNumber('');
     setSearching(false);
@@ -68,6 +83,13 @@ export default function CreateReturnDialog({ open, onClose, onSuccess }) {
     setSelectedItems({});
     setSubmitting(false);
     setSubmitError('');
+    setBankCode('MB');
+    setBankAccountNumber('');
+    setBankAccountName('');
+    setReturnShippingFee(0);
+    setReturnShippingPayer('CUSTOMER');
+    setReturnTrackingCode('');
+    setEvidenceUrls('');
   };
 
   const handleClose = () => {
@@ -183,6 +205,13 @@ export default function CreateReturnDialog({ open, onClose, onSuccess }) {
         reason: reason.trim(),
         requestType,
         instantComplete,
+        bankCode: !instantComplete ? bankCode : null,
+        bankAccountNumber: !instantComplete ? bankAccountNumber.trim() : null,
+        bankAccountName: !instantComplete ? bankAccountName.trim().toUpperCase() : null,
+        returnShippingFee: !instantComplete ? Number(returnShippingFee) || 0 : 0,
+        returnShippingPayer: !instantComplete ? returnShippingPayer : 'CUSTOMER',
+        returnTrackingCode: !instantComplete && returnTrackingCode.trim() ? returnTrackingCode.trim() : null,
+        evidenceUrls: !instantComplete && evidenceUrls.trim() ? evidenceUrls.trim() : null,
         items: itemsToReturn
       });
 
@@ -438,6 +467,82 @@ export default function CreateReturnDialog({ open, onClose, onSuccess }) {
               onChange={(e) => setReason(e.target.value)}
               sx={{ mb: 2 }}
             />
+
+            {/* STEP 4: ONLINE BANKING & SHIPPING (ONLY FOR ONLINE/REMOTE RETURNS) */}
+            {!instantComplete && (
+              <Paper sx={{ p: 2, mb: 2, bgcolor: '#F7F9FC', border: `1px solid ${COLORS.border}`, borderRadius: 2 }}>
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
+                  <BankOutlined style={{ color: COLORS.green, fontSize: 16 }} />
+                  <Typography fontSize={13} fontWeight={700} color={COLORS.text}>
+                    Bước 4: Thông tin nhận tiền hoàn & vận chuyển bưu cục (Online)
+                  </Typography>
+                </Stack>
+
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={4}>
+                    <FormControl size="small" fullWidth>
+                      <InputLabel id="bank-select-label">Ngân hàng</InputLabel>
+                      <Select
+                        labelId="bank-select-label"
+                        label="Ngân hàng"
+                        value={bankCode}
+                        onChange={(e) => setBankCode(e.target.value)}
+                      >
+                        {VIETNAMESE_BANKS.map((b) => (
+                          <MenuItem key={b.code} value={b.code}>
+                            {b.shortName} - {b.name}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+
+                  <Grid item xs={12} sm={4}>
+                    <TextField
+                      size="small"
+                      fullWidth
+                      label="Số tài khoản nhận tiền"
+                      placeholder="Ví dụ: 0987654321"
+                      value={bankAccountNumber}
+                      onChange={(e) => setBankAccountNumber(e.target.value)}
+                    />
+                  </Grid>
+
+                  <Grid item xs={12} sm={4}>
+                    <TextField
+                      size="small"
+                      fullWidth
+                      label="Tên chủ tài khoản"
+                      placeholder="NGUYEN VAN A"
+                      value={bankAccountName}
+                      onChange={(e) => setBankAccountName(e.target.value.toUpperCase())}
+                    />
+                  </Grid>
+
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      size="small"
+                      fullWidth
+                      label="Mã vận đơn bưu cục (Nếu có)"
+                      placeholder="Ví dụ: VNPost, GHN, GHTK..."
+                      value={returnTrackingCode}
+                      onChange={(e) => setReturnTrackingCode(e.target.value)}
+                    />
+                  </Grid>
+
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      size="small"
+                      fullWidth
+                      label="Link ảnh lỗi sản phẩm (URL)"
+                      placeholder="https://... hoặc mô tả hình ảnh"
+                      value={evidenceUrls}
+                      onChange={(e) => setEvidenceUrls(e.target.value)}
+                    />
+                  </Grid>
+                </Grid>
+              </Paper>
+            )}
 
             {submitError && (
               <Alert severity="error" sx={{ mb: 2 }}>

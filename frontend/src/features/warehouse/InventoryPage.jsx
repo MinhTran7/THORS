@@ -1,12 +1,26 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Stack, TextField, Typography } from '@mui/material';
+import {
+  Alert,
+  Button,
+  Checkbox,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  MenuItem,
+  Stack,
+  TextField,
+  Typography
+} from '@mui/material';
 import useSWR from 'swr';
 import MainCard from 'components/MainCard';
 import { api } from 'services/http';
 import { useWarehouse } from './WarehouseContext';
 import { DataTable, Metrics, Title } from './components';
 import { locationLabel, number, variantLabel, when } from './model';
+import BarcodePrintDialog from './BarcodePrintDialog';
+import BarcodeScannerDialog from './BarcodeScannerDialog';
 function History({ variant, onClose }) {
   const { data, error, isLoading } = useSWR(`/warehouse/history/${variant.detail_id}`, api);
   const names = {
@@ -61,15 +75,21 @@ function History({ variant, onClose }) {
   );
 }
 export default function InventoryPage() {
-  const { data } = useWarehouse();
+  const { data, owner, busy, run } = useWarehouse();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('');
   const [color, setColor] = useState('');
   const [size, setSize] = useState('');
   const [history, setHistory] = useState(null);
+  const [selected, setSelected] = useState([]);
+  const [printing, setPrinting] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [barcodeMessage, setBarcodeMessage] = useState('');
+  const missingBarcodes = data.variants.filter((variant) => !variant.barcode).length;
+  const selectedVariants = data.variants.filter((variant) => selected.includes(variant.detail_id));
   const variants = data.variants.filter(
     (v) =>
-      variantLabel(v).toLocaleLowerCase('vi').includes(search.toLocaleLowerCase('vi')) &&
+      `${variantLabel(v)} ${v.barcode || ''}`.toLocaleLowerCase('vi').includes(search.toLocaleLowerCase('vi')) &&
       (!color || v.color === color) &&
       (!size || v.size === size) &&
       (!filter || (filter === 'unassigned' ? v.unassigned_quantity > 0 : filter === 'out' ? v.stock_quantity === 0 : v.stock_quantity > 0))
@@ -91,10 +111,45 @@ export default function InventoryPage() {
         </Alert>
       )}
       <MainCard>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mb: 2, flexWrap: 'wrap', alignItems: { sm: 'center' } }}>
+          {owner && (
+            <Button
+              variant="outlined"
+              disabled={busy || !missingBarcodes}
+              onClick={async () => {
+                try {
+                  const result = await run(() => api('/warehouse/barcodes/generate', { method: 'POST' }));
+                  setBarcodeMessage(`Đã tạo ${number(result.generated)} mã vạch còn thiếu.`);
+                } catch {
+                  /* WarehouseContext displays the API error. */
+                }
+              }}
+            >
+              Tạo mã còn thiếu ({number(missingBarcodes)})
+            </Button>
+          )}
+          <Button variant="contained" disabled={!selectedVariants.length} onClick={() => setPrinting(true)}>
+            In mã vạch ({number(selectedVariants.length)})
+          </Button>
+          <Button variant="outlined" onClick={() => setScanning(true)}>
+            Quét mã tìm hàng
+          </Button>
+          {selected.length > 0 && <Button onClick={() => setSelected([])}>Bỏ chọn tất cả</Button>}
+        </Stack>
+        {barcodeMessage && (
+          <Alert severity="success" sx={{ mb: 2 }} onClose={() => setBarcodeMessage('')}>
+            {barcodeMessage}
+          </Alert>
+        )}
+        {missingBarcodes > 0 && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Có {number(missingBarcodes)} biến thể chưa có mã vạch. Chủ cửa hàng dùng “Tạo mã còn thiếu” trước khi in tem.
+          </Alert>
+        )}
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} sx={{ mb: 2 }}>
           <TextField
             size="small"
-            placeholder="Tìm tên, màu hoặc size"
+            placeholder="Tìm tên, màu, size hoặc mã vạch"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             sx={{ flex: 1 }}
@@ -139,6 +194,38 @@ export default function InventoryPage() {
           rows={variants}
           columns={[
             {
+              key: 'select',
+              label: (
+                <Checkbox
+                  checked={variants.length > 0 && variants.every((variant) => selected.includes(variant.detail_id))}
+                  indeterminate={
+                    variants.some((variant) => selected.includes(variant.detail_id)) &&
+                    !variants.every((variant) => selected.includes(variant.detail_id))
+                  }
+                  disabled={!variants.length}
+                  slotProps={{ input: { 'aria-label': 'Chọn tất cả kết quả đang lọc' } }}
+                  onChange={(event) =>
+                    setSelected((previous) =>
+                      event.target.checked
+                        ? [...new Set([...previous, ...variants.map((variant) => variant.detail_id)])]
+                        : previous.filter((id) => !variants.some((variant) => variant.detail_id === id))
+                    )
+                  }
+                />
+              ),
+              render: (variant) => (
+                <Checkbox
+                  checked={selected.includes(variant.detail_id)}
+                  slotProps={{ input: { 'aria-label': `Chọn ${variantLabel(variant)}` } }}
+                  onChange={(event) =>
+                    setSelected((previous) =>
+                      event.target.checked ? [...previous, variant.detail_id] : previous.filter((id) => id !== variant.detail_id)
+                    )
+                  }
+                />
+              )
+            },
+            {
               key: 'name',
               label: 'Sản phẩm',
               render: (v) => (
@@ -152,6 +239,7 @@ export default function InventoryPage() {
             },
             { key: 'color', label: 'Màu' },
             { key: 'size', label: 'Size' },
+            { key: 'barcode', label: 'Mã vạch', render: (variant) => variant.barcode || 'Chưa có mã' },
             { key: 'stock_quantity', label: 'Tổng tồn', align: 'right', render: (v) => number(v.stock_quantity) },
             { key: 'assigned_quantity', label: 'Đã xếp', align: 'right', render: (v) => number(v.assigned_quantity) },
             {
@@ -189,6 +277,8 @@ export default function InventoryPage() {
         />
       </MainCard>
       {history && <History variant={history} onClose={() => setHistory(null)} />}
+      {printing && <BarcodePrintDialog variants={selectedVariants} onClose={() => setPrinting(false)} />}
+      {scanning && <BarcodeScannerDialog onClose={() => setScanning(false)} />}
     </>
   );
 }

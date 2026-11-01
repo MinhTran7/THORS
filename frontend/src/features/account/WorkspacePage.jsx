@@ -333,27 +333,6 @@ function OwnerDashboard({ account }) {
             view of your store, all in one place.
           </Typography>
         </Box>
-
-        <Button
-          component={Link}
-          to="/products/add"
-          variant="contained"
-          startIcon={<PlusOutlined />}
-          sx={{
-            bgcolor: COLORS.cyan,
-            color: COLORS.text,
-            textTransform: 'none',
-            fontWeight: 600,
-            boxShadow: 'none',
-            px: 2.5,
-            '&:hover': {
-              bgcolor: '#6DDDE9',
-              boxShadow: 'none'
-            }
-          }}
-        >
-          Add Product
-        </Button>
       </Stack>
 
       {/* ======================================
