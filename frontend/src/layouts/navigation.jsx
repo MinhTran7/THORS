@@ -18,6 +18,17 @@ import { warehouseMenu } from 'features/warehouse/model';
 const dashboard = { to: '/workspace', label: 'Dashboard', icon: <AppstoreOutlined /> };
 const profile = { to: '/profile', label: 'Profile', icon: <UserOutlined /> };
 const orders = { to: '/orders', label: 'Đơn hàng', icon: <ShoppingOutlined /> };
+const addresses = { to: '/addresses', label: 'Địa chỉ của tôi', icon: <EnvironmentOutlined /> };
+
+// Mục bán hàng tại quầy dạng menu đa cấp xổ xuống
+const inStoreSales = {
+  label: 'Bán hàng tại quầy',
+  icon: <ShoppingCartOutlined />,
+  children: [
+    { to: '/in-store-sales', label: 'Bán hàng', icon: <ShoppingCartOutlined /> },
+    { to: '/in-store-sales/history', label: 'Lịch sử đơn', icon: <FileTextOutlined /> }
+  ]
+};
 
 const warehouseIcons = [
   <InboxOutlined />,
@@ -50,13 +61,13 @@ export const NAVIGATION = {
     orders,
     { to: '/returns', label: 'Hoàn hàng / Đổi trả', icon: <RollbackOutlined /> },
     { to: '/staff', label: 'Family', icon: <TeamOutlined /> },
-    { to: '/in-store-sales', label: 'In-store Sales', icon: <ShoppingCartOutlined /> },
+    inStoreSales,
     { to: '/promotions', label: 'Khuyến mãi', icon: <TagsOutlined /> },
     ...warehouse,
     profile
   ],
-  FAMILY_MEMBER: [dashboard, orders, ...warehouse, profile],
-  CUSTOMER: [dashboard, orders, profile]
+  FAMILY_MEMBER: [dashboard, orders, inStoreSales, ...warehouse, profile],
+  CUSTOMER: [dashboard, orders, addresses, profile]
 };
 
 export const navFor = (role) => NAVIGATION[role] ?? [dashboard, profile];

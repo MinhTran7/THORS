@@ -40,11 +40,18 @@ import ProductDetailPage from 'features/product/ProductDetailPage';
 import EditProductPage from 'features/product/EditProductPage';
 //sales
 import InStoreSalesPage from 'features/sales/InStoreSalesPage';
+import InStoreSalesHistoryPage from 'features/sales/InStoreSalesHistoryPage';
+import InStoreSaleDetailPage from 'features/sales/InStoreSaleDetailPage';
 import PromotionPage from 'features/promotion/PromotionPage';
 import AddPromotionPage from 'features/promotion/AddPromotionPage';
-
+import PromotionDetailPage from 'features/promotion/PromotionDetailPage';
+import EditPromotionPage from 'features/promotion/EditPromotionPage';
 // Returns Management (Đổi trả / Hoàn hàng)
 import ReturnsPage from 'features/returns/ReturnsPage';
+// Customer Addresses
+import CustomerAddressPage from 'features/customer/CustomerAddressPage';
+import AddAddressPage from 'features/customer/AddAddressPage';
+import EditAddressPage from 'features/customer/EditAddressPage';
 
 // Shop management
 import ShopPage from 'features/shop/ShopPage';
@@ -95,6 +102,15 @@ export default createBrowserRouter([
             ]
           },
           {
+            // Quản lý địa chỉ giao hàng của Customer
+            element: <RequireAuth roles={['CUSTOMER']} />,
+            children: [
+              { path: '/addresses', element: <CustomerAddressPage /> },
+              { path: '/addresses/new', element: <AddAddressPage /> },
+              { path: '/addresses/:id/edit', element: <EditAddressPage /> }
+            ]
+          },
+          {
             element: <RequireAuth roles={['OWNER', 'FAMILY_MEMBER']} />,
             children: [
               {
@@ -104,14 +120,23 @@ export default createBrowserRouter([
               }
             ]
           },
-          {
-            element: <RequireAuth roles={['ADMIN', 'OWNER']} />,
-            children: [{ path: '/accounts', element: <AccountsPage /> }]
-          },
-          {
-            element: <RequireAuth roles={['ADMIN']} />,
-            children: [{ path: '/system-log', element: <SystemLogPage /> }]
-          },
+{
+  element: <RequireAuth roles={['ADMIN', 'OWNER']} />,
+  children: [{ path: '/accounts', element: <AccountsPage /> }]
+},
+{
+  element: <RequireAuth roles={['ADMIN']} />,
+  children: [{ path: '/system-log', element: <SystemLogPage /> }]
+},
+{
+  element: <RequireAuth roles={['OWNER', 'FAMILY_MEMBER']} />,
+  children: [
+    { path: '/in-store-sales', element: <InStoreSalesPage /> },
+    { path: '/in-store-sales/history', element: <InStoreSalesHistoryPage /> },
+    { path: '/in-store-sales/history/:orderId', element: <InStoreSaleDetailPage /> }
+  ]
+},
+          
           {
             element: <RequireAuth roles={['OWNER']} />,
             children: [
@@ -126,10 +151,11 @@ export default createBrowserRouter([
               { path: '/products/:productId', element: <ProductDetailPage /> },
               { path: '/products/:productId/edit', element: <EditProductPage /> },
               { path: '/returns', element: <ReturnsPage /> },
-              // Sales & Promotion (của phuoc)
-              { path: '/in-store-sales', element: <InStoreSalesPage /> },
+              // Promotion (của phuoc)
               { path: '/promotions', element: <PromotionPage /> },
-              { path: '/promotions/add', element: <AddPromotionPage /> }
+              { path: '/promotions/add', element: <AddPromotionPage /> },
+              { path: '/promotions/:promotionId', element: <PromotionDetailPage /> },
+              { path: '/promotions/:promotionId/edit', element: <EditPromotionPage /> },
             ]
           }
         ]
