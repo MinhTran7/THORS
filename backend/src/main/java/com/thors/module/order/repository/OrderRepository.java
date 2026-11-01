@@ -50,6 +50,7 @@ public class OrderRepository {
                             rs.getLong("total_amount"),
                             rs.getString("delivery_name"),
                             rs.getString("delivery_phone"),
+                            rs.getString("delivery_address"),
                             rs.getLong("item_count"),
                             rs.getString("first_item"),
                             List.of());
@@ -103,7 +104,7 @@ public class OrderRepository {
                         """
                         SELECT o.order_id, o.order_number, o.order_date, o.order_status, o.preparation_status,
                                o.payment_method, o.payment_status, o.total_amount,
-                               o.delivery_name, o.delivery_phone,
+                               o.delivery_name, o.delivery_phone, o.delivery_address,
                                (SELECT COALESCE(SUM(oi.quantity), 0) FROM order_item oi
                                  WHERE oi.order_id = o.order_id) AS item_count,
                                (SELECT oi.product_name_snapshot FROM order_item oi
@@ -344,7 +345,7 @@ public class OrderRepository {
                 set.append(", confirmed_by = ?, confirmed_at = NOW()");
                 args.add(actorId);
             }
-            case "REJECTED", "CANCELLED" -> {
+            case "REJECTED", "CANCELLED", "EXPIRED" -> {
                 set.append(", cancel_reason = ?, cancelled_at = NOW()");
                 args.add(reason);
             }
@@ -405,5 +406,53 @@ public class OrderRepository {
                         orderIds.toArray());
         for (PreviewRow r : rows) byOrder.computeIfAbsent(r.orderId(), k -> new ArrayList<>()).add(r.preview());
         return byOrder;
+    }
+
+    // ------------------------------------------------------------------
+    // Việc chạy nền: đơn hết hạn thanh toán, đơn đã giao quá lâu
+    // ------------------------------------------------------------------
+
+    /** Đơn cần xử lý nền: mã, chủ đơn và số đơn để gửi thông báo. */
+    public record Due(int orderId, int userId, String orderNumber) {}
+
+    /** Đơn online chờ thanh toán đã quá payment_expires_at. */
+    public List<Due> expiredUnpaid() {
+        return db.query(
+                """
+                SELECT order_id, user_id, order_number FROM orders
+                WHERE order_type = 'Online' AND order_status = 'AWAITING_PAYMENT'
+                  AND payment_expires_at IS NOT NULL AND payment_expires_at < NOW()
+                """,
+                (rs, i) -> new Due(rs.getInt("order_id"), rs.getInt("user_id"), rs.getString("order_number")));
+    }
+
+    /** Đơn online đã giao quá {@code days} ngày mà khách chưa xác nhận đã nhận hàng. */
+    public List<Due> deliveredLongAgo(int days) {
+        return db.query(
+                """
+                SELECT order_id, user_id, order_number FROM orders
+                WHERE order_type = 'Online' AND order_status = 'DELIVERED'
+                  AND shipment_delivered_at IS NOT NULL
+                  AND shipment_delivered_at < DATE_SUB(NOW(), INTERVAL ? DAY)
+                """,
+                (rs, i) -> new Due(rs.getInt("order_id"), rs.getInt("user_id"), rs.getString("order_number")),
+                days);
+    }
+
+    private record StatusCount(String status, long count) {}
+
+    /** Số đơn theo từng trạng thái; customerId = null thì tính mọi đơn của loại đó. */
+    public Map<String, Long> countByStatus(Integer customerId, String orderType) {
+        String sql =
+                "SELECT order_status, COUNT(*) AS n FROM orders WHERE order_type = ?"
+                        + (customerId != null ? " AND user_id = ?" : "")
+                        + " GROUP BY order_status";
+        Object[] args = customerId != null ? new Object[] {orderType, customerId} : new Object[] {orderType};
+        Map<String, Long> out = new HashMap<>();
+        for (StatusCount c :
+                db.query(sql, (rs, i) -> new StatusCount(rs.getString("order_status"), rs.getLong("n")), args)) {
+            out.put(c.status(), c.count());
+        }
+        return out;
     }
 }

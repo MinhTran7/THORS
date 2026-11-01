@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
-import { Box, Tab, Table, TableBody, TableCell, TableHead, TableRow, Tabs, Typography } from '@mui/material';
+import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Tab, Table, TableBody, TableCell, TableHead, TableRow, Tabs, TextField, Typography } from '@mui/material';
 import { Stack } from 'features/account/components/Flex';
 import { useCrumbs } from 'layouts/crumbs';
 import { useAuth } from 'features/auth/AuthProvider';
@@ -14,7 +14,6 @@ import { StatusPill } from 'features/account/components/Chips';
 import {
   bodyCellSx,
   EmptyRow,
-  FilterSelect,
   headCellSx,
   PageHeader,
   Pager,
@@ -22,7 +21,8 @@ import {
   Toolbar
 } from 'features/account/components/Blocks';
 import { ordersApi } from './api';
-import { formatVnd, ORDER_STATUS_OPTIONS, orderStatusMeta, paymentMethodLabel, paymentStatusMeta, preparationMeta } from './constants';
+import { CARRIERS, CUSTOMER_ACTIONS, OWNER_ACTIONS } from './orderActions';
+import { formatVnd, orderStatusMeta, paymentMethodLabel, paymentStatusMeta, preparationMeta } from './constants';
 
 // Các tab của khách (kiểu "Đơn mua"): mỗi tab là một hoặc nhiều trạng thái
 const CUSTOMER_TABS = [
@@ -36,9 +36,39 @@ const CUSTOMER_TABS = [
   { value: 'CANCELLED,REJECTED,EXPIRED', label: 'Đã hủy' }
 ];
 
+// Tổng số đơn của một tab (tab "Đã hủy" gồm nhiều trạng thái)
+const statusCount = (counts, value) =>
+  value === 'all' ? Object.values(counts).reduce((sum, n) => sum + n, 0) : value.split(',').reduce((sum, st) => sum + (counts[st] ?? 0), 0);
+
+function TabLabel({ label, count, alert }) {
+  return (
+    <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
+      {label}
+      {count > 0 && (
+        <Box
+          component="span"
+          sx={{
+            minWidth: 20,
+            px: 0.75,
+            borderRadius: '10px',
+            fontSize: 12,
+            lineHeight: '20px',
+            fontWeight: 600,
+            textAlign: 'center',
+            color: alert ? '#fff' : brand.muted,
+            bgcolor: alert ? 'error.main' : brand.neutralBg
+          }}
+        >
+          {count}
+        </Box>
+      )}
+    </Box>
+  );
+}
+
 const TONE_COLOR = { success: 'success.main', danger: 'error.main', warning: 'warning.dark', neutral: 'text.secondary' };
 
-function CustomerOrderCard({ order, onOpen }) {
+function CustomerOrderCard({ order, onOpen, actions, onAction, busy }) {
   const meta = orderStatusMeta(order.orderStatus);
   const pay = paymentStatusMeta(order.paymentStatus);
   const lines = order.lines ?? [];
@@ -111,9 +141,22 @@ function CustomerOrderCard({ order, onOpen }) {
           <Typography variant="caption" sx={{ color: brand.muted }}>
             {formatLogDate(order.orderDate)} · {formatTime(order.orderDate)} · {paymentMethodLabel(order.paymentMethod)} · {pay.label}
           </Typography>
-          <OutlineButton size="small" component={RouterLink} to={`/orders/${order.id}`}>
-            Xem chi tiết
-          </OutlineButton>
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            <OutlineButton size="small" component={RouterLink} to={`/orders/${order.id}`}>
+              Xem chi tiết
+            </OutlineButton>
+            {actions.map((action) =>
+              action.primary ? (
+                <Button key={action.to} size="small" variant="contained" disableElevation disabled={busy} onClick={() => onAction(action)}>
+                  {action.label}
+                </Button>
+              ) : (
+                <OutlineButton key={action.to} size="small" disabled={busy} onClick={() => onAction(action)}>
+                  {action.label}
+                </OutlineButton>
+              )
+            )}
+          </Box>
         </Box>
       </Box>
     </Box>
@@ -131,6 +174,12 @@ export default function OrderListPage() {
   const [page, setPage] = useState(0);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
+  const [busyId, setBusyId] = useState(null);
+  const [rowError, setRowError] = useState('');
+  const [dialog, setDialog] = useState(null); // { order, action } đang chờ nhập lý do hoặc chọn hình thức giao
+  const [reason, setReason] = useState('');
+  const [carrier, setCarrier] = useState('SELF');
+  const isOwner = account.role === 'OWNER';
   const search = useDebounced(q.trim());
 
   const filter = (setter) => (value) => {
@@ -140,6 +189,10 @@ export default function OrderListPage() {
 
   const params = { status: status === 'all' ? undefined : status, q: search || undefined, page, size: PAGE_SIZE };
   const list = useSWR(['orders', params], () => ordersApi.list(params), { keepPreviousData: true, revalidateOnFocus: false });
+  // Số đơn theo trạng thái cho các tab của chủ shop
+  const counts = useSWR(isOwner ? ['order-counts'] : null, () => ordersApi.counts(), { revalidateOnFocus: false });
+  const countData = counts.data ?? {};
+  const refresh = () => Promise.all([list.mutate(), isOwner ? counts.mutate() : null]);
 
   // Chỉ dành cho chủ shop, để test thông báo: tạo đơn online mẫu rồi tải lại danh sách
   const createSample = async () => {
@@ -148,7 +201,7 @@ export default function OrderListPage() {
     try {
       await ordersApi.createSample();
       setPage(0);
-      await list.mutate();
+      await refresh();
     } catch (e) {
       setCreateError(e.message || 'Không tạo được đơn mẫu.');
     } finally {
@@ -156,7 +209,105 @@ export default function OrderListPage() {
     }
   };
 
+  // Chủ shop xử lý đơn ngay trên danh sách, không cần vào trang chi tiết
+  const runAction = async (order, action, why, carrierValue) => {
+    setBusyId(order.id);
+    setRowError('');
+    try {
+      await ordersApi.changeStatus(order.id, action.to, why, carrierValue);
+      setDialog(null);
+      await refresh();
+    } catch (e) {
+      setRowError(e.message || 'Không đổi được trạng thái đơn.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const startAction = (order, action) => {
+    setRowError('');
+    if (action.askReason || action.askCarrier) {
+      setReason('');
+      setCarrier('SELF');
+      setDialog({ order, action });
+    } else {
+      runAction(order, action);
+    }
+  };
+
   const items = list.data?.items ?? [];
+
+  // Hộp thoại nhập lý do (từ chối, hủy) hoặc chọn hình thức giao; dùng chung cho khách và chủ shop
+  const actionDialog = (
+    <Dialog open={Boolean(dialog)} onClose={() => busyId === null && setDialog(null)} fullWidth maxWidth="xs">
+      <DialogTitle>{dialog?.action.label}</DialogTitle>
+      <DialogContent>
+        {dialog && (
+          <Typography variant="body2" sx={{ color: brand.muted, mb: 1.5 }}>
+            Đơn {dialog.order.orderNumber} · {dialog.order.deliveryName}
+            {dialog.action.askCarrier && (
+              <>
+                <br />
+                Địa chỉ giao:{' '}
+                <Typography component="span" variant="body2" sx={{ color: brand.ink, fontWeight: 600 }}>
+                  {dialog.order.deliveryAddress || '—'}
+                </Typography>
+              </>
+            )}
+          </Typography>
+        )}
+        {dialog?.action.askCarrier ? (
+          <TextField
+            select
+            autoFocus
+            fullWidth
+            margin="dense"
+            label="Hình thức giao hàng"
+            value={carrier}
+            onChange={(e) => setCarrier(e.target.value)}
+            helperText={carrier === 'SELF' ? 'Dùng khi địa chỉ gần: cửa hàng tự giao, không cần mã vận đơn.' : 'Dùng khi địa chỉ xa: giao qua đơn vị vận chuyển.'}
+          >
+            {CARRIERS.map((item) => (
+              <MenuItem key={item.value} value={item.value}>
+                {item.label}
+              </MenuItem>
+            ))}
+          </TextField>
+        ) : (
+          <TextField
+            autoFocus
+            fullWidth
+            multiline
+            minRows={2}
+            margin="dense"
+            label="Lý do (không bắt buộc)"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            inputProps={{ maxLength: 255 }}
+          />
+        )}
+        {rowError && (
+          <Typography color="error" variant="body2" sx={{ mt: 1 }}>
+            {rowError}
+          </Typography>
+        )}
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button disabled={busyId !== null} onClick={() => setDialog(null)}>
+          Quay lại
+        </Button>
+        <Button
+          variant="contained"
+          color={dialog?.action.askCarrier ? 'primary' : 'error'}
+          disableElevation
+          disabled={busyId !== null}
+          onClick={() => runAction(dialog.order, dialog.action, reason, carrier)}
+        >
+          {busyId !== null ? 'Đang xử lý...' : 'Xác nhận'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
 
   // ---------------------------------------------------------------- Khách hàng (kiểu Shopee)
   if (isCustomer) {
@@ -182,6 +333,11 @@ export default function OrderListPage() {
           <SearchField placeholder="Tìm theo mã đơn hoặc tên sản phẩm" value={q} onChange={filter(setQ)} />
         </Box>
 
+        {rowError && (
+          <Typography color="error" sx={{ mb: 1.5 }}>
+            {rowError}
+          </Typography>
+        )}
         {list.error && (
           <Typography color="error" sx={{ mb: 1.5 }}>
             {list.error.message}
@@ -189,7 +345,14 @@ export default function OrderListPage() {
         )}
 
         {items.map((order) => (
-          <CustomerOrderCard key={order.id} order={order} onOpen={() => navigate(`/orders/${order.id}`)} />
+          <CustomerOrderCard
+            key={order.id}
+            order={order}
+            busy={busyId === order.id}
+            onOpen={() => navigate(`/orders/${order.id}`)}
+            actions={CUSTOMER_ACTIONS[order.orderStatus] ?? []}
+            onAction={(action) => startAction(order, action)}
+          />
         ))}
 
         {!list.isLoading && items.length === 0 && (
@@ -208,12 +371,13 @@ export default function OrderListPage() {
             <Pager page={page} totalPages={list.data?.totalPages ?? 0} total={list.data?.total ?? 0} size={PAGE_SIZE} noun="đơn hàng" onPage={setPage} />
           </Box>
         )}
+        {actionDialog}
       </Box>
     );
   }
 
   // ---------------------------------------------------------------- Chủ shop / người xử lý đơn (bảng)
-  const columns = ['Đơn hàng', 'Người nhận', 'Sản phẩm', 'Tổng tiền', 'Thanh toán', 'Trạng thái', ''];
+  const columns = ['Đơn hàng', 'Người nhận', 'Sản phẩm', 'Tổng tiền', 'Thanh toán', 'Trạng thái', 'Thao tác'];
 
   return (
     <Box>
@@ -221,21 +385,40 @@ export default function OrderListPage() {
         <Box sx={{ flex: 1, minWidth: 260 }}>
           <PageHeader title="Đơn hàng online" subtitle="Xem và xử lý các đơn khách đặt trên website." />
         </Box>
-        <OutlineButton onClick={createSample} disabled={creating}>
-          {creating ? 'Đang tạo...' : 'Tạo đơn mẫu (Test)'}
-        </OutlineButton>
+        {isOwner && (
+          <OutlineButton onClick={createSample} disabled={creating}>
+            {creating ? 'Đang tạo...' : 'Tạo đơn mẫu (Test)'}
+          </OutlineButton>
+        )}
       </Box>
       {createError && (
         <Typography color="error" sx={{ mb: 1 }}>
           {createError}
         </Typography>
       )}
+      {rowError && !dialog && (
+        <Typography color="error" sx={{ mb: 1 }}>
+          {rowError}
+        </Typography>
+      )}
+
+      <Box sx={{ ...cardSx, mb: 1.5 }}>
+        <Tabs value={status} onChange={(_, value) => filter(setStatus)(value)} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile>
+          {CUSTOMER_TABS.map((tab) => (
+            <Tab
+              key={tab.value}
+              value={tab.value}
+              label={<TabLabel label={tab.label} count={statusCount(countData, tab.value)} alert={tab.value === 'PENDING_CONFIRMATION'} />}
+              sx={{ textTransform: 'none', fontWeight: 500, minWidth: 120 }}
+            />
+          ))}
+        </Tabs>
+      </Box>
 
       <Toolbar>
         <Box sx={{ flex: 1 }}>
           <SearchField placeholder="Tìm theo mã đơn, người nhận hoặc số điện thoại" value={q} onChange={filter(setQ)} />
         </Box>
-        <FilterSelect label="Lọc theo trạng thái" value={status} onChange={filter(setStatus)} options={ORDER_STATUS_OPTIONS} minWidth={190} />
       </Toolbar>
 
       <Box sx={{ ...cardSx, overflow: 'hidden' }}>
@@ -245,11 +428,11 @@ export default function OrderListPage() {
           </Typography>
         )}
         <Box sx={{ overflowX: 'auto' }}>
-          <Table size="small" sx={{ minWidth: 820 }}>
+          <Table size="small" sx={{ minWidth: 980 }}>
             <TableHead>
               <TableRow>
                 {columns.map((label, index) => (
-                  <TableCell key={`${label}-${index}`} sx={headCellSx}>
+                  <TableCell key={`${label}-${index}`} sx={label === 'Thao tác' ? { ...headCellSx, width: 360 } : headCellSx}>
                     {label}
                   </TableCell>
                 ))}
@@ -303,10 +486,23 @@ export default function OrderListPage() {
                         )}
                       </Stack>
                     </TableCell>
-                    <TableCell sx={{ ...bodyCellSx, textAlign: 'right' }}>
-                      <OutlineButton size="small" component={RouterLink} to={`/orders/${order.id}`}>
-                        Xem
-                      </OutlineButton>
+                    <TableCell sx={bodyCellSx}>
+                      <Stack direction="row" spacing={1} alignItems="center" justifyContent="flex-start" sx={{ flexWrap: 'wrap', rowGap: 0.75 }}>
+                        <OutlineButton size="small" component={RouterLink} to={`/orders/${order.id}`}>
+                          Xem
+                        </OutlineButton>
+                        {(isOwner ? OWNER_ACTIONS[order.orderStatus] ?? [] : []).map((action) =>
+                          action.primary ? (
+                            <Button key={action.to} size="small" variant="contained" disableElevation disabled={busyId === order.id} onClick={() => startAction(order, action)}>
+                              {action.label}
+                            </Button>
+                          ) : (
+                            <OutlineButton key={action.to} size="small" disabled={busyId === order.id} onClick={() => startAction(order, action)}>
+                              {action.label}
+                            </OutlineButton>
+                          )
+                        )}
+                      </Stack>
                     </TableCell>
                   </TableRow>
                 );
@@ -321,6 +517,8 @@ export default function OrderListPage() {
         </Box>
         <Pager page={page} totalPages={list.data?.totalPages ?? 0} total={list.data?.total ?? 0} size={PAGE_SIZE} noun="đơn hàng" onPage={setPage} />
       </Box>
+
+      {actionDialog}
     </Box>
   );
 }

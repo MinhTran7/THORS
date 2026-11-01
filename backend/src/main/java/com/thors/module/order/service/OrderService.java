@@ -18,7 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class OrderService {
     private static final int MAX_SIZE = 50;
 
-    /** Tài khoản khách dùng để tạo đơn mẫu khi Owner / Family Member bấm nút test. */
+    /** Tài khoản khách dùng để tạo đơn mẫu khi Owner bấm nút test. */
     private static final String TEST_CUSTOMER_EMAIL = "customer@thors.shop";
 
     /** Các vai trò xử lý đơn online của cửa hàng. */
@@ -30,12 +30,20 @@ public class OrderService {
                     OrderStatus.PENDING_CONFIRMATION,
                     List.of(OrderStatus.AWAITING_PICKUP, OrderStatus.REJECTED),
                     OrderStatus.AWAITING_PICKUP, List.of(OrderStatus.SHIPPING),
-                    OrderStatus.SHIPPING, List.of(OrderStatus.DELIVERED),
+                    OrderStatus.SHIPPING, List.of(OrderStatus.DELIVERED));
+
+    /**
+     * Customer: hủy khi cửa hàng chưa xác nhận; bấm "Đã nhận hàng" khi đơn đã giao. Owner không tự
+     * hoàn tất đơn, nếu khách không bấm thì hệ thống tự hoàn tất sau AUTO_COMPLETE_DAYS ngày.
+     */
+    private static final Map<String, List<String>> CUSTOMER_FLOW =
+            Map.of(
+                    OrderStatus.AWAITING_PAYMENT, List.of(OrderStatus.CANCELLED),
+                    OrderStatus.PENDING_CONFIRMATION, List.of(OrderStatus.CANCELLED),
                     OrderStatus.DELIVERED, List.of(OrderStatus.COMPLETED));
 
-    /** Customer chỉ được hủy khi cửa hàng chưa xác nhận. */
-    private static final Set<String> CUSTOMER_CANCELABLE =
-            Set.of(OrderStatus.AWAITING_PAYMENT, OrderStatus.PENDING_CONFIRMATION);
+    /** Số ngày sau khi giao mà khách chưa xác nhận thì đơn tự hoàn tất. */
+    private static final int AUTO_COMPLETE_DAYS = 7;
 
     /** Vai trò nhận thông báo của chủ shop (cùng tên với Account.role()). */
     private static final String OWNER_ROLE = "OWNER";
@@ -87,6 +95,12 @@ public class OrderService {
         return new Page(slice.items(), safePage, safeSize, slice.total(), totalPages);
     }
 
+    /** Số đơn theo từng trạng thái: Customer đếm đơn của mình, nhân viên cửa hàng đếm mọi đơn online. */
+    public Map<String, Long> counts(Account actor) {
+        requireOrderAccess(actor);
+        return orders.countByStatus(isCustomer(actor) ? actor.id() : null, OrderStatus.TYPE_ONLINE);
+    }
+
     /**
      * View Order Detail: Customer chỉ xem đơn của mình (đơn của người khác trả 404 để không lộ đơn có
      * tồn tại); nhân viên cửa hàng xem mọi đơn online, kèm thông tin khách.
@@ -103,16 +117,15 @@ public class OrderService {
     }
 
     /**
-     * Chỉ để test: tạo một đơn online mẫu rồi gửi thông báo. Customer tạo cho chính mình;
-     * Owner / Family Member tạo cho tài khoản customer@thors.shop.
+     * Chỉ để test: tạo một đơn online mẫu cho tài khoản customer@thors.shop rồi gửi thông báo.
+     * Chỉ Owner được dùng; Customer và các vai trò khác bị chặn.
      */
     @Transactional
     public Detail createSample(Account actor) {
-        requireOrderAccess(actor);
+        if (!"OWNER".equals(actor.role()))
+            throw new ApiException(403, "ROLE", "Chỉ Owner được dùng chức năng tạo đơn mẫu.");
         int customerId =
-                isCustomer(actor)
-                        ? actor.id()
-                        : orders.findUserIdByEmail(TEST_CUSTOMER_EMAIL)
+                orders.findUserIdByEmail(TEST_CUSTOMER_EMAIL)
                         .orElseThrow(
                                 () ->
                                         new ApiException(
@@ -183,9 +196,9 @@ public class OrderService {
         String number = found.detail().orderNumber();
 
         boolean allowed =
-                isCustomer(actor)
-                        ? OrderStatus.CANCELLED.equals(target) && CUSTOMER_CANCELABLE.contains(current)
-                        : OWNER_FLOW.getOrDefault(current, List.of()).contains(target);
+                (isCustomer(actor) ? CUSTOMER_FLOW : OWNER_FLOW)
+                        .getOrDefault(current, List.of())
+                        .contains(target);
         if (!allowed)
             throw new ApiException(
                     409, "ORDER_TRANSITION", "Không thể chuyển đơn từ " + current + " sang " + target + ".");
@@ -215,8 +228,13 @@ public class OrderService {
                     notifyCustomer(customerId, orderId, "Đơn hàng đã giao",
                             "Đơn " + number + " đã được giao thành công.");
             case OrderStatus.COMPLETED ->
-                    notifyCustomer(customerId, orderId, "Đơn hàng hoàn tất",
-                            "Đơn " + number + " đã hoàn tất. Cảm ơn bạn đã mua hàng!");
+                    notifications.toRole(
+                            OWNER_ROLE,
+                            NotificationTypes.ORDER_STATUS,
+                            "Khách đã nhận hàng",
+                            "Đơn " + number + " đã được khách xác nhận nhận hàng.",
+                            NotificationTypes.ENTITY_ORDER,
+                            orderId);
             case OrderStatus.CANCELLED ->
                     notifications.toRole(
                             OWNER_ROLE,
@@ -228,6 +246,58 @@ public class OrderService {
             default -> {}
         }
         return detail(actor, orderId);
+    }
+
+    /**
+     * Việc nền: hủy đơn online chờ thanh toán đã quá hạn (đơn trả tiền online được cho 2 giờ, hạn lưu ở
+     * payment_expires_at). Trả về số đơn đã chuyển sang hết hạn.
+     */
+    @Transactional
+    public int expireUnpaidOrders() {
+        int count = 0;
+        for (var due : orders.expiredUnpaid()) {
+            boolean moved =
+                    orders.transition(
+                            due.orderId(),
+                            OrderStatus.AWAITING_PAYMENT,
+                            OrderStatus.EXPIRED,
+                            null,
+                            "Hết hạn thanh toán",
+                            null);
+            if (!moved) continue;
+            notifyCustomer(
+                    due.userId(),
+                    due.orderId(),
+                    "Đơn hàng đã hết hạn",
+                    "Đơn " + due.orderNumber() + " đã hết hạn thanh toán và bị hủy.");
+            count++;
+        }
+        return count;
+    }
+
+    /** Việc nền: tự hoàn tất đơn đã giao quá AUTO_COMPLETE_DAYS ngày mà khách chưa xác nhận. */
+    @Transactional
+    public int autoCompleteDelivered() {
+        int count = 0;
+        for (var due : orders.deliveredLongAgo(AUTO_COMPLETE_DAYS)) {
+            boolean moved =
+                    orders.transition(
+                            due.orderId(),
+                            OrderStatus.DELIVERED,
+                            OrderStatus.COMPLETED,
+                            null,
+                            null,
+                            null);
+            if (!moved) continue;
+            notifyCustomer(
+                    due.userId(),
+                    due.orderId(),
+                    "Đơn hàng hoàn tất",
+                    "Đơn " + due.orderNumber() + " đã tự động hoàn tất sau " + AUTO_COMPLETE_DAYS
+                            + " ngày kể từ khi giao.");
+            count++;
+        }
+        return count;
     }
 
     private void notifyCustomer(int userId, int orderId, String title, String message) {

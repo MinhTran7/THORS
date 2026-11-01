@@ -25,6 +25,12 @@ public class OrderController {
         return service.list(sessions.current(), status, q, page, size);
     }
 
+    /** GET /api/orders/counts: số đơn theo từng trạng thái (hiện trên các tab) */
+    @GetMapping("/counts")
+    Object counts() {
+        return service.counts(sessions.current());
+    }
+
     @GetMapping("/{id}")
     Object detail(@PathVariable int id) {
         return service.detail(sessions.current(), id);

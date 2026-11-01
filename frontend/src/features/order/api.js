@@ -12,6 +12,8 @@ function query(params = {}) {
 export const ordersApi = {
   list: (params) => api(`/orders${query(params)}`),
   detail: (id) => api(`/orders/${id}`),
+  // Số đơn theo từng trạng thái, để hiện số trên các tab
+  counts: () => api('/orders/counts'),
   // Chỉ dùng khi test: tạo một đơn online mẫu và phát thông báo
   createSample: () => api('/orders/test-sample', { method: 'POST' }),
   // Owner: xác nhận / từ chối / giao / hoàn tất. Customer: hủy đơn.

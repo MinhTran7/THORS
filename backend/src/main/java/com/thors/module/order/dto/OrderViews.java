@@ -26,6 +26,7 @@ public class OrderViews {
             long totalAmount,
             String deliveryName,
             String deliveryPhone,
+            String deliveryAddress,
             long itemCount,
             String firstItemName,
             List<Preview> lines) {
@@ -42,6 +43,7 @@ public class OrderViews {
                     totalAmount,
                     deliveryName,
                     deliveryPhone,
+                    deliveryAddress,
                     itemCount,
                     firstItemName,
                     newLines);
