@@ -134,16 +134,17 @@ class AuditlogUnitTest {
     }
 
     @Test
-    @DisplayName("UTC010 - Rejects an unknown status filter")
+    @DisplayName("UTC010 - Rejects an unknown status filter and the removed WARNING status")
     void list_rejectsUnknownStatus() {
         fail(400, "STATUS_FILTER", () -> service.list(admin, new Filter(null, null, null, null, null, null, "UNKNOWN", 0), 0, 20));
+        fail(400, "STATUS_FILTER", () -> service.list(admin, new Filter(null, null, null, null, null, null, "WARNING", 0), 0, 20));
     }
 
     @Test
-    @DisplayName("UTC011 - Accepts SUCCESS, WARNING and FAILED")
+    @DisplayName("UTC011 - Accepts SUCCESS and FAILED")
     void list_acceptsKnownStatuses() {
         when(logs.search(any(), anyInt(), anyInt())).thenReturn(new Page(List.of(), 0, 20, 0, 0));
-        for (String status : List.of("SUCCESS", "WARNING", "FAILED")) {
+        for (String status : List.of("SUCCESS", "FAILED")) {
             assertNotNull(service.list(admin, new Filter(null, null, null, null, null, null, status, 0), 0, 20));
         }
     }
@@ -208,16 +209,18 @@ class AuditlogUnitTest {
     // ================================================================== statusOf (AuditLogRepository)
 
     @Test
-    @DisplayName("UTC018 - LOGIN_FAILED is shown as FAILED")
+    @DisplayName("UTC018 - Failed sign-in actions (LOGIN_FAILED, LOGIN_FAILURE, LOGIN_LOCK) are shown as FAILED")
     void statusOf_loginFailedIsFailed() {
-        assertEquals("FAILED", AuditLogRepository.statusOf("LOGIN_FAILED"));
+        for (String action : List.of("LOGIN_FAILED", "LOGIN_FAILURE", "LOGIN_LOCK")) {
+            assertEquals("FAILED", AuditLogRepository.statusOf(action), action);
+        }
     }
 
     @Test
-    @DisplayName("UTC019 - Lock, deactivate and reset-request actions are shown as WARNING")
-    void statusOf_securityActionsAreWarning() {
+    @DisplayName("UTC019 - Lock, deactivate and reset-request actions are shown as SUCCESS (the WARNING status was removed)")
+    void statusOf_accountManagementActionsAreSuccess() {
         for (String action : List.of("ACCOUNT_LOCK", "ACCOUNT_DEACTIVATE", "PASSWORD_RESET_REQUEST")) {
-            assertEquals("WARNING", AuditLogRepository.statusOf(action), action);
+            assertEquals("SUCCESS", AuditLogRepository.statusOf(action), action);
         }
     }
 
