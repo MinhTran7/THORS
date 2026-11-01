@@ -13,6 +13,7 @@ const patch = (path, body) => api(path, { method: 'PATCH', body });
 
 export const accountsApi = {
   profile: () => api('/accounts/profile'),
+  activity: (limit = 8) => api(`/accounts/profile/activity${query({ limit })}`),
   updateProfile: (body) => patch('/accounts/profile', body),
   changePassword: (body) => post('/auth/change-password', body),
   list: (params) => api(`/accounts${query(params)}`),

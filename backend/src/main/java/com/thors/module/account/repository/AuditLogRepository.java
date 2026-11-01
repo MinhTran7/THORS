@@ -25,15 +25,13 @@ public class AuditLogRepository {
     public static final List<String> HIDDEN =
             List.of("GOOGLE_LINK", "PASSWORD_INVALIDATE", "STATUS_INVALIDATE", "OTP_SENT", "LOGIN_SUCCESS");
 
-    /** Đăng nhập thất bại (LOGIN_FAILURE là giá trị OtpRepository đang ghi; LOGIN_FAILED giữ cho dữ liệu cũ). */
-    public static final List<String> FAILED = List.of("LOGIN_FAILED", "LOGIN_FAILURE");
-
     /**
-     * Sự kiện cần chú ý về bảo mật: khóa/vô hiệu hóa tài khoản, tạm dừng đăng nhập do sai mật khẩu
-     * nhiều lần, yêu cầu đặt lại mật khẩu của Owner.
+     * Hành động không thành công: đăng nhập sai (LOGIN_FAILURE là giá trị OtpRepository đang ghi;
+     * LOGIN_FAILED giữ cho dữ liệu cũ) và đăng nhập bị tạm dừng do sai nhiều lần (LOGIN_LOCK). Mọi
+     * hành động còn lại, kể cả khóa/mở khóa tài khoản do quản lý thực hiện, tính là thành công: một
+     * dòng nhật ký chỉ có hai kết quả là thành công hoặc thất bại.
      */
-    public static final List<String> WARNING =
-            List.of("ACCOUNT_LOCK", "ACCOUNT_DEACTIVATE", "PASSWORD_RESET_REQUEST", "LOGIN_LOCK");
+    public static final List<String> FAILED = List.of("LOGIN_FAILED", "LOGIN_FAILURE", "LOGIN_LOCK");
 
     /**
      * Các dòng đăng nhập do hệ thống ghi (user_id NULL). Khi hiển thị, người thực hiện là chính tài
@@ -42,9 +40,7 @@ public class AuditLogRepository {
     private static final Set<String> LOGIN_ATTEMPTS = Set.of("LOGIN_FAILED", "LOGIN_FAILURE", "LOGIN_LOCK");
 
     public static String statusOf(String action) {
-        if (FAILED.contains(action)) return "FAILED";
-        if (WARNING.contains(action)) return "WARNING";
-        return "SUCCESS";
+        return FAILED.contains(action) ? "FAILED" : "SUCCESS";
     }
 
     private static final String FROM =
@@ -111,14 +107,9 @@ public class AuditLogRepository {
                     where.append(" AND l.action_type IN (" + marks(FAILED.size()) + ")");
                     args.addAll(FAILED);
                 }
-                case "WARNING" -> {
-                    where.append(" AND l.action_type IN (" + marks(WARNING.size()) + ")");
-                    args.addAll(WARNING);
-                }
                 default -> {
-                    where.append(" AND l.action_type NOT IN (" + marks(FAILED.size() + WARNING.size()) + ")");
+                    where.append(" AND l.action_type NOT IN (" + marks(FAILED.size()) + ")");
                     args.addAll(FAILED);
-                    args.addAll(WARNING);
                 }
             }
         }
@@ -182,9 +173,9 @@ public class AuditLogRepository {
                 args.toArray());
         long events = counts.values().stream().mapToLong(Long::longValue).sum();
         long failed = FAILED.stream().mapToLong(a -> counts.getOrDefault(a, 0L)).sum();
-        long alerts = failed + WARNING.stream().mapToLong(a -> counts.getOrDefault(a, 0L)).sum();
-        return new Summary(
-                events, events - failed, alerts, failed, counts.getOrDefault("ACCOUNT_LOCK", 0L));
+        long wrongSignIns = counts.getOrDefault("LOGIN_FAILED", 0L) + counts.getOrDefault("LOGIN_FAILURE", 0L);
+        long pausedSignIns = counts.getOrDefault("LOGIN_LOCK", 0L);
+        return new Summary(events, events - failed, failed, wrongSignIns, pausedSignIns);
     }
 
     /** Danh sách action_type đang có trong log, dùng cho dropdown lọc ở giao diện. */
@@ -195,6 +186,55 @@ public class AuditLogRepository {
                         + ") ORDER BY action_type",
                 String.class,
                 HIDDEN.toArray());
+    }
+
+    /**
+     * Hoạt động gần đây của một tài khoản cho chính chủ xem: mọi sự kiện tác động lên tài khoản đó
+     * (do chính họ hoặc người quản lý thực hiện, kể cả đăng nhập sai) cộng các lần đăng nhập thành
+     * công của họ. Chỉ lấy action không nằm trong HIDDEN.
+     */
+    public List<Activity> recentFor(int userId, int limit) {
+        List<Object> args = new ArrayList<>(HIDDEN);
+        args.add(userId);
+        args.add(userId);
+        args.add(limit);
+        return db.query(
+                "SELECT l.log_id, l.user_id, l.action_type, l.new_value, l.performed_at FROM audit_log l"
+                        + " WHERE l.action_type NOT IN ("
+                        + marks(HIDDEN.size())
+                        + ") AND ((l.entity_affected = 'user' AND l.entity_id = ?)"
+                        + " OR (l.user_id = ? AND l.action_type = 'LOGIN'))"
+                        + " ORDER BY l.performed_at DESC, l.log_id DESC LIMIT ?",
+                activityMapper(userId),
+                args.toArray());
+    }
+
+    /** Lần đăng nhập thành công gần nhất của tài khoản, null nếu chưa có dòng LOGIN nào. */
+    public Activity lastLogin(int userId) {
+        List<Activity> rows =
+                db.query(
+                        "SELECT l.log_id, l.user_id, l.action_type, l.new_value, l.performed_at FROM audit_log l"
+                                + " WHERE l.user_id = ? AND l.action_type = 'LOGIN'"
+                                + " ORDER BY l.performed_at DESC, l.log_id DESC LIMIT 1",
+                        activityMapper(userId),
+                        userId);
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    private static RowMapper<Activity> activityMapper(int me) {
+        return (rs, i) -> {
+            String action = rs.getString("action_type");
+            String newValue = rs.getString("new_value");
+            String ip = newValue != null && newValue.startsWith("IP ") ? newValue.substring(3) : null;
+            Integer actor = rs.getObject("user_id", Integer.class);
+            return new Activity(
+                    rs.getLong("log_id"),
+                    action,
+                    statusOf(action),
+                    actor != null && actor != me,
+                    ip,
+                    rs.getObject("performed_at", LocalDateTime.class));
+        };
     }
 
     private static String like(String q) {

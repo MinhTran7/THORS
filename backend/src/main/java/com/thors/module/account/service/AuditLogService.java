@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class AuditLogService {
     private static final int MAX_SIZE = 100;
+    private static final int MAX_MINE = 20;
     private final AuditLogRepository logs;
 
     public AuditLogService(AuditLogRepository logs) {
@@ -28,7 +29,7 @@ public class AuditLogService {
         String status = blankToNull(f.status());
         if (q != null && q.length() > 100)
             throw new ApiException(400, "QUERY", "Từ khóa tìm kiếm quá dài.");
-        if (status != null && !List.of("SUCCESS", "WARNING", "FAILED").contains(status))
+        if (status != null && !List.of("SUCCESS", "FAILED").contains(status))
             throw new ApiException(400, "STATUS_FILTER", "Trạng thái lọc không hợp lệ.");
         offset(f.offset());
         return logs.search(
@@ -46,6 +47,16 @@ public class AuditLogService {
     public List<String> actions(Account actor) {
         admin(actor);
         return logs.actions();
+    }
+
+    /**
+     * Hoạt động gần đây của CHÍNH người đang đăng nhập (mọi vai trò). Luôn lấy theo id của actor,
+     * không nhận id từ client nên không thể xem log của người khác.
+     */
+    public ProfileActivity mine(Account actor, int limit) {
+        if (limit < 1 || limit > MAX_MINE)
+            throw new ApiException(400, "LIMIT", "Số dòng phải từ 1 đến " + MAX_MINE + ".");
+        return new ProfileActivity(logs.lastLogin(actor.id()), logs.recentFor(actor.id(), limit));
     }
 
     private void admin(Account actor) {

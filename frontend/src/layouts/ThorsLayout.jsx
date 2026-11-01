@@ -79,9 +79,12 @@ export default function ThorsLayout() {
           <Typography variant="subtitle2" noWrap sx={{ color: brand.ink }}>
             {account.fullName}
           </Typography>
-          <Typography variant="caption" noWrap sx={{ color: brand.muted, display: 'block' }}>
-            {ROLE_LABEL[account.role] ?? account.role}
-          </Typography>
+          {/* Khách hàng chỉ có một vai trò nên không cần hiện nhãn; các vai trò khác thì có phân biệt. */}
+          {account.role !== 'CUSTOMER' && (
+            <Typography variant="caption" noWrap sx={{ color: brand.muted, display: 'block' }}>
+              {ROLE_LABEL[account.role] ?? account.role}
+            </Typography>
+          )}
         </Box>
         <Tooltip title="Đăng xuất">
           <IconButton aria-label="Đăng xuất" onClick={signOut}>
@@ -119,7 +122,7 @@ export default function ThorsLayout() {
         </Drawer>
         <Box sx={{ flexGrow: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
           <AppHeader crumbs={crumbs} onOpenMenu={() => setMobile(true)} onSignOut={signOut} />
-          <Box component="main" sx={{ px: { xs: 2, md: 4 }, py: { xs: 3, md: 4 }, maxWidth: 1240, width: '100%', flexGrow: 1 }}>
+          <Box component="main" sx={{ px: { xs: 2, md: 4 }, py: 3, maxWidth: 1920, mx: 'auto', width: '100%', flexGrow: 1 }}>
             {error && (
               <Alert severity="error" sx={{ mb: 2 }}>
                 {error}

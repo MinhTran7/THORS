@@ -24,5 +24,16 @@ export const brand = {
   neutralInk: '#4B5563'
 };
 
+// Thang cỡ chữ (px) dùng chung cho các trang account. Muốn to/nhỏ cả feature chỉ cần sửa ở đây.
+export const fs = {
+  pageTitle: 30,
+  name: 24,
+  cardTitle: 20,
+  strong: 16,
+  body: 15,
+  caption: 14,
+  small: 13
+};
+
 export const radius = 2; // theme.spacing(2) = 16px khi dùng với sx borderRadius
 export const cardSx = { bgcolor: brand.surface, border: `1px solid ${brand.line}`, borderRadius: '14px' };
