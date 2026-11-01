@@ -2,14 +2,14 @@ import { useState } from 'react';
 import useSWR from 'swr';
 import { Box, IconButton, Table, TableBody, TableCell, TableHead, TableRow, TextField, Tooltip, Typography } from '@mui/material';
 import { Stack } from '../components/Flex';
-import { CheckCircleOutlined, DownloadOutlined, FileTextOutlined, ReloadOutlined, SafetyOutlined } from '@ant-design/icons';
+import { CheckCircleOutlined, CloseCircleOutlined, DownloadOutlined, FileTextOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useCrumbs } from 'layouts/crumbs';
 import { downloadCsv } from 'utils/csv';
 import { fetchAll, logsApi } from '../api';
-import { LOG_STATUS, PAGE_SIZE, ROLE_LABEL } from '../constants';
+import { LOG_STATUS, ROLE_LABEL } from '../constants';
 import { formatLogDate, formatTime, humanize, parseUtc, toYmd, tzLabel, tzOffsetMinutes } from '../format';
 import { useDebounced } from '../hooks';
-import { brand, cardSx } from '../tokens';
+import { brand, cardSx, fs } from '../tokens';
 import { OutlineButton } from '../components/Brand';
 import { StatusPill } from '../components/Chips';
 import {
@@ -27,28 +27,34 @@ import {
 import { useToast } from '../components/Toast';
 
 const ACTION_LABELS = {
-  LOGIN: 'Signed in',
-  LOGIN_FAILED: 'Sign-in attempt failed',
-  LOGIN_FAILURE: 'Sign-in attempt failed',
-  LOGIN_LOCK: 'Sign-in paused after repeated failures',
-  ACCOUNT_CREATE: 'Account created',
-  ACCOUNT_EDIT: 'Account updated',
-  ACCOUNT_LOCK: 'Account locked',
-  ACCOUNT_UNLOCK: 'Account unlocked',
-  ACCOUNT_ACTIVATE: 'Account activated',
-  ACCOUNT_DEACTIVATE: 'Account deactivated',
-  PASSWORD_CHANGE: 'Password changed',
-  PASSWORD_RESET: 'Password reset',
-  PASSWORD_RESET_ADMIN: 'Password reset by a manager',
-  PASSWORD_RESET_REQUEST: 'Password reset requested',
-  PROFILE_UPDATE: 'Profile updated',
-  PHONE_ADDED: 'Phone number added'
+  LOGIN: 'Đăng nhập',
+  LOGIN_FAILED: 'Đăng nhập thất bại',
+  LOGIN_FAILURE: 'Đăng nhập thất bại',
+  LOGIN_LOCK: 'Tạm khóa đăng nhập do sai nhiều lần',
+  ACCOUNT_CREATE: 'Tạo tài khoản',
+  ACCOUNT_EDIT: 'Cập nhật tài khoản',
+  ACCOUNT_LOCK: 'Khóa tài khoản',
+  ACCOUNT_UNLOCK: 'Mở khóa tài khoản',
+  ACCOUNT_ACTIVATE: 'Kích hoạt tài khoản',
+  ACCOUNT_DEACTIVATE: 'Vô hiệu hóa tài khoản',
+  PASSWORD_CHANGE: 'Đổi mật khẩu',
+  PASSWORD_RESET: 'Đặt lại mật khẩu',
+  PASSWORD_RESET_ADMIN: 'Quản lý đặt lại mật khẩu',
+  PASSWORD_RESET_REQUEST: 'Yêu cầu đặt lại mật khẩu',
+  PROFILE_UPDATE: 'Cập nhật hồ sơ',
+  PHONE_ADDED: 'Thêm số điện thoại'
 };
 
 const STATUS_OPTIONS = [
-  { value: '', label: 'All statuses' },
+  { value: '', label: 'Tất cả trạng thái' },
   ...Object.entries(LOG_STATUS).map(([value, meta]) => ({ value, label: meta.label }))
 ];
+
+// Hàng thấp hơn mặc định để một trang 10 dòng đỡ phải cuộn.
+const cellSx = { ...bodyCellSx, py: 1 };
+
+// Trang này có thêm ba thẻ thống kê nên chỉ hiện 8 dòng mỗi trang để vừa một màn hình, không phải cuộn.
+const LOG_PAGE_SIZE = 8;
 
 const actionLabel = (item) => ACTION_LABELS[item.action] ?? humanize(item.action);
 
@@ -59,7 +65,7 @@ function subtitle(item) {
 }
 
 export default function SystemLogPage() {
-  useCrumbs(['System Log']);
+  useCrumbs(['Nhật ký hệ thống']);
   const [toast, showToast] = useToast();
   const today = new Date();
   const [q, setQ] = useState('');
@@ -72,7 +78,7 @@ export default function SystemLogPage() {
   const search = useDebounced(q.trim());
   const offset = tzOffsetMinutes();
 
-  const params = { q: search, status, from, to, offset, page, size: PAGE_SIZE };
+  const params = { q: search, status, from, to, offset, page, size: LOG_PAGE_SIZE };
   const list = useSWR(['system-log', params], () => logsApi.list(params), {
     keepPreviousData: true,
     revalidateOnFocus: false,
@@ -94,10 +100,10 @@ export default function SystemLogPage() {
       const rows = await fetchAll((paging) => logsApi.list({ q: search, status, from, to, offset, ...paging }));
       downloadCsv(
         'system-log.csv',
-        ['Timestamp (UTC)', 'User', 'Action', 'Details', 'IP address', 'Status'],
+        ['Thời gian (UTC)', 'Người dùng', 'Hành động', 'Chi tiết', 'Địa chỉ IP', 'Trạng thái'],
         rows.map((item) => [
           parseUtc(item.performedAt)?.toISOString() ?? '',
-          item.actorName ?? 'System',
+          item.actorName ?? 'Hệ thống',
           actionLabel(item),
           subtitle(item),
           item.ip ?? '',
@@ -121,8 +127,8 @@ export default function SystemLogPage() {
       onChange={(event) => filter(setter)(event.target.value)}
       slotProps={{ inputLabel: { shrink: true } }}
       sx={{
-        minWidth: 160,
-        '& .MuiOutlinedInput-root': { bgcolor: brand.surface, borderRadius: '10px', '& fieldset': { borderColor: brand.line } }
+        minWidth: 170,
+        '& .MuiOutlinedInput-root': { bgcolor: brand.surface, borderRadius: '10px', fontSize: fs.body, '& fieldset': { borderColor: brand.line } }
       }}
     />
   );
@@ -130,60 +136,67 @@ export default function SystemLogPage() {
   return (
     <Box>
       <PageHeader
-        title="System Log"
-        subtitle="A reliable record of account management and security activity."
+        title="Nhật ký hệ thống"
+        subtitle="Bản ghi đáng tin cậy về hoạt động quản lý tài khoản và bảo mật."
         action={
-          <OutlineButton startIcon={<DownloadOutlined />} onClick={exportCsv} disabled={exporting}>
-            {exporting ? 'Exporting…' : 'Export log'}
+          <OutlineButton startIcon={<DownloadOutlined />} onClick={exportCsv} disabled={exporting} sx={{ fontSize: fs.body }}>
+            {exporting ? 'Đang xuất…' : 'Xuất nhật ký'}
           </OutlineButton>
         }
       />
       <StatRow>
         <StatCard
-          label="Events today"
+          label="Sự kiện hôm nay"
           value={stats?.eventsToday}
-          caption="Across all system accounts"
+          caption="Trên toàn bộ tài khoản hệ thống"
           icon={<FileTextOutlined />}
           loading={!stats}
         />
         <StatCard
-          label="Successful actions"
+          label="Hành động thành công"
           value={stats?.successfulToday}
-          caption={`${successRate}% completed successfully`}
+          caption={`${successRate}% hoàn tất thành công`}
           icon={<CheckCircleOutlined />}
           loading={!stats}
         />
         <StatCard
-          label="Security alerts"
-          value={stats?.securityAlertsToday}
-          caption={stats ? `${stats.failedSignInsToday} failed sign-ins · ${stats.locksToday} account locks` : ' '}
-          icon={<SafetyOutlined />}
-          warning
+          label="Hành động thất bại"
+          value={stats?.failedToday}
+          caption={stats ? `${stats.failedSignInsToday} lần đăng nhập sai · ${stats.pausedSignInsToday} lần tạm khóa đăng nhập` : ' '}
+          icon={<CloseCircleOutlined />}
+          warning={Boolean(stats?.failedToday)}
           loading={!stats}
         />
       </StatRow>
 
       <Toolbar>
         <Box sx={{ flex: 1 }}>
-          <SearchField placeholder="Search user, action or IP address" value={q} onChange={filter(setQ)} />
+          <SearchField placeholder="Tìm người dùng, hành động hoặc địa chỉ IP" value={q} onChange={filter(setQ)} />
         </Box>
-        <FilterSelect label="Filter by status" value={status} onChange={filter(setStatus)} options={STATUS_OPTIONS} />
-        {dateField('From', from, setFrom)}
-        {dateField('To', to, setTo)}
+        <FilterSelect label="Lọc theo trạng thái" value={status} onChange={filter(setStatus)} options={STATUS_OPTIONS} minWidth={180} />
+        {dateField('Từ ngày', from, setFrom)}
+        {dateField('Đến ngày', to, setTo)}
       </Toolbar>
 
       <Box sx={{ ...cardSx, overflow: 'hidden' }}>
         {list.error && (
-          <Typography color="error" sx={{ p: 2 }}>
+          <Typography color="error" sx={{ p: 2, fontSize: fs.body }}>
             {list.error.message}
           </Typography>
         )}
         <Box sx={{ overflowX: 'auto' }}>
-          <Table size="small" sx={{ minWidth: 760 }}>
+          {/* tableLayout fixed + độ rộng cố định: cột không còn xê dịch theo nội dung của từng trang. */}
+          <Table size="small" sx={{ minWidth: 960, tableLayout: 'fixed' }}>
             <TableHead>
               <TableRow>
-                {['Timestamp', 'User', 'Action', 'IP Address', 'Status'].map((label) => (
-                  <TableCell key={label} sx={headCellSx}>
+                {[
+                  ['Thời gian', 230],
+                  ['Người dùng', 200],
+                  ['Hành động', undefined],
+                  ['Địa chỉ IP', 190],
+                  ['Trạng thái', 150]
+                ].map(([label, width]) => (
+                  <TableCell key={label} sx={{ ...headCellSx, width }}>
                     {label}
                   </TableCell>
                 ))}
@@ -194,33 +207,43 @@ export default function SystemLogPage() {
                 const meta = LOG_STATUS[item.status] ?? LOG_STATUS.SUCCESS;
                 return (
                   <TableRow key={item.id} hover>
-                    <TableCell sx={bodyCellSx}>
-                      <Typography variant="body2">{formatLogDate(item.performedAt)}</Typography>
-                      <Typography variant="caption" sx={{ color: brand.muted }}>
-                        {formatTime(item.performedAt)}
+                    <TableCell sx={cellSx}>
+                      <Typography sx={{ fontSize: fs.body, whiteSpace: 'nowrap' }}>
+                        {formatLogDate(item.performedAt)}
+                        <Box component="span" sx={{ color: brand.muted, ml: 1 }}>
+                          {formatTime(item.performedAt)}
+                        </Box>
                       </Typography>
                     </TableCell>
-                    <TableCell sx={bodyCellSx}>
-                      <Typography variant="body2">{item.actorName ?? 'System'}</Typography>
-                    </TableCell>
-                    <TableCell sx={bodyCellSx}>
-                      <Typography variant="body2" sx={{ fontWeight: 600, color: brand.ink }}>
-                        {actionLabel(item)}
-                      </Typography>
-                      <Typography variant="caption" sx={{ color: brand.muted }}>
-                        {subtitle(item)}
+                    <TableCell sx={cellSx}>
+                      <Typography noWrap sx={{ fontSize: fs.body }}>
+                        {item.actorName ?? 'Hệ thống'}
                       </Typography>
                     </TableCell>
-                    <TableCell sx={bodyCellSx}>
-                      <Typography variant="body2">{item.ip ?? '—'}</Typography>
+                    <TableCell sx={cellSx}>
+                      <Typography noWrap title={`${actionLabel(item)} ${subtitle(item)}`} sx={{ fontSize: fs.body }}>
+                        <Box component="span" sx={{ fontWeight: 600, color: brand.ink }}>
+                          {actionLabel(item)}
+                        </Box>
+                        {subtitle(item) && (
+                          <Box component="span" sx={{ color: brand.muted, fontSize: fs.caption, ml: 1 }}>
+                            {subtitle(item)}
+                          </Box>
+                        )}
+                      </Typography>
                     </TableCell>
-                    <TableCell sx={bodyCellSx}>
+                    <TableCell sx={cellSx}>
+                      <Typography noWrap title={item.ip ?? ''} sx={{ fontSize: fs.body }}>
+                        {item.ip ?? '—'}
+                      </Typography>
+                    </TableCell>
+                    <TableCell sx={cellSx}>
                       <StatusPill tone={meta.tone} label={meta.label} />
                     </TableCell>
                   </TableRow>
                 );
               })}
-              {!list.isLoading && items.length === 0 && <EmptyRow colSpan={5}>No events match your filters.</EmptyRow>}
+              {!list.isLoading && items.length === 0 && <EmptyRow colSpan={5}>Không có sự kiện nào khớp với bộ lọc.</EmptyRow>}
             </TableBody>
           </Table>
         </Box>
@@ -228,22 +251,22 @@ export default function SystemLogPage() {
           page={page}
           totalPages={list.data?.totalPages ?? 0}
           total={list.data?.total ?? 0}
-          size={PAGE_SIZE}
-          noun="events"
+          size={LOG_PAGE_SIZE}
+          noun="sự kiện"
           onPage={setPage}
         />
       </Box>
 
-      <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 2.5 }}>
-        <Typography variant="caption" sx={{ color: brand.muted }}>
-          {`Audit records are read-only. All times in ${tzLabel()}.${
-            refreshedAt ? ` Last refreshed: ${refreshedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}.` : ''
+      <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 1.5 }}>
+        <Typography sx={{ color: brand.muted, fontSize: fs.caption }}>
+          {`Nhật ký chỉ để xem, không thể chỉnh sửa. Mọi thời gian theo ${tzLabel()}.${
+            refreshedAt ? ` Làm mới lúc ${refreshedAt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}.` : ''
           }`}
         </Typography>
-        <Tooltip title="Refresh">
+        <Tooltip title="Làm mới">
           <IconButton
             size="small"
-            aria-label="Refresh log"
+            aria-label="Làm mới nhật ký"
             onClick={() => {
               list.mutate();
               summary.mutate();
