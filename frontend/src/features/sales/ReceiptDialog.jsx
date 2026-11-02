@@ -139,7 +139,6 @@ export default function ReceiptDialog({
             {/* Thông tin hóa đơn — lấy từ Backend response */}
             <Stack spacing={0.4} sx={{ mb: 1.25, fontSize: 11 }}>
               <ReceiptRow label="Số hóa đơn" value={saleData.invoiceNumber} />
-              <ReceiptRow label="Mã đơn hàng" value={saleData.orderNumber} />
               <ReceiptRow label="Thời gian" value={formatDateTime(completedAt)} />
               <ReceiptRow label="Thu ngân" value={displaySeller} />
               <ReceiptRow label="Khách hàng" value={displayCustomer} />

@@ -7,6 +7,7 @@ import com.thors.module.sales.dto.InStoreSaleDetailResponse;
 import com.thors.module.sales.dto.InStoreSaleListItem;
 import com.thors.module.sales.dto.InStoreSalePageResponse;
 import com.thors.module.sales.dto.InStoreSaleResponse;
+import com.thors.module.sales.dto.SellerOption;
 import com.thors.security.SessionAccess;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -33,9 +34,6 @@ import java.util.UUID;
 public class InStoreSalesService {
 
     private static final BigDecimal ZERO = BigDecimal.ZERO;
-
-    private static final DateTimeFormatter NUMBER_TIME =
-            DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
     private final JdbcTemplate jdbc;
     private final SessionAccess sessionAccess;
@@ -351,6 +349,7 @@ public class InStoreSalesService {
             String q,
             LocalDate fromDate,
             LocalDate toDate,
+            Integer sellerId,
             int page,
             int size
     ) {
@@ -368,7 +367,9 @@ public class InStoreSalesService {
                     .replace("\\", "\\\\")
                     .replace("%", "\\%")
                     .replace("_", "\\_") + "%";
-            where.append(" AND (LOWER(o.order_number) LIKE ? OR LOWER(COALESCE(i.invoice_number, '')) LIKE ?)");
+            where.append(" AND (LOWER(o.order_number) LIKE ? OR LOWER(COALESCE(i.invoice_number, '')) LIKE ? OR LOWER(COALESCE(o.delivery_name, '')) LIKE ? OR LOWER(COALESCE(u.full_name, '')) LIKE ?)");
+            args.add(like);
+            args.add(like);
             args.add(like);
             args.add(like);
         }
@@ -383,7 +384,12 @@ public class InStoreSalesService {
             args.add(java.sql.Timestamp.valueOf(toDate.atTime(23, 59, 59, 999_000_000)));
         }
 
-        String countSql = "SELECT COUNT(*) FROM orders o LEFT JOIN invoice i ON i.order_id = o.order_id" + where;
+        if (sellerId != null && sellerId > 0) {
+            where.append(" AND o.created_by = ?");
+            args.add(sellerId);
+        }
+
+        String countSql = "SELECT COUNT(*) FROM orders o LEFT JOIN invoice i ON i.order_id = o.order_id LEFT JOIN `user` u ON u.user_id = o.created_by" + where;
         Long total = jdbc.queryForObject(countSql, Long.class, args.toArray());
         long totalItems = total == null ? 0 : total;
 
@@ -435,6 +441,25 @@ public class InStoreSalesService {
     /**
      * Lấy chi tiết hóa đơn bán hàng tại quầy kèm danh sách mặt hàng đã bán.
      */
+    /**
+     * Lấy danh sách thu ngân từng bán hàng tại quầy để phục vụ bộ lọc.
+     */
+    @Transactional(readOnly = true)
+    public List<SellerOption> listSellers() {
+        String sql = """
+                SELECT DISTINCT u.user_id, u.full_name
+                FROM orders o
+                JOIN `user` u ON u.user_id = o.created_by
+                WHERE o.order_type = 'In-Store'
+                  AND u.full_name IS NOT NULL
+                ORDER BY u.full_name ASC
+                """;
+        return jdbc.query(sql, (rs, rowNum) -> new SellerOption(
+                rs.getInt("user_id"),
+                rs.getString("full_name")
+        ));
+    }
+
     public InStoreSaleDetailResponse getSaleDetail(int orderId) {
         Account seller = sessionAccess.current();
         validateSeller(seller);
@@ -771,15 +796,9 @@ public class InStoreSalesService {
     }
 
     private String makeNumber(String prefix) {
-        return prefix
-                + "-"
-                + LocalDateTime.now().format(NUMBER_TIME)
-                + "-"
-                + UUID.randomUUID()
-                .toString()
-                .replace("-", "")
-                .substring(0, 8)
-                .toUpperCase();
+        String date = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE);
+        String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 6).toUpperCase();
+        return prefix + "-" + date + "-" + suffix;
     }
 
     private ApiException badRequest(String message) {

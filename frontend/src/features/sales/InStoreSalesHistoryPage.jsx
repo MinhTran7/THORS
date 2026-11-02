@@ -7,6 +7,7 @@ import {
   CircularProgress,
   IconButton,
   InputAdornment,
+  MenuItem,
   Stack,
   Table,
   TableBody,
@@ -87,14 +88,24 @@ export default function InStoreSalesHistoryPage() {
   const [q, setQ] = useState('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
+  const [sellerId, setSellerId] = useState('');
   const [page, setPage] = useState(0);
 
   const debouncedSearch = useDebounced(q.trim(), 350);
+
+  // Lấy danh sách thu ngân để phục vụ bộ lọc
+  const { data: sellersData } = useSWR(
+    '/sales/in-store/sellers',
+    () => api('/sales/in-store/sellers'),
+    { revalidateOnFocus: false }
+  );
+  const sellers = sellersData || [];
 
   const params = {
     q: debouncedSearch || undefined,
     fromDate: fromDate || undefined,
     toDate: toDate || undefined,
+    sellerId: sellerId || undefined,
     page,
     size: PAGE_SIZE
   };
@@ -132,6 +143,7 @@ export default function InStoreSalesHistoryPage() {
     setQ('');
     setFromDate('');
     setToDate('');
+    setSellerId('');
     setPage(0);
   }
 
@@ -177,7 +189,7 @@ export default function InStoreSalesHistoryPage() {
           gridTemplateColumns: {
             xs: '1fr',
             sm: '1fr 1fr',
-            md: 'minmax(280px, 1.8fr) 180px 180px auto'
+            md: 'minmax(240px, 1.8fr) 180px 160px 160px auto'
           },
           gap: 2,
           alignItems: 'end'
@@ -212,6 +224,40 @@ export default function InStoreSalesHistoryPage() {
               }
             }}
           />
+        </Box>
+
+        {/* Lọc theo thu ngân */}
+        <Box>
+          <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>
+            Thu ngân
+          </Typography>
+          <TextField
+            select
+            fullWidth
+            size="small"
+            value={sellerId}
+            onChange={(e) => {
+              setSellerId(e.target.value);
+              setPage(0);
+            }}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                bgcolor: C.surface,
+                borderRadius: 2.5,
+                height: 44,
+                '& fieldset': { borderColor: C.border },
+                '&:hover fieldset': { borderColor: C.cyan },
+                '&.Mui-focused fieldset': { borderColor: C.cyan }
+              }
+            }}
+          >
+            <MenuItem value="">Tất cả thu ngân</MenuItem>
+            {sellers.map((s) => (
+              <MenuItem key={s.id} value={s.id}>
+                {s.name}
+              </MenuItem>
+            ))}
+          </TextField>
         </Box>
 
         {/* Từ ngày - Chặn tuyệt đối ngày tương lai */}
@@ -327,23 +373,23 @@ export default function InStoreSalesHistoryPage() {
         <Box sx={{ overflowX: 'auto' }}>
           <Table size="medium">
             <TableHead>
-              <TableRow sx={{ '& th': { borderBottom: `1px solid ${C.borderLight}`, py: 1.75 } }}>
-                <TableCell sx={{ color: C.muted, fontSize: 12.5, fontWeight: 500, pl: 3 }}>
+              <TableRow sx={{ '& th': { borderBottom: `1px solid ${C.border}`, py: 1.75, bgcolor: '#F8FAFC' } }}>
+                <TableCell sx={{ color: '#475569', fontSize: 13, fontWeight: 600, pl: 3 }}>
                   Mã hóa đơn
                 </TableCell>
-                <TableCell sx={{ color: C.muted, fontSize: 12.5, fontWeight: 500 }}>
+                <TableCell sx={{ color: '#475569', fontSize: 13, fontWeight: 600 }}>
                   Thời gian
                 </TableCell>
-                <TableCell sx={{ color: C.muted, fontSize: 12.5, fontWeight: 500 }}>
+                <TableCell sx={{ color: '#475569', fontSize: 13, fontWeight: 600 }}>
                   Thu ngân
                 </TableCell>
-                <TableCell sx={{ color: C.muted, fontSize: 12.5, fontWeight: 500 }} align="right">
+                <TableCell sx={{ color: '#475569', fontSize: 13, fontWeight: 600 }} align="right">
                   Tổng tiền
                 </TableCell>
-                <TableCell sx={{ color: C.muted, fontSize: 12.5, fontWeight: 500, pl: 4 }}>
+                <TableCell sx={{ color: '#475569', fontSize: 13, fontWeight: 600, pl: 4 }}>
                   Phương thức
                 </TableCell>
-                <TableCell sx={{ color: C.muted, fontSize: 12.5, fontWeight: 500, pr: 3 }} align="center">
+                <TableCell sx={{ color: '#475569', fontSize: 13, fontWeight: 600, pr: 3 }} align="center">
                   Thao tác
                 </TableCell>
               </TableRow>
@@ -442,29 +488,22 @@ export default function InStoreSalesHistoryPage() {
                         </Box>
                       </TableCell>
 
-                      {/* Thao tác - Nút vuông bo góc với icon mắt */}
+                      {/* Thao tác - Icon mắt đơn giản, không viền hộp, không button hover */}
                       <TableCell align="center" sx={{ pr: 3 }}>
                         <Tooltip title="Xem chi tiết hóa đơn">
                           <IconButton
                             size="small"
                             onClick={() => navigate(`/in-store-sales/history/${sale.orderId}`)}
                             sx={{
-                              width: 32,
-                              height: 32,
-                              borderRadius: 2,
-                              border: `1px solid ${C.border}`,
-                              bgcolor: C.surface,
                               color: '#64748B',
-                              transition: 'all 0.15s ease',
+                              p: 0.75,
                               '&:hover': {
-                                bgcolor: C.cyan,
-                                color: C.text,
-                                borderColor: C.cyanHover,
-                                transform: 'scale(1.05)'
+                                color: '#0F172A',
+                                bgcolor: 'transparent'
                               }
                             }}
                           >
-                            <EyeOutlined style={{ fontSize: 14 }} />
+                            <EyeOutlined style={{ fontSize: 17 }} />
                           </IconButton>
                         </Tooltip>
                       </TableCell>

@@ -1189,20 +1189,8 @@ export default function InStoreSalesPage() {
       >
         <Box sx={{ p: { xs: 2.25, sm: 2.75 } }}>
           {/* Header Modal */}
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Box sx={{ mb: 2 }}>
             <Typography sx={{ fontSize: 16.5, fontWeight: 800, color: '#0F172A' }}>Chọn biến thể sản phẩm</Typography>
-            <IconButton
-              onClick={closeDialog}
-              size="small"
-              sx={{
-                p: 0.5,
-                bgcolor: '#F1F5F9',
-                color: '#64748B',
-                '&:hover': { bgcolor: '#E2E8F0' }
-              }}
-            >
-              <CloseOutlined style={{ fontSize: 12 }} />
-            </IconButton>
           </Box>
 
           {loadingVariants ? (
@@ -1283,17 +1271,17 @@ export default function InStoreSalesPage() {
                           borderRadius: 1.75,
                           fontFamily: 'inherit',
                           fontSize: 12.5,
-                          fontWeight: isSelected ? 800 : 500,
+                          fontWeight: isSelected ? 700 : 500,
                           bgcolor: '#FFFFFF',
                           color: !hasStock ? '#CBD5E1' : isSelected ? '#0F172A' : '#475569',
-                          border: isSelected ? '2px solid #0F172A' : '1.5px solid #E2E8F0',
+                          border: isSelected ? '1.5px solid #64748B' : '1.5px solid #E2E8F0',
                           cursor: hasStock ? 'pointer' : 'not-allowed',
                           opacity: hasStock ? 1 : 0.4,
                           outline: 'none',
                           transition: 'none',
                           '&:hover': hasStock
                             ? {
-                                borderColor: isSelected ? '#0F172A' : '#94A3B8'
+                                borderColor: isSelected ? '#64748B' : '#94A3B8'
                               }
                             : {}
                         }}
@@ -1330,17 +1318,17 @@ export default function InStoreSalesPage() {
                           borderRadius: 1.75,
                           fontFamily: 'inherit',
                           fontSize: 12.5,
-                          fontWeight: isSelected ? 800 : 500,
+                          fontWeight: isSelected ? 700 : 500,
                           bgcolor: '#FFFFFF',
                           color: !inStock ? '#CBD5E1' : isSelected ? '#0F172A' : '#475569',
-                          border: isSelected ? '2px solid #0F172A' : '1.5px solid #E2E8F0',
+                          border: isSelected ? '1.5px solid #64748B' : '1.5px solid #E2E8F0',
                           cursor: inStock ? 'pointer' : 'not-allowed',
                           opacity: inStock ? 1 : 0.4,
                           outline: 'none',
                           transition: 'none',
                           '&:hover': inStock
                             ? {
-                                borderColor: isSelected ? '#0F172A' : '#94A3B8'
+                                borderColor: isSelected ? '#64748B' : '#94A3B8'
                               }
                             : {}
                         }}
@@ -1366,7 +1354,7 @@ export default function InStoreSalesPage() {
                   <Typography sx={{ fontSize: 11.5, color: '#64748B' }}>
                     {selectedVariant ? 'Thành tiền · 1 sản phẩm' : 'Giá sản phẩm'}
                   </Typography>
-                  <Typography sx={{ fontSize: 20, fontWeight: 800, color: '#0F172A', mt: 0.25 }}>
+                  <Typography sx={{ fontSize: 17, fontWeight: 800, color: '#0F172A', mt: 0.25 }}>
                     {selectedVariant ? money(getPrice(selectedVariant)) : priceRange}
                   </Typography>
                 </Box>
