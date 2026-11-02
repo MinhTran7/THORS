@@ -26,6 +26,7 @@ export const accountsApi = {
   unlock: (id) => post(`/accounts/${id}/unlock`),
   resetPassword: (id, body) => post(`/accounts/${id}/reset-password`, body),
   resetRequests: () => api('/accounts/password-reset-requests'),
+  linkGoogle: () => post('/auth/google/link'),
   requestReset: (identifier) => post('/auth/password-reset-requests', { identifier })
 };
 

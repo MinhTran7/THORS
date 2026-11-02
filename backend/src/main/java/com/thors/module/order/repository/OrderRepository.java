@@ -5,6 +5,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -58,9 +59,20 @@ public class OrderRepository {
     /**
      * Danh sách đơn online. customerId != null thì chỉ lấy đơn của khách đó (Customer xem đơn của mình);
      * null thì lấy mọi đơn online (Owner, Family Member, Staff).
+     *
+     * <p>dateFrom / dateTo (có thể null): lọc theo ngày đặt, gồm cả hai ngày đầu cuối. paymentFilter
+     * (có thể null): "COD" chỉ lấy đơn COD, "ONLINE" lấy mọi đơn không phải COD.
      */
     public Slice search(
-            Integer customerId, String orderType, List<String> statuses, String q, int page, int size) {
+            Integer customerId,
+            String orderType,
+            List<String> statuses,
+            String q,
+            LocalDate dateFrom,
+            LocalDate dateTo,
+            String paymentFilter,
+            int page,
+            int size) {
         var where = new StringBuilder(" WHERE o.order_type = ?");
         List<Object> args = new ArrayList<>();
         args.add(orderType);
@@ -73,6 +85,20 @@ public class OrderRepository {
                     .append(String.join(",", Collections.nCopies(statuses.size(), "?")))
                     .append(")");
             args.addAll(statuses);
+        }
+        if (dateFrom != null) {
+            where.append(" AND o.order_date >= ?");
+            args.add(Timestamp.valueOf(dateFrom.atStartOfDay()));
+        }
+        if (dateTo != null) {
+            // Nhỏ hơn 0h của ngày kế tiếp để lấy trọn cả ngày dateTo
+            where.append(" AND o.order_date < ?");
+            args.add(Timestamp.valueOf(dateTo.plusDays(1).atStartOfDay()));
+        }
+        if ("COD".equals(paymentFilter)) {
+            where.append(" AND o.payment_method = 'COD'");
+        } else if ("ONLINE".equals(paymentFilter)) {
+            where.append(" AND o.payment_method <> 'COD'");
         }
         if (q != null) {
             String like =

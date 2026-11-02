@@ -7,6 +7,7 @@ import com.thors.module.notification.service.NotificationTypes;
 import com.thors.module.order.dto.OrderViews.Detail;
 import com.thors.module.order.dto.OrderViews.Page;
 import com.thors.module.order.repository.OrderRepository;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -52,6 +53,9 @@ public class OrderService {
     private static final Set<String> ALLOWED_CARRIERS =
             Set.of("SELF", "GHN", "GHTK", "VIETTEL_POST", "JT");
 
+    /** Bộ lọc hình thức thanh toán: COD hoặc ONLINE (mọi hình thức không phải COD). */
+    private static final Set<String> PAYMENT_FILTERS = Set.of("COD", "ONLINE");
+
     private final OrderRepository orders;
     private final NotificationPublisher notifications;
 
@@ -75,14 +79,33 @@ public class OrderService {
 
     /**
      * View Order List: Customer thấy đơn của chính mình; Owner và Family Member thấy mọi đơn
-     * online. Có lọc theo trạng thái, tìm theo mã đơn / tên / số điện thoại người nhận và phân trang.
+     * online. Có lọc theo trạng thái, ngày đặt (dateFrom, dateTo, gồm cả hai đầu), hình thức thanh
+     * toán (COD / ONLINE), tìm theo mã đơn / tên / số điện thoại người nhận và phân trang.
      */
-    public Page list(Account actor, String status, String q, int page, int size) {
+    public Page list(
+            Account actor,
+            String status,
+            String q,
+            LocalDate dateFrom,
+            LocalDate dateTo,
+            String paymentMethod,
+            int page,
+            int size) {
         requireOrderAccess(actor);
         List<String> statuses = parseStatuses(status);
         String safeQuery = blankToNull(q);
         if (safeQuery != null && safeQuery.length() > 100)
             throw new ApiException(400, "QUERY", "Từ khóa tìm kiếm quá dài.");
+
+        if (dateFrom != null && dateTo != null && dateFrom.isAfter(dateTo))
+            throw new ApiException(400, "DATE_RANGE", "Ngày bắt đầu phải trước hoặc bằng ngày kết thúc.");
+
+        String safePayment = blankToNull(paymentMethod);
+        if (safePayment != null) {
+            safePayment = safePayment.toUpperCase();
+            if (!PAYMENT_FILTERS.contains(safePayment))
+                throw new ApiException(400, "PAYMENT_METHOD", "Hình thức thanh toán không hợp lệ.");
+        }
 
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), MAX_SIZE);
@@ -90,7 +113,15 @@ public class OrderService {
 
         var slice =
                 orders.search(
-                        customerId, OrderStatus.TYPE_ONLINE, statuses, safeQuery, safePage, safeSize);
+                        customerId,
+                        OrderStatus.TYPE_ONLINE,
+                        statuses,
+                        safeQuery,
+                        dateFrom,
+                        dateTo,
+                        safePayment,
+                        safePage,
+                        safeSize);
         int totalPages = (int) Math.ceil(slice.total() / (double) safeSize);
         return new Page(slice.items(), safePage, safeSize, slice.total(), totalPages);
     }
