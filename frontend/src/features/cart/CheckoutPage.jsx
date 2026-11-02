@@ -26,7 +26,7 @@ const SHIPPING_FEE = 0;
 
 const PAYMENT_METHODS = [
   { value: 'COD', label: 'Thanh toán khi nhận hàng (COD)', hint: 'Trả tiền mặt cho nhân viên giao hàng.' },
-  { value: 'BANK', label: 'Chuyển khoản ngân hàng', hint: 'Sắp có.', disabled: true }
+  { value: 'ONLINE', label: 'Thanh toán trực tuyến (PayOS / VietQR)', hint: 'Quét mã VietQR chuyển khoản nhanh 24/7 qua mọi ứng dụng ngân hàng.' }
 ];
 
 const NEW = 'new'; // giá trị của lựa chọn "Dùng địa chỉ mới"

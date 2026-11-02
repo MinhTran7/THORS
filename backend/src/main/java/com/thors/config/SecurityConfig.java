@@ -71,7 +71,8 @@ public class SecurityConfig {
         http.csrf(
                 c ->
                         c.csrfTokenRepository(new HttpSessionCsrfTokenRepository())
-                                .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()));
+                                .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
+                                .ignoringRequestMatchers("/api/payment/payos/webhook"));
         http.authorizeHttpRequests(
                 a ->
                         a.requestMatchers(
@@ -91,6 +92,7 @@ public class SecurityConfig {
                                         "/api/shop/**",
                                         "/oauth2/**",
                                         "/login/oauth2/**",
+                                        "/api/payment/payos/webhook",
                                         "/error")
                                 .permitAll()
                                 .requestMatchers("/api/warehouse", "/api/warehouse/**")

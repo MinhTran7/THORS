@@ -47,10 +47,7 @@ public class CheckoutService {
 
     @Transactional
     public Map<String, Object> placeOrder(int userId, CreateOrderRequest request) {
-        // Hiện mới hỗ trợ COD. Chuyển khoản cần bảng payment và hạn giữ hàng nên làm sau.
-        if (!"COD".equals(request.paymentMethod())) {
-            throw new IllegalArgumentException("Hiện chỉ hỗ trợ thanh toán khi nhận hàng (COD).");
-        }
+        String paymentMethod = "ONLINE".equalsIgnoreCase(request.paymentMethod()) ? "ONLINE" : "COD";
 
         Receiver receiver = resolveReceiver(userId, request);
 
@@ -102,7 +99,7 @@ public class CheckoutService {
             try {
                 orderId = checkoutRepository.insertOrder(orderNumber, userId,
                         receiver.name(), receiver.phone(), receiver.address(),
-                        itemsAmount, SHIPPING_FEE, total);
+                        itemsAmount, SHIPPING_FEE, total, paymentMethod);
             } catch (DuplicateKeyException ex) {
                 if (attempt == 2) throw ex;
             }
@@ -123,6 +120,7 @@ public class CheckoutService {
         result.put("id", orderId);
         result.put("orderNumber", orderNumber);
         result.put("totalAmount", total);
+        result.put("paymentMethod", paymentMethod);
         return result;
     }
 

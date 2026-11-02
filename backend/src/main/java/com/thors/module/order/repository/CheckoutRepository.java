@@ -53,10 +53,19 @@ public class CheckoutRepository {
         return rows.isEmpty() ? null : rows.get(0);
     }
 
-    /** Tạo đơn online COD, chờ chủ cửa hàng xác nhận. Trả về order_id. */
+    /** Tạo đơn online COD hoặc ONLINE. Trả về order_id. */
     public int insertOrder(String orderNumber, int userId,
                            String deliveryName, String deliveryPhone, String deliveryAddress,
                            BigDecimal itemsAmount, BigDecimal shippingFee, BigDecimal totalAmount) {
+        return insertOrder(orderNumber, userId, deliveryName, deliveryPhone, deliveryAddress, itemsAmount, shippingFee, totalAmount, "COD");
+    }
+
+    public int insertOrder(String orderNumber, int userId,
+                           String deliveryName, String deliveryPhone, String deliveryAddress,
+                           BigDecimal itemsAmount, BigDecimal shippingFee, BigDecimal totalAmount,
+                           String paymentMethod) {
+        String method = "ONLINE".equalsIgnoreCase(paymentMethod) ? "ONLINE" : "COD";
+        String status = "ONLINE".equals(method) ? "AWAITING_PAYMENT" : "PENDING_CONFIRMATION";
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(con -> {
             PreparedStatement ps = con.prepareStatement("""
@@ -65,7 +74,7 @@ public class CheckoutRepository {
                      order_status, total_amount, created_by, payment_method, payment_status,
                      items_amount, shipping_fee)
                 VALUES (?, 'Online', ?, ?, ?, ?,
-                        'PENDING_CONFIRMATION', ?, ?, 'COD', 'UNPAID',
+                        ?, ?, ?, ?, 'UNPAID',
                         ?, ?)
                 """, Statement.RETURN_GENERATED_KEYS);
             ps.setString(1, orderNumber);
@@ -73,10 +82,12 @@ public class CheckoutRepository {
             ps.setString(3, deliveryName);
             ps.setString(4, deliveryPhone);
             ps.setString(5, deliveryAddress);
-            ps.setBigDecimal(6, totalAmount);
-            ps.setInt(7, userId);
-            ps.setBigDecimal(8, itemsAmount);
-            ps.setBigDecimal(9, shippingFee);
+            ps.setString(6, status);
+            ps.setBigDecimal(7, totalAmount);
+            ps.setInt(8, userId);
+            ps.setString(9, method);
+            ps.setBigDecimal(10, itemsAmount);
+            ps.setBigDecimal(11, shippingFee);
             return ps;
         }, keyHolder);
         Number key = keyHolder.getKey();
