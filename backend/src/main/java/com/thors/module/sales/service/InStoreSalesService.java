@@ -350,6 +350,7 @@ public class InStoreSalesService {
             LocalDate fromDate,
             LocalDate toDate,
             Integer sellerId,
+            String paymentMethod,
             int page,
             int size
     ) {
@@ -387,6 +388,19 @@ public class InStoreSalesService {
         if (sellerId != null && sellerId > 0) {
             where.append(" AND o.created_by = ?");
             args.add(sellerId);
+        }
+
+        if (paymentMethod != null && !paymentMethod.trim().isEmpty()) {
+            String pm = paymentMethod.trim().toUpperCase();
+            String resolvedMethod = "COALESCE(o.payment_method, (SELECT p.payment_method FROM payment p WHERE p.order_id = o.order_id ORDER BY p.payment_id DESC LIMIT 1), 'CASH')";
+            if ("CASH".equals(pm)) {
+                where.append(" AND UPPER(").append(resolvedMethod).append(") IN ('CASH', 'TIEN_MAT', 'TIENMAT')");
+            } else if ("TRANSFER".equals(pm) || "ONLINE".equals(pm) || "BANK_TRANSFER".equals(pm)) {
+                where.append(" AND UPPER(").append(resolvedMethod).append(") IN ('ONLINE', 'TRANSFER', 'BANK_TRANSFER', 'BANK TRANSFER', 'CHUYEN_KHOAN')");
+            } else {
+                where.append(" AND UPPER(").append(resolvedMethod).append(") = ?");
+                args.add(pm);
+            }
         }
 
         String countSql = "SELECT COUNT(*) FROM orders o LEFT JOIN invoice i ON i.order_id = o.order_id LEFT JOIN `user` u ON u.user_id = o.created_by" + where;
@@ -518,8 +532,18 @@ public class InStoreSalesService {
                     oi.size_snapshot,
                     oi.color_snapshot,
                     oi.quantity,
-                    oi.unit_price
+                    oi.unit_price,
+                    COALESCE(
+                        (SELECT pi.image_url FROM product_image pi
+                         WHERE pi.product_id = pd.product_id AND pi.deleted_at IS NULL
+                         ORDER BY pi.is_primary DESC, pi.image_id ASC LIMIT 1),
+                        (SELECT pi.image_url FROM product_image pi
+                         JOIN product p ON p.product_id = pi.product_id
+                         WHERE p.product_name = oi.product_name_snapshot AND pi.deleted_at IS NULL
+                         ORDER BY pi.is_primary DESC, pi.image_id ASC LIMIT 1)
+                    ) AS image_url
                 FROM order_item oi
+                LEFT JOIN product_detail pd ON pd.detail_id = oi.detail_id
                 WHERE oi.order_id = ?
                 ORDER BY oi.order_item_id ASC
                 """;
@@ -536,7 +560,8 @@ public class InStoreSalesService {
                     rs.getString("color_snapshot"),
                     qty,
                     unitPrice,
-                    lineTotal
+                    lineTotal,
+                    rs.getString("image_url")
             );
         }, orderId);
 

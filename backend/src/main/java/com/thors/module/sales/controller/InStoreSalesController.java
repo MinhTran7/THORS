@@ -45,10 +45,11 @@ public class InStoreSalesController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate,
             @RequestParam(required = false) Integer sellerId,
+            @RequestParam(required = false) String paymentMethod,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size
     ) {
-        return ResponseEntity.ok(salesService.listSales(q, fromDate, toDate, sellerId, page, size));
+        return ResponseEntity.ok(salesService.listSales(q, fromDate, toDate, sellerId, paymentMethod, page, size));
     }
 
     @GetMapping("/sellers")
