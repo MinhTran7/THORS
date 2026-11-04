@@ -3,15 +3,14 @@ import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 import { Box, Button, Chip, MenuItem, Select, Typography } from '@mui/material';
 import { useAuth } from 'features/auth/AuthProvider';
 import { brand } from 'features/account/tokens';
-import { useCrumbs } from 'layouts/crumbs';
 import { api } from 'services/http';
 import { Photo, ShopHeader, priceText } from './ShopCommon';
+import ShopBanner from './ShopBanner';
 import PendingCartHandler from './PendingCartHandler';
 
 /**
- * Trang chủ cửa hàng (kiểu Shopee): lưới sản phẩm, tìm kiếm, lọc danh mục, sắp xếp.
+ * Trang chủ cửa hàng công khai (kiểu Shopee): lưới sản phẩm, tìm kiếm, lọc danh mục, sắp xếp.
  * Bấm vào sản phẩm mở trang chi tiết riêng: /shop/products/:productId
- * Đã đăng nhập thì nằm trong khung ThorsLayout (sidebar + header chung), chưa đăng nhập thì có header riêng.
  */
 
 const SORTS = [
@@ -22,7 +21,6 @@ const SORTS = [
 const PAGE_SIZE = 20;
 
 export default function ShopPage() {
-  useCrumbs(['Trang chủ']);
   const auth = useAuth();
   const account = auth?.account;
   const [params] = useSearchParams();
@@ -70,10 +68,12 @@ export default function ShopPage() {
   const chip = (selected) => ({ bgcolor: selected ? brand.cyan : '#fff', border: `1px solid ${brand.line}` });
 
   return (
-    <Box sx={{ minHeight: account ? 'auto' : '100vh', bgcolor: account ? 'transparent' : brand.page }}>
+    <Box sx={{ minHeight: '100vh', bgcolor: brand.page }}>
       <ShopHeader account={account} initialQuery={query} onSearch={setQuery} />
 
-      <Box sx={{ maxWidth: 1240, mx: 'auto', px: account ? 0 : { xs: 2, md: 4 }, py: account ? 0 : 3 }}>
+      {!query && <ShopBanner />}
+
+      <Box sx={{ maxWidth: 1480, mx: 'auto', boxSizing: 'border-box', px: { xs: '16px', md: '32px' }, py: 3 }}>
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center', mb: 2 }}>
           <Chip label="Tất cả" clickable onClick={() => setCategoryId(0)} sx={chip(categoryId === 0)} />
           {categories.map((c) => (
@@ -114,7 +114,7 @@ export default function ShopPage() {
           </Box>
         )}
 
-        <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(4, 1fr)', lg: 'repeat(5, 1fr)' } }}>
+        <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(4, 1fr)', lg: 'repeat(5, 1fr)', xl: 'repeat(6, 1fr)' } }}>
           {items.map((p) => (
             <Box
               key={p.productId}
