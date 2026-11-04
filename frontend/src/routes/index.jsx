@@ -4,6 +4,7 @@ import WarehousePage, { warehouseRoutes } from 'features/warehouse/WarehousePage
 
 // Authentication
 import RequireAuth from 'features/auth/RequireAuth';
+import { useAuth } from 'features/auth/AuthProvider';
 import OptionalLayout from 'layouts/OptionalLayout';
 import LoginPage from 'features/auth/pages/LoginPage';
 import RegisterPage from 'features/auth/pages/RegisterPage';
@@ -62,6 +63,13 @@ import CartPage from 'features/cart/CartPage';
 import CheckoutPage from 'features/cart/CheckoutPage';
 import OrderSuccessPage from 'features/cart/OrderSuccessPage';
 
+// Sau khi đăng nhập mọi người đều vào /workspace: khách hàng được chuyển thẳng sang trang shop,
+// các vai trò khác (chủ cửa hàng, nhân viên, admin) vẫn thấy trang Dashboard như cũ.
+function WorkspaceEntry() {
+  const { account } = useAuth();
+  return account?.role === 'CUSTOMER' ? <Navigate to="/" replace /> : <WorkspacePage />;
+}
+
 export default createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
   { path: '/register', element: <RegisterPage /> },
@@ -82,7 +90,7 @@ export default createBrowserRouter([
       {
         element: <RequireAuth />,
         children: [
-          { path: '/workspace', element: <WorkspacePage /> },
+          { path: '/workspace', element: <WorkspaceEntry /> },
           { path: '/profile', element: <ProfilePage /> },
           { path: '/profile/edit', element: <UpdateProfilePage /> },
           { path: '/profile/password', element: <ChangePasswordPage /> },
