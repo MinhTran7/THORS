@@ -27,6 +27,7 @@ public record InStoreSaleDetailResponse(
             String color,
             int quantity,
             BigDecimal unitPrice,
-            BigDecimal totalPrice
+            BigDecimal totalPrice,
+            String imageUrl
     ) {}
 }

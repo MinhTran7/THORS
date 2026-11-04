@@ -4,6 +4,7 @@ import com.thors.module.sales.dto.CreateInStoreSaleRequest;
 import com.thors.module.sales.dto.InStoreSaleDetailResponse;
 import com.thors.module.sales.dto.InStoreSalePageResponse;
 import com.thors.module.sales.dto.InStoreSaleResponse;
+import com.thors.module.sales.dto.SellerOption;
 import com.thors.module.sales.service.InStoreSalesService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/sales/in-store")
@@ -42,10 +44,17 @@ public class InStoreSalesController {
             @RequestParam(required = false) String q,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate,
+            @RequestParam(required = false) Integer sellerId,
+            @RequestParam(required = false) String paymentMethod,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size
     ) {
-        return ResponseEntity.ok(salesService.listSales(q, fromDate, toDate, page, size));
+        return ResponseEntity.ok(salesService.listSales(q, fromDate, toDate, sellerId, paymentMethod, page, size));
+    }
+
+    @GetMapping("/sellers")
+    public ResponseEntity<List<SellerOption>> listSellers() {
+        return ResponseEntity.ok(salesService.listSellers());
     }
 
     @GetMapping("/{orderId}")

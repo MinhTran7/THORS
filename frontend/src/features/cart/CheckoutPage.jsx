@@ -11,17 +11,19 @@ import {
   CircularProgress,
   Divider,
   FormControlLabel,
+  IconButton,
   Radio,
   RadioGroup,
   Stack,
   TextField,
   Typography
 } from '@mui/material';
+import { TagOutlined, CloseOutlined } from '@ant-design/icons';
 import { api } from 'services/http';
 import { useAuth } from 'features/auth/AuthProvider';
 import { fetchProvinces, fetchWards } from './vnAddress';
 
-// Phí vận chuyển cố định. Đổi theo quy định của cửa hàng (0 = miễn phí).
+
 const SHIPPING_FEE = 0;
 
 const PAYMENT_METHODS = [
@@ -29,7 +31,7 @@ const PAYMENT_METHODS = [
   { value: 'ONLINE', label: 'Thanh toán trực tuyến (PayOS / VietQR)', hint: 'Quét mã VietQR chuyển khoản nhanh 24/7 qua mọi ứng dụng ngân hàng.' }
 ];
 
-const NEW = 'new'; // giá trị của lựa chọn "Dùng địa chỉ mới"
+const NEW = 'new'; 
 const STORAGE_KEY = 'thors:checkout';
 const readStored = () => {
   try {
@@ -46,10 +48,11 @@ const pick = (obj, ...keys) => {
   return undefined;
 };
 
-// Chuẩn hóa 1 dòng giỏ hàng. Nếu tên trường backend khác, chỉ cần sửa ở đây.
+
 function normalize(item) {
   return {
     id: pick(item, 'id', 'cartItemId', 'variantId'),
+    productId: pick(item, 'productId'),
     name: pick(item, 'productName', 'name', 'title') ?? 'Sản phẩm',
     image: pick(item, 'imageUrl', 'image', 'thumbnail', 'productImage'),
     size: pick(item, 'size', 'sizeName'),
@@ -59,7 +62,7 @@ function normalize(item) {
   };
 }
 
-// Chuẩn hóa 1 địa chỉ đã lưu (bảng shipping_address). Sửa ở đây nếu backend đặt tên trường khác.
+
 function normalizeAddress(a) {
   return {
     id: pick(a, 'id', 'addressId'),
@@ -126,17 +129,13 @@ function Row({ label, value }) {
   );
 }
 
-/**
- * Trang đặt hàng. Nhận sản phẩm từ trang giỏ hàng hoặc từ nút "Mua ngay":
- *   checkoutFromCart(navigate, ids)  ->  state: { itemIds }
- *   buyNow(navigate, item)           ->  state: { buyNow }
- */
+
 export default function CheckoutPage() {
   const { account } = useAuth();
   const navigate = useNavigate();
   const { state } = useLocation();
 
-  // Có state mới thì dùng, không thì lấy bản đã lưu (khi tải lại trang)
+  
   const source = useMemo(() => (state?.itemIds?.length || state?.buyNow ? state : readStored()), [state]);
   const itemIds = source?.itemIds;
   const buyNow = source?.buyNow;
@@ -147,7 +146,7 @@ export default function CheckoutPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
 
-  // Địa chỉ nhận hàng
+  
   const [addresses, setAddresses] = useState([]);
   const [addrLoading, setAddrLoading] = useState(true);
   const [selectedAddressId, setSelectedAddressId] = useState('');
@@ -156,8 +155,8 @@ export default function CheckoutPage() {
   const [addr, setAddr] = useState({
     receiverName: account?.fullName ?? '',
     receiverPhone: account?.phone ?? '',
-    province: null, // { code, name }
-    ward: null, // { code, name }
+    province: null, 
+    ward: null, 
     address: ''
   });
   const [provinces, setProvinces] = useState([]);
@@ -173,12 +172,12 @@ export default function CheckoutPage() {
       try {
         sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       } catch {
-        // bỏ qua nếu trình duyệt chặn sessionStorage
+        
       }
     }
   }, [state]);
 
-  // Luồng giỏ hàng: tải giỏ rồi lọc các dòng đã chọn. Luồng Mua ngay không cần tải.
+  
   useEffect(() => {
     if (buyNow || !itemIds?.length) return;
     let alive = true;
@@ -198,7 +197,7 @@ export default function CheckoutPage() {
     };
   }, [itemIds, buyNow]);
 
-  // Tải địa chỉ đã lưu. Chưa có địa chỉ nào (hoặc không tải được) thì hiện form nhập địa chỉ mới.
+  
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -220,7 +219,7 @@ export default function CheckoutPage() {
     };
   }, []);
 
-  // Danh sách tỉnh/thành
+  
   useEffect(() => {
     let alive = true;
     fetchProvinces()
@@ -232,7 +231,7 @@ export default function CheckoutPage() {
     };
   }, []);
 
-  // Phường/xã của tỉnh đang chọn
+  
   const provinceCode = addr.province?.code;
   useEffect(() => {
     if (!provinceCode) {
@@ -250,11 +249,94 @@ export default function CheckoutPage() {
     };
   }, [provinceCode]);
 
+  const [voucher, setVoucher] = useState(() => {
+    try {
+      const raw = sessionStorage.getItem('thors:applied_voucher');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
+
   const subtotal = useMemo(() => items.reduce((s, i) => s + i.price * i.quantity, 0), [items]);
   const totalQty = useMemo(() => items.reduce((s, i) => s + i.quantity, 0), [items]);
-  const total = subtotal + SHIPPING_FEE;
 
-  // Vào thẳng /checkout mà không có sản phẩm nào thì quay về giỏ hàng
+  const voucherResult = useMemo(() => {
+    if (!voucher) return null;
+
+    const today = new Date().toISOString().slice(0, 10);
+    const startDate = voucher.startDate ? String(voucher.startDate).slice(0, 10) : '';
+    const endDate = voucher.endDate ? String(voucher.endDate).slice(0, 10) : '';
+
+    if (startDate && today < startDate) {
+      return { valid: false, reason: 'Chương trình ưu đãi chưa bắt đầu.' };
+    }
+    if (endDate && today > endDate) {
+      return { valid: false, reason: 'Mã giảm giá đã hết hạn sử dụng.' };
+    }
+    if (voucher.status && voucher.status !== 'ACTIVE') {
+      return { valid: false, reason: 'Chương trình ưu đãi hiện không khả dụng.' };
+    }
+
+    let eligibleSubtotal = 0;
+    if (voucher.applyScope === 'ALL' || !voucher.applyScope) {
+      eligibleSubtotal = subtotal;
+    } else if (voucher.applyScope === 'SELECTED') {
+      const eligibleIds = new Set((voucher.productIds || []).map(Number));
+      const eligibleItems = items.filter((item) => {
+        const pId = item.productId ?? item.id;
+        return eligibleIds.has(Number(pId));
+      });
+      eligibleSubtotal = eligibleItems.reduce((s, i) => s + i.price * i.quantity, 0);
+      if (eligibleSubtotal === 0) {
+        return {
+          valid: false,
+          reason: 'Đơn hàng chưa có sản phẩm nào thuộc phạm vi áp dụng của mã này.'
+        };
+      }
+    }
+
+    const minOrder = Number(voucher.minOrderValue || 0);
+    if (eligibleSubtotal < minOrder) {
+      const diff = minOrder - eligibleSubtotal;
+      return {
+        valid: false,
+        reason: `Chưa đủ điều kiện: Cần thêm ${new Intl.NumberFormat('vi-VN').format(diff)} ₫ để áp dụng.`
+      };
+    }
+
+    let discount = 0;
+    const isPercent = ['PERCENT', 'PERCENTAGE'].includes(voucher.discountType);
+    const discountVal = Number(voucher.discountValue || 0);
+
+    if (isPercent) {
+      discount = Math.round((eligibleSubtotal * discountVal) / 100);
+      const maxDiscount = Number(voucher.maxDiscountAmount || 0);
+      if (maxDiscount > 0 && discount > maxDiscount) {
+        discount = maxDiscount;
+      }
+    } else {
+      discount = Math.min(discountVal, eligibleSubtotal);
+    }
+
+    return {
+      valid: true,
+      discount,
+      eligibleSubtotal
+    };
+  }, [voucher, subtotal, items]);
+
+  const discountAmount = voucherResult?.valid ? voucherResult.discount : 0;
+  const total = Math.max(0, subtotal - discountAmount) + SHIPPING_FEE;
+
+  const handleRemoveVoucher = () => {
+    try {
+      sessionStorage.removeItem('thors:applied_voucher');
+    } catch {}
+    setVoucher(null);
+  };
+
+  
   if (!buyNow && !itemIds?.length) return <Navigate to="/cart" replace />;
 
   const isNew = selectedAddressId === NEW;
@@ -279,7 +361,7 @@ export default function CheckoutPage() {
 
     setSubmitting(true);
     try {
-      // 1. Xác định địa chỉ giao hàng
+      
       let addressPart;
       if (chosen && !isNew) {
         addressPart = { shippingAddressId: chosen.id };
@@ -294,7 +376,7 @@ export default function CheckoutPage() {
           addressDetail: addr.address.trim()
         };
         if (saveAddress) {
-          // Lưu địa chỉ mới (địa chỉ đầu tiên của khách thì đặt làm mặc định)
+          
           const saved = await api('/addresses', { method: 'POST', body: { ...fields, isDefault: addresses.length === 0 } });
           addressPart = saved?.id != null ? { shippingAddressId: saved.id } : { shippingAddress: fields };
         } else {
@@ -302,8 +384,8 @@ export default function CheckoutPage() {
         }
       }
 
-      // 2. Tạo đơn. Mua ngay gửi thẳng biến thể + số lượng; mua từ giỏ gửi id các dòng giỏ hàng
-      // TODO: đối chiếu endpoint và tên trường với OrderController của backend
+      
+      
       const base = { ...addressPart, paymentMethod: form.paymentMethod };
       const body = buyNow
         ? { ...base, items: [{ productVariantId: buyNow.variantId, quantity: buyNow.quantity }] }
@@ -312,8 +394,9 @@ export default function CheckoutPage() {
 
       try {
         sessionStorage.removeItem(STORAGE_KEY);
+        sessionStorage.removeItem('thors:applied_voucher');
       } catch {
-        // bỏ qua
+        
       }
       window.dispatchEvent(new Event('thors:cart-changed'));
       const receiver = chosen && !isNew ? chosen.name : addr.receiverName.trim();
@@ -322,7 +405,7 @@ export default function CheckoutPage() {
           ? fullAddress(chosen)
           : [addr.address.trim(), addr.ward?.name, addr.province?.name].filter(Boolean).join(', ');
 
-      // Trang cảm ơn sau khi đặt hàng thành công (route /order-success)
+      
       navigate('/order-success', {
         replace: true,
         state: {
@@ -515,23 +598,83 @@ export default function CheckoutPage() {
             </SectionCard>
           </Stack>
 
-          <Card variant="outlined" sx={{ p: 3, borderRadius: 3, position: { md: 'sticky' }, top: { md: 80 } }}>
-            <Typography variant="h5" sx={{ mb: 2 }}>
-              Tóm tắt đơn hàng
-            </Typography>
-            <Stack spacing={1.5}>
-              <Row label="Số sản phẩm" value={`${items.length}`} />
-              <Row label="Tổng số lượng" value={`${totalQty}`} />
-              <Row label="Tạm tính" value={money(subtotal)} />
-              <Row label="Phí vận chuyển" value={SHIPPING_FEE ? money(SHIPPING_FEE) : 'Miễn phí'} />
-              <Divider />
-              <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
-                <Typography variant="subtitle1">Tổng thanh toán</Typography>
-                <Typography variant="h4" color="primary">
-                  {money(total)}
-                </Typography>
+          <Stack spacing={2} sx={{ position: { md: 'sticky' }, top: { md: 80 } }}>
+            <Card variant="outlined" sx={{ p: 2.5, borderRadius: 3 }}>
+              <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', mb: voucher ? 1.5 : 0 }}>
+                <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                  <TagOutlined style={{ color: '#BE185D', fontSize: 16 }} />
+                  <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                    Mã giảm giá
+                  </Typography>
+                </Stack>
+                <Button
+                  component={Link}
+                  to="/promotions"
+                  size="small"
+                  sx={{ textTransform: 'none', color: '#BE185D', fontWeight: 600, fontSize: 13, p: 0, minWidth: 'auto' }}
+                >
+                  {voucher ? 'Đổi mã khác' : 'Chọn mã'}
+                </Button>
               </Stack>
-            </Stack>
+
+              {voucher && (
+                <Box
+                  sx={{
+                    p: 1.5,
+                    borderRadius: 2,
+                    bgcolor: voucherResult?.valid ? '#FFF1F5' : '#FEFCE8',
+                    border: `1px solid ${voucherResult?.valid ? '#F8B4C8' : '#FDE047'}`
+                  }}
+                >
+                  <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <Box sx={{ minWidth: 0, pr: 1 }}>
+                      <Typography sx={{ fontWeight: 700, fontSize: 13.5, color: '#202D42' }}>
+                        {voucher.name}
+                      </Typography>
+                      <Typography sx={{ fontSize: 12, color: '#64748B', mt: 0.25 }}>
+                        {voucher.discountType === 'PERCENT'
+                          ? `Giảm ${voucher.discountValue}%`
+                          : `Giảm ${new Intl.NumberFormat('vi-VN').format(voucher.discountValue)} ₫`}
+                        {voucher.minOrderValue > 0 && ` · Đơn từ ${new Intl.NumberFormat('vi-VN').format(voucher.minOrderValue)} ₫`}
+                      </Typography>
+                    </Box>
+                    <IconButton size="small" onClick={handleRemoveVoucher} sx={{ color: '#94A3B8', p: 0.5 }}>
+                      <CloseOutlined style={{ fontSize: 12 }} />
+                    </IconButton>
+                  </Stack>
+
+                  {!voucherResult?.valid && (
+                    <Typography sx={{ mt: 1, fontSize: 12, color: '#BE185D', fontWeight: 600 }}>
+                      {voucherResult?.reason}
+                    </Typography>
+                  )}
+                </Box>
+              )}
+            </Card>
+
+            <Card variant="outlined" sx={{ p: 3, borderRadius: 3 }}>
+              <Typography variant="h5" sx={{ mb: 2 }}>
+                Tóm tắt đơn hàng
+              </Typography>
+              <Stack spacing={1.5}>
+                <Row label="Số sản phẩm" value={`${items.length}`} />
+                <Row label="Tổng số lượng" value={`${totalQty}`} />
+                <Row label="Tạm tính" value={money(subtotal)} />
+                {discountAmount > 0 && (
+                  <Row
+                    label="Giảm giá voucher"
+                    value={<Typography sx={{ color: '#BE185D', fontWeight: 700 }}>-{money(discountAmount)}</Typography>}
+                  />
+                )}
+                <Row label="Phí vận chuyển" value={SHIPPING_FEE ? money(SHIPPING_FEE) : 'Miễn phí'} />
+                <Divider />
+                <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <Typography variant="subtitle1">Tổng thanh toán</Typography>
+                  <Typography variant="h4" color="primary">
+                    {money(total)}
+                  </Typography>
+                </Stack>
+              </Stack>
 
             {submitError && (
               <Alert severity="error" sx={{ mt: 2 }}>
@@ -546,6 +689,7 @@ export default function CheckoutPage() {
               {buyNow ? 'Quay lại' : 'Quay lại giỏ hàng'}
             </Button>
           </Card>
+          </Stack>
         </Box>
       )}
     </Box>

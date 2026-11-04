@@ -15,6 +15,12 @@ public class PromotionMapper implements RowMapper<Promotion> {
         Timestamp startTimestamp = rs.getTimestamp("start_date");
         Timestamp endTimestamp = rs.getTimestamp("end_date");
 
+        int usedCount = 0;
+        try {
+            usedCount = rs.getInt("used_count");
+        } catch (SQLException ignored) {
+        }
+
         return new Promotion(
                 rs.getInt("promotion_id"),
                 rs.getString("name"),
@@ -29,7 +35,8 @@ public class PromotionMapper implements RowMapper<Promotion> {
                 rs.getBigDecimal("max_discount_amount"),
                 rs.getObject("usage_limit", Integer.class),
                 rs.getString("apply_scope"),
-                List.of()
+                List.of(),
+                usedCount
         );
     }
 }

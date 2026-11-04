@@ -31,6 +31,7 @@ public class PromotionController {
         return promotionService.getById(promotionId);
     }
 
+
     @PostMapping
     public ResponseEntity<Promotion> create(
             @RequestBody CreatePromotionRequest request

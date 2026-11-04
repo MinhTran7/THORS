@@ -5,6 +5,7 @@ import { useAuth } from 'features/auth/AuthProvider';
 import { brand } from 'features/account/tokens';
 import { api } from 'services/http';
 import { Photo, ShopHeader, priceText } from './ShopCommon';
+import ShopBanner from './ShopBanner';
 import PendingCartHandler from './PendingCartHandler';
 
 /**
@@ -70,7 +71,9 @@ export default function ShopPage() {
     <Box sx={{ minHeight: '100vh', bgcolor: brand.page }}>
       <ShopHeader account={account} initialQuery={query} onSearch={setQuery} />
 
-      <Box sx={{ maxWidth: 1240, mx: 'auto', px: { xs: 2, md: 4 }, py: 3 }}>
+      {!query && <ShopBanner />}
+
+      <Box sx={{ maxWidth: 1480, mx: 'auto', boxSizing: 'border-box', px: { xs: '16px', md: '32px' }, py: 3 }}>
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center', mb: 2 }}>
           <Chip label="Tất cả" clickable onClick={() => setCategoryId(0)} sx={chip(categoryId === 0)} />
           {categories.map((c) => (
@@ -111,7 +114,7 @@ export default function ShopPage() {
           </Box>
         )}
 
-        <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(4, 1fr)', lg: 'repeat(5, 1fr)' } }}>
+        <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(4, 1fr)', lg: 'repeat(5, 1fr)', xl: 'repeat(6, 1fr)' } }}>
           {items.map((p) => (
             <Box
               key={p.productId}
