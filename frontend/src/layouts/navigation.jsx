@@ -2,6 +2,7 @@ import {
   AppstoreOutlined,
   EnvironmentOutlined,
   FileTextOutlined,
+  HomeOutlined,
   ImportOutlined,
   InboxOutlined,
   LayoutOutlined,
@@ -16,6 +17,8 @@ import {
 import { warehouseMenu } from 'features/warehouse/model';
 
 const dashboard = { to: '/workspace', label: 'Dashboard', icon: <AppstoreOutlined /> };
+// Trang chủ của khách hàng: mở thẳng trang cửa hàng (ShopPage, đường dẫn '/')
+const home = { to: '/', label: 'Trang chủ', icon: <HomeOutlined /> };
 const profile = { to: '/profile', label: 'Profile', icon: <UserOutlined /> };
 const orders = { to: '/orders', label: 'Đơn hàng', icon: <ShoppingOutlined /> };
 const addresses = { to: '/addresses', label: 'Địa chỉ của tôi', icon: <EnvironmentOutlined /> };
@@ -67,7 +70,7 @@ export const NAVIGATION = {
     profile
   ],
   FAMILY_MEMBER: [dashboard, orders, inStoreSales, ...warehouse, profile],
-  CUSTOMER: [dashboard, orders, addresses, profile]
+  CUSTOMER: [home, orders, addresses, profile]
 };
 
 export const navFor = (role) => NAVIGATION[role] ?? [dashboard, profile];
