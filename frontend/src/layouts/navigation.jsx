@@ -6,6 +6,7 @@ import {
   InboxOutlined,
   LayoutOutlined,
   RollbackOutlined,
+  MessageOutlined,
   ShopOutlined,
   ShoppingCartOutlined,
   ShoppingOutlined,
@@ -21,6 +22,8 @@ const orders = { to: '/orders', label: 'Đơn hàng', icon: <ShoppingOutlined />
 const addresses = { to: '/addresses', label: 'Địa chỉ của tôi', icon: <EnvironmentOutlined /> };
 
 // Mục bán hàng tại quầy dạng menu đa cấp xổ xuống
+const facebookSales = { to: '/facebook', label: 'Bán hàng Facebook', icon: <MessageOutlined /> };
+
 const inStoreSales = {
   label: 'Bán hàng tại quầy',
   icon: <ShoppingCartOutlined />,
@@ -62,11 +65,12 @@ export const NAVIGATION = {
     { to: '/returns', label: 'Hoàn hàng / Đổi trả', icon: <RollbackOutlined /> },
     { to: '/staff', label: 'Family', icon: <TeamOutlined /> },
     inStoreSales,
+    facebookSales,
     { to: '/promotions', label: 'Khuyến mãi', icon: <TagsOutlined /> },
     ...warehouse,
     profile
   ],
-  FAMILY_MEMBER: [dashboard, orders, inStoreSales, ...warehouse, profile],
+  FAMILY_MEMBER: [dashboard, orders, inStoreSales, facebookSales, ...warehouse, profile],
   CUSTOMER: [dashboard, orders, addresses, profile]
 };
 

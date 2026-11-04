@@ -73,6 +73,11 @@ thors:
     client-secret: ${FACEBOOK_CLIENT_SECRET:}
     redirect-uri: ${FACEBOOK_REDIRECT_URI:http://localhost:3000/login/oauth2/code/facebook}
     api-version: ${FACEBOOK_API_VERSION:v23.0}
+    page-id: ${FACEBOOK_PAGE_ID:${thors.facebook.page-id:1375988095602878}}
+    page-name: ${FACEBOOK_PAGE_NAME:${thors.facebook.page-name:THORS}}
+    page-token: ${FACEBOOK_PAGE_TOKEN:${thors.facebook.page-token:}}
+    webhook:
+      verify-token: ${FACEBOOK_VERIFY_TOKEN:${thors.facebook.webhook.verify-token:thors_secret_webhook_token_2026}}
   payos:
     enabled: ${PAYOS_ENABLED:${thors.payos.enabled:false}}
     client-id: ${PAYOS_CLIENT_ID:${thors.payos.client-id:}}
