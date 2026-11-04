@@ -1,4 +1,4 @@
-import { api } from 'services/http';
+import { api, post } from 'services/http';
 
 function query(params = {}) {
   const search = new URLSearchParams();
@@ -18,5 +18,7 @@ export const ordersApi = {
   createSample: () => api('/orders/test-sample', { method: 'POST' }),
   // Owner: xác nhận / từ chối / giao / hoàn tất. Customer: hủy đơn.
   // carrier chỉ dùng khi chuyển sang SHIPPING: SELF (tự giao) hoặc mã đơn vị vận chuyển
-  changeStatus: (id, status, reason, carrier) => api(`/orders/${id}/status${query({ status, reason, carrier })}`, { method: 'POST' })
+  changeStatus: (id, status, reason, carrier) => api(`/orders/${id}/status${query({ status, reason, carrier })}`, { method: 'POST' }),
+  createPayOSLink: (orderId) => post('/payment/payos/create-link', { orderId }),
+  checkPayOSStatus: (orderId) => api(`/payment/payos/status/${orderId}`)
 };

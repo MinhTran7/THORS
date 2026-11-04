@@ -4,6 +4,7 @@ const money = (n) => `${new Intl.NumberFormat("vi-VN").format(n || 0)} ₫`;
 
 const PAYMENT_LABEL = {
   COD: "Thanh toán khi nhận hàng (COD)",
+  ONLINE: "Thanh toán online (PayOS / VietQR)",
   BANK: "Chuyển khoản ngân hàng",
 };
 
@@ -144,7 +145,7 @@ export default function OrderSuccessPage() {
               fontWeight: 500,
             }}
           >
-            Xem đơn hàng
+            {paymentMethod === 'ONLINE' ? 'Thanh toán ngay / Xem đơn' : 'Xem đơn hàng'}
           </Link>
           <Link
             to="/"

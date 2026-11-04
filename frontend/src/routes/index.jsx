@@ -49,6 +49,7 @@ import PromotionDetailPage from 'features/promotion/PromotionDetailPage';
 import EditPromotionPage from 'features/promotion/EditPromotionPage';
 // Returns Management (Đổi trả / Hoàn hàng)
 import ReturnsPage from 'features/returns/ReturnsPage';
+import FacebookPOSPage from 'features/facebook/FacebookPOSPage';
 // Customer Addresses
 import CustomerAddressPage from 'features/customer/CustomerAddressPage';
 import AddAddressPage from 'features/customer/AddAddressPage';
@@ -140,12 +141,13 @@ export default createBrowserRouter([
             element: <RequireAuth roles={['ADMIN']} />,
             children: [{ path: '/system-log', element: <SystemLogPage /> }]
           },
-          {
+         {
             element: <RequireAuth roles={['OWNER', 'FAMILY_MEMBER']} />,
             children: [
               { path: '/in-store-sales', element: <InStoreSalesPage /> },
               { path: '/in-store-sales/history', element: <InStoreSalesHistoryPage /> },
-              { path: '/in-store-sales/history/:orderId', element: <InStoreSaleDetailPage /> }
+              { path: '/in-store-sales/history/:orderId', element: <InStoreSaleDetailPage /> },
+              { path: '/facebook', element: <FacebookPOSPage /> }
             ]
           },
           {

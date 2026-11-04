@@ -1,5 +1,7 @@
 .env
 backend/local.properties
+local.properties
+**/local.properties
 **/.env
 !**/.env.example
 frontend/node_modules/
