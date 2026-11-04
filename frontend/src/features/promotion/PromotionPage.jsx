@@ -37,6 +37,8 @@ import {
   changePromotionStatus,
   getPromotions
 } from 'services/promotionService';
+import { useAuth } from 'features/auth/AuthProvider';
+import CustomerPromotionPage from './CustomerPromotionPage';
 import { useCrumbs } from '../../layouts/crumbs';
 
 const C = {
@@ -164,7 +166,7 @@ function PromotionSwitch({ promotion, onToggleNormal, onEndedClick, disabled }) 
   );
 }
 
-export default function PromotionPage() {
+function OwnerPromotionView() {
   useCrumbs(['Danh sách khuyến mãi']);
 
   const navigate = useNavigate();
@@ -860,4 +862,14 @@ export default function PromotionPage() {
       </Dialog>
     </Box>
   );
+}
+
+export default function PromotionPage() {
+  const { account } = useAuth();
+
+  if (account?.role === 'CUSTOMER') {
+    return <CustomerPromotionPage />;
+  }
+
+  return <OwnerPromotionView />;
 }

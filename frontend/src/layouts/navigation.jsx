@@ -67,7 +67,13 @@ export const NAVIGATION = {
     profile
   ],
   FAMILY_MEMBER: [dashboard, orders, inStoreSales, ...warehouse, profile],
-  CUSTOMER: [dashboard, orders, addresses, profile]
+  CUSTOMER: [
+    dashboard,
+    { to: '/promotions', label: 'Khuyến mãi', icon: <TagsOutlined /> },
+    orders,
+    addresses,
+    profile
+  ]
 };
 
 export const navFor = (role) => NAVIGATION[role] ?? [dashboard, profile];

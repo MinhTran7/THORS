@@ -914,38 +914,115 @@ export default function AddPromotionPage() {
             {/* Sản phẩm áp dụng */}
             <Card sx={cardSx}>
               <CardContent sx={{ p: { xs: 2, md: 3 } }}>
-                <SectionTitle>Phạm vi áp dụng</SectionTitle>
+                <SectionTitle description="Chọn toàn bộ sản phẩm hoặc chỉ áp dụng cho những sản phẩm được chỉ định.">
+                  Sản phẩm áp dụng
+                </SectionTitle>
 
-                <RadioGroup
-                    value={form.applyScope}
-                    onChange={(event) => {
-                      setForm((previous) => ({
-                        ...previous,
-                        applyScope: event.target.value
-                      }));
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
+                    gap: 2,
+                    mt: 1.5
+                  }}
+                >
+                  <Box
+                    onClick={() => {
+                      setForm((previous) => ({ ...previous, applyScope: 'ALL' }));
                       setError('');
                     }}
-                >
-                  <FormControlLabel
-                    value="ALL"
-                    control={<Radio sx={{ '&.Mui-checked': { color: '#8EECF5' } }} />}
-                    label={<Typography sx={{ fontSize: 14, fontWeight: 600 }}>Toàn bộ sản phẩm trong cửa hàng</Typography>}
-                  />
-                  <FormControlLabel
-                    value="SELECTED"
-                    control={<Radio sx={{ '&.Mui-checked': { color: '#8EECF5' } }} />}
-                    label={<Typography sx={{ fontSize: 14, fontWeight: 600 }}>Chỉ áp dụng cho các sản phẩm được chọn</Typography>}
-                  />
-                </RadioGroup>
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1.5,
+                      p: 2,
+                      borderRadius: 2.5,
+                      border: `1.5px solid ${form.applyScope === 'ALL' ? '#8EECF5' : COLORS.border}`,
+                      bgcolor: form.applyScope === 'ALL' ? '#ECFEFF' : '#FFFFFF',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      '&:hover': {
+                        borderColor: form.applyScope === 'ALL' ? '#8EECF5' : '#CBD5E1'
+                      }
+                    }}
+                  >
+                    <Radio
+                      checked={form.applyScope === 'ALL'}
+                      onChange={() => {
+                        setForm((previous) => ({ ...previous, applyScope: 'ALL' }));
+                        setError('');
+                      }}
+                      sx={{
+                        p: 0.5,
+                        color: '#94A3B8',
+                        '&.Mui-checked': {
+                          color: '#8EECF5'
+                        }
+                      }}
+                    />
+                    <Box>
+                      <Typography sx={{ fontSize: 14, fontWeight: 700, color: COLORS.text }}>
+                        Tất cả sản phẩm
+                      </Typography>
+                      <Typography sx={{ fontSize: 12.5, color: COLORS.muted, mt: 0.25 }}>
+                        Áp dụng cho toàn bộ sản phẩm
+                      </Typography>
+                    </Box>
+                  </Box>
+
+                  <Box
+                    onClick={() => {
+                      setForm((previous) => ({ ...previous, applyScope: 'SELECTED' }));
+                      setError('');
+                    }}
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1.5,
+                      p: 2,
+                      borderRadius: 2.5,
+                      border: `1.5px solid ${form.applyScope === 'SELECTED' ? '#8EECF5' : COLORS.border}`,
+                      bgcolor: form.applyScope === 'SELECTED' ? '#ECFEFF' : '#FFFFFF',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      '&:hover': {
+                        borderColor: form.applyScope === 'SELECTED' ? '#8EECF5' : '#CBD5E1'
+                      }
+                    }}
+                  >
+                    <Radio
+                      checked={form.applyScope === 'SELECTED'}
+                      onChange={() => {
+                        setForm((previous) => ({ ...previous, applyScope: 'SELECTED' }));
+                        setError('');
+                      }}
+                      sx={{
+                        p: 0.5,
+                        color: '#94A3B8',
+                        '&.Mui-checked': {
+                          color: '#8EECF5'
+                        }
+                      }}
+                    />
+                    <Box>
+                      <Typography sx={{ fontSize: 14, fontWeight: 700, color: COLORS.text }}>
+                        Chọn sản phẩm
+                      </Typography>
+                      <Typography sx={{ fontSize: 12.5, color: COLORS.muted, mt: 0.25 }}>
+                        Chỉ áp dụng cho sản phẩm đã chọn
+                      </Typography>
+                    </Box>
+                  </Box>
+                </Box>
 
                 {form.applyScope === 'SELECTED' && (
                   <Box
                     sx={{
                       mt: 2.5,
-                      p: { xs: 1.5, md: 2 },
+                      p: { xs: 2, md: 2.5 },
                       border: `1px solid ${COLORS.border}`,
                       borderRadius: 2.5,
-                      bgcolor: '#FAFAF8'
+                      bgcolor: '#FFFFFF'
                     }}
                   >
                     <Box sx={{ mb: 2 }}>
