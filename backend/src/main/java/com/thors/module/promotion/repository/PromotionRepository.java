@@ -32,7 +32,10 @@ public class PromotionRepository {
                    min_order_value,
                    max_discount_amount,
                    usage_limit,
-                   apply_scope
+                   apply_scope,
+                   (SELECT COUNT(*) FROM orders o
+                    WHERE (o.promotion_id = promotion.promotion_id OR o.promotion_name_snapshot = promotion.name)
+                      AND o.order_status NOT IN ('CANCELLED', 'REJECTED', 'EXPIRED')) AS used_count
             FROM promotion
             """;
 
@@ -270,4 +273,5 @@ public class PromotionRepository {
                 id
         );
     }
+
 }

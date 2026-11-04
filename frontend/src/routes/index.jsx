@@ -109,7 +109,8 @@ export default createBrowserRouter([
             element: <RequireAuth roles={['CUSTOMER', 'OWNER', 'FAMILY_MEMBER']} />,
             children: [
               { path: '/orders', element: <OrderListPage /> },
-              { path: '/orders/:id', element: <OrderDetailPage /> }
+              { path: '/orders/:id', element: <OrderDetailPage /> },
+              { path: '/promotions', element: <PromotionPage /> }
             ]
           },
           {
@@ -162,7 +163,6 @@ export default createBrowserRouter([
               { path: '/products/:productId/edit', element: <EditProductPage /> },
               { path: '/returns', element: <ReturnsPage /> },
               // Promotion (của phuoc)
-              { path: '/promotions', element: <PromotionPage /> },
               { path: '/promotions/add', element: <AddPromotionPage /> },
               { path: '/promotions/:promotionId', element: <PromotionDetailPage /> },
               { path: '/promotions/:promotionId/edit', element: <EditPromotionPage /> }

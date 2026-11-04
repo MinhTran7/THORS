@@ -18,6 +18,41 @@ public record Promotion(
         BigDecimal maxDiscountAmount,
         Integer usageLimit,
         String applyScope,
-        List<Integer> productIds
+        List<Integer> productIds,
+        Integer usedCount
 ) {
+    public Promotion(
+            Integer promotionId,
+            String name,
+            String description,
+            BigDecimal discountValue,
+            LocalDateTime startDate,
+            LocalDateTime endDate,
+            String status,
+            Integer createdBy,
+            String discountType,
+            BigDecimal minOrderValue,
+            BigDecimal maxDiscountAmount,
+            Integer usageLimit,
+            String applyScope,
+            List<Integer> productIds
+    ) {
+        this(
+                promotionId,
+                name,
+                description,
+                discountValue,
+                startDate,
+                endDate,
+                status,
+                createdBy,
+                discountType,
+                minOrderValue,
+                maxDiscountAmount,
+                usageLimit,
+                applyScope,
+                productIds,
+                0
+        );
+    }
 }

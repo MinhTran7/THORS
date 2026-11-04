@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 
 import {
   Alert,
+  Snackbar,
   Box,
   Breadcrumbs,
   Button,
@@ -26,6 +27,8 @@ import {
 } from '@mui/material';
 
 import {
+  ArrowLeftOutlined,
+  PictureOutlined,
   SaveOutlined,
   SearchOutlined,
   FilterOutlined,
@@ -36,6 +39,7 @@ import {
 
 import { createPromotion } from 'services/promotionService';
 import { getProducts } from 'services/productService';
+import { useCrumbs } from '../../layouts/crumbs';
 
 const COLORS = {
   text: '#202D42',
@@ -226,144 +230,92 @@ function SectionTitle({ children, description }) {
 
 // Thông tin sản phẩm trong danh sách
 function ProductItem({ product, checked, onToggle }) {
-  const [imageError, setImageError] = useState(false);
-
   const imageUrl = getProductImage(product);
   const productName = getProductName(product);
   const productPrice = getProductPrice(product);
   const stock = product.totalStock ?? product.quantity ?? 0;
 
   return (
+    <Box
+      onClick={onToggle}
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1.5,
+        p: 1.25,
+        border: `1px solid ${checked ? '#FACC15' : COLORS.border}`,
+        borderRadius: 2.5,
+        bgcolor: checked ? '#FEFCE8' : '#FFFFFF',
+        cursor: 'pointer'
+      }}
+    >
+      <Checkbox
+        size="small"
+        checked={checked}
+        onChange={onToggle}
+        onClick={(event) => event.stopPropagation()}
+        sx={{
+          p: 0.5,
+          color: COLORS.border,
+          '&.Mui-checked': { color: '#EAB308' }
+        }}
+      />
+
       <Box
-          onClick={onToggle}
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1.5,
-            p: 1.5,
-            border: `1px solid ${checked ? COLORS.cyan : COLORS.border}`,
-            borderRadius: 2.5,
-            bgcolor: checked ? COLORS.selected : '#fff',
-            cursor: 'pointer',
-            transition: 'all 0.18s ease',
-            '&:hover': {
-              borderColor: COLORS.cyanHover,
-              bgcolor: COLORS.selected,
-              transform: 'translateY(-1px)',
-              boxShadow: '0 3px 10px rgba(35, 158, 170, 0.06)'
-            }
-          }}
+        sx={{
+          width: 48,
+          height: 48,
+          flexShrink: 0,
+          borderRadius: 2,
+          overflow: 'hidden',
+          bgcolor: '#F8FAFC',
+          border: `1px solid ${COLORS.border}`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}
       >
-        <Checkbox
-            size="small"
-            checked={checked}
-            onChange={onToggle}
-            onClick={(event) => event.stopPropagation()}
-            sx={{
-              p: 0.25,
-              flexShrink: 0,
-              color: COLORS.muted,
-              '&.Mui-checked': {
-                color: COLORS.price
-              }
-            }}
-        />
+        {imageUrl ? (
+          <Box
+            component="img"
+            src={imageUrl}
+            alt={productName}
+            sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
+        ) : (
+          <PictureOutlined style={{ color: '#94A3B8', fontSize: 16 }} />
+        )}
+      </Box>
 
-        <Box
-            sx={{
-              width: 76,
-              height: 76,
-              flexShrink: 0,
-              borderRadius: 2,
-              overflow: 'hidden',
-              bgcolor: '#F4F6F6',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Typography
+          title={productName}
+          sx={{
+            color: COLORS.text,
+            fontWeight: 600,
+            fontSize: 13.5,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap'
+          }}
         >
-          {imageUrl && !imageError ? (
-              <Box
-                  component="img"
-                  src={imageUrl}
-                  alt={productName}
-                  onError={() => setImageError(true)}
-                  sx={{
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'cover'
-                  }}
-              />
-          ) : (
-              <Typography
-                  sx={{
-                    color: '#A0A8B4',
-                    fontSize: 11
-                  }}
-              >
-                No image
-              </Typography>
-          )}
-        </Box>
-
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography
-              sx={{
-                color: COLORS.text,
-                fontWeight: 650,
-                fontSize: 14,
-                mb: 0.75,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap'
-              }}
-              title={productName}
-          >
-            {productName}
-          </Typography>
-
-          <Typography
-              sx={{
-                color: COLORS.price,
-                fontSize: 13.5,
-                fontWeight: 700,
-                mb: 0.75
-              }}
-          >
+          {productName}
+        </Typography>
+        <Stack direction="row" spacing={2} alignItems="center" sx={{ mt: 0.25 }}>
+          <Typography sx={{ color: '#202D42', fontSize: 12.5, fontWeight: 700 }}>
             {productPrice}
           </Typography>
-
-          <Stack direction="row" alignItems="center" spacing={1}>
-            <Typography
-                sx={{
-                  color: COLORS.muted,
-                  fontSize: 12
-                }}
-            >
-              Tồn kho: {Number(stock).toLocaleString('vi-VN')}
-            </Typography>
-
-            {checked && (
-                <Chip
-                    label="Đã chọn"
-                    size="small"
-                    sx={{
-                      height: 20,
-                      fontSize: 10.5,
-                      fontWeight: 600,
-                      bgcolor: '#D8F6F8',
-                      color: COLORS.dark
-                    }}
-                />
-            )}
-          </Stack>
-        </Box>
+          <Typography sx={{ color: COLORS.muted, fontSize: 12 }}>
+            Tồn kho: {Number(stock).toLocaleString('vi-VN')}
+          </Typography>
+        </Stack>
       </Box>
+    </Box>
   );
 }
 
 // Kiểm tra dữ liệu trước khi tạo
-function validateForm(form, startImmediately = false) {
+function validateForm(form) {
   const name = form.name.trim();
   const discountValue = Number(form.discountValue);
   const minOrderValue = Number(form.minOrderValue || 0);
@@ -404,43 +356,27 @@ function validateForm(form, startImmediately = false) {
     return 'Số tiền giảm cố định phải là số nguyên VNĐ.';
   }
 
-  if (startImmediately) {
-    if (!form.endDate) {
-      return 'Vui lòng chọn thời gian kết thúc.';
-    }
+  if (!form.startDate || !form.endDate) {
+    return 'Vui lòng chọn thời gian bắt đầu và kết thúc.';
+  }
 
-    const start = new Date();
-    const end = new Date(form.endDate);
+  const now = new Date();
+  const start = new Date(form.startDate);
+  const end = new Date(form.endDate);
 
-    if (
-        Number.isNaN(end.getTime()) ||
-        end.getTime() <= start.getTime()
-    ) {
-      return 'Thời gian kết thúc phải sau thời gian hiện tại.';
-    }
-  } else {
-    if (!form.startDate || !form.endDate) {
-      return 'Vui lòng chọn thời gian bắt đầu và kết thúc.';
-    }
+  // Cho phép khoảng đệm 15 phút
+  if (
+      Number.isNaN(start.getTime()) ||
+      start.getTime() < now.getTime() - 15 * 60 * 1000
+  ) {
+    return 'Thời gian bắt đầu không được ở trong quá khứ.';
+  }
 
-    const now = new Date();
-    const start = new Date(form.startDate);
-    const end = new Date(form.endDate);
-
-    // Cho phép khoảng đệm 15 phút
-    if (
-        Number.isNaN(start.getTime()) ||
-        start.getTime() < now.getTime() - 15 * 60 * 1000
-    ) {
-      return 'Thời gian bắt đầu không được ở trong quá khứ.';
-    }
-
-    if (
-        Number.isNaN(end.getTime()) ||
-        end.getTime() <= start.getTime()
-    ) {
-      return 'Thời gian kết thúc phải sau thời gian bắt đầu.';
-    }
+  if (
+      Number.isNaN(end.getTime()) ||
+      end.getTime() <= start.getTime()
+  ) {
+    return 'Thời gian kết thúc phải sau thời gian bắt đầu.';
   }
 
   if (
@@ -479,13 +415,9 @@ function validateForm(form, startImmediately = false) {
 
 export default function AddPromotionPage() {
   const navigate = useNavigate();
+  useCrumbs(['Danh sách khuyến mãi', 'Thêm khuyến mãi']);
 
-  const [startImmediately, setStartImmediately] = useState(true);
-
-  const [form, setForm] = useState(() => ({
-    ...initialForm,
-    startDate: getCurrentDateTimeLocal()
-  }));
+  const [form, setForm] = useState(initialForm);
 
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -519,13 +451,12 @@ export default function AddPromotionPage() {
         }
 
         if (active) {
-          const activeProducts = rows
+          const activeOnlineProducts = rows
               .filter((product) => product.status === 'ACTIVE')
-              .filter((product) =>
-                  Number.isInteger(getProductId(product))
-              );
+              .filter((product) => Number.isInteger(getProductId(product)))
+              .filter((product) => Number(product.onlineVariantCount || 0) > 0);
 
-          setProducts(activeProducts);
+          setProducts(activeOnlineProducts);
         }
       } catch (err) {
         if (active) {
@@ -652,7 +583,7 @@ export default function AddPromotionPage() {
   const handleSubmit = async (event) => {
     event.preventDefault();
 
-    const validationError = validateForm(form, startImmediately);
+    const validationError = validateForm(form);
 
     if (validationError) {
       setError(validationError);
@@ -663,7 +594,7 @@ export default function AddPromotionPage() {
     setSaving(true);
 
     try {
-      const effectiveStartDate = startImmediately ? getCurrentDateTimeLocal() : form.startDate;
+      
 
       await createPromotion({
         name: form.name.trim(),
@@ -679,7 +610,7 @@ export default function AddPromotionPage() {
             form.usageLimit === ''
                 ? null
                 : Number(form.usageLimit),
-        startDate: effectiveStartDate,
+        startDate: form.startDate,
         endDate: form.endDate,
         applyScope: form.applyScope,
         productIds:
@@ -774,24 +705,63 @@ export default function AddPromotionPage() {
           </Typography>
         </Box>
 
-        {error && (
-            <Alert
-                severity="error"
-                sx={{ mb: 2 }}
-                onClose={() => setError('')}
-            >
-              {error}
-            </Alert>
-        )}
+              {/* ─── TOAST THÔNG BÁO GÓC MÀN HÌNH (TỰ MẤT SAU 5 GIÂY) ─── */}
+      <Snackbar
+        open={Boolean(error)}
+        autoHideDuration={5000}
+        onClose={() => setError('')}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+        sx={{ mt: 7 }}
+      >
+        <Alert
+          severity="error"
+          onClose={() => setError('')}
+          sx={{
+            width: '100%',
+            maxWidth: 300,
+            minHeight: 76,
+            py: 1.75,
+            px: 2,
+            bgcolor: '#FFFFFF',
+            color: '#1E293B',
+            borderRadius: 1.5,
+            border: '1px solid #E2E8F0',
+            borderLeft: '5px solid #EF4444',
+            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+            fontWeight: 600,
+            fontSize: 13,
+            alignItems: 'flex-start',
+            '& .MuiAlert-icon': {
+              color: '#EF4444',
+              fontSize: 20,
+              mt: 0.25,
+              mr: 1.25
+            },
+            '& .MuiAlert-message': {
+              color: '#1E293B',
+              p: 0,
+              lineHeight: 1.5
+            },
+            '& .MuiAlert-action': {
+              color: '#64748B',
+              p: 0,
+              mt: -0.25,
+              ml: 1
+            }
+          }}
+        >
+          {error}
+        </Alert>
+      </Snackbar>
 
         <Box component="form" onSubmit={handleSubmit}>
           <Stack spacing={2.5}>
 
-            {/* Thông tin cơ bản */}
+            {/* Thông tin tổng quan */}
             <Card sx={cardSx}>
               <CardContent sx={{ p: { xs: 2, md: 3 } }}>
-                <SectionTitle description="Nhập tên và mô tả cho chương trình khuyến mãi.">
-                  Thông tin cơ bản
+                <SectionTitle description="Nhập tên, mô tả và thời gian áp dụng cho chương trình khuyến mãi.">
+                  Thông tin tổng quan
                 </SectionTitle>
 
                 <Stack spacing={2}>
@@ -816,15 +786,51 @@ export default function AddPromotionPage() {
                       placeholder="Nhập mô tả chương trình..."
                       sx={fieldSx}
                   />
+
+                  <Box
+                      sx={{
+                        display: 'grid',
+                        gridTemplateColumns: {
+                          xs: '1fr',
+                          md: 'repeat(2, minmax(0, 1fr))'
+                        },
+                        gap: 2
+                      }}
+                  >
+                    <TextField
+                        label="Thời gian bắt đầu"
+                        type="datetime-local"
+                        value={form.startDate}
+                        onChange={updateField('startDate')}
+                        required
+                        fullWidth
+                        slotProps={{ inputLabel: { shrink: true } }}
+                        sx={fieldSx}
+                    />
+
+                    <TextField
+                        label="Thời gian kết thúc"
+                        type="datetime-local"
+                        value={form.endDate}
+                        onChange={updateField('endDate')}
+                        required
+                        fullWidth
+                        inputProps={{
+                          min: getCurrentDateTimeLocal()
+                        }}
+                        slotProps={{ inputLabel: { shrink: true } }}
+                        sx={fieldSx}
+                    />
+                  </Box>
                 </Stack>
               </CardContent>
             </Card>
 
-            {/* Thiết lập giảm giá */}
+            {/* Điều kiện áp dụng */}
             <Card sx={cardSx}>
               <CardContent sx={{ p: { xs: 2, md: 3 } }}>
                 <SectionTitle description="Thiết lập mức ưu đãi và điều kiện áp dụng.">
-                  Thiết lập giảm giá
+                  Điều kiện áp dụng
                 </SectionTitle>
 
                 <Box
@@ -912,523 +918,229 @@ export default function AddPromotionPage() {
                   Sản phẩm áp dụng
                 </SectionTitle>
 
-                <RadioGroup
-                    value={form.applyScope}
-                    onChange={(event) => {
-                      setForm((previous) => ({
-                        ...previous,
-                        applyScope: event.target.value
-                      }));
-
-                      setError('');
-                    }}
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
+                    gap: 2,
+                    mt: 1.5
+                  }}
                 >
                   <Box
-                      sx={{
-                        display: 'grid',
-                        gridTemplateColumns: {
-                          xs: '1fr',
-                          sm: 'repeat(2, minmax(0, 1fr))'
-                        },
-                        gap: 1.5
-                      }}
-                  >
-                    <Box
-                        sx={{
-                          p: 1.5,
-                          borderRadius: 2,
-                          border: `1px solid ${
-                              form.applyScope === 'ALL'
-                                  ? COLORS.cyan
-                                  : COLORS.border
-                          }`,
-                          bgcolor: form.applyScope === 'ALL'
-                              ? COLORS.selected
-                              : '#fff'
-                        }}
-                    >
-                      <FormControlLabel
-                          value="ALL"
-                          control={<Radio />}
-                          label={
-                            <Box>
-                              <Typography sx={{ fontSize: 13.5, fontWeight: 650, color: COLORS.text }}>
-                                Tất cả sản phẩm
-                              </Typography>
-                              <Typography sx={{ fontSize: 11.5, color: COLORS.muted }}>
-                                Áp dụng cho toàn bộ sản phẩm
-                              </Typography>
-                            </Box>
-                          }
-                          sx={{ m: 0, width: '100%' }}
-                      />
-                    </Box>
-
-                    <Box
-                        sx={{
-                          p: 1.5,
-                          borderRadius: 2,
-                          border: `1px solid ${
-                              form.applyScope === 'SELECTED'
-                                  ? COLORS.cyan
-                                  : COLORS.border
-                          }`,
-                          bgcolor: form.applyScope === 'SELECTED'
-                              ? COLORS.selected
-                              : '#fff'
-                        }}
-                    >
-                      <FormControlLabel
-                          value="SELECTED"
-                          control={<Radio />}
-                          label={
-                            <Box>
-                              <Typography sx={{ fontSize: 13.5, fontWeight: 650, color: COLORS.text }}>
-                                Chọn sản phẩm
-                              </Typography>
-                              <Typography sx={{ fontSize: 11.5, color: COLORS.muted }}>
-                                Chỉ áp dụng cho sản phẩm đã chọn
-                              </Typography>
-                            </Box>
-                          }
-                          sx={{ m: 0, width: '100%' }}
-                      />
-                    </Box>
-                  </Box>
-                </RadioGroup>
-
-                {form.applyScope === 'SELECTED' && (
-                    <Box
-                        sx={{
-                          mt: 2.5,
-                          p: { xs: 1.5, md: 2 },
-                          border: `1px solid ${COLORS.border}`,
-                          borderRadius: 2.5,
-                          bgcolor: '#FCFDFD'
-                        }}
-                    >
-                      {/* Tiêu đề khu vực chọn sản phẩm */}
-                      <Stack
-                          direction={{ xs: 'column', sm: 'row' }}
-                          justifyContent="space-between"
-                          alignItems={{ xs: 'flex-start', sm: 'center' }}
-                          spacing={1}
-                          sx={{ mb: 2 }}
-                      >
-                        <Box>
-                          <Typography
-                              sx={{
-                                fontSize: 14,
-                                fontWeight: 700,
-                                color: COLORS.text
-                              }}
-                          >
-                            Danh sách sản phẩm
-                          </Typography>
-
-                          <Typography
-                              sx={{
-                                fontSize: 12,
-                                color: COLORS.muted,
-                                mt: 0.4
-                              }}
-                          >
-                            Tìm kiếm, lọc và chọn sản phẩm áp dụng.
-                          </Typography>
-                        </Box>
-
-                      </Stack>
-
-                      {/* Thanh tìm kiếm */}
-                      <TextField
-                          value={productSearch}
-                          onChange={(event) => setProductSearch(event.target.value)}
-                          placeholder="Tìm theo tên sản phẩm..."
-                          size="small"
-                          fullWidth
-                          InputProps={{
-                            startAdornment: (
-                                <InputAdornment position="start">
-                                  <SearchOutlined style={{ color: COLORS.muted }} />
-                                </InputAdornment>
-                            )
-                          }}
-                          sx={{
-                            ...fieldSx,
-                            mb: 1.5
-                          }}
-                      />
-
-                      {/* Khu vực bộ lọc */}
-                      <Box
-                          sx={{
-                            p: 1.5,
-                            mb: 1.5,
-                            border: `1px solid ${COLORS.border}`,
-                            borderRadius: 2,
-                            bgcolor: '#fff'
-                          }}
-                      >
-                        <Stack
-                            direction="row"
-                            alignItems="center"
-                            spacing={1}
-                            sx={{ mb: 1.5 }}
-                        >
-                          <FilterOutlined style={{ color: COLORS.price }} />
-
-                          <Typography
-                              sx={{
-                                color: COLORS.text,
-                                fontSize: 12.5,
-                                fontWeight: 700
-                              }}
-                          >
-                            Bộ lọc sản phẩm
-                          </Typography>
-
-                          <Box sx={{ flex: 1 }} />
-
-                          <Button
-                              size="small"
-                              startIcon={<CloseCircleOutlined />}
-                              onClick={resetProductFilters}
-                              sx={{
-                                color: COLORS.muted,
-                                fontSize: 11.5,
-                                textTransform: 'none',
-                                minWidth: 0
-                              }}
-                          >
-                            Xóa lọc
-                          </Button>
-                        </Stack>
-
-                        <Box
-                            sx={{
-                              display: 'grid',
-                              gridTemplateColumns: {
-                                xs: '1fr',
-                                sm: 'repeat(2, minmax(0, 1fr))'
-                              },
-                              gap: 1.25
-                            }}
-                        >
-                          {/* Danh mục */}
-                          <TextField
-                              select
-                              size="small"
-                              label="Danh mục"
-                              value={categoryFilter}
-                              onChange={(event) => setCategoryFilter(event.target.value)}
-                              sx={fieldSx}
-                          >
-                            <MenuItem value="ALL">Tất cả danh mục</MenuItem>
-
-                            {productCategories.map((category) => (
-                                <MenuItem key={category.id} value={category.id}>
-                                  {category.name}
-                                </MenuItem>
-                            ))}
-                          </TextField>
-
-                          {/* Sắp xếp giá */}
-                          <TextField
-                              select
-                              size="small"
-                              label="Sắp xếp theo giá"
-                              value={priceSort}
-                              onChange={(event) => setPriceSort(event.target.value)}
-                              sx={fieldSx}
-                          >
-                            <MenuItem value="DEFAULT">Mặc định</MenuItem>
-                            <MenuItem value="PRICE_HIGH">Giá cao đến thấp</MenuItem>
-                            <MenuItem value="PRICE_LOW">Giá thấp đến cao</MenuItem>
-                          </TextField>
-                        </Box>
-                      </Box>
-
-                      {/* Thông tin kết quả */}
-                      <Stack
-                          direction="row"
-                          justifyContent="space-between"
-                          alignItems="center"
-                          sx={{ mb: 1.25 }}
-                      >
-                        <Typography
-                            sx={{
-                              color: COLORS.muted,
-                              fontSize: 12
-                            }}
-                        >
-                          Hiển thị {filteredProducts.length} / {products.length} sản phẩm
-                        </Typography>
-
-                        <Typography
-                            sx={{
-                              color: COLORS.price,
-                              fontSize: 12,
-                              fontWeight: 700
-                            }}
-                        >
-                          Đã chọn: {form.productIds.length}
-                        </Typography>
-                      </Stack>
-
-                      <Divider sx={{ mb: 1.5, borderColor: COLORS.border }} />
-
-                      {/* Danh sách sản phẩm */}
-                      <Box
-                          sx={{
-                            maxHeight: 460,
-                            overflowY: 'auto',
-                            pr: 0.5,
-                            '&::-webkit-scrollbar': {
-                              width: 6
-                            },
-                            '&::-webkit-scrollbar-thumb': {
-                              bgcolor: '#D7E1E2',
-                              borderRadius: 5
-                            }
-                          }}
-                      >
-                        {productsLoading ? (
-                            <Box
-                                sx={{
-                                  display: 'flex',
-                                  justifyContent: 'center',
-                                  alignItems: 'center',
-                                  py: 6
-                                }}
-                            >
-                              <CircularProgress size={28} sx={{ color: COLORS.price }} />
-                            </Box>
-                        ) : productLoadError ? (
-                            <Alert severity="error">
-                              {productLoadError}
-                            </Alert>
-                        ) : filteredProducts.length === 0 ? (
-                            <Box sx={{ py: 5, textAlign: 'center' }}>
-                              <Typography
-                                  sx={{
-                                    color: COLORS.muted,
-                                    fontSize: 13
-                                  }}
-                              >
-                                {products.length === 0
-                                    ? 'Chưa có sản phẩm đang hoạt động.'
-                                    : 'Không tìm thấy sản phẩm phù hợp.'}
-                              </Typography>
-                            </Box>
-                        ) : (
-                            <Stack spacing={1}>
-                              {filteredProducts.map((product) => {
-                                const productId = getProductId(product);
-
-                                return (
-                                    <ProductItem
-                                        key={productId}
-                                        product={product}
-                                        checked={form.productIds.includes(productId)}
-                                        onToggle={() => toggleProduct(productId)}
-                                    />
-                                );
-                              })}
-                            </Stack>
-                        )}
-                      </Box>
-                    </Box>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Thời gian áp dụng */}
-            <Card sx={cardSx}>
-              <CardContent sx={{ p: { xs: 2, md: 3 } }}>
-                <SectionTitle description="Chọn khoảng thời gian chương trình khuyến mãi có hiệu lực.">
-                  Thời gian áp dụng
-                </SectionTitle>
-
-                {/* Tùy chọn Bắt đầu ngay bây giờ */}
-                <Box
-                    sx={{
-                      p: 2,
-                      mb: 2.5,
-                      borderRadius: 2.5,
-                      bgcolor: startImmediately ? '#F0FCFD' : '#F8FAFC',
-                      border: `1px solid ${startImmediately ? '#8DE9F2' : COLORS.border}`,
-                      transition: 'all 0.2s ease',
-                      display: 'flex',
-                      flexDirection: { xs: 'column', sm: 'row' },
-                      justifyContent: 'space-between',
-                      alignItems: { xs: 'flex-start', sm: 'center' },
-                      gap: 1.5
+                    onClick={() => {
+                      setForm((previous) => ({ ...previous, applyScope: 'ALL' }));
+                      setError('');
                     }}
-                >
-                  <Stack direction="row" spacing={1.5} alignItems="center">
-                    <Box
-                        sx={{
-                          width: 38,
-                          height: 38,
-                          borderRadius: 2,
-                          bgcolor: startImmediately ? '#8DE9F2' : '#E2E8F0',
-                          color: startImmediately ? '#0E7490' : '#64748B',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontSize: 18
-                        }}
-                    >
-                      <ThunderboltOutlined />
-                    </Box>
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1.5,
+                      p: 2,
+                      borderRadius: 2.5,
+                      border: `1.5px solid ${form.applyScope === 'ALL' ? '#8EECF5' : COLORS.border}`,
+                      bgcolor: form.applyScope === 'ALL' ? '#ECFEFF' : '#FFFFFF',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      '&:hover': {
+                        borderColor: form.applyScope === 'ALL' ? '#8EECF5' : '#CBD5E1'
+                      }
+                    }}
+                  >
+                    <Radio
+                      checked={form.applyScope === 'ALL'}
+                      onChange={() => {
+                        setForm((previous) => ({ ...previous, applyScope: 'ALL' }));
+                        setError('');
+                      }}
+                      sx={{
+                        p: 0.5,
+                        color: '#94A3B8',
+                        '&.Mui-checked': {
+                          color: '#8EECF5'
+                        }
+                      }}
+                    />
                     <Box>
                       <Typography sx={{ fontSize: 14, fontWeight: 700, color: COLORS.text }}>
-                        Bắt đầu ngay bây giờ
+                        Tất cả sản phẩm
                       </Typography>
-                      <Typography sx={{ fontSize: 12, color: COLORS.muted }}>
-                        {startImmediately
-                            ? 'Khuyến mãi sẽ có hiệu lực ngay lập tức sau khi bạn tạo'
-                            : 'Chủ động lên lịch trước thời điểm bắt đầu khuyến mãi'}
+                      <Typography sx={{ fontSize: 12.5, color: COLORS.muted, mt: 0.25 }}>
+                        Áp dụng cho toàn bộ sản phẩm
                       </Typography>
                     </Box>
-                  </Stack>
+                  </Box>
 
-                  <FormControlLabel
-                      control={
-                        <Switch
-                            checked={startImmediately}
-                            onChange={(e) => {
-                              const checked = e.target.checked;
-                              setStartImmediately(checked);
-                              if (checked) {
-                                setForm((prev) => ({
-                                  ...prev,
-                                  startDate: getCurrentDateTimeLocal()
-                                }));
-                              }
-                            }}
-                            sx={{
-                              '& .MuiSwitch-switchBase.Mui-checked': {
-                                color: '#0E7490'
-                              },
-                              '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                                backgroundColor: '#8DE9F2'
-                              }
-                            }}
-                        />
-                      }
-                      label={
-                        <Typography sx={{ fontSize: 13, fontWeight: 700, color: startImmediately ? '#0E7490' : COLORS.muted }}>
-                          {startImmediately ? 'Áp dụng ngay' : 'Hẹn giờ'}
-                        </Typography>
-                      }
-                      sx={{ m: 0 }}
-                  />
-                </Box>
-
-                <Box
-                    sx={{
-                      display: 'grid',
-                      gridTemplateColumns: {
-                        xs: '1fr',
-                        md: 'repeat(2, minmax(0, 1fr))'
-                      },
-                      gap: 2
+                  <Box
+                    onClick={() => {
+                      setForm((previous) => ({ ...previous, applyScope: 'SELECTED' }));
+                      setError('');
                     }}
-                >
-                  {/* Thời gian bắt đầu */}
-                  <Box>
-                    <Typography
-                        sx={{
-                          color: COLORS.text,
-                          fontSize: 13,
-                          fontWeight: 600,
-                          mb: 1
-                        }}
-                    >
-                      Thời gian bắt đầu
-                      <Box component="span" sx={{ color: '#D32F2F', ml: 0.5 }}>
-                        *
-                      </Box>
-                    </Typography>
-
-                    {startImmediately ? (
-                      <Box
-                          sx={{
-                            height: 48,
-                            px: 2,
-                            borderRadius: 2,
-                            bgcolor: '#F0FCFD',
-                            border: `1px dashed #8DE9F2`,
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 1,
-                            color: '#0E7490'
-                          }}
-                      >
-                        <CheckCircleOutlined style={{ fontSize: 16 }} />
-                        <Typography sx={{ fontSize: 13, fontWeight: 700 }}>
-                          Áp dụng ngay khi tạo (Thời gian thực)
-                        </Typography>
-                      </Box>
-                    ) : (
-                      <TextField
-                          type="datetime-local"
-                          value={form.startDate}
-                          onChange={updateField('startDate')}
-                          required
-                          fullWidth
-                          size="medium"
-                          sx={fieldSx}
-                      />
-                    )}
-                  </Box>
-
-                  {/* Thời gian kết thúc */}
-                  <Box>
-                    <Typography
-                        sx={{
-                          color: COLORS.text,
-                          fontSize: 13,
-                          fontWeight: 600,
-                          mb: 1
-                        }}
-                    >
-                      Thời gian kết thúc
-                      <Box component="span" sx={{ color: '#D32F2F', ml: 0.5 }}>
-                        *
-                      </Box>
-                    </Typography>
-
-                    <TextField
-                        type="datetime-local"
-                        value={form.endDate}
-                        onChange={updateField('endDate')}
-                        required
-                        fullWidth
-                        size="medium"
-                        inputProps={{
-                          min: getCurrentDateTimeLocal()
-                        }}
-                        sx={fieldSx}
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1.5,
+                      p: 2,
+                      borderRadius: 2.5,
+                      border: `1.5px solid ${form.applyScope === 'SELECTED' ? '#8EECF5' : COLORS.border}`,
+                      bgcolor: form.applyScope === 'SELECTED' ? '#ECFEFF' : '#FFFFFF',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      '&:hover': {
+                        borderColor: form.applyScope === 'SELECTED' ? '#8EECF5' : '#CBD5E1'
+                      }
+                    }}
+                  >
+                    <Radio
+                      checked={form.applyScope === 'SELECTED'}
+                      onChange={() => {
+                        setForm((previous) => ({ ...previous, applyScope: 'SELECTED' }));
+                        setError('');
+                      }}
+                      sx={{
+                        p: 0.5,
+                        color: '#94A3B8',
+                        '&.Mui-checked': {
+                          color: '#8EECF5'
+                        }
+                      }}
                     />
+                    <Box>
+                      <Typography sx={{ fontSize: 14, fontWeight: 700, color: COLORS.text }}>
+                        Chọn sản phẩm
+                      </Typography>
+                      <Typography sx={{ fontSize: 12.5, color: COLORS.muted, mt: 0.25 }}>
+                        Chỉ áp dụng cho sản phẩm đã chọn
+                      </Typography>
+                    </Box>
                   </Box>
                 </Box>
 
-                <Alert
-                    severity="info"
+                {form.applyScope === 'SELECTED' && (
+                  <Box
                     sx={{
                       mt: 2.5,
+                      p: { xs: 2, md: 2.5 },
+                      border: `1px solid ${COLORS.border}`,
                       borderRadius: 2.5,
-                      fontSize: 12.5,
-                      '& .MuiAlert-icon': { color: '#0E7490' },
-                      bgcolor: '#F0FCFD',
-                      color: COLORS.text,
-                      border: '1px solid #C7F1F6'
+                      bgcolor: '#FFFFFF'
                     }}
-                >
-                  Khuyến mãi chỉ được áp dụng trong khoảng thời gian đã chọn khi trạng thái là <strong>Đang hoạt động</strong>.
-                </Alert>
+                  >
+                    <Box sx={{ mb: 2 }}>
+                      <Typography sx={{ fontSize: 14, fontWeight: 700, color: COLORS.text }}>
+                        Chọn sản phẩm áp dụng
+                      </Typography>
+                      <Typography sx={{ fontSize: 12, color: COLORS.muted, mt: 0.25 }}>
+                        Chỉ hiển thị các sản phẩm đang được bật bán online.
+                      </Typography>
+                    </Box>
+
+                    {/* Bộ lọc tìm kiếm và danh mục */}
+                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '2fr 1fr 1fr' }, gap: 1.5, mb: 2 }}>
+                      <TextField
+                        value={productSearch}
+                        onChange={(e) => setProductSearch(e.target.value)}
+                        placeholder="Tìm theo tên sản phẩm..."
+                        size="small"
+                        fullWidth
+                        InputProps={{
+                          startAdornment: (
+                            <InputAdornment position="start">
+                              <SearchOutlined style={{ color: COLORS.muted, fontSize: 15 }} />
+                            </InputAdornment>
+                          )
+                        }}
+                        sx={fieldSx}
+                      />
+
+                      <TextField
+                        select
+                        size="small"
+                        label="Danh mục"
+                        value={categoryFilter}
+                        onChange={(e) => setCategoryFilter(e.target.value)}
+                        sx={fieldSx}
+                      >
+                        <MenuItem value="ALL">Tất cả danh mục</MenuItem>
+                        {productCategories.map((c) => (
+                          <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
+                        ))}
+                      </TextField>
+
+                      <TextField
+                        select
+                        size="small"
+                        label="Sắp xếp giá"
+                        value={priceSort}
+                        onChange={(e) => setPriceSort(e.target.value)}
+                        sx={fieldSx}
+                      >
+                        <MenuItem value="DEFAULT">Mặc định</MenuItem>
+                        <MenuItem value="PRICE_HIGH">Giá cao đến thấp</MenuItem>
+                        <MenuItem value="PRICE_LOW">Giá thấp đến cao</MenuItem>
+                      </TextField>
+                    </Box>
+
+                    {/* Counter & status */}
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
+                      <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: '#202D42' }}>
+                        Đã chọn: {form.productIds.length} / {products.length} sản phẩm
+                      </Typography>
+                      {form.productIds.length > 0 && (
+                        <Button
+                          size="small"
+                          onClick={() => setForm((prev) => ({ ...prev, productIds: [] }))}
+                          sx={{
+                            textTransform: 'none',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            color: COLORS.muted,
+                            p: 0,
+                            minWidth: 'auto',
+                            '&:hover': { color: COLORS.text }
+                          }}
+                        >
+                          Bỏ chọn tất cả
+                        </Button>
+                      )}
+                    </Box>
+
+                    {/* Danh sách cuộn sản phẩm */}
+                    <Box
+                      sx={{
+                        maxHeight: 420,
+                        overflowY: 'auto',
+                        pr: 0.5,
+                        '&::-webkit-scrollbar': { width: 5 },
+                        '&::-webkit-scrollbar-thumb': { bgcolor: '#CBD5E1', borderRadius: 4 }
+                      }}
+                    >
+                      {productsLoading ? (
+                        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                          <CircularProgress size={28} sx={{ color: COLORS.cyan }} />
+                        </Box>
+                      ) : filteredProducts.length === 0 ? (
+                        <Typography sx={{ py: 3, textAlign: 'center', color: COLORS.muted, fontSize: 13.5 }}>
+                          Không tìm thấy sản phẩm bán online nào phù hợp.
+                        </Typography>
+                      ) : (
+                        <Stack spacing={1}>
+                          {filteredProducts.map((product) => {
+                            const productId = getProductId(product);
+                            const isChecked = form.productIds.includes(productId);
+                            return (
+                              <ProductItem
+                                key={productId}
+                                product={product}
+                                checked={isChecked}
+                                onToggle={() => toggleProduct(productId)}
+                              />
+                            );
+                          })}
+                        </Stack>
+                      )}
+                    </Box>
+                  </Box>
+                )}
               </CardContent>
             </Card>
 

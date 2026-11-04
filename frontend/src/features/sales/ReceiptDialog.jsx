@@ -1,13 +1,4 @@
-import {
-  Box,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  Divider,
-  Stack,
-  Typography
-} from '@mui/material';
+import { Box, Button, Dialog, DialogActions, DialogContent, Divider, Stack, Typography } from '@mui/material';
 import { PrinterOutlined, PlusOutlined } from '@ant-design/icons';
 
 const C = {
@@ -138,15 +129,9 @@ export default function ReceiptDialog({
           >
             {/* Header cửa hàng */}
             <Box sx={{ textAlign: 'center', mb: 1.5 }}>
-              <Typography sx={{ fontSize: 15, fontWeight: 800, color: C.text, letterSpacing: 1 }}>
-                THORS
-              </Typography>
-              <Typography sx={{ fontSize: 10.5, color: C.muted }}>
-                Hệ thống bán lẻ THORS
-              </Typography>
-              <Typography sx={{ fontSize: 11, fontWeight: 700, color: C.text, mt: 0.5, letterSpacing: 0.5 }}>
-                HÓA ĐƠN BÁN HÀNG
-              </Typography>
+              <Typography sx={{ fontSize: 15, fontWeight: 800, color: C.text, letterSpacing: 1 }}>THORS</Typography>
+              <Typography sx={{ fontSize: 10.5, color: C.muted }}>Hệ thống bán lẻ THORS</Typography>
+              <Typography sx={{ fontSize: 11, fontWeight: 700, color: C.text, mt: 0.5, letterSpacing: 0.5 }}>HÓA ĐƠN BÁN HÀNG</Typography>
             </Box>
 
             <Divider sx={{ borderStyle: 'dashed', borderColor: C.border, mb: 1.25 }} />
@@ -154,7 +139,6 @@ export default function ReceiptDialog({
             {/* Thông tin hóa đơn — lấy từ Backend response */}
             <Stack spacing={0.4} sx={{ mb: 1.25, fontSize: 11 }}>
               <ReceiptRow label="Số hóa đơn" value={saleData.invoiceNumber} />
-              <ReceiptRow label="Mã đơn hàng" value={saleData.orderNumber} />
               <ReceiptRow label="Thời gian" value={formatDateTime(completedAt)} />
               <ReceiptRow label="Thu ngân" value={displaySeller} />
               <ReceiptRow label="Khách hàng" value={displayCustomer} />
@@ -179,14 +163,22 @@ export default function ReceiptDialog({
                   <Typography sx={{ fontSize: 10, color: C.muted }}>
                     {line.size ? `Size: ${line.size}` : 'Mặc định'} {line.color ? `/ Màu: ${line.color}` : ''}
                   </Typography>
-                  <Stack direction="row" justifyContent="space-between">
-                    <Typography sx={{ fontSize: 10.5, color: C.muted }}>
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      width: '100%',
+                      mt: 0.5
+                    }}
+                  >
+                    <Typography sx={{ fontSize: 11, color: C.muted }}>
                       {line.quantity} × {money(line.price)}
                     </Typography>
-                    <Typography sx={{ fontSize: 10.5, fontWeight: 600, color: C.text }}>
+                    <Typography sx={{ fontSize: 11, fontWeight: 700, color: C.text, ml: 'auto' }}>
                       {money(line.price * line.quantity)}
                     </Typography>
-                  </Stack>
+                  </Box>
                 </Box>
               ))}
             </Box>
@@ -196,23 +188,14 @@ export default function ReceiptDialog({
             {/* Tổng kết tiền — lấy từ Backend response */}
             <Stack spacing={0.5} sx={{ mb: 1.25 }}>
               <ReceiptRow label="Tạm tính" value={money(saleData.itemsAmount)} />
-              {Number(saleData.discountAmount) > 0 && (
-                <ReceiptRow label="Giảm giá" value={`− ${money(saleData.discountAmount)}`} />
-              )}
+              {Number(saleData.discountAmount) > 0 && <ReceiptRow label="Giảm giá" value={`− ${money(saleData.discountAmount)}`} />}
               <Divider sx={{ borderStyle: 'dashed', borderColor: C.border }} />
-              <ReceiptRow
-                label="TỔNG TIỀN"
-                value={money(saleData.totalAmount)}
-                strong
-              />
+              <ReceiptRow label="TỔNG TIỀN" value={money(saleData.totalAmount)} strong />
             </Stack>
 
             {/* Thông tin thanh toán — lấy từ Backend response */}
             <Stack spacing={0.4} sx={{ mb: 1 }}>
-              <ReceiptRow
-                label="Phương thức"
-                value={saleData.paymentMethod === 'CASH' ? 'Tiền mặt' : 'Chuyển khoản'}
-              />
+              <ReceiptRow label="Phương thức" value={saleData.paymentMethod === 'CASH' ? 'Tiền mặt' : 'Chuyển khoản'} />
               {isCash && (
                 <>
                   <ReceiptRow label="Tiền khách đưa" value={money(amountReceived)} />
@@ -281,29 +264,30 @@ export default function ReceiptDialog({
 
 function ReceiptRow({ label, value, strong = false }) {
   return (
-    <Stack direction="row" justifyContent="space-between" alignItems="baseline">
+    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', width: '100%' }}>
       <Typography
         sx={{
-          fontSize: 11,
+          fontSize: strong ? 12 : 11,
           color: strong ? C.text : C.muted,
-          fontWeight: strong ? 700 : 400,
+          fontWeight: strong ? 800 : 400,
           flexShrink: 0,
-          mr: 1
+          mr: 2
         }}
       >
         {label}
       </Typography>
       <Typography
         sx={{
-          fontSize: strong ? 13 : 11,
+          fontSize: strong ? 14 : 11,
           color: C.text,
           fontWeight: strong ? 800 : 500,
           textAlign: 'right',
-          wordBreak: 'break-all'
+          wordBreak: 'break-all',
+          ml: 'auto'
         }}
       >
         {value ?? '—'}
       </Typography>
-    </Stack>
+    </Box>
   );
 }
