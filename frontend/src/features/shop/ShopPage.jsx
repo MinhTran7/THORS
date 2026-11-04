@@ -1,21 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router-dom';
-import { Menu, MenuItem } from '@mui/material';
+import { Box, Menu, MenuItem } from '@mui/material';
 import { useAuth } from 'features/auth/AuthProvider';
 import { STORE_NAME } from 'features/account/constants';
 import { api } from 'services/http';
 import heroImage from 'assets/images/auth/boutique-shopping.png';
 import { money, priceText } from './ShopCommon';
 import PendingCartHandler from './PendingCartHandler';
-import './ShopPage.css';
 
 /**
  * Trang chủ cửa hàng (đường dẫn '/') theo giao diện thời trang tối giản.
- * Trang tự vẽ header + footer riêng (OptionalLayout không bọc ThorsLayout ở '/').
- *  - Chưa tìm kiếm / chưa lọc: Hero, danh mục, hàng mới về, ưu đãi, toàn bộ sản phẩm.
+ * Toàn bộ style viết bằng sx của MUI, không dùng file CSS riêng.
+ * Trang tự vẽ header + footer (OptionalLayout không bọc ThorsLayout ở '/').
+ *  - Chưa tìm kiếm: Hero, danh mục, hàng mới về, ưu đãi, toàn bộ sản phẩm.
  *  - Đang tìm kiếm: chỉ hiện lưới kết quả.
  * Dữ liệu: /shop/categories, /shop/products, /shop/promotions, /cart (khách đã đăng nhập).
- * Bấm vào sản phẩm mở trang chi tiết: /shop/products/:productId
  */
 
 const SORTS = [
@@ -26,26 +25,106 @@ const SORTS = [
 const PAGE_SIZE = 20;
 const NEW_COUNT = 8;
 const TILE_COLORS = ['#E4DDD3', '#D9D6D0', '#E8E1D6', '#DCD3C8'];
+const FONT_URL = 'https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Be+Vietnam+Pro:wght@400;500;600&display=swap';
+
+/* ---------- Màu & style dùng chung ---------- */
+
+const C = { ink: '#111111', accent: '#8A2B2B', line: '#E6E3DE', sand: '#EFEBE5', muted: '#5C5650', photo: '#EEEAE4' };
+const SANS = "'Be Vietnam Pro', system-ui, sans-serif";
+const SERIF = "'Playfair Display', Georgia, serif";
+
+const focusRing = { '&:focus-visible': { outline: `2px solid ${C.accent}`, outlineOffset: '2px' } };
+const container = { maxWidth: 1320, mx: 'auto', px: { xs: '16px', sm: '40px' }, boxSizing: 'border-box' };
+const section = { ...container, pt: { xs: '64px', sm: '96px' } };
+const linkSx = { color: C.ink, textDecoration: 'none', cursor: 'pointer', '&:hover': { color: C.accent }, ...focusRing };
+const h2Sx = { m: 0, fontFamily: SERIF, fontWeight: 400, fontSize: { xs: 32, sm: 40 } };
+const eyebrowSx = { m: 0, fontSize: 13, letterSpacing: '0.2em', textTransform: 'uppercase' };
+const srOnly = { position: 'absolute', left: 0, top: 0, width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' };
+const iconBtnSx = {
+  width: 44,
+  height: 44,
+  p: 0,
+  border: 0,
+  bgcolor: 'transparent',
+  color: C.ink,
+  cursor: 'pointer',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  textDecoration: 'none',
+  fontFamily: 'inherit',
+  '&:hover': { color: C.accent },
+  ...focusRing
+};
+const btnSx = (variant) => ({
+  display: 'inline-block',
+  boxSizing: 'border-box',
+  minHeight: 44,
+  px: '32px',
+  py: '16px',
+  fontFamily: 'inherit',
+  fontSize: 14,
+  fontWeight: 500,
+  letterSpacing: '0.06em',
+  lineHeight: 1,
+  textDecoration: 'none',
+  cursor: 'pointer',
+  border: `1px solid ${variant === 'light' ? '#FFFFFF' : C.ink}`,
+  bgcolor: variant === 'dark' ? C.ink : '#FFFFFF',
+  color: variant === 'dark' ? '#FFFFFF' : C.ink,
+  transition: 'opacity .2s',
+  '&:hover': { opacity: 0.85, color: variant === 'dark' ? '#FFFFFF' : C.ink },
+  '&:disabled': { opacity: 0.6, cursor: 'default' },
+  ...focusRing
+});
 
 const scrollToId = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+// Link neo trong trang: chặn nhảy mặc định, chạy hành động riêng
+const anchor = (fn) => (e) => {
+  e.preventDefault();
+  fn();
+};
 
-/* ---------- Icon ---------- */
+// Nạp font một lần khi mở trang
+function useStoreFonts() {
+  useEffect(() => {
+    if (document.querySelector(`link[href="${FONT_URL}"]`)) return;
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = FONT_URL;
+    document.head.appendChild(link);
+  }, []);
+}
 
-function Icon({ children, size = 20, stroke = 'currentColor', strokeWidth = 1.6 }) {
+/* ---------- Icon & ảnh ---------- */
+
+function Icon({ children, size = 20, strokeWidth = 1.6 }) {
   return (
-    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={strokeWidth}>
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth}>
       {children}
     </svg>
   );
 }
 
-/* ---------- Ảnh sản phẩm (có ảnh thì hiện ảnh, không thì chữ cái đầu) ---------- */
-
-function ProductPhoto({ src, name, className = '', style }) {
+// Có ảnh thì hiện ảnh, không thì hiện chữ cái đầu
+function ProductPhoto({ src, name, dark = false, zoomOnHover = false }) {
   return (
-    <div className={`fh-photo ${className}`} style={style}>
-      {src ? <img src={src} alt={name} loading="lazy" /> : <span className="fh-photo__letter">{name?.charAt(0)}</span>}
-    </div>
+    <Box sx={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center', bgcolor: dark ? '#3A1212' : C.photo }}>
+      {src ? (
+        <Box
+          component="img"
+          src={src}
+          alt={name}
+          loading="lazy"
+          className={zoomOnHover ? 'zoom' : undefined}
+          sx={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform .4s ease' }}
+        />
+      ) : (
+        <Box component="span" sx={{ fontFamily: SERIF, fontSize: 48, color: dark ? 'rgba(255,255,255,.35)' : 'rgba(17,17,17,.3)' }}>
+          {name?.charAt(0)}
+        </Box>
+      )}
+    </Box>
   );
 }
 
@@ -106,111 +185,139 @@ function StoreHeader({ account, categories, query, onSearch, onPickCategory }) {
     }
   };
 
+  const menuItems = isCustomer
+    ? [
+        ['/profile', 'Tài khoản của tôi'],
+        ['/orders', 'Đơn hàng'],
+        ['/addresses', 'Địa chỉ giao hàng'],
+        ['/notifications', 'Thông báo']
+      ]
+    : [
+        ['/workspace', 'Trang quản lý'],
+        ['/profile', 'Tài khoản']
+      ];
+
   return (
-    <header className="fh-header">
-      <div className="fh-container fh-header__inner">
-        <nav aria-label="Danh mục chính" className="fh-header__nav">
-          <a href="#moi" onClick={(e) => { e.preventDefault(); scrollToId('moi'); }}>
+    <Box component="header" sx={{ position: 'sticky', top: 0, zIndex: 20, bgcolor: '#FFFFFF', borderBottom: `1px solid ${C.line}` }}>
+      <Box
+        sx={{ ...container, py: '18px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}
+      >
+        <Box
+          component="nav"
+          aria-label="Danh mục chính"
+          sx={{
+            display: 'flex',
+            gap: { xs: 2, sm: '28px' },
+            fontSize: 14,
+            fontWeight: 500,
+            flex: { xs: '1 1 100%', md: '1 1 360px' },
+            order: { xs: 3, md: 0 },
+            flexWrap: { xs: 'nowrap', md: 'wrap' },
+            overflowX: { xs: 'auto', md: 'visible' },
+            whiteSpace: 'nowrap'
+          }}
+        >
+          <Box component="a" href="#moi" onClick={anchor(() => scrollToId('moi'))} sx={linkSx}>
             Hàng mới
-          </a>
+          </Box>
           {categories.slice(0, 4).map((c) => (
-            <a key={c.categoryId} href="#tat-ca" onClick={(e) => { e.preventDefault(); onPickCategory(c.categoryId); }}>
+            <Box key={c.categoryId} component="a" href="#tat-ca" onClick={anchor(() => onPickCategory(c.categoryId))} sx={linkSx}>
               {c.categoryName}
-            </a>
+            </Box>
           ))}
-          <a href="#uu-dai" className="fh-accent" onClick={(e) => { e.preventDefault(); scrollToId('uu-dai'); }}>
+          <Box component="a" href="#uu-dai" onClick={anchor(() => scrollToId('uu-dai'))} sx={{ ...linkSx, color: C.accent }}>
             Sale
-          </a>
-        </nav>
+          </Box>
+        </Box>
 
-        <RouterLink to="/" className="fh-logo" onClick={() => onSearch('')}>
+        <Box
+          component={RouterLink}
+          to="/"
+          onClick={() => onSearch('')}
+          sx={{ ...linkSx, fontFamily: SERIF, fontSize: { xs: 22, sm: 30 }, letterSpacing: '0.12em', flex: '0 0 auto' }}
+        >
           {STORE_NAME.toUpperCase()}
-        </RouterLink>
+        </Box>
 
-        <div className="fh-header__actions">
-          <button type="button" className="fh-icon-btn" aria-label="Tìm kiếm" aria-expanded={searchOpen} onClick={() => setSearchOpen((v) => !v)}>
+        <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end', alignItems: 'center', flex: { xs: '0 0 auto', md: '1 1 200px' } }}>
+          <Box component="button" type="button" aria-label="Tìm kiếm" aria-expanded={searchOpen} onClick={() => setSearchOpen((v) => !v)} sx={iconBtnSx}>
             <Icon>
               <circle cx="11" cy="11" r="7" />
               <path d="M20 20l-4-4" />
             </Icon>
-          </button>
+          </Box>
 
           {account ? (
             <>
-              <button
+              <Box
+                component="button"
                 type="button"
-                className="fh-icon-btn"
                 aria-label="Tài khoản"
                 aria-haspopup="menu"
                 aria-expanded={Boolean(menuAnchor)}
                 onClick={(e) => setMenuAnchor(e.currentTarget)}
+                sx={iconBtnSx}
               >
                 <Icon>
                   <circle cx="12" cy="8" r="4" />
                   <path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" />
                 </Icon>
-              </button>
+              </Box>
               <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)}>
-                {isCustomer
-                  ? [
-                      <MenuItem key="p" onClick={() => go('/profile')}>
-                        Tài khoản của tôi
-                      </MenuItem>,
-                      <MenuItem key="o" onClick={() => go('/orders')}>
-                        Đơn hàng
-                      </MenuItem>,
-                      <MenuItem key="a" onClick={() => go('/addresses')}>
-                        Địa chỉ giao hàng
-                      </MenuItem>,
-                      <MenuItem key="n" onClick={() => go('/notifications')}>
-                        Thông báo
-                      </MenuItem>
-                    ]
-                  : [
-                      <MenuItem key="w" onClick={() => go('/workspace')}>
-                        Trang quản lý
-                      </MenuItem>,
-                      <MenuItem key="p" onClick={() => go('/profile')}>
-                        Tài khoản
-                      </MenuItem>
-                    ]}
+                {menuItems.map(([to, label]) => (
+                  <MenuItem key={to} onClick={() => go(to)}>
+                    {label}
+                  </MenuItem>
+                ))}
                 <MenuItem onClick={signOut}>Đăng xuất</MenuItem>
               </Menu>
             </>
           ) : (
-            <RouterLink to="/login" className="fh-header__login">
+            <Box component={RouterLink} to="/login" sx={{ ...linkSx, display: 'flex', alignItems: 'center', height: 44, px: 1, fontSize: 14, fontWeight: 500 }}>
               Đăng nhập
-            </RouterLink>
+            </Box>
           )}
 
           {(isCustomer || !account) && (
-            <RouterLink
+            <Box
+              component={RouterLink}
               to={isCustomer ? '/cart' : '/login'}
-              className="fh-icon-btn fh-cart-btn"
               aria-label={isCustomer ? `Giỏ hàng, ${cartCount} sản phẩm` : 'Đăng nhập để xem giỏ hàng'}
+              sx={{ ...iconBtnSx, width: 'auto', gap: '6px', fontSize: 14 }}
             >
               <Icon>
                 <path d="M5 8h14l-1 12H6L5 8z" />
                 <path d="M9 8V6a3 3 0 0 1 6 0v2" />
               </Icon>
               ({cartCount})
-            </RouterLink>
+            </Box>
           )}
-        </div>
-      </div>
+        </Box>
+      </Box>
 
       {searchOpen && (
-        <div className="fh-searchbar">
-          <form className="fh-container fh-searchbar__form" onSubmit={submit} role="search">
-            <label htmlFor="fh-search" className="fh-sr-only">
+        <Box sx={{ borderTop: `1px solid ${C.line}`, py: '14px' }}>
+          <Box component="form" role="search" onSubmit={submit} sx={{ ...container, display: 'flex', position: 'relative' }}>
+            <Box component="label" htmlFor="shop-search" sx={srOnly}>
               Tìm sản phẩm
-            </label>
-            <input id="fh-search" ref={searchRef} type="search" placeholder="Tìm sản phẩm..." value={input} onChange={(e) => setInput(e.target.value)} />
-            <button type="submit">TÌM</button>
-          </form>
-        </div>
+            </Box>
+            <Box
+              component="input"
+              id="shop-search"
+              ref={searchRef}
+              type="search"
+              placeholder="Tìm sản phẩm..."
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              sx={{ flex: 1, minWidth: 0, height: 48, border: `1px solid ${C.ink}`, px: 2, font: 'inherit', fontSize: 15, ...focusRing }}
+            />
+            <Box component="button" type="submit" sx={{ ...btnSx('dark'), py: 0, height: 48, px: '28px' }}>
+              TÌM
+            </Box>
+          </Box>
+        </Box>
       )}
-    </header>
+    </Box>
   );
 }
 
@@ -218,96 +325,192 @@ function StoreHeader({ account, categories, query, onSearch, onPickCategory }) {
 
 function SectionHead({ title, children }) {
   return (
-    <div className="fh-section-head">
-      <h2 className="fh-h2">{title}</h2>
+    <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-end', gap: 2, mb: 4 }}>
+      <Box component="h2" sx={h2Sx}>
+        {title}
+      </Box>
       {children}
-    </div>
+    </Box>
   );
 }
 
 function Hero() {
   return (
-    <section className="fh-container fh-hero-wrap">
-      <div className="fh-hero">
-        <div className="fh-hero__text">
-          <p className="fh-eyebrow">Bộ sưu tập mới</p>
-          <h1 className="fh-hero__title">
+    <Box component="section" sx={{ ...container, pt: 4 }}>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', bgcolor: C.sand, minHeight: { xs: 0, sm: 640 } }}>
+        <Box
+          sx={{
+            flex: '1 1 420px',
+            p: { xs: '40px 24px', sm: '72px 56px' },
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            gap: 3
+          }}
+        >
+          <Box component="p" sx={{ ...eyebrowSx, color: '#5A544C' }}>
+            Bộ sưu tập mới
+          </Box>
+          <Box component="h1" sx={{ m: 0, fontFamily: SERIF, fontWeight: 400, fontSize: 'clamp(44px, 6vw, 72px)', lineHeight: 1.05 }}>
             Mặc chậm.
             <br />
             <em>Mặc lâu.</em>
-          </h1>
-          <p className="fh-hero__lead">Những thiết kế tối giản, chất liệu bền đẹp — để tủ đồ của bạn ít hơn nhưng đúng hơn.</p>
-          <div className="fh-hero__ctas">
-            <a href="#moi" className="fh-btn fh-btn--dark" onClick={(e) => { e.preventDefault(); scrollToId('moi'); }}>
+          </Box>
+          <Box component="p" sx={{ m: 0, fontSize: 17, lineHeight: 1.6, color: '#3F3A34', maxWidth: 420 }}>
+            Những thiết kế tối giản, chất liệu bền đẹp — để tủ đồ của bạn ít hơn nhưng đúng hơn.
+          </Box>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, mt: 1 }}>
+            <Box component="a" href="#moi" onClick={anchor(() => scrollToId('moi'))} sx={btnSx('dark')}>
               MUA NGAY
-            </a>
-            <a href="#tat-ca" className="fh-btn fh-btn--outline" onClick={(e) => { e.preventDefault(); scrollToId('tat-ca'); }}>
+            </Box>
+            <Box component="a" href="#tat-ca" onClick={anchor(() => scrollToId('tat-ca'))} sx={btnSx('outline')}>
               XEM TẤT CẢ
-            </a>
-          </div>
-        </div>
-        <div className="fh-hero__media">
-          <img src={heroImage} alt="" />
-        </div>
-      </div>
-    </section>
+            </Box>
+          </Box>
+        </Box>
+        <Box sx={{ flex: { xs: '1 1 100%', sm: '1 1 520px' }, minHeight: { xs: 360, sm: 520 }, bgcolor: '#CFC6BA', position: 'relative', overflow: 'hidden' }}>
+          <Box component="img" src={heroImage} alt="" sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+        </Box>
+      </Box>
+    </Box>
   );
 }
 
 function Categories({ categories, onPick }) {
   if (categories.length === 0) return null;
   return (
-    <section id="danh-muc" className="fh-container fh-section">
+    <Box component="section" id="danh-muc" sx={section}>
       <SectionHead title="Mua theo danh mục">
-        <a href="#tat-ca" className="fh-link-sm" onClick={(e) => { e.preventDefault(); onPick(0); }}>
+        <Box component="a" href="#tat-ca" onClick={anchor(() => onPick(0))} sx={{ ...linkSx, fontSize: 14, textDecoration: 'underline' }}>
           Xem tất cả
-        </a>
+        </Box>
       </SectionHead>
-      <div className="fh-row">
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: { xs: 1.5, sm: 2.5 } }}>
         {categories.slice(0, 4).map((c, i) => (
-          <button key={c.categoryId} type="button" className="fh-cat" onClick={() => onPick(c.categoryId)}>
-            <span className="fh-cat__img" style={{ background: TILE_COLORS[i % TILE_COLORS.length] }}>
-              <span className="fh-cat__letter">{c.categoryName.charAt(0)}</span>
-            </span>
-            <span className="fh-cat__name">{c.categoryName}</span>
-          </button>
+          <Box
+            key={c.categoryId}
+            component="button"
+            type="button"
+            onClick={() => onPick(c.categoryId)}
+            sx={{
+              flex: { xs: '1 1 calc(50% - 6px)', sm: '1 1 260px' },
+              border: 0,
+              p: 0,
+              bgcolor: 'transparent',
+              font: 'inherit',
+              color: C.ink,
+              textAlign: 'left',
+              cursor: 'pointer',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '14px',
+              '&:hover .tile': { filter: 'brightness(.95)' },
+              '&:hover .name': { color: C.accent },
+              ...focusRing
+            }}
+          >
+            <Box
+              className="tile"
+              sx={{ width: '100%', aspectRatio: '3 / 4', bgcolor: TILE_COLORS[i % TILE_COLORS.length], display: 'flex', alignItems: 'flex-end', p: 2.5, boxSizing: 'border-box', transition: 'filter .2s' }}
+            >
+              <Box component="span" sx={{ fontFamily: SERIF, fontSize: 64, lineHeight: 1, color: 'rgba(17,17,17,.35)' }}>
+                {c.categoryName.charAt(0)}
+              </Box>
+            </Box>
+            <Box component="span" className="name" sx={{ fontSize: 16, fontWeight: 500 }}>
+              {c.categoryName}
+            </Box>
+          </Box>
         ))}
-      </div>
-    </section>
+      </Box>
+    </Box>
   );
 }
 
-function ProductCard({ product, promo, isNew }) {
+const badgeSx = (bg, color = C.ink) => ({
+  position: 'absolute',
+  top: 12,
+  left: 12,
+  bgcolor: bg,
+  color,
+  fontSize: 11,
+  fontWeight: 600,
+  letterSpacing: '0.08em',
+  px: 1,
+  py: '5px'
+});
+
+function ProductCard({ product, promo, isNew, sx }) {
   const outOfStock = Number(product.totalStock) === 0;
   return (
-    <RouterLink to={`/shop/products/${product.productId}`} className="fh-product">
-      <div className="fh-product__img">
-        <ProductPhoto src={product.imageUrl} name={product.productName} />
+    <Box
+      component={RouterLink}
+      to={`/shop/products/${product.productId}`}
+      sx={{
+        color: C.ink,
+        textDecoration: 'none',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 1.5,
+        '&:hover .zoom': { transform: 'scale(1.03)' },
+        '&:hover .name': { color: C.accent },
+        ...focusRing,
+        ...sx
+      }}
+    >
+      <Box sx={{ position: 'relative', aspectRatio: '4 / 5', overflow: 'hidden' }}>
+        <ProductPhoto src={product.imageUrl} name={product.productName} zoomOnHover />
         {outOfStock ? (
-          <span className="fh-badge fh-badge--muted">HẾT HÀNG</span>
+          <Box component="span" sx={badgeSx('#6B655D', '#FFFFFF')}>
+            HẾT HÀNG
+          </Box>
         ) : promo ? (
-          <span className="fh-badge fh-badge--sale">{promo.discountLabel}</span>
+          <Box component="span" sx={badgeSx(C.accent, '#FFFFFF')}>
+            {promo.discountLabel}
+          </Box>
         ) : (
-          isNew && <span className="fh-badge">MỚI</span>
+          isNew && (
+            <Box component="span" sx={badgeSx('#FFFFFF')}>
+              MỚI
+            </Box>
+          )
         )}
-      </div>
-      <div className="fh-product__info">
-        <span className="fh-product__name">{product.productName}</span>
+      </Box>
+      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', gap: { xs: 0.5, sm: 1.5 }, fontSize: 15 }}>
+        <Box
+          component="span"
+          className="name"
+          sx={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+        >
+          {product.productName}
+        </Box>
         {promo ? (
-          <span className="fh-product__prices">
-            <span className="fh-price fh-price--sale">
+          <Box component="span" sx={{ display: 'flex', gap: 1, whiteSpace: 'nowrap' }}>
+            <Box component="span" sx={{ fontWeight: 600, color: C.accent }}>
               {Number(product.maxPrice) > Number(product.minPrice) ? 'Từ ' : ''}
               {money(promo.salePrice)}
-            </span>
-            <span className="fh-price--old">{money(product.minPrice)}</span>
-          </span>
+            </Box>
+            <Box component="span" sx={{ color: '#6B655D', textDecoration: 'line-through' }}>
+              {money(product.minPrice)}
+            </Box>
+          </Box>
         ) : (
-          <span className="fh-price">{priceText(product.minPrice, product.maxPrice)}</span>
+          <Box component="span" sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
+            {priceText(product.minPrice, product.maxPrice)}
+          </Box>
         )}
-      </div>
-    </RouterLink>
+      </Box>
+    </Box>
   );
 }
+
+const arrowSx = (dark) => ({
+  ...iconBtnSx,
+  border: `1px solid ${C.ink}`,
+  bgcolor: dark ? C.ink : '#FFFFFF',
+  color: dark ? '#FFFFFF' : C.ink,
+  '&:hover': { opacity: 0.85 }
+});
 
 function NewArrivals({ items, promoMap }) {
   const trackRef = useRef(null);
@@ -319,27 +522,36 @@ function NewArrivals({ items, promoMap }) {
   };
 
   return (
-    <section id="moi" className="fh-container fh-section">
+    <Box component="section" id="moi" sx={section}>
       <SectionHead title="Hàng mới về">
-        <div className="fh-arrows">
-          <button type="button" className="fh-arrow" aria-label="Sản phẩm trước" onClick={() => scroll(-1)}>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Box component="button" type="button" aria-label="Sản phẩm trước" onClick={() => scroll(-1)} sx={arrowSx(false)}>
             <Icon size={18}>
               <path d="M15 5l-7 7 7 7" />
             </Icon>
-          </button>
-          <button type="button" className="fh-arrow fh-arrow--dark" aria-label="Sản phẩm tiếp theo" onClick={() => scroll(1)}>
-            <Icon size={18} stroke="#FFFFFF">
+          </Box>
+          <Box component="button" type="button" aria-label="Sản phẩm tiếp theo" onClick={() => scroll(1)} sx={arrowSx(true)}>
+            <Icon size={18}>
               <path d="M9 5l7 7-7 7" />
             </Icon>
-          </button>
-        </div>
+          </Box>
+        </Box>
       </SectionHead>
-      <div className="fh-track" ref={trackRef}>
+      <Box
+        ref={trackRef}
+        sx={{ display: 'flex', gap: 2.5, overflowX: 'auto', scrollSnapType: 'x mandatory', scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' } }}
+      >
         {items.map((p) => (
-          <ProductCard key={p.productId} product={p} promo={promoMap.get(p.productId)} isNew />
+          <ProductCard
+            key={p.productId}
+            product={p}
+            promo={promoMap.get(p.productId)}
+            isNew
+            sx={{ flex: '0 0 calc((100% - 60px) / 4)', minWidth: { xs: '72%', sm: 260 }, scrollSnapAlign: 'start' }}
+          />
         ))}
-      </div>
-    </section>
+      </Box>
+    </Box>
   );
 }
 
@@ -348,25 +560,29 @@ function PromoBanner({ promos }) {
   const top = promos[0];
   const best = promos.reduce((acc, p) => Math.max(acc, parseInt(String(p.discountLabel).replace(/\D/g, ''), 10) || 0), 0);
   return (
-    <section id="uu-dai" className="fh-container fh-section">
-      <div className="fh-promo">
-        <div className="fh-promo__media">
-          <ProductPhoto src={top.imageUrl} name={top.productName} className="fh-photo--dark" />
-        </div>
-        <div className="fh-promo__text">
-          <p className="fh-eyebrow fh-eyebrow--light">Ưu đãi có hạn</p>
-          <h2 className="fh-promo__title">{best > 0 ? `Giảm đến ${best}%` : top.promotionName}</h2>
-          <p className="fh-promo__desc">
+    <Box component="section" id="uu-dai" sx={section}>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', bgcolor: C.accent, color: '#FFFFFF' }}>
+        <Box sx={{ flex: { xs: '1 1 100%', sm: '1 1 480px' }, minHeight: { xs: 360, sm: 420 }, display: 'flex' }}>
+          <ProductPhoto src={top.imageUrl} name={top.productName} dark />
+        </Box>
+        <Box sx={{ flex: '1 1 420px', p: { xs: '40px 24px', sm: '64px 56px' }, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2.5 }}>
+          <Box component="p" sx={eyebrowSx}>
+            Ưu đãi có hạn
+          </Box>
+          <Box component="h2" sx={{ m: 0, fontFamily: SERIF, fontWeight: 400, fontSize: { xs: 38, sm: 52 }, lineHeight: 1.1 }}>
+            {best > 0 ? `Giảm đến ${best}%` : top.promotionName}
+          </Box>
+          <Box component="p" sx={{ m: 0, fontSize: 16, lineHeight: 1.6, maxWidth: 400 }}>
             {top.promotionName} — áp dụng cho {promos.length} sản phẩm đang khuyến mãi.
-          </p>
-          <div>
-            <RouterLink to={`/shop/products/${top.productId}`} className="fh-btn fh-btn--light">
+          </Box>
+          <Box>
+            <Box component={RouterLink} to={`/shop/products/${top.productId}`} sx={btnSx('light')}>
               MUA ƯU ĐÃI
-            </RouterLink>
-          </div>
-        </div>
-      </div>
-    </section>
+            </Box>
+          </Box>
+        </Box>
+      </Box>
+    </Box>
   );
 }
 
@@ -408,66 +624,94 @@ const BENEFITS = [
 
 function Benefits() {
   return (
-    <section className="fh-container fh-benefits-wrap">
-      <div className="fh-benefits">
+    <Box component="section" sx={{ ...container, py: 9 }}>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 4, borderTop: `1px solid ${C.line}`, borderBottom: `1px solid ${C.line}`, py: 5 }}>
         {BENEFITS.map((b) => (
-          <div key={b.title} className="fh-benefit">
+          <Box key={b.title} sx={{ flex: '1 1 240px', display: 'flex', gap: '14px', alignItems: 'flex-start', '& svg': { flex: '0 0 auto' } }}>
             <Icon size={28} strokeWidth={1.4}>
               {b.icon}
             </Icon>
-            <div>
-              <div className="fh-benefit__title">{b.title}</div>
-              <div className="fh-benefit__desc">{b.desc}</div>
-            </div>
-          </div>
+            <Box>
+              <Box sx={{ fontSize: 15, fontWeight: 600 }}>{b.title}</Box>
+              <Box sx={{ fontSize: 14, color: C.muted, mt: 0.5 }}>{b.desc}</Box>
+            </Box>
+          </Box>
         ))}
-      </div>
-    </section>
+      </Box>
+    </Box>
   );
 }
 
+const footerLinkSx = { color: '#D9D6D0', textDecoration: 'none', '&:hover': { color: '#FFFFFF' }, ...focusRing };
+const footerColSx = { flex: '1 1 160px', display: 'flex', flexDirection: 'column', gap: 1.25, fontSize: 14 };
+const footerTitleSx = { color: '#FFFFFF', fontWeight: 600, mb: 0.5 };
+
 function StoreFooter({ categories, onPickCategory }) {
   return (
-    <footer className="fh-footer">
-      <div className="fh-container fh-footer__inner">
-        <div className="fh-footer__cols">
-          <div className="fh-footer__brand">
-            <div className="fh-footer__logo">{STORE_NAME.toUpperCase()}</div>
-            <p>Thời trang tối giản, chất liệu bền đẹp — giao tận nhà.</p>
-          </div>
-          <nav aria-label="Mua sắm" className="fh-footer__col">
-            <div className="fh-footer__col-title">Mua sắm</div>
-            <a href="#moi" onClick={(e) => { e.preventDefault(); scrollToId('moi'); }}>
+    <Box component="footer" sx={{ bgcolor: C.ink, color: '#D9D6D0' }}>
+      <Box sx={{ ...container, pt: 9, pb: 4, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+          <Box sx={{ flex: '2 1 280px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <Box sx={{ fontFamily: SERIF, fontSize: 26, letterSpacing: '0.12em', color: '#FFFFFF' }}>{STORE_NAME.toUpperCase()}</Box>
+            <Box component="p" sx={{ m: 0, fontSize: 14, lineHeight: 1.7, maxWidth: 320 }}>
+              Thời trang tối giản, chất liệu bền đẹp — giao tận nhà.
+            </Box>
+          </Box>
+          <Box component="nav" aria-label="Mua sắm" sx={footerColSx}>
+            <Box sx={footerTitleSx}>Mua sắm</Box>
+            <Box component="a" href="#moi" onClick={anchor(() => scrollToId('moi'))} sx={footerLinkSx}>
               Hàng mới
-            </a>
+            </Box>
             {categories.slice(0, 4).map((c) => (
-              <a key={c.categoryId} href="#tat-ca" onClick={(e) => { e.preventDefault(); onPickCategory(c.categoryId); }}>
+              <Box key={c.categoryId} component="a" href="#tat-ca" onClick={anchor(() => onPickCategory(c.categoryId))} sx={footerLinkSx}>
                 {c.categoryName}
-              </a>
+              </Box>
             ))}
-          </nav>
-          <nav aria-label="Tài khoản" className="fh-footer__col">
-            <div className="fh-footer__col-title">Tài khoản</div>
-            <RouterLink to="/orders">Tra cứu đơn hàng</RouterLink>
-            <RouterLink to="/cart">Giỏ hàng</RouterLink>
-            <RouterLink to="/addresses">Địa chỉ giao hàng</RouterLink>
-            <RouterLink to="/profile">Thông tin cá nhân</RouterLink>
-          </nav>
-        </div>
-        <div className="fh-footer__bottom">
+          </Box>
+          <Box component="nav" aria-label="Tài khoản" sx={footerColSx}>
+            <Box sx={footerTitleSx}>Tài khoản</Box>
+            {[
+              ['/orders', 'Tra cứu đơn hàng'],
+              ['/cart', 'Giỏ hàng'],
+              ['/addresses', 'Địa chỉ giao hàng'],
+              ['/profile', 'Thông tin cá nhân']
+            ].map(([to, label]) => (
+              <Box key={to} component={RouterLink} to={to} sx={footerLinkSx}>
+                {label}
+              </Box>
+            ))}
+          </Box>
+        </Box>
+        <Box
+          sx={{ borderTop: '1px solid #3A3A3A', pt: 3, display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: 1.5, fontSize: 13, color: '#B5B1AA' }}
+        >
           <span>
             © {new Date().getFullYear()} {STORE_NAME}. Bảo lưu mọi quyền.
           </span>
           <span>Điều khoản · Chính sách bảo mật</span>
-        </div>
-      </div>
-    </footer>
+        </Box>
+      </Box>
+    </Box>
   );
 }
 
 /* ---------- Trang ---------- */
 
+const chipSx = (selected) => ({
+  minHeight: 36,
+  px: 2,
+  border: `1px solid ${selected ? C.ink : '#CFCAC2'}`,
+  bgcolor: selected ? C.ink : '#FFFFFF',
+  color: selected ? '#FFFFFF' : C.ink,
+  font: 'inherit',
+  fontSize: 14,
+  cursor: 'pointer',
+  '&:hover': { borderColor: C.ink },
+  ...focusRing
+});
+
 export default function ShopPage() {
+  useStoreFonts();
   const auth = useAuth();
   const account = auth?.account;
   const [params, setParams] = useSearchParams();
@@ -543,11 +787,13 @@ export default function ShopPage() {
       : 'Tất cả sản phẩm';
 
   return (
-    <div className="fh-root">
-      <div className="fh-announce">Giao hàng toàn quốc — Thanh toán khi nhận hàng hoặc chuyển khoản</div>
+    <Box sx={{ fontFamily: SANS, color: C.ink, bgcolor: '#FFFFFF', minHeight: '100vh', '& *, & *::before, & *::after': { boxSizing: 'border-box' } }}>
+      <Box sx={{ bgcolor: C.ink, color: '#FFFFFF', fontSize: 13, letterSpacing: '0.04em', textAlign: 'center', py: '11px', px: 2 }}>
+        Giao hàng toàn quốc — Thanh toán khi nhận hàng hoặc chuyển khoản
+      </Box>
       <StoreHeader account={account} categories={categories} query={query} onSearch={onSearch} onPickCategory={pickCategory} />
 
-      <main>
+      <Box component="main">
         {!query && (
           <>
             <Hero />
@@ -557,71 +803,104 @@ export default function ShopPage() {
           </>
         )}
 
-        <section id="tat-ca" className="fh-container fh-section">
+        <Box component="section" id="tat-ca" sx={section}>
           <SectionHead title={gridTitle}>
             {query ? (
-              <button type="button" className="fh-link-btn" onClick={() => onSearch('')}>
+              <Box
+                component="button"
+                type="button"
+                onClick={() => onSearch('')}
+                sx={{ ...linkSx, border: 0, p: 0, bgcolor: 'transparent', font: 'inherit', fontSize: 14, textDecoration: 'underline' }}
+              >
                 Xóa tìm kiếm ({total} kết quả)
-              </button>
+              </Box>
             ) : (
-              <label className="fh-sort">
-                <span className="fh-sr-only">Sắp xếp</span>
-                <select value={sort} onChange={(e) => setSort(e.target.value)}>
+              <Box component="label" sx={{ position: 'relative' }}>
+                <Box component="span" sx={srOnly}>
+                  Sắp xếp
+                </Box>
+                <Box
+                  component="select"
+                  value={sort}
+                  onChange={(e) => setSort(e.target.value)}
+                  sx={{ height: 44, pl: '14px', pr: 4, border: `1px solid ${C.ink}`, bgcolor: '#FFFFFF', font: 'inherit', fontSize: 14, color: C.ink, cursor: 'pointer', ...focusRing }}
+                >
                   {SORTS.map(([value, label]) => (
                     <option key={value} value={value}>
                       {label}
                     </option>
                   ))}
-                </select>
-              </label>
+                </Box>
+              </Box>
             )}
           </SectionHead>
 
           {!query && categories.length > 0 && (
-            <div className="fh-chips" role="group" aria-label="Lọc theo danh mục">
-              <button type="button" className="fh-chip" aria-pressed={categoryId === 0} onClick={() => setCategoryId(0)}>
+            <Box role="group" aria-label="Lọc theo danh mục" sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: -1.5, mb: 4 }}>
+              <Box component="button" type="button" aria-pressed={categoryId === 0} onClick={() => setCategoryId(0)} sx={chipSx(categoryId === 0)}>
                 Tất cả
-              </button>
+              </Box>
               {categories.map((c) => (
-                <button key={c.categoryId} type="button" className="fh-chip" aria-pressed={categoryId === c.categoryId} onClick={() => setCategoryId(c.categoryId)}>
+                <Box
+                  key={c.categoryId}
+                  component="button"
+                  type="button"
+                  aria-pressed={categoryId === c.categoryId}
+                  onClick={() => setCategoryId(c.categoryId)}
+                  sx={chipSx(categoryId === c.categoryId)}
+                >
                   {c.categoryName}
-                </button>
+                </Box>
               ))}
-            </div>
+            </Box>
           )}
 
-          {error && <p className="fh-error">{error}</p>}
+          {error && (
+            <Box component="p" sx={{ color: C.accent }}>
+              {error}
+            </Box>
+          )}
 
           {!loading && !error && items.length === 0 && (
-            <div className="fh-empty">
-              <p className="fh-empty__title">Không tìm thấy sản phẩm</p>
-              <p>Thử từ khóa khác hoặc chọn danh mục khác.</p>
-            </div>
+            <Box sx={{ textAlign: 'center', py: 6, color: C.muted }}>
+              <Box sx={{ fontFamily: SERIF, fontSize: 24, color: C.ink, mb: 1 }}>Không tìm thấy sản phẩm</Box>
+              <Box>Thử từ khóa khác hoặc chọn danh mục khác.</Box>
+            </Box>
           )}
 
-          <div className="fh-grid">
+          <Box
+            sx={{
+              display: 'grid',
+              gap: { xs: '24px 12px', sm: '32px 20px' },
+              gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', sm: 'repeat(auto-fill, minmax(240px, 1fr))' }
+            }}
+          >
             {items.map((p) => (
               <ProductCard key={p.productId} product={p} promo={promoMap.get(p.productId)} />
             ))}
-          </div>
+          </Box>
 
-          {loading && items.length === 0 && <p className="fh-muted">Đang tải sản phẩm...</p>}
+          {loading && items.length === 0 && (
+            <Box component="p" sx={{ color: C.muted }}>
+              Đang tải sản phẩm...
+            </Box>
+          )}
 
           {items.length < total && (
-            <div className="fh-more">
-              <button type="button" className="fh-btn fh-btn--outline" disabled={loading} onClick={() => load(page + 1, false)}>
+            <Box sx={{ textAlign: 'center', mt: 6 }}>
+              <Box component="button" type="button" disabled={loading} onClick={() => load(page + 1, false)} sx={btnSx('outline')}>
                 {loading ? 'ĐANG TẢI...' : 'XEM THÊM'}
-              </button>
-            </div>
+              </Box>
+            </Box>
           )}
-        </section>
+        </Box>
 
         <Benefits />
-      </main>
+      </Box>
 
       <StoreFooter categories={categories} onPickCategory={pickCategory} />
 
       {account?.role === 'CUSTOMER' && <PendingCartHandler />}
-    </div>
+    </Box>
   );
 }
