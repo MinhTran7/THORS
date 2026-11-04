@@ -220,15 +220,6 @@ export default function FacebookPOSPage() {
     return conversations.find((c) => c.psid === selectedPsid);
   }, [conversations, selectedPsid]);
 
-  // Tự động điền Tên khách hàng từ tài khoản Facebook khi chọn cuộc hội thoại
-  useEffect(() => {
-    if (activeConversation?.name && !activeConversation.name.startsWith('Khách FB #')) {
-      setCustomerName(activeConversation.name);
-    } else if (!customerName && selectedPsid) {
-      setCustomerName(`Khách hàng FB (#${selectedPsid.slice(-6)})`);
-    }
-  }, [activeConversation?.name, selectedPsid]);
-
   // Quét thông minh số điện thoại từ các tin nhắn khách hàng gửi đến
   const detectedPhone = useMemo(() => {
     if (!currentChatMessages.length) return null;
@@ -242,13 +233,6 @@ export default function FacebookPOSPage() {
     }
     return null;
   }, [currentChatMessages]);
-
-  // Tự động điền số điện thoại nếu khách đã nhắn trong chat
-  useEffect(() => {
-    if (detectedPhone && !customerPhone) {
-      setCustomerPhone(detectedPhone);
-    }
-  }, [detectedPhone]);
 
   // Quét thông minh Địa chỉ giao hàng từ tin nhắn của khách
   const detectedAddress = useMemo(() => {
@@ -285,7 +269,39 @@ export default function FacebookPOSPage() {
     return null;
   }, [currentChatMessages]);
 
-  // Tự động điền địa chỉ nếu tìm thấy trong chat và ô đang trống
+  // Tự động điền thông tin khách hàng khi chọn hoặc chuyển đổi cuộc hội thoại
+  useEffect(() => {
+    if (!selectedPsid) {
+      setCustomerName('');
+      setCustomerPhone('');
+      setCustomerAddress('');
+      return;
+    }
+
+    if (activeConversation?.name && !activeConversation.name.startsWith('Khách FB #')) {
+      setCustomerName(activeConversation.name);
+    } else {
+      setCustomerName(`Khách hàng FB (#${selectedPsid.slice(-6)})`);
+    }
+
+    setCustomerPhone(detectedPhone || '');
+    setCustomerAddress(detectedAddress || '');
+  }, [selectedPsid]);
+
+  useEffect(() => {
+    if (activeConversation?.name && !activeConversation.name.startsWith('Khách FB #')) {
+      setCustomerName(activeConversation.name);
+    }
+  }, [activeConversation?.name]);
+
+  // Tự động cập nhật số điện thoại nếu khách mới gửi trong tin nhắn
+  useEffect(() => {
+    if (detectedPhone && !customerPhone) {
+      setCustomerPhone(detectedPhone);
+    }
+  }, [detectedPhone]);
+
+  // Tự động cập nhật địa chỉ nếu khách mới gửi trong tin nhắn
   useEffect(() => {
     if (detectedAddress && !customerAddress) {
       setCustomerAddress(detectedAddress);
