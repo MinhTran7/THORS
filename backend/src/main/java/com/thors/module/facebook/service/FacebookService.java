@@ -57,11 +57,14 @@ public class FacebookService {
         }
 
         if (pageToken == null || pageToken.isBlank() || psid == null) {
-            return Map.of("name", "Khách FB #" + (psid != null && psid.length() > 6 ? psid.substring(psid.length() - 6) : psid), "avatar", "");
+            return Map.of("name",
+                    "Khách FB #" + (psid != null && psid.length() > 6 ? psid.substring(psid.length() - 6) : psid),
+                    "avatar", "");
         }
 
         try {
-            String url = "https://graph.facebook.com/v21.0/" + psid + "?fields=name,first_name,last_name,profile_pic&access_token=" + pageToken;
+            String url = "https://graph.facebook.com/v21.0/" + psid
+                    + "?fields=name,first_name,last_name,profile_pic&access_token=" + pageToken;
             Map<String, Object> resp = restTemplate.getForObject(url, Map.class);
             if (resp != null && resp.containsKey("name")) {
                 String name = String.valueOf(resp.get("name"));
@@ -77,8 +80,7 @@ public class FacebookService {
 
         return Map.of(
                 "name", "Khách FB #" + (psid.length() > 6 ? psid.substring(psid.length() - 6) : psid),
-                "avatar", ""
-        );
+                "avatar", "");
     }
 
     /**
@@ -96,18 +98,21 @@ public class FacebookService {
 
             for (Map<String, Object> entry : entries) {
                 List<Map<String, Object>> messagingList = (List<Map<String, Object>>) entry.get("messaging");
-                if (messagingList == null) continue;
+                if (messagingList == null)
+                    continue;
 
                 for (Map<String, Object> messaging : messagingList) {
                     Map<String, Object> sender = (Map<String, Object>) messaging.get("sender");
                     Map<String, Object> recipient = (Map<String, Object>) messaging.get("recipient");
                     Map<String, Object> message = (Map<String, Object>) messaging.get("message");
 
-                    if (sender == null || message == null) continue;
+                    if (sender == null || message == null)
+                        continue;
 
                     String senderPsid = String.valueOf(sender.get("id"));
                     String text = message.get("text") != null ? String.valueOf(message.get("text")) : "";
-                    String mid = message.get("mid") != null ? String.valueOf(message.get("mid")) : UUID.randomUUID().toString();
+                    String mid = message.get("mid") != null ? String.valueOf(message.get("mid"))
+                            : UUID.randomUUID().toString();
 
                     // Bỏ qua tin nhắn do chính Page gửi ra
                     if (pageId != null && pageId.equals(senderPsid)) {
@@ -125,7 +130,8 @@ public class FacebookService {
                     msgRecord.put("senderName", customerName);
                     msgRecord.put("senderAvatar", customerAvatar);
                     msgRecord.put("text", text);
-                    msgRecord.put("timestamp", LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss dd/MM/yyyy")));
+                    msgRecord.put("timestamp",
+                            LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss dd/MM/yyyy")));
                     msgRecord.put("from", "CUSTOMER");
 
                     recentMessages.add(msgRecord);
@@ -137,7 +143,8 @@ public class FacebookService {
                         conv.put("name", customerName);
                         conv.put("avatar", customerAvatar);
                         conv.put("lastMessage", text);
-                        conv.put("lastTimestamp", LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss dd/MM/yyyy")));
+                        conv.put("lastTimestamp",
+                                LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss dd/MM/yyyy")));
                         conv.put("unreadCount", ((Integer) conv.getOrDefault("unreadCount", 0)) + 1);
                         return conv;
                     });
@@ -164,8 +171,7 @@ public class FacebookService {
 
             Map<String, Object> body = Map.of(
                     "recipient", Map.of("id", recipientPsid),
-                    "message", Map.of("text", text)
-            );
+                    "message", Map.of("text", text));
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
@@ -211,7 +217,8 @@ public class FacebookService {
             try {
                 Thread.sleep(1000);
                 syncConversationsFromFacebook();
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
         }).start();
     }
 
@@ -225,14 +232,16 @@ public class FacebookService {
 
         try {
             log.info("==> Đang đồng bộ toàn bộ hội thoại và tin nhắn từ Facebook Graph API...");
-            String convUrl = "https://graph.facebook.com/v21.0/me/conversations?fields=id,updated_time,snippet,unread_count,participants&access_token=" + pageToken;
+            String convUrl = "https://graph.facebook.com/v21.0/me/conversations?fields=id,updated_time,snippet,unread_count,participants&access_token="
+                    + pageToken;
             Map<String, Object> resp = restTemplate.getForObject(convUrl, Map.class);
             if (resp == null || !resp.containsKey("data")) {
                 return;
             }
 
             List<Map<String, Object>> convList = (List<Map<String, Object>>) resp.get("data");
-            if (convList == null) return;
+            if (convList == null)
+                return;
 
             Set<String> existingMids = recentMessages.stream()
                     .map(m -> String.valueOf(m.get("mid")))
@@ -241,9 +250,11 @@ public class FacebookService {
             for (Map<String, Object> convData : convList) {
                 String convId = String.valueOf(convData.get("id"));
                 Map<String, Object> participantsWrapper = (Map<String, Object>) convData.get("participants");
-                if (participantsWrapper == null) continue;
+                if (participantsWrapper == null)
+                    continue;
                 List<Map<String, Object>> participants = (List<Map<String, Object>>) participantsWrapper.get("data");
-                if (participants == null) continue;
+                if (participants == null)
+                    continue;
 
                 // Tìm khách hàng (người tham gia không phải là Page)
                 Map<String, Object> customerParticipant = null;
@@ -254,17 +265,22 @@ public class FacebookService {
                         break;
                     }
                 }
-                if (customerParticipant == null) continue;
+                if (customerParticipant == null)
+                    continue;
 
                 String customerPsid = String.valueOf(customerParticipant.get("id"));
-                String customerName = customerParticipant.get("name") != null ? String.valueOf(customerParticipant.get("name")) : "Khách Facebook";
+                String customerName = customerParticipant.get("name") != null
+                        ? String.valueOf(customerParticipant.get("name"))
+                        : "Khách Facebook";
 
                 // Thử lấy avatar từ profile nếu có
                 Map<String, String> prof = fetchCustomerProfile(customerPsid);
                 String customerAvatar = prof.getOrDefault("avatar", "");
 
                 String snippet = convData.get("snippet") != null ? String.valueOf(convData.get("snippet")) : "";
-                Integer unreadCount = convData.get("unread_count") instanceof Number ? ((Number) convData.get("unread_count")).intValue() : 0;
+                Integer unreadCount = convData.get("unread_count") instanceof Number
+                        ? ((Number) convData.get("unread_count")).intValue()
+                        : 0;
                 String updatedTime = formatFacebookTime(convData.get("updated_time"));
 
                 // Lưu cuộc trò chuyện
@@ -283,7 +299,8 @@ public class FacebookService {
 
                 // Tải tin nhắn của cuộc trò chuyện này
                 try {
-                    String msgUrl = "https://graph.facebook.com/v21.0/" + convId + "/messages?fields=id,created_time,from,message&limit=50&access_token=" + pageToken;
+                    String msgUrl = "https://graph.facebook.com/v21.0/" + convId
+                            + "/messages?fields=id,created_time,from,message&limit=50&access_token=" + pageToken;
                     Map<String, Object> msgResp = restTemplate.getForObject(msgUrl, Map.class);
                     if (msgResp != null && msgResp.containsKey("data")) {
                         List<Map<String, Object>> msgList = (List<Map<String, Object>>) msgResp.get("data");
@@ -293,14 +310,16 @@ public class FacebookService {
 
                             for (Map<String, Object> m : chronologicalList) {
                                 String mid = String.valueOf(m.get("id"));
-                                if (existingMids.contains(mid)) continue;
+                                if (existingMids.contains(mid))
+                                    continue;
 
                                 String text = m.get("message") != null ? String.valueOf(m.get("message")) : "";
                                 Map<String, Object> fromObj = (Map<String, Object>) m.get("from");
                                 String fromId = fromObj != null ? String.valueOf(fromObj.get("id")) : "";
                                 boolean isShop = pageId != null && pageId.equals(fromId);
 
-                                String rawTime = m.get("created_time") != null ? String.valueOf(m.get("created_time")) : "";
+                                String rawTime = m.get("created_time") != null ? String.valueOf(m.get("created_time"))
+                                        : "";
 
                                 Map<String, Object> record = new HashMap<>();
                                 record.put("mid", mid);
@@ -330,7 +349,8 @@ public class FacebookService {
     }
 
     public String formatFacebookTime(Object timeObj) {
-        if (timeObj == null) return LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss dd/MM/yyyy"));
+        if (timeObj == null)
+            return LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss dd/MM/yyyy"));
         try {
             String timeStr = String.valueOf(timeObj);
             OffsetDateTime odt = OffsetDateTime.parse(timeStr, DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssZ"));
@@ -338,8 +358,10 @@ public class FacebookService {
             return vnTime.format(DateTimeFormatter.ofPattern("HH:mm:ss dd/MM/yyyy"));
         } catch (Exception e) {
             try {
-                OffsetDateTime odt = OffsetDateTime.parse(String.valueOf(timeObj), DateTimeFormatter.ISO_OFFSET_DATE_TIME);
-                return odt.atZoneSameInstant(ZoneId.of("Asia/Ho_Chi_Minh")).format(DateTimeFormatter.ofPattern("HH:mm:ss dd/MM/yyyy"));
+                OffsetDateTime odt = OffsetDateTime.parse(String.valueOf(timeObj),
+                        DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+                return odt.atZoneSameInstant(ZoneId.of("Asia/Ho_Chi_Minh"))
+                        .format(DateTimeFormatter.ofPattern("HH:mm:ss dd/MM/yyyy"));
             } catch (Exception ignored) {
                 return String.valueOf(timeObj);
             }
@@ -366,6 +388,7 @@ public class FacebookService {
             try (PrintWriter out = new PrintWriter(new FileWriter(logFile, true))) {
                 out.println("[" + LocalDateTime.now() + "] " + objectMapper.writeValueAsString(payload));
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
     }
 }
