@@ -82,6 +82,5 @@ export const NAVIGATION = {
     profile
   ]
 };
-};
 
 export const navFor = (role) => NAVIGATION[role] ?? [dashboard, profile];
