@@ -1,20 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router-dom';
-import { Box, Menu, MenuItem } from '@mui/material';
+import { Link as RouterLink, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
+import { Box } from '@mui/material';
 import { useAuth } from 'features/auth/AuthProvider';
-import { STORE_NAME } from 'features/account/constants';
 import { api } from 'services/http';
 import heroImage from 'assets/images/auth/boutique-shopping.png';
 import { money, priceText } from './ShopCommon';
 import PendingCartHandler from './PendingCartHandler';
+import { C, SERIF, Icon, btnSx, container, eyebrowSx, focusRing, h2Sx, iconBtnSx, linkSx, scrollToId, section, srOnly } from './storeTheme';
 
 /**
- * Trang chủ cửa hàng (đường dẫn '/') theo giao diện thời trang tối giản.
- * Toàn bộ style viết bằng sx của MUI, không dùng file CSS riêng.
- * Trang tự vẽ header + footer (OptionalLayout không bọc ThorsLayout ở '/').
+ * Trang chủ cửa hàng (đường dẫn '/'). Header, footer và thanh thông báo nằm ở layouts/StorefrontLayout.
  *  - Chưa tìm kiếm: Hero, danh mục, hàng mới về, ưu đãi, toàn bộ sản phẩm.
- *  - Đang tìm kiếm: chỉ hiện lưới kết quả.
- * Dữ liệu: /shop/categories, /shop/products, /shop/promotions, /cart (khách đã đăng nhập).
+ *  - Đang tìm kiếm (?q=...): chỉ hiện lưới kết quả.
+ *  - Lọc danh mục qua ?category=ID; link có #moi / #uu-dai / #tat-ca sẽ tự cuộn tới khối đó.
+ * Dữ liệu: /shop/categories (lấy từ layout), /shop/products, /shop/promotions.
  */
 
 const SORTS = [
@@ -25,86 +24,14 @@ const SORTS = [
 const PAGE_SIZE = 20;
 const NEW_COUNT = 8;
 const TILE_COLORS = ['#E4DDD3', '#D9D6D0', '#E8E1D6', '#DCD3C8'];
-const FONT_URL = 'https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Be+Vietnam+Pro:wght@400;500;600&display=swap';
 
-/* ---------- Màu & style dùng chung ---------- */
-
-const C = { ink: '#111111', accent: '#8A2B2B', line: '#E6E3DE', sand: '#EFEBE5', muted: '#5C5650', photo: '#EEEAE4' };
-const SANS = "'Be Vietnam Pro', system-ui, sans-serif";
-const SERIF = "'Playfair Display', Georgia, serif";
-
-const focusRing = { '&:focus-visible': { outline: `2px solid ${C.accent}`, outlineOffset: '2px' } };
-const container = { maxWidth: 1320, mx: 'auto', px: { xs: '16px', sm: '40px' }, boxSizing: 'border-box' };
-const section = { ...container, pt: { xs: '64px', sm: '96px' } };
-const linkSx = { color: C.ink, textDecoration: 'none', cursor: 'pointer', '&:hover': { color: C.accent }, ...focusRing };
-const h2Sx = { m: 0, fontFamily: SERIF, fontWeight: 400, fontSize: { xs: 32, sm: 40 } };
-const eyebrowSx = { m: 0, fontSize: 13, letterSpacing: '0.2em', textTransform: 'uppercase' };
-const srOnly = { position: 'absolute', left: 0, top: 0, width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' };
-const iconBtnSx = {
-  width: 44,
-  height: 44,
-  p: 0,
-  border: 0,
-  bgcolor: 'transparent',
-  color: C.ink,
-  cursor: 'pointer',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  textDecoration: 'none',
-  fontFamily: 'inherit',
-  '&:hover': { color: C.accent },
-  ...focusRing
-};
-const btnSx = (variant) => ({
-  display: 'inline-block',
-  boxSizing: 'border-box',
-  minHeight: 44,
-  px: '32px',
-  py: '16px',
-  fontFamily: 'inherit',
-  fontSize: 14,
-  fontWeight: 500,
-  letterSpacing: '0.06em',
-  lineHeight: 1,
-  textDecoration: 'none',
-  cursor: 'pointer',
-  border: `1px solid ${variant === 'light' ? '#FFFFFF' : C.ink}`,
-  bgcolor: variant === 'dark' ? C.ink : '#FFFFFF',
-  color: variant === 'dark' ? '#FFFFFF' : C.ink,
-  transition: 'opacity .2s',
-  '&:hover': { opacity: 0.85, color: variant === 'dark' ? '#FFFFFF' : C.ink },
-  '&:disabled': { opacity: 0.6, cursor: 'default' },
-  ...focusRing
-});
-
-const scrollToId = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 // Link neo trong trang: chặn nhảy mặc định, chạy hành động riêng
 const anchor = (fn) => (e) => {
   e.preventDefault();
   fn();
 };
 
-// Nạp font một lần khi mở trang
-function useStoreFonts() {
-  useEffect(() => {
-    if (document.querySelector(`link[href="${FONT_URL}"]`)) return;
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = FONT_URL;
-    document.head.appendChild(link);
-  }, []);
-}
-
-/* ---------- Icon & ảnh ---------- */
-
-function Icon({ children, size = 20, strokeWidth = 1.6 }) {
-  return (
-    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth}>
-      {children}
-    </svg>
-  );
-}
+/* ---------- Ảnh ---------- */
 
 // Có ảnh thì hiện ảnh, không thì hiện chữ cái đầu
 function ProductPhoto({ src, name, dark = false, zoomOnHover = false }) {
@@ -122,199 +49,6 @@ function ProductPhoto({ src, name, dark = false, zoomOnHover = false }) {
       ) : (
         <Box component="span" sx={{ fontFamily: SERIF, fontSize: 48, color: dark ? 'rgba(255,255,255,.35)' : 'rgba(17,17,17,.3)' }}>
           {name?.charAt(0)}
-        </Box>
-      )}
-    </Box>
-  );
-}
-
-/* ---------- Giỏ hàng ---------- */
-
-function useCartCount(enabled) {
-  const [count, setCount] = useState(0);
-  const refresh = useCallback(async () => {
-    try {
-      const data = await api('/cart');
-      setCount((data.items || []).length);
-    } catch {
-      // Không lấy được giỏ hàng thì giữ nguyên số hiện tại
-    }
-  }, []);
-  useEffect(() => {
-    if (!enabled) return undefined;
-    refresh();
-    window.addEventListener('thors:cart-changed', refresh);
-    return () => window.removeEventListener('thors:cart-changed', refresh);
-  }, [enabled, refresh]);
-  return enabled ? count : 0;
-}
-
-/* ---------- Header ---------- */
-
-function StoreHeader({ account, categories, query, onSearch, onPickCategory }) {
-  const navigate = useNavigate();
-  const { logout } = useAuth();
-  const isCustomer = account?.role === 'CUSTOMER';
-  const cartCount = useCartCount(isCustomer);
-  const [searchOpen, setSearchOpen] = useState(Boolean(query));
-  const [input, setInput] = useState(query);
-  const [menuAnchor, setMenuAnchor] = useState(null);
-  const searchRef = useRef(null);
-
-  useEffect(() => setInput(query), [query]);
-  useEffect(() => {
-    if (searchOpen) searchRef.current?.focus();
-  }, [searchOpen]);
-
-  const submit = (e) => {
-    e.preventDefault();
-    onSearch(input.trim());
-  };
-
-  const go = (to) => {
-    setMenuAnchor(null);
-    navigate(to);
-  };
-
-  const signOut = async () => {
-    setMenuAnchor(null);
-    try {
-      await logout();
-    } finally {
-      navigate('/', { replace: true });
-    }
-  };
-
-  const menuItems = isCustomer
-    ? [
-        ['/profile', 'Tài khoản của tôi'],
-        ['/orders', 'Đơn hàng'],
-        ['/addresses', 'Địa chỉ giao hàng'],
-        ['/notifications', 'Thông báo']
-      ]
-    : [
-        ['/workspace', 'Trang quản lý'],
-        ['/profile', 'Tài khoản']
-      ];
-
-  return (
-    <Box component="header" sx={{ position: 'sticky', top: 0, zIndex: 20, bgcolor: '#FFFFFF', borderBottom: `1px solid ${C.line}` }}>
-      <Box
-        sx={{ ...container, py: '18px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}
-      >
-        <Box
-          component="nav"
-          aria-label="Danh mục chính"
-          sx={{
-            display: 'flex',
-            gap: { xs: 2, sm: '28px' },
-            fontSize: 14,
-            fontWeight: 500,
-            flex: { xs: '1 1 100%', md: '1 1 360px' },
-            order: { xs: 3, md: 0 },
-            flexWrap: { xs: 'nowrap', md: 'wrap' },
-            overflowX: { xs: 'auto', md: 'visible' },
-            whiteSpace: 'nowrap'
-          }}
-        >
-          <Box component="a" href="#moi" onClick={anchor(() => scrollToId('moi'))} sx={linkSx}>
-            Hàng mới
-          </Box>
-          {categories.slice(0, 4).map((c) => (
-            <Box key={c.categoryId} component="a" href="#tat-ca" onClick={anchor(() => onPickCategory(c.categoryId))} sx={linkSx}>
-              {c.categoryName}
-            </Box>
-          ))}
-          <Box component="a" href="#uu-dai" onClick={anchor(() => scrollToId('uu-dai'))} sx={{ ...linkSx, color: C.accent }}>
-            Sale
-          </Box>
-        </Box>
-
-        <Box
-          component={RouterLink}
-          to="/"
-          onClick={() => onSearch('')}
-          sx={{ ...linkSx, fontFamily: SERIF, fontSize: { xs: 22, sm: 30 }, letterSpacing: '0.12em', flex: '0 0 auto' }}
-        >
-          {STORE_NAME.toUpperCase()}
-        </Box>
-
-        <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end', alignItems: 'center', flex: { xs: '0 0 auto', md: '1 1 200px' } }}>
-          <Box component="button" type="button" aria-label="Tìm kiếm" aria-expanded={searchOpen} onClick={() => setSearchOpen((v) => !v)} sx={iconBtnSx}>
-            <Icon>
-              <circle cx="11" cy="11" r="7" />
-              <path d="M20 20l-4-4" />
-            </Icon>
-          </Box>
-
-          {account ? (
-            <>
-              <Box
-                component="button"
-                type="button"
-                aria-label="Tài khoản"
-                aria-haspopup="menu"
-                aria-expanded={Boolean(menuAnchor)}
-                onClick={(e) => setMenuAnchor(e.currentTarget)}
-                sx={iconBtnSx}
-              >
-                <Icon>
-                  <circle cx="12" cy="8" r="4" />
-                  <path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" />
-                </Icon>
-              </Box>
-              <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)}>
-                {menuItems.map(([to, label]) => (
-                  <MenuItem key={to} onClick={() => go(to)}>
-                    {label}
-                  </MenuItem>
-                ))}
-                <MenuItem onClick={signOut}>Đăng xuất</MenuItem>
-              </Menu>
-            </>
-          ) : (
-            <Box component={RouterLink} to="/login" sx={{ ...linkSx, display: 'flex', alignItems: 'center', height: 44, px: 1, fontSize: 14, fontWeight: 500 }}>
-              Đăng nhập
-            </Box>
-          )}
-
-          {(isCustomer || !account) && (
-            <Box
-              component={RouterLink}
-              to={isCustomer ? '/cart' : '/login'}
-              aria-label={isCustomer ? `Giỏ hàng, ${cartCount} sản phẩm` : 'Đăng nhập để xem giỏ hàng'}
-              sx={{ ...iconBtnSx, width: 'auto', gap: '6px', fontSize: 14 }}
-            >
-              <Icon>
-                <path d="M5 8h14l-1 12H6L5 8z" />
-                <path d="M9 8V6a3 3 0 0 1 6 0v2" />
-              </Icon>
-              ({cartCount})
-            </Box>
-          )}
-        </Box>
-      </Box>
-
-      {searchOpen && (
-        <Box sx={{ borderTop: `1px solid ${C.line}`, py: '14px' }}>
-          <Box component="form" role="search" onSubmit={submit} sx={{ ...container, display: 'flex', position: 'relative' }}>
-            <Box component="label" htmlFor="shop-search" sx={srOnly}>
-              Tìm sản phẩm
-            </Box>
-            <Box
-              component="input"
-              id="shop-search"
-              ref={searchRef}
-              type="search"
-              placeholder="Tìm sản phẩm..."
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              sx={{ flex: 1, minWidth: 0, height: 48, border: `1px solid ${C.ink}`, px: 2, font: 'inherit', fontSize: 15, ...focusRing }}
-            />
-            <Box component="button" type="submit" sx={{ ...btnSx('dark'), py: 0, height: 48, px: '28px' }}>
-              TÌM
-            </Box>
-          </Box>
         </Box>
       )}
     </Box>
@@ -522,7 +256,7 @@ function NewArrivals({ items, promoMap }) {
   };
 
   return (
-    <Box component="section" id="moi" sx={section}>
+    <Box component="section" id="moi" sx={{ ...section, scrollMarginTop: 96 }}>
       <SectionHead title="Hàng mới về">
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Box component="button" type="button" aria-label="Sản phẩm trước" onClick={() => scroll(-1)} sx={arrowSx(false)}>
@@ -560,7 +294,7 @@ function PromoBanner({ promos }) {
   const top = promos[0];
   const best = promos.reduce((acc, p) => Math.max(acc, parseInt(String(p.discountLabel).replace(/\D/g, ''), 10) || 0), 0);
   return (
-    <Box component="section" id="uu-dai" sx={section}>
+    <Box component="section" id="uu-dai" sx={{ ...section, scrollMarginTop: 96 }}>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', bgcolor: C.accent, color: '#FFFFFF' }}>
         <Box sx={{ flex: { xs: '1 1 100%', sm: '1 1 480px' }, minHeight: { xs: 360, sm: 420 }, display: 'flex' }}>
           <ProductPhoto src={top.imageUrl} name={top.productName} dark />
@@ -642,59 +376,6 @@ function Benefits() {
   );
 }
 
-const footerLinkSx = { color: '#D9D6D0', textDecoration: 'none', '&:hover': { color: '#FFFFFF' }, ...focusRing };
-const footerColSx = { flex: '1 1 160px', display: 'flex', flexDirection: 'column', gap: 1.25, fontSize: 14 };
-const footerTitleSx = { color: '#FFFFFF', fontWeight: 600, mb: 0.5 };
-
-function StoreFooter({ categories, onPickCategory }) {
-  return (
-    <Box component="footer" sx={{ bgcolor: C.ink, color: '#D9D6D0' }}>
-      <Box sx={{ ...container, pt: 9, pb: 4, display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-          <Box sx={{ flex: '2 1 280px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <Box sx={{ fontFamily: SERIF, fontSize: 26, letterSpacing: '0.12em', color: '#FFFFFF' }}>{STORE_NAME.toUpperCase()}</Box>
-            <Box component="p" sx={{ m: 0, fontSize: 14, lineHeight: 1.7, maxWidth: 320 }}>
-              Thời trang tối giản, chất liệu bền đẹp — giao tận nhà.
-            </Box>
-          </Box>
-          <Box component="nav" aria-label="Mua sắm" sx={footerColSx}>
-            <Box sx={footerTitleSx}>Mua sắm</Box>
-            <Box component="a" href="#moi" onClick={anchor(() => scrollToId('moi'))} sx={footerLinkSx}>
-              Hàng mới
-            </Box>
-            {categories.slice(0, 4).map((c) => (
-              <Box key={c.categoryId} component="a" href="#tat-ca" onClick={anchor(() => onPickCategory(c.categoryId))} sx={footerLinkSx}>
-                {c.categoryName}
-              </Box>
-            ))}
-          </Box>
-          <Box component="nav" aria-label="Tài khoản" sx={footerColSx}>
-            <Box sx={footerTitleSx}>Tài khoản</Box>
-            {[
-              ['/orders', 'Tra cứu đơn hàng'],
-              ['/cart', 'Giỏ hàng'],
-              ['/addresses', 'Địa chỉ giao hàng'],
-              ['/profile', 'Thông tin cá nhân']
-            ].map(([to, label]) => (
-              <Box key={to} component={RouterLink} to={to} sx={footerLinkSx}>
-                {label}
-              </Box>
-            ))}
-          </Box>
-        </Box>
-        <Box
-          sx={{ borderTop: '1px solid #3A3A3A', pt: 3, display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: 1.5, fontSize: 13, color: '#B5B1AA' }}
-        >
-          <span>
-            © {new Date().getFullYear()} {STORE_NAME}. Bảo lưu mọi quyền.
-          </span>
-          <span>Điều khoản · Chính sách bảo mật</span>
-        </Box>
-      </Box>
-    </Box>
-  );
-}
-
 /* ---------- Trang ---------- */
 
 const chipSx = (selected) => ({
@@ -711,17 +392,18 @@ const chipSx = (selected) => ({
 });
 
 export default function ShopPage() {
-  useStoreFonts();
   const auth = useAuth();
   const account = auth?.account;
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { categories = [] } = useOutletContext() || {};
   const [params, setParams] = useSearchParams();
   const query = params.get('q') || '';
+  const categoryId = Number(params.get('category')) || 0;
 
-  const [categories, setCategories] = useState([]);
   const [newest, setNewest] = useState([]);
   const [promos, setPromos] = useState([]);
 
-  const [categoryId, setCategoryId] = useState(0);
   const [sort, setSort] = useState('newest');
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
@@ -731,9 +413,6 @@ export default function ShopPage() {
 
   // Dữ liệu cho các khối trang chủ (tải một lần)
   useEffect(() => {
-    api('/shop/categories')
-      .then((d) => setCategories(d.items || []))
-      .catch(() => setCategories([]));
     api(`/shop/products?page=0&size=${NEW_COUNT}&sort=newest`)
       .then((d) => setNewest(d.items || []))
       .catch(() => setNewest([]));
@@ -770,15 +449,18 @@ export default function ShopPage() {
     load(0, true);
   }, [load]);
 
-  const onSearch = (text) => {
-    setParams(text ? { q: text } : {});
-    if (text) setCategoryId(0);
-  };
+  // Link dạng /#moi, /?category=2#tat-ca (từ header/footer): cuộn tới khối tương ứng khi khối đã hiện
+  const hash = location.hash.slice(1);
+  useEffect(() => {
+    if (!hash) return undefined;
+    const timer = setTimeout(() => scrollToId(hash), 50);
+    return () => clearTimeout(timer);
+  }, [hash, location.key, newest.length, promos.length]);
 
-  const pickCategory = (id) => {
-    setCategoryId(id);
-    setTimeout(() => scrollToId('tat-ca'), 0);
-  };
+  // Chọn danh mục: lọc lưới và cuộn tới lưới
+  const pickCategory = (id) => navigate(id ? `/?category=${id}#tat-ca` : '/#tat-ca');
+  // Chip lọc ngay trên lưới: chỉ đổi bộ lọc, không cuộn
+  const setCategoryFilter = (id) => setParams(id ? { category: String(id) } : {}, { replace: true, preventScrollReset: true });
 
   const gridTitle = query
     ? `Kết quả cho “${query}”`
@@ -787,120 +469,111 @@ export default function ShopPage() {
       : 'Tất cả sản phẩm';
 
   return (
-    <Box sx={{ fontFamily: SANS, color: C.ink, bgcolor: '#FFFFFF', minHeight: '100vh', '& *, & *::before, & *::after': { boxSizing: 'border-box' } }}>
-      <Box sx={{ bgcolor: C.ink, color: '#FFFFFF', fontSize: 13, letterSpacing: '0.04em', textAlign: 'center', py: '11px', px: 2 }}>
-        Giao hàng toàn quốc — Thanh toán khi nhận hàng hoặc chuyển khoản
-      </Box>
-      <StoreHeader account={account} categories={categories} query={query} onSearch={onSearch} onPickCategory={pickCategory} />
+    <>
+      {!query && (
+        <>
+          <Hero />
+          <Categories categories={categories} onPick={pickCategory} />
+          <NewArrivals items={newest} promoMap={promoMap} />
+          <PromoBanner promos={promos} />
+        </>
+      )}
 
-      <Box component="main">
-        {!query && (
-          <>
-            <Hero />
-            <Categories categories={categories} onPick={pickCategory} />
-            <NewArrivals items={newest} promoMap={promoMap} />
-            <PromoBanner promos={promos} />
-          </>
-        )}
-
-        <Box component="section" id="tat-ca" sx={section}>
-          <SectionHead title={gridTitle}>
-            {query ? (
+      <Box component="section" id="tat-ca" sx={{ ...section, scrollMarginTop: 96 }}>
+        <SectionHead title={gridTitle}>
+          {query ? (
+            <Box
+              component="button"
+              type="button"
+              onClick={() => navigate('/')}
+              sx={{ ...linkSx, border: 0, p: 0, bgcolor: 'transparent', font: 'inherit', fontSize: 14, textDecoration: 'underline' }}
+            >
+              Xóa tìm kiếm ({total} kết quả)
+            </Box>
+          ) : (
+            <Box component="label" sx={{ position: 'relative' }}>
+              <Box component="span" sx={srOnly}>
+                Sắp xếp
+              </Box>
               <Box
+                component="select"
+                value={sort}
+                onChange={(e) => setSort(e.target.value)}
+                sx={{ height: 44, pl: '14px', pr: 4, border: `1px solid ${C.ink}`, bgcolor: '#FFFFFF', font: 'inherit', fontSize: 14, color: C.ink, cursor: 'pointer', ...focusRing }}
+              >
+                {SORTS.map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </Box>
+            </Box>
+          )}
+        </SectionHead>
+
+        {!query && categories.length > 0 && (
+          <Box role="group" aria-label="Lọc theo danh mục" sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: -1.5, mb: 4 }}>
+            <Box component="button" type="button" aria-pressed={categoryId === 0} onClick={() => setCategoryFilter(0)} sx={chipSx(categoryId === 0)}>
+              Tất cả
+            </Box>
+            {categories.map((c) => (
+              <Box
+                key={c.categoryId}
                 component="button"
                 type="button"
-                onClick={() => onSearch('')}
-                sx={{ ...linkSx, border: 0, p: 0, bgcolor: 'transparent', font: 'inherit', fontSize: 14, textDecoration: 'underline' }}
+                aria-pressed={categoryId === c.categoryId}
+                onClick={() => setCategoryFilter(c.categoryId)}
+                sx={chipSx(categoryId === c.categoryId)}
               >
-                Xóa tìm kiếm ({total} kết quả)
+                {c.categoryName}
               </Box>
-            ) : (
-              <Box component="label" sx={{ position: 'relative' }}>
-                <Box component="span" sx={srOnly}>
-                  Sắp xếp
-                </Box>
-                <Box
-                  component="select"
-                  value={sort}
-                  onChange={(e) => setSort(e.target.value)}
-                  sx={{ height: 44, pl: '14px', pr: 4, border: `1px solid ${C.ink}`, bgcolor: '#FFFFFF', font: 'inherit', fontSize: 14, color: C.ink, cursor: 'pointer', ...focusRing }}
-                >
-                  {SORTS.map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </Box>
-              </Box>
-            )}
-          </SectionHead>
-
-          {!query && categories.length > 0 && (
-            <Box role="group" aria-label="Lọc theo danh mục" sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: -1.5, mb: 4 }}>
-              <Box component="button" type="button" aria-pressed={categoryId === 0} onClick={() => setCategoryId(0)} sx={chipSx(categoryId === 0)}>
-                Tất cả
-              </Box>
-              {categories.map((c) => (
-                <Box
-                  key={c.categoryId}
-                  component="button"
-                  type="button"
-                  aria-pressed={categoryId === c.categoryId}
-                  onClick={() => setCategoryId(c.categoryId)}
-                  sx={chipSx(categoryId === c.categoryId)}
-                >
-                  {c.categoryName}
-                </Box>
-              ))}
-            </Box>
-          )}
-
-          {error && (
-            <Box component="p" sx={{ color: C.accent }}>
-              {error}
-            </Box>
-          )}
-
-          {!loading && !error && items.length === 0 && (
-            <Box sx={{ textAlign: 'center', py: 6, color: C.muted }}>
-              <Box sx={{ fontFamily: SERIF, fontSize: 24, color: C.ink, mb: 1 }}>Không tìm thấy sản phẩm</Box>
-              <Box>Thử từ khóa khác hoặc chọn danh mục khác.</Box>
-            </Box>
-          )}
-
-          <Box
-            sx={{
-              display: 'grid',
-              gap: { xs: '24px 12px', sm: '32px 20px' },
-              gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', sm: 'repeat(auto-fill, minmax(240px, 1fr))' }
-            }}
-          >
-            {items.map((p) => (
-              <ProductCard key={p.productId} product={p} promo={promoMap.get(p.productId)} />
             ))}
           </Box>
+        )}
 
-          {loading && items.length === 0 && (
-            <Box component="p" sx={{ color: C.muted }}>
-              Đang tải sản phẩm...
-            </Box>
-          )}
+        {error && (
+          <Box component="p" sx={{ color: C.accent }}>
+            {error}
+          </Box>
+        )}
 
-          {items.length < total && (
-            <Box sx={{ textAlign: 'center', mt: 6 }}>
-              <Box component="button" type="button" disabled={loading} onClick={() => load(page + 1, false)} sx={btnSx('outline')}>
-                {loading ? 'ĐANG TẢI...' : 'XEM THÊM'}
-              </Box>
-            </Box>
-          )}
+        {!loading && !error && items.length === 0 && (
+          <Box sx={{ textAlign: 'center', py: 6, color: C.muted }}>
+            <Box sx={{ fontFamily: SERIF, fontSize: 24, color: C.ink, mb: 1 }}>Không tìm thấy sản phẩm</Box>
+            <Box>Thử từ khóa khác hoặc chọn danh mục khác.</Box>
+          </Box>
+        )}
+
+        <Box
+          sx={{
+            display: 'grid',
+            gap: { xs: '24px 12px', sm: '32px 20px' },
+            gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', sm: 'repeat(auto-fill, minmax(240px, 1fr))' }
+          }}
+        >
+          {items.map((p) => (
+            <ProductCard key={p.productId} product={p} promo={promoMap.get(p.productId)} />
+          ))}
         </Box>
 
-        <Benefits />
+        {loading && items.length === 0 && (
+          <Box component="p" sx={{ color: C.muted }}>
+            Đang tải sản phẩm...
+          </Box>
+        )}
+
+        {items.length < total && (
+          <Box sx={{ textAlign: 'center', mt: 6 }}>
+            <Box component="button" type="button" disabled={loading} onClick={() => load(page + 1, false)} sx={btnSx('outline')}>
+              {loading ? 'ĐANG TẢI...' : 'XEM THÊM'}
+            </Box>
+          </Box>
+        )}
       </Box>
 
-      <StoreFooter categories={categories} onPickCategory={pickCategory} />
+      <Benefits />
 
       {account?.role === 'CUSTOMER' && <PendingCartHandler />}
-    </Box>
+    </>
   );
 }

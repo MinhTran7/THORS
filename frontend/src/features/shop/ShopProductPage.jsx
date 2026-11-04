@@ -6,7 +6,7 @@ import { brand } from 'features/account/tokens';
 import { buyNow as goBuyNow, stashBuyNow } from 'features/cart/checkout';
 import { useCrumbs } from 'layouts/crumbs';
 import { api, post } from 'services/http';
-import { Photo, ShopHeader, money, priceText } from './ShopCommon';
+import { Photo, money, priceText } from './ShopCommon';
 import PendingCartHandler from './PendingCartHandler';
 import { savePending } from './pendingCart';
 
@@ -125,10 +125,9 @@ export default function ShopProductPage() {
   });
 
   return (
-    <Box sx={{ minHeight: account ? 'auto' : '100vh', bgcolor: account ? 'transparent' : brand.page }}>
-      <ShopHeader account={account} onSearch={(q) => navigate(q ? `/?q=${encodeURIComponent(q)}` : '/')} />
-
-      <Box sx={{ maxWidth: 1240, mx: 'auto', px: account ? 0 : { xs: 2, md: 4 }, py: account ? 0 : 3 }}>
+    // Header + footer do StorefrontLayout lo
+    <Box>
+      <Box sx={{ maxWidth: 1320, mx: 'auto', boxSizing: 'border-box', px: { xs: '16px', sm: '40px' }, py: { xs: 3, md: 5 } }}>
         <Box component="nav" aria-label="Breadcrumb" sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', fontSize: 13, color: brand.muted, mb: 2 }}>
           <Box component={RouterLink} to="/" sx={{ color: brand.muted, textDecoration: 'none', '&:hover': { color: brand.ink } }}>
             Trang chủ
