@@ -3,10 +3,12 @@ import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import { Box, Button, Chip, Typography } from '@mui/material';
 import { useAuth } from 'features/auth/AuthProvider';
 import { brand } from 'features/account/tokens';
+import { buyNow as goBuyNow, stashBuyNow } from 'features/cart/checkout';
+import { useCrumbs } from 'layouts/crumbs';
 import { api, post } from 'services/http';
 import { Photo, ShopHeader, money, priceText } from './ShopCommon';
 import PendingCartHandler from './PendingCartHandler';
-import { CHECKOUT_PATH, savePending } from './pendingCart';
+import { savePending } from './pendingCart';
 
 /** Trang chi tiết sản phẩm công khai: /shop/products/:productId */
 export default function ShopProductPage() {
@@ -25,6 +27,9 @@ export default function ShopProductPage() {
   const [qty, setQty] = useState(1);
   const [needLogin, setNeedLogin] = useState(''); // '' | 'cart' | 'buy'
   const [loadError, setLoadError] = useState('');
+
+  // Đường dẫn trên header chung (khi đã đăng nhập)
+  useCrumbs(['Trang chủ', data?.product?.productName ?? 'Chi tiết sản phẩm']);
 
   useEffect(() => {
     setData(null);
@@ -66,25 +71,43 @@ export default function ShopProductPage() {
       setError('Phân loại này hiện không có.');
       return;
     }
+    const item = {
+      variantId: variant.detailId,
+      productName: data.product.productName,
+      imageUrl: data.images?.[0],
+      size: variant.size,
+      color: variant.color,
+      unitPrice: variant.price,
+      quantity: qty
+    };
+
     if (!account) {
-      // Chưa đăng nhập: nhớ lựa chọn, đăng nhập/đăng ký xong sẽ tự hoàn tất
-      savePending({
-        detailId: variant.detailId,
-        quantity: qty,
-        buyNow,
-        label: `${data.product.productName} (${variant.size} · ${variant.color})`
-      });
+      if (buyNow) {
+        // Mua ngay khi chưa đăng nhập: nhớ sản phẩm này, đăng nhập xong sẽ vào thẳng trang đặt hàng
+        stashBuyNow(item);
+      } else {
+        // Thêm vào giỏ khi chưa đăng nhập: đăng nhập xong sẽ tự thêm (PendingCartHandler)
+        savePending({
+          detailId: variant.detailId,
+          quantity: qty,
+          buyNow: false,
+          label: `${data.product.productName} (${variant.size} · ${variant.color})`
+        });
+      }
       setNeedLogin(buyNow ? 'buy' : 'cart');
       return;
     }
+
+    if (buyNow) {
+      // Mua ngay: sang thẳng trang đặt hàng với đúng sản phẩm này, không thêm vào giỏ hàng
+      goBuyNow(navigate, item);
+      return;
+    }
+
     setBusy(true);
     try {
       await post('/cart/items', { detailId: variant.detailId, quantity: qty });
       window.dispatchEvent(new Event('thors:cart-changed'));
-      if (buyNow) {
-        navigate(CHECKOUT_PATH, { state: { detailIds: [variant.detailId], buyNow: true } });
-        return;
-      }
       setNotice('Đã thêm vào giỏ hàng.');
     } catch (e) {
       setError(e.message);
@@ -93,16 +116,19 @@ export default function ShopProductPage() {
     }
   }
 
+  // Mua ngay: đăng nhập/đăng ký xong quay về trang đặt hàng; Thêm vào giỏ: về như cũ
+  const authPath = (path) => (needLogin === 'buy' ? `${path}?returnTo=${encodeURIComponent('/checkout')}` : path);
+
   const chipSx = (selected) => ({
     bgcolor: selected ? brand.cyan : 'transparent',
     border: `1px solid ${selected ? brand.cyan : brand.line}`
   });
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: brand.page }}>
+    <Box sx={{ minHeight: account ? 'auto' : '100vh', bgcolor: account ? 'transparent' : brand.page }}>
       <ShopHeader account={account} onSearch={(q) => navigate(q ? `/?q=${encodeURIComponent(q)}` : '/')} />
 
-      <Box sx={{ maxWidth: 1240, mx: 'auto', px: { xs: 2, md: 4 }, py: 3 }}>
+      <Box sx={{ maxWidth: 1240, mx: 'auto', px: account ? 0 : { xs: 2, md: 4 }, py: account ? 0 : 3 }}>
         <Box component="nav" aria-label="Breadcrumb" sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', fontSize: 13, color: brand.muted, mb: 2 }}>
           <Box component={RouterLink} to="/" sx={{ color: brand.muted, textDecoration: 'none', '&:hover': { color: brand.ink } }}>
             Trang chủ
@@ -259,10 +285,10 @@ export default function ShopProductPage() {
                       : 'Hãy đăng nhập hoặc đăng ký để tiếp tục. Xong bước này, sản phẩm bạn vừa chọn sẽ được thêm vào giỏ hàng.'}
                   </Typography>
                   <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Button variant="contained" size="small" onClick={() => navigate('/register')}>
+                    <Button variant="contained" size="small" onClick={() => navigate(authPath('/register'))}>
                       Đăng ký
                     </Button>
-                    <Button variant="outlined" size="small" onClick={() => navigate('/login')}>
+                    <Button variant="outlined" size="small" onClick={() => navigate(authPath('/login'))}>
                       Đăng nhập
                     </Button>
                   </Box>

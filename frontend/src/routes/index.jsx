@@ -4,7 +4,8 @@ import WarehousePage, { warehouseRoutes } from 'features/warehouse/WarehousePage
 
 // Authentication
 import RequireAuth from 'features/auth/RequireAuth';
-import ThorsLayout from 'layouts/ThorsLayout';
+import { useAuth } from 'features/auth/AuthProvider';
+import OptionalLayout from 'layouts/OptionalLayout';
 import LoginPage from 'features/auth/pages/LoginPage';
 import RegisterPage from 'features/auth/pages/RegisterPage';
 import ForgotPage from 'features/auth/pages/ForgotPage';
@@ -61,9 +62,15 @@ import ShopProductPage from 'features/shop/ShopProductPage';
 import CartPage from 'features/cart/CartPage';
 import CheckoutPage from 'features/cart/CheckoutPage';
 import OrderSuccessPage from 'features/cart/OrderSuccessPage';
+
+// Sau khi đăng nhập mọi người đều vào /workspace: khách hàng được chuyển thẳng sang trang shop,
+// các vai trò khác (chủ cửa hàng, nhân viên, admin) vẫn thấy trang Dashboard như cũ.
+function WorkspaceEntry() {
+  const { account } = useAuth();
+  return account?.role === 'CUSTOMER' ? <Navigate to="/" replace /> : <WorkspacePage />;
+}
+
 export default createBrowserRouter([
-  { path: '/', element: <ShopPage /> },
-  { path: '/shop/products/:productId', element: <ShopProductPage /> },
   { path: '/login', element: <LoginPage /> },
   { path: '/register', element: <RegisterPage /> },
   { path: '/forgot-password', element: <ForgotPage /> },
@@ -74,25 +81,29 @@ export default createBrowserRouter([
   { path: '/auth/google/callback', element: <GoogleCallback /> },
 
   {
-    element: <RequireAuth />,
+    // Khung chung: đã đăng nhập thì có sidebar + header (ThorsLayout), chưa đăng nhập thì trang trần.
+    // Trang shop mở được cho cả khách chưa đăng nhập; các trang còn lại bắt buộc đăng nhập (RequireAuth).
+    element: <OptionalLayout />,
     children: [
+      { path: '/', element: <ShopPage /> },
+      { path: '/shop/products/:productId', element: <ShopProductPage /> },
       {
-        element: <ThorsLayout />,
+        element: <RequireAuth />,
         children: [
-          { path: '/workspace', element: <WorkspacePage /> },
+          { path: '/workspace', element: <WorkspaceEntry /> },
           { path: '/profile', element: <ProfilePage /> },
           { path: '/profile/edit', element: <UpdateProfilePage /> },
           { path: '/profile/password', element: <ChangePasswordPage /> },
           { path: '/notifications', element: <NotificationPage /> },
           {
-                      // Giỏ hàng và đặt hàng chỉ dành cho khách hàng
-                      element: <RequireAuth roles={['CUSTOMER']} />,
-                      children: [
-                        { path: '/cart', element: <CartPage /> },
-                        { path: '/checkout', element: <CheckoutPage /> },
-                        { path: '/order-success', element: <OrderSuccessPage /> }
-                      ]
-                    },
+            // Giỏ hàng và đặt hàng chỉ dành cho khách hàng
+            element: <RequireAuth roles={['CUSTOMER']} />,
+            children: [
+              { path: '/cart', element: <CartPage /> },
+              { path: '/checkout', element: <CheckoutPage /> },
+              { path: '/order-success', element: <OrderSuccessPage /> }
+            ]
+          },
           {
             // Customer xem đơn của mình; Owner và Family Member xem đơn online của cửa hàng
             element: <RequireAuth roles={['CUSTOMER', 'OWNER', 'FAMILY_MEMBER']} />,
@@ -121,23 +132,22 @@ export default createBrowserRouter([
               }
             ]
           },
-{
-  element: <RequireAuth roles={['ADMIN', 'OWNER']} />,
-  children: [{ path: '/accounts', element: <AccountsPage /> }]
-},
-{
-  element: <RequireAuth roles={['ADMIN']} />,
-  children: [{ path: '/system-log', element: <SystemLogPage /> }]
-},
-{
-  element: <RequireAuth roles={['OWNER', 'FAMILY_MEMBER']} />,
-  children: [
-    { path: '/in-store-sales', element: <InStoreSalesPage /> },
-    { path: '/in-store-sales/history', element: <InStoreSalesHistoryPage /> },
-    { path: '/in-store-sales/history/:orderId', element: <InStoreSaleDetailPage /> }
-  ]
-},
-          
+          {
+            element: <RequireAuth roles={['ADMIN', 'OWNER']} />,
+            children: [{ path: '/accounts', element: <AccountsPage /> }]
+          },
+          {
+            element: <RequireAuth roles={['ADMIN']} />,
+            children: [{ path: '/system-log', element: <SystemLogPage /> }]
+          },
+          {
+            element: <RequireAuth roles={['OWNER', 'FAMILY_MEMBER']} />,
+            children: [
+              { path: '/in-store-sales', element: <InStoreSalesPage /> },
+              { path: '/in-store-sales/history', element: <InStoreSalesHistoryPage /> },
+              { path: '/in-store-sales/history/:orderId', element: <InStoreSaleDetailPage /> }
+            ]
+          },
           {
             element: <RequireAuth roles={['OWNER']} />,
             children: [
@@ -155,7 +165,7 @@ export default createBrowserRouter([
               // Promotion (của phuoc)
               { path: '/promotions/add', element: <AddPromotionPage /> },
               { path: '/promotions/:promotionId', element: <PromotionDetailPage /> },
-              { path: '/promotions/:promotionId/edit', element: <EditPromotionPage /> },
+              { path: '/promotions/:promotionId/edit', element: <EditPromotionPage /> }
             ]
           }
         ]
