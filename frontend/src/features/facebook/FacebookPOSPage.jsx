@@ -250,6 +250,48 @@ export default function FacebookPOSPage() {
     }
   }, [detectedPhone]);
 
+  // Quét thông minh Địa chỉ giao hàng từ tin nhắn của khách
+  const detectedAddress = useMemo(() => {
+    if (!currentChatMessages.length) return null;
+
+    const addressKeywords = [
+      'địa chỉ', 'đc:', 'dc:', 'ship về', 'ship đến', 'giao đến', 'giao về', 'giao ở', 'ở tại', 'em ở', 'mình ở',
+      'đường', 'phố', 'ngõ', 'ngách', 'hẻm', 'số nhà', 'tòa nhà', 'chung cư',
+      'phường', 'xã', 'thị trấn', 'quận', 'huyện', 'thị xã', 'tp.', 'tp ',
+      'hà nội', 'hồ chí minh', 'hcm', 'sài gòn', 'đà nẵng', 'hải phòng', 'cần thơ',
+      'bắc ninh', 'bắc giang', 'nam định', 'thái bình', 'quảng ninh', 'hải dương',
+      'thanh hóa', 'nghệ an', 'bình dương', 'đồng nai', 'vĩnh phúc', 'phú thọ'
+    ];
+
+    for (let i = currentChatMessages.length - 1; i >= 0; i--) {
+      const msg = currentChatMessages[i];
+      if (msg.from === 'CUSTOMER' && msg.text) {
+        const textLower = msg.text.toLowerCase().trim();
+        if (textLower.length < 8) continue;
+
+        const withoutPhone = msg.text.replace(/(0[3|5|7|8|9][0-9]{8})\b/g, '').trim();
+        const hasKeyword = addressKeywords.some((kw) => textLower.includes(kw));
+
+        if (hasKeyword && withoutPhone.length >= 6) {
+          let cleanAddr = withoutPhone
+            .replace(/^(địa chỉ|đc|dc|ship về|ship đến|giao đến|giao về|giao qua|giao ở|mình ở|em ở|nhà ở)[\s:,-]+/i, '')
+            .trim();
+          if (cleanAddr.length >= 6) {
+            return cleanAddr;
+          }
+        }
+      }
+    }
+    return null;
+  }, [currentChatMessages]);
+
+  // Tự động điền địa chỉ nếu tìm thấy trong chat và ô đang trống
+  useEffect(() => {
+    if (detectedAddress && !customerAddress) {
+      setCustomerAddress(detectedAddress);
+    }
+  }, [detectedAddress]);
+
   // Thêm sản phẩm vào giỏ chốt đơn
   const addToCart = () => {
     if (!selectedProduct || !selectedVariant) return;
@@ -779,13 +821,25 @@ export default function FacebookPOSPage() {
                   />
                 )}
               </Box>
-              <TextField
-                size="small"
-                placeholder="Địa chỉ giao hàng"
-                value={customerAddress}
-                onChange={(e) => setCustomerAddress(e.target.value)}
-                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: 12 } }}
-              />
+              <Box>
+                <TextField
+                  fullWidth
+                  size="small"
+                  placeholder="Địa chỉ giao hàng"
+                  value={customerAddress}
+                  onChange={(e) => setCustomerAddress(e.target.value)}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: 12 } }}
+                />
+                {detectedAddress && customerAddress !== detectedAddress && (
+                  <Chip
+                    size="small"
+                    label={`Dùng địa chỉ trong chat: ${detectedAddress.length > 30 ? detectedAddress.slice(0, 30) + '...' : detectedAddress}`}
+                    onClick={() => setCustomerAddress(detectedAddress)}
+                    title={detectedAddress}
+                    sx={{ mt: 0.5, fontSize: 11, cursor: 'pointer', bgcolor: '#FEF3C7', color: '#B45309', fontWeight: 600, maxWidth: '100%' }}
+                  />
+                )}
+              </Box>
             </Stack>
 
             <Divider sx={{ my: 1.5, borderColor: C.border }} />
