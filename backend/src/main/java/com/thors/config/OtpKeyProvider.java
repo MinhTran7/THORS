@@ -5,7 +5,7 @@ import java.util.HexFormat;
 import org.springframework.stereotype.Component;
 
 @Component
-public class phaOtpKeyProvider {
+public class OtpKeyProvider {
   private final String value;
   public OtpKeyProvider(Settings settings) {
     String configured=settings.auth().otpSecret();
