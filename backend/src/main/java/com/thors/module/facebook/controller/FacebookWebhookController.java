@@ -109,4 +109,13 @@ public class FacebookWebhookController {
         boolean success = facebookService.sendMessageToCustomer(recipientPsid, message);
         return ResponseEntity.ok(Map.of("success", success));
     }
+
+    /**
+     * Tạo đơn hàng Facebook lưu trực tiếp vào Quản lý Đơn hàng (orders)
+     */
+    @PostMapping("/order")
+    public ResponseEntity<Map<String, Object>> createFacebookOrder(@RequestBody Map<String, Object> payload) {
+        Map<String, Object> order = facebookService.createOrderFromFacebook(payload);
+        return ResponseEntity.status(HttpStatus.CREATED).body(order);
+    }
 }

@@ -200,12 +200,30 @@ export default function FacebookPOSPage() {
     return 0;
   };
 
-  // Tin nhắn lọc theo khách hàng đang chọn (sắp xếp tăng dần theo thời gian)
+  // Tin nhắn lọc theo khách hàng đang chọn (sắp xếp tăng dần theo thời gian & khử trùng lặp)
   const currentChatMessages = useMemo(() => {
     if (!selectedPsid) return [];
-    return messages
+    const list = messages
       .filter((m) => m.senderPsid === selectedPsid)
       .sort((a, b) => parseMsgTime(a) - parseMsgTime(b));
+
+    const unique = [];
+    const seenKeys = new Set();
+    for (const msg of list) {
+      const key = msg.mid || `${msg.from}_${msg.text?.trim()}`;
+      if (seenKeys.has(key)) continue;
+      seenKeys.add(key);
+
+      // Nếu là tin nhắn từ Shop, kiểm tra xem tin ngay trước đó có cùng nội dung không (tránh duplicate bubble)
+      const prev = unique[unique.length - 1];
+      if (prev && prev.from === msg.from && prev.text?.trim() === msg.text?.trim()) {
+        const timeDiff = Math.abs(parseMsgTime(msg) - parseMsgTime(prev));
+        if (timeDiff < 10000) continue; // trùng lặp nội dung trong vòng 10 giây
+      }
+
+      unique.push(msg);
+    }
+    return unique;
   }, [messages, selectedPsid]);
 
   // Tự cuộn chỉ bên trong khung chat (không kéo toàn bộ trang web xuống đáy)
@@ -428,36 +446,53 @@ export default function FacebookPOSPage() {
     setOrderSuccessMsg('');
 
     try {
-      // Bước A: Tạo đơn bán hàng trên hệ thống THORS (trừ kho thời gian thực)
-      const orderResult = await api('/sales/in-store', {
+      // Bước A: Tạo đơn hàng lưu trực tiếp vào Quản lý Đơn hàng (orders) và trừ kho thời gian thực
+      const orderResult = await api('/facebook/webhook/order', {
         method: 'POST',
         body: {
           items: cart.map((line) => ({
             detailId: line.variantId,
             quantity: line.quantity
           })),
-          discountAmount: 0,
-          paymentMethod: 'ONLINE',
-          customerName: customerName.trim() || `Khách FB (${selectedPsid.slice(-6)})`
+          customerName: customerName.trim() || `Khách FB (${selectedPsid.slice(-6)})`,
+          customerPhone: customerPhone.trim(),
+          customerAddress: customerAddress.trim(),
+          psid: selectedPsid,
+          paymentMethod: 'ONLINE'
         }
       });
 
-      const orderId = orderResult?.orderId || orderResult?.id || Math.floor(100000 + Math.random() * 900000);
-      const totalAmount = cartTotal;
+      const orderId = orderResult?.orderId;
+      const orderNumber = orderResult?.orderNumber || `#${orderId}`;
+      const totalAmount = orderResult?.totalAmount || cartTotal;
 
-      // Bước B: Tạo tin nhắn xác nhận kèm thông tin thanh toán VietQR / PayOS
+      // Bước B: Thử tạo link thanh toán PayOS thật nếu PayOS đã cấu hình
+      let payUrl = `http://localhost:3000/orders/${orderId}`;
+      try {
+        const payRes = await api('/payment/payos/create-link', {
+          method: 'POST',
+          body: { orderId }
+        });
+        if (payRes?.checkoutUrl) {
+          payUrl = payRes.checkoutUrl;
+        }
+      } catch (ignored) {
+        // Nếu PayOS chưa bật, dùng link xem chi tiết đơn hàng
+      }
+
+      // Bước C: Tạo tin nhắn xác nhận kèm thông tin thanh toán VietQR / PayOS
       const paymentMsg =
         `🎉 Cảm ơn bạn đã đặt hàng tại THORS Studio!\n\n` +
-        `📦 THÔNG TIN ĐƠN HÀNG #${orderId}:\n` +
+        `📦 THÔNG TIN ĐƠN HÀNG ${orderNumber}:\n` +
         cart.map((c) => ` • ${c.productName} (${c.size}/${c.color}) x${c.quantity} : ${money(c.price * c.quantity)}`).join('\n') +
         `\n\n💵 TỔNG CỘNG: ${money(totalAmount)}\n` +
         (customerAddress.trim() ? `📍 Địa chỉ nhận hàng: ${customerAddress.trim()}\n` : '') +
         (customerPhone.trim() ? `📞 SĐT: ${customerPhone.trim()}\n` : '') +
         `\n💳 Bạn vui lòng quét mã VietQR hoặc truy cập link sau để hoàn tất thanh toán online:\n` +
-        `http://localhost:3000/orders/${orderId}\n\n` +
+        `${payUrl}\n\n` +
         `Shop sẽ đóng gói và giao hàng ngay khi nhận được thanh toán ạ! ❤️`;
 
-      // Bước C: Bắn tin nhắn qua Messenger cho khách hàng
+      // Bước D: Bắn tin nhắn qua Messenger cho khách hàng
       await api('/facebook/webhook/send', {
         method: 'POST',
         body: {
@@ -466,7 +501,7 @@ export default function FacebookPOSPage() {
         }
       });
 
-      setOrderSuccessMsg(`Tạo đơn #${orderId} thành công và đã gửi link thanh toán vào Messenger cho khách!`);
+      setOrderSuccessMsg(`Tạo đơn ${orderNumber} thành công! Đơn đã lưu vào mục "Đơn hàng" và đã gửi link thanh toán vào Messenger.`);
       setCart([]);
       await fetchConversationsAndMessages();
     } catch (e) {
