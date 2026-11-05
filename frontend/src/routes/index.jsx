@@ -15,9 +15,9 @@ import GoogleCallback from 'features/auth/pages/GoogleCallback';
 import ProfilePage from 'features/account/pages/ProfilePage';
 import UpdateProfilePage from 'features/account/pages/UpdateProfilePage';
 import ChangePasswordPage from 'features/account/pages/ChangePasswordPage';
-import StaffListPage from 'features/account/pages/StaffListPage';
-import StaffFormPage from 'features/account/pages/StaffFormPage';
-import StaffDetailPage from 'features/account/pages/StaffDetailPage';
+import FamilyListPage from 'features/account/pages/FamilyListPage';
+import FamilyFormPage from 'features/account/pages/FamilyFormPage';
+import FamilyDetailPage from 'features/account/pages/FamilyDetailPage';
 import AccountsPage from 'features/account/pages/AccountListPage';
 import SystemLogPage from 'features/account/pages/SystemLogPage';
 import WorkspacePage from 'features/account/WorkspacePage';
@@ -38,7 +38,8 @@ import ProductPage from '../features/product/ProductPage';
 import AddProductPage from '../features/product/AddProductPage';
 import ProductDetailPage from 'features/product/ProductDetailPage';
 import EditProductPage from 'features/product/EditProductPage';
-//sales
+
+// Sales
 import InStoreSalesPage from 'features/sales/InStoreSalesPage';
 import InStoreSalesHistoryPage from 'features/sales/InStoreSalesHistoryPage';
 import InStoreSaleDetailPage from 'features/sales/InStoreSaleDetailPage';
@@ -46,8 +47,10 @@ import PromotionPage from 'features/promotion/PromotionPage';
 import AddPromotionPage from 'features/promotion/AddPromotionPage';
 import PromotionDetailPage from 'features/promotion/PromotionDetailPage';
 import EditPromotionPage from 'features/promotion/EditPromotionPage';
+
 // Returns Management (Đổi trả / Hoàn hàng)
 import ReturnsPage from 'features/returns/ReturnsPage';
+
 // Customer Addresses
 import CustomerAddressPage from 'features/customer/CustomerAddressPage';
 import AddAddressPage from 'features/customer/AddAddressPage';
@@ -61,6 +64,7 @@ import ShopProductPage from 'features/shop/ShopProductPage';
 import CartPage from 'features/cart/CartPage';
 import CheckoutPage from 'features/cart/CheckoutPage';
 import OrderSuccessPage from 'features/cart/OrderSuccessPage';
+
 export default createBrowserRouter([
   { path: '/', element: <ShopPage /> },
   { path: '/shop/products/:productId', element: <ShopProductPage /> },
@@ -85,14 +89,14 @@ export default createBrowserRouter([
           { path: '/profile/password', element: <ChangePasswordPage /> },
           { path: '/notifications', element: <NotificationPage /> },
           {
-                      // Giỏ hàng và đặt hàng chỉ dành cho khách hàng
-                      element: <RequireAuth roles={['CUSTOMER']} />,
-                      children: [
-                        { path: '/cart', element: <CartPage /> },
-                        { path: '/checkout', element: <CheckoutPage /> },
-                        { path: '/order-success', element: <OrderSuccessPage /> }
-                      ]
-                    },
+            // Giỏ hàng và đặt hàng chỉ dành cho khách hàng
+            element: <RequireAuth roles={['CUSTOMER']} />,
+            children: [
+              { path: '/cart', element: <CartPage /> },
+              { path: '/checkout', element: <CheckoutPage /> },
+              { path: '/order-success', element: <OrderSuccessPage /> }
+            ]
+          },
           {
             // Customer xem đơn của mình; Owner và Family Member xem đơn online của cửa hàng
             element: <RequireAuth roles={['CUSTOMER', 'OWNER', 'FAMILY_MEMBER']} />,
@@ -120,30 +124,29 @@ export default createBrowserRouter([
               }
             ]
           },
-{
-  element: <RequireAuth roles={['ADMIN', 'OWNER']} />,
-  children: [{ path: '/accounts', element: <AccountsPage /> }]
-},
-{
-  element: <RequireAuth roles={['ADMIN']} />,
-  children: [{ path: '/system-log', element: <SystemLogPage /> }]
-},
-{
-  element: <RequireAuth roles={['OWNER', 'FAMILY_MEMBER']} />,
-  children: [
-    { path: '/in-store-sales', element: <InStoreSalesPage /> },
-    { path: '/in-store-sales/history', element: <InStoreSalesHistoryPage /> },
-    { path: '/in-store-sales/history/:orderId', element: <InStoreSaleDetailPage /> }
-  ]
-},
-          
+          {
+            element: <RequireAuth roles={['ADMIN', 'OWNER']} />,
+            children: [{ path: '/accounts', element: <AccountsPage /> }]
+          },
+          {
+            element: <RequireAuth roles={['ADMIN']} />,
+            children: [{ path: '/system-log', element: <SystemLogPage /> }]
+          },
+          {
+            element: <RequireAuth roles={['OWNER', 'FAMILY_MEMBER']} />,
+            children: [
+              { path: '/in-store-sales', element: <InStoreSalesPage /> },
+              { path: '/in-store-sales/history', element: <InStoreSalesHistoryPage /> },
+              { path: '/in-store-sales/history/:orderId', element: <InStoreSaleDetailPage /> }
+            ]
+          },
           {
             element: <RequireAuth roles={['OWNER']} />,
             children: [
-              { path: '/family', element: <StaffListPage /> },
-              { path: '/family/new', element: <StaffFormPage /> },
-              { path: '/family/:id', element: <StaffDetailPage /> },
-              { path: '/family/:id/edit', element: <StaffFormPage /> },
+              { path: '/family', element: <FamilyListPage /> },
+              { path: '/family/new', element: <FamilyFormPage /> },
+              { path: '/family/:id', element: <FamilyDetailPage /> },
+              { path: '/family/:id/edit', element: <FamilyFormPage /> },
               // Category, Product & Returns (của DongNV)
               { path: '/categories', element: <CategoryPage /> },
               { path: '/products', element: <ProductPage /> },
@@ -155,7 +158,7 @@ export default createBrowserRouter([
               { path: '/promotions', element: <PromotionPage /> },
               { path: '/promotions/add', element: <AddPromotionPage /> },
               { path: '/promotions/:promotionId', element: <PromotionDetailPage /> },
-              { path: '/promotions/:promotionId/edit', element: <EditPromotionPage /> },
+              { path: '/promotions/:promotionId/edit', element: <EditPromotionPage /> }
             ]
           }
         ]

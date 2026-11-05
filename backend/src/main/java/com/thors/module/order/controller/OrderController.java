@@ -50,13 +50,21 @@ public class OrderController {
         return service.createSample(sessions.current());
     }
 
-    /** POST /api/orders/{id}/status?status=SHIPPING&carrier=SELF|GHN|GHTK|VIETTEL_POST|JT&reason= */
+    /**
+     * POST /api/orders/{id}/status?status=SHIPPING&carrier=SELF|GHN|GHTK|VIETTEL_POST|JT&reason=&weightG=
+     *     &ghnDistrictId=&ghnWardCode=
+     * (khi gửi GHN: cân nặng gram, bỏ trống = mặc định; Quận-Huyện / Phường-Xã theo GHN Owner chọn)
+     */
     @PostMapping("/{id}/status")
     Object changeStatus(
             @PathVariable int id,
             @RequestParam String status,
             @RequestParam(required = false) String reason,
-            @RequestParam(required = false) String carrier) {
-        return service.changeStatus(sessions.current(), id, status, reason, carrier);
+            @RequestParam(required = false) String carrier,
+            @RequestParam(required = false) Integer weightG,
+            @RequestParam(required = false) Integer ghnDistrictId,
+            @RequestParam(required = false) String ghnWardCode) {
+        return service.changeStatus(
+                sessions.current(), id, status, reason, carrier, weightG, ghnDistrictId, ghnWardCode);
     }
 }

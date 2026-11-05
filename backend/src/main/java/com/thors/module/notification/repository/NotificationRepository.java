@@ -29,8 +29,8 @@ public class NotificationRepository {
     public record Slice(List<Item> items, long total) {}
 
     private static LocalDateTime time(ResultSet rs, String column) throws SQLException {
-        Timestamp t = rs.getTimestamp(column);
-        return t == null ? null : t.toLocalDateTime();
+        // Đọc nguyên giá trị UTC trong DB, không đổi theo múi giờ của máy chạy backend
+        return rs.getObject(column, LocalDateTime.class);
     }
 
     private final RowMapper<Item> mapper =

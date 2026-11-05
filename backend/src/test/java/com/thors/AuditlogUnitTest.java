@@ -163,28 +163,41 @@ class AuditlogUnitTest {
     // ================================================================== summary
 
     @Test
-    @DisplayName("UTC013 - Admin gets today's statistics")
+    @DisplayName("UTC013 - Admin gets statistics for the filtered date range")
     void summary_adminReturnsRepositorySummary() {
         Summary s = new Summary(5, 4, 2, 1, 1);
-        when(logs.summary(420)).thenReturn(s);
-        assertSame(s, service.summary(admin, 420));
+        LocalDate from = LocalDate.of(2026, 10, 14), to = LocalDate.of(2026, 11, 5);
+        when(logs.summary(from, to, 420)).thenReturn(s);
+        assertSame(s, service.summary(admin, from, to, 420));
     }
 
     @Test
     @DisplayName("UTC014 - Only ADMIN can view the statistics")
     void summary_rejectsNonAdmin() {
-        fail(403, "ROLE", () -> service.summary(owner, 0));
-        verify(logs, never()).summary(anyInt());
+        fail(403, "ROLE", () -> service.summary(owner, null, null, 0));
+        verify(logs, never()).summary(any(), any(), anyInt());
     }
 
     @Test
     @DisplayName("UTC015 - offset 840 is accepted, 841 and -841 are rejected")
     void summary_timezoneOffsetBoundary() {
         Summary s = new Summary(0, 0, 0, 0, 0);
-        when(logs.summary(840)).thenReturn(s);
-        assertSame(s, service.summary(admin, 840));
-        fail(400, "OFFSET", () -> service.summary(admin, 841));
-        fail(400, "OFFSET", () -> service.summary(admin, -841));
+        when(logs.summary(null, null, 840)).thenReturn(s);
+        assertSame(s, service.summary(admin, null, null, 840));
+        fail(400, "OFFSET", () -> service.summary(admin, null, null, 841));
+        fail(400, "OFFSET", () -> service.summary(admin, null, null, -841));
+    }
+
+    @Test
+    @DisplayName("UTC015b - Statistics reject to < from; open ranges (all time) are accepted")
+    void summary_dateRange() {
+        LocalDate day = LocalDate.of(2026, 10, 12);
+        fail(400, "DATE_RANGE", () -> service.summary(admin, day, day.minusDays(1), 0));
+        verify(logs, never()).summary(any(), any(), anyInt());
+        when(logs.summary(any(), any(), anyInt())).thenReturn(new Summary(0, 0, 0, 0, 0));
+        assertNotNull(service.summary(admin, null, null, 0));
+        assertNotNull(service.summary(admin, day, null, 0));
+        assertNotNull(service.summary(admin, day, day, 0));
     }
 
 

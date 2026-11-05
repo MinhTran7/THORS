@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
-import useSWR from 'swr';
+import useSWR, { useSWRConfig } from 'swr';
 import {
   Alert,
   Box,
@@ -40,13 +40,16 @@ import { useCrumbs } from 'layouts/crumbs';
 import { useAuth } from 'features/auth/AuthProvider';
 import { PAGE_SIZE } from 'features/account/constants';
 import { useDebounced } from 'features/account/hooks';
-import { formatTime } from 'features/account/format';
+import { formatTime, parseUtc } from 'features/account/format';
 import { brand, cardSx } from 'features/account/tokens';
 import { BrandButton, OutlineButton } from 'features/account/components/Brand';
 import { StatusPill } from 'features/account/components/Chips';
 import { bodyCellSx, EmptyRow, headCellSx, PageHeader, Pager, SearchField, Toolbar } from 'features/account/components/Blocks';
-import { ordersApi } from './api';
-import { CARRIERS, CUSTOMER_ACTIONS, OWNER_ACTIONS } from './orderActions';
+import { LIVE_SWR, ordersApi, refreshAllOrders } from './api';
+import { CUSTOMER_ACTIONS, OWNER_ACTIONS, ownerActionsFor } from './orderActions';
+import AddressNotFoundDialog, { ADDRESS_NOT_FOUND, INVALID_ADDRESS_REASON } from './AddressNotFoundDialog';
+import DeliveryChoice from './DeliveryChoice';
+import { ghnReady } from './GhnAddressFields';
 import { formatVnd, orderStatusMeta, paymentMethodLabel, paymentStatusMeta, preparationMeta } from './constants';
 
 // Các tab của khách (kiểu "Đơn mua"): mỗi tab là một hoặc nhiều trạng thái
@@ -71,12 +74,15 @@ const DATE_PRESETS = [
   { value: 'custom', label: 'Chọn khoảng ngày' }
 ];
 
-// Bộ lọc hình thức thanh toán (khớp với backend: COD hoặc ONLINE = mọi hình thức không phải COD)
+// Bộ lọc hình thức thanh toán (khớp với backend: giá trị cột orders.payment_method)
 const PAYMENT_FILTERS = [
   { value: 'all', label: 'Mọi hình thức thanh toán' },
   { value: 'COD', label: 'Thanh toán khi nhận hàng (COD)' },
   { value: 'ONLINE', label: 'Thanh toán online' }
 ];
+
+// Chiều rộng cố định cho các ô lọc để thanh lọc không bị nhảy khi đổi lựa chọn
+const FILTER_WIDTH = { date: 200, payment: 270, customDate: 160 };
 
 // Lý do có sẵn để chọn; chỉ khi chọn "Lý do khác" mới phải tự nhập
 const OTHER_REASON = '__OTHER__';
@@ -85,6 +91,7 @@ const OWNER_REJECT_REASONS = [
   'Sản phẩm không còn kinh doanh',
   'Không liên hệ được với khách hàng',
   'Địa chỉ giao hàng không hỗ trợ',
+  INVALID_ADDRESS_REASON,
   'Thông tin đơn hàng không hợp lệ'
 ];
 const OWNER_CANCEL_REASONS = [
@@ -112,8 +119,9 @@ const pad = (n) => String(n).padStart(2, '0');
 // Hiển thị ngày dạng dd/mm/yyyy
 const formatDate = (value) => {
   if (!value) return '—';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return '—';
+  // Backend trả giờ UTC không kèm "Z", nên phải đọc bằng parseUtc thì mới ra đúng ngày giờ VN
+  const d = parseUtc(value);
+  if (!d) return '—';
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
 };
 
@@ -420,6 +428,7 @@ export default function OrderListPage() {
   useCrumbs(['Đơn hàng']);
   const { account } = useAuth();
   const navigate = useNavigate();
+  const { mutate: globalMutate } = useSWRConfig();
   const isCustomer = account.role === 'CUSTOMER';
 
   const [q, setQ] = useState('');
@@ -437,6 +446,9 @@ export default function OrderListPage() {
   const [reasonChoice, setReasonChoice] = useState(''); // lý do có sẵn đã chọn (hoặc OTHER_REASON)
   const [customReason, setCustomReason] = useState(''); // chỉ dùng khi chọn "Lý do khác"
   const [carrier, setCarrier] = useState('SELF');
+  const [ghn, setGhn] = useState(null); // { provinceId, districtId, wardCode, weightG } khi gửi GHN
+  const [addressBlocked, setAddressBlocked] = useState(false); // không tìm thấy địa chỉ giao -> không bàn giao
+  const [addressAlert, setAddressAlert] = useState(null); // { order, message } khi backend báo không tìm thấy địa chỉ
   const isOwner = account.role === 'OWNER';
   const search = useDebounced(q.trim());
 
@@ -455,11 +467,13 @@ export default function OrderListPage() {
     page,
     size: PAGE_SIZE
   };
-  const list = useSWR(['orders', params], () => ordersApi.list(params), { keepPreviousData: true, revalidateOnFocus: false });
+  // Danh sách tự tải lại định kỳ để thấy ngay đơn mới và trạng thái mới, không cần reload trang
+  const list = useSWR(['orders', params], () => ordersApi.list(params), { keepPreviousData: true, ...LIVE_SWR });
   // Số đơn theo trạng thái cho các tab của chủ shop
-  const counts = useSWR(isOwner ? ['order-counts'] : null, () => ordersApi.counts(), { revalidateOnFocus: false });
+  const counts = useSWR(isOwner ? ['order-counts'] : null, () => ordersApi.counts(), LIVE_SWR);
   const countData = counts.data ?? {};
-  const refresh = () => Promise.all([list.mutate(), isOwner ? counts.mutate() : null]);
+  // Làm mới mọi dữ liệu đơn hàng (danh sách, số đếm, cả trang chi tiết đang mở trong cache)
+  const refresh = () => refreshAllOrders(globalMutate);
 
   const hasFilter = Boolean(search) || status !== 'all' || datePreset !== 'all' || paymentFilter !== 'all';
 
@@ -483,14 +497,32 @@ export default function OrderListPage() {
     setBusyId(order.id);
     setRowError('');
     try {
-      await ordersApi.changeStatus(order.id, action.to, why, carrierValue);
+      await ordersApi.changeStatus(order.id, action.to, why, carrierValue, ghn);
       setDialog(null);
       await refresh();
     } catch (e) {
-      setRowError(e.message || 'Không đổi được trạng thái đơn.');
+      if (e.code === ADDRESS_NOT_FOUND) {
+        // Hiện hộp thoại giữa màn hình để chủ shop không bỏ sót, thay cho dòng báo lỗi nhỏ
+        setDialog(null);
+        setAddressAlert({ order, message: e.message });
+      } else {
+        setRowError(e.message || 'Không đổi được trạng thái đơn.');
+      }
     } finally {
       setBusyId(null);
     }
+  };
+
+  // Từ hộp thoại "Không tìm thấy địa chỉ": mở luồng từ chối đơn, chọn sẵn lý do địa chỉ không hợp lệ
+  const rejectForInvalidAddress = () => {
+    const order = addressAlert.order;
+    const reject = (OWNER_ACTIONS[order.orderStatus] ?? []).find((a) => a.to === 'REJECTED');
+    setAddressAlert(null);
+    if (!reject) return;
+    setRowError('');
+    setReasonChoice(INVALID_ADDRESS_REASON);
+    setCustomReason('');
+    setDialog({ order, action: reject });
   };
 
   const startAction = (order, action) => {
@@ -499,6 +531,8 @@ export default function OrderListPage() {
       setReasonChoice('');
       setCustomReason('');
       setCarrier('SELF');
+      setGhn(null);
+      setAddressBlocked(false);
       setDialog({ order, action });
     } else {
       runAction(order, action);
@@ -518,6 +552,7 @@ export default function OrderListPage() {
 
   // Hộp thoại chọn lý do (từ chối, hủy) hoặc chọn hình thức giao; dùng chung cho khách và chủ shop
   const actionDialog = (
+    <>
     <Dialog
       open={Boolean(dialog)}
       onClose={() => busyId === null && setDialog(null)}
@@ -530,53 +565,31 @@ export default function OrderListPage() {
         {dialog && (
           <Box sx={{ p: 1.5, bgcolor: '#FAFAF7', border: `1px solid ${brand.line}`, borderRadius: '10px', mb: 2 }}>
             <Typography variant="body2" sx={{ color: brand.ink, fontWeight: 700 }}>
-              Đơn hàng <span style={{ color: '#DC2626', textDecoration: 'underline', textUnderlineOffset: '3px' }}>#{dialog.order.orderNumber}</span>
+              Đơn hàng{' '}
+              <span style={{ color: '#DC2626', textDecoration: 'underline', textUnderlineOffset: '3px' }}>#{dialog.order.orderNumber}</span>
             </Typography>
             <Typography variant="body2" sx={{ color: brand.muted, mt: 0.25 }}>
               Người nhận: <strong>{dialog.order.deliveryName}</strong>
             </Typography>
-            {dialog.action.askCarrier && (
-              <Typography variant="body2" sx={{ color: brand.muted, mt: 0.5 }}>
-                Địa chỉ giao:{' '}
-                <Typography component="span" variant="body2" sx={{ color: brand.ink, fontWeight: 600 }}>
-                  {dialog.order.deliveryAddress || '—'}
-                </Typography>
-              </Typography>
-            )}
           </Box>
         )}
         {dialog?.action.askCarrier ? (
-          <TextField
-            select
-            autoFocus
-            fullWidth
-            margin="dense"
-            label="Hình thức giao hàng"
-            value={carrier}
-            onChange={(e) => setCarrier(e.target.value)}
-            helperText={
-              carrier === 'SELF'
-                ? 'Cửa hàng tự giao hàng (địa chỉ gần, không cần mã vận đơn).'
-                : 'Giao hàng thông qua đơn vị vận chuyển đối tác.'
-            }
-            slotProps={{ select: { sx: { borderRadius: '10px' } } }}
-          >
-            {CARRIERS.map((item) => (
-              <MenuItem key={item.value} value={item.value}>
-                {item.label}
-              </MenuItem>
-            ))}
-          </TextField>
+          <DeliveryChoice
+            orderId={dialog.order.id}
+            address={dialog.order.deliveryAddress}
+            carrier={carrier}
+            onChange={setCarrier}
+            ghn={ghn}
+            onGhnChange={setGhn}
+            onBlockedChange={setAddressBlocked}
+          />
         ) : (
           dialog && (
             <Box>
               <Typography variant="body2" sx={{ color: brand.ink, fontWeight: 600, mb: 0.5 }}>
                 Chọn lý do
               </Typography>
-              <RadioGroup
-                value={reasonChoice}
-                onChange={(e) => setReasonChoice(e.target.value)}
-              >
+              <RadioGroup value={reasonChoice} onChange={(e) => setReasonChoice(e.target.value)}>
                 {[...getReasons(dialog.action), OTHER_REASON].map((item) => (
                   <FormControlLabel
                     key={item}
@@ -616,7 +629,11 @@ export default function OrderListPage() {
           Quay lại
         </OutlineButton>
         {dialog?.action.askCarrier ? (
-          <BrandButton disabled={busyId !== null} onClick={() => runAction(dialog.order, dialog.action, '', carrier)} sx={{ px: 2.5 }}>
+          <BrandButton
+            disabled={busyId !== null || addressBlocked || (carrier === 'GHN' && !ghnReady(ghn))}
+            onClick={() => runAction(dialog.order, dialog.action, '', carrier)}
+            sx={{ px: 2.5 }}
+          >
             {busyId !== null ? 'Đang xử lý...' : 'Xác nhận'}
           </BrandButton>
         ) : (
@@ -633,12 +650,19 @@ export default function OrderListPage() {
         )}
       </DialogActions>
     </Dialog>
+    <AddressNotFoundDialog
+      value={addressAlert}
+      onClose={() => setAddressAlert(null)}
+      onReject={addressAlert?.order.orderStatus === 'PENDING_CONFIRMATION' ? rejectForInvalidAddress : undefined}
+    />
+    </>
   );
 
-  // Thanh bộ lọc: tìm kiếm, ngày đặt, hình thức thanh toán; dùng chung cho khách và chủ shop
+  // Thanh bộ lọc: tìm kiếm, ngày đặt, hình thức thanh toán; dùng chung cho khách và chủ shop.
+  // Các ô lọc có chiều rộng cố định, chỉ ô tìm kiếm co giãn, nên thanh không bị nhảy khi đổi lựa chọn.
   const filterBar = (searchPlaceholder) => (
     <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.5 }}>
-      <Box sx={{ flex: 1, minWidth: 260 }}>
+      <Box sx={{ flex: '1 1 260px', minWidth: 260 }}>
         <SearchField placeholder={searchPlaceholder} value={q} onChange={filter(setQ)} />
       </Box>
       <TextField
@@ -647,7 +671,7 @@ export default function OrderListPage() {
         label="Ngày đặt"
         value={datePreset}
         onChange={(e) => filter(setDatePreset)(e.target.value)}
-        sx={{ minWidth: 190 }}
+        sx={{ width: FILTER_WIDTH.date, flexShrink: 0 }}
         slotProps={{ select: { sx: { borderRadius: '10px' } } }}
       >
         {DATE_PRESETS.map((item) => (
@@ -664,6 +688,7 @@ export default function OrderListPage() {
             label="Từ ngày"
             value={customFrom}
             onChange={(e) => filter(setCustomFrom)(e.target.value)}
+            sx={{ width: FILTER_WIDTH.customDate, flexShrink: 0 }}
             slotProps={{ inputLabel: { shrink: true }, htmlInput: { max: customTo || undefined }, input: { sx: { borderRadius: '10px' } } }}
           />
           <TextField
@@ -672,6 +697,7 @@ export default function OrderListPage() {
             label="Đến ngày"
             value={customTo}
             onChange={(e) => filter(setCustomTo)(e.target.value)}
+            sx={{ width: FILTER_WIDTH.customDate, flexShrink: 0 }}
             slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: customFrom || undefined }, input: { sx: { borderRadius: '10px' } } }}
           />
         </>
@@ -682,7 +708,7 @@ export default function OrderListPage() {
         label="Thanh toán"
         value={paymentFilter}
         onChange={(e) => filter(setPaymentFilter)(e.target.value)}
-        sx={{ minWidth: 230 }}
+        sx={{ width: FILTER_WIDTH.payment, flexShrink: 0 }}
         slotProps={{ select: { sx: { borderRadius: '10px' } } }}
       >
         {PAYMENT_FILTERS.map((item) => (
@@ -746,7 +772,7 @@ export default function OrderListPage() {
             {rowError}
           </Alert>
         )}
-        {list.error && (
+        {list.error && !list.data && (
           <Alert severity="error" sx={{ mb: 2, borderRadius: '10px' }}>
             {list.error.message}
           </Alert>
@@ -885,7 +911,7 @@ export default function OrderListPage() {
       </Toolbar>
 
       <Box sx={{ ...cardSx, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)', borderRadius: '14px' }}>
-        {list.error && (
+        {list.error && !list.data && (
           <Alert severity="error" sx={{ m: 2, borderRadius: '10px' }}>
             {list.error.message}
           </Alert>
@@ -1031,7 +1057,7 @@ export default function OrderListPage() {
                         >
                           Xem
                         </OutlineButton>
-                        {(isOwner ? (OWNER_ACTIONS[order.orderStatus] ?? []) : []).map((action) =>
+                        {(isOwner ? ownerActionsFor(order) : []).map((action) =>
                           action.primary ? (
                             <BrandButton
                               key={action.to}

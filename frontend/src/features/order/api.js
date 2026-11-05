@@ -18,5 +18,45 @@ export const ordersApi = {
   createSample: () => api('/orders/test-sample', { method: 'POST' }),
   // Owner: xác nhận / từ chối / giao / hoàn tất. Customer: hủy đơn.
   // carrier chỉ dùng khi chuyển sang SHIPPING: SELF (tự giao) hoặc mã đơn vị vận chuyển
-  changeStatus: (id, status, reason, carrier) => api(`/orders/${id}/status${query({ status, reason, carrier })}`, { method: 'POST' })
+  // ghn (chỉ khi carrier = GHN): { districtId, wardCode, weightG } theo danh mục GHN
+  changeStatus: (id, status, reason, carrier, ghn) =>
+    api(
+      `/orders/${id}/status${query({
+        status,
+        reason,
+        carrier,
+        ...(carrier === 'GHN' && ghn ? { ghnDistrictId: ghn.districtId, ghnWardCode: ghn.wardCode, weightG: ghn.weightG } : {})
+      })}`,
+      { method: 'POST' }
+    ),
+  // Khoảng cách từ cửa hàng tới địa chỉ giao và hình thức giao gợi ý (chỉ cửa hàng)
+  deliverySuggestion: (id) => api(`/orders/${id}/delivery-suggestion`)
 };
+
+// Danh mục địa chỉ của GHN (3 cấp kiểu cũ: Tỉnh > Quận/Huyện > Phường/Xã), mỗi mục { id, name }
+export const ghnApi = {
+  provinces: () => api('/ghn/provinces'),
+  districts: (provinceId) => api(`/ghn/districts${query({ provinceId })}`),
+  wards: (districtId) => api(`/ghn/wards${query({ districtId })}`),
+  // Gợi ý Tỉnh / Quận / Phường theo GHN cho địa chỉ của đơn: { provinceId, districtId, wardCode, candidates }
+  suggest: (orderId) => api(`/ghn/suggest${query({ orderId })}`)
+};
+
+/* ------------------------------------------------------------------ Tự cập nhật đơn hàng không cần reload trang */
+
+export const LIVE_INTERVAL = 5000; // 5 giây; khi lên production có thể tăng lên 10–15 giây
+
+// Đơn ở các trạng thái này sẽ không thay đổi nữa, không cần hỏi lại
+export const FINAL_STATUSES = ['COMPLETED', 'CANCELLED', 'REJECTED', 'EXPIRED'];
+
+// Tải lại khi quay lại tab, khi có mạng lại, và hỏi định kỳ (chỉ khi tab đang mở)
+export const LIVE_SWR = {
+  refreshInterval: LIVE_INTERVAL,
+  revalidateOnFocus: true,
+  revalidateOnReconnect: true,
+  refreshWhenHidden: false
+};
+
+// Làm mới mọi dữ liệu đơn hàng trong cache SWR: danh sách, chi tiết, số đếm trên tab
+export const refreshAllOrders = (globalMutate) =>
+  globalMutate((key) => Array.isArray(key) && ['orders', 'order', 'order-counts'].includes(key[0]));

@@ -71,7 +71,10 @@ public class SecurityConfig {
         http.csrf(
                 c ->
                         c.csrfTokenRepository(new HttpSessionCsrfTokenRepository())
-                                .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()));
+                                .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
+                                // GHN gọi webhook từ máy chủ của họ, không có cookie/CSRF; được bảo vệ
+                                // bằng chuỗi bí mật trong đường dẫn (thors.ghn.webhook-secret)
+                                .ignoringRequestMatchers("/api/ghn/webhook/**"));
         http.authorizeHttpRequests(
                 a ->
                         a.requestMatchers(
@@ -89,6 +92,7 @@ public class SecurityConfig {
                                         "/api/auth/otp/**",
                                         "/api/auth/reset-password",
                                         "/api/shop/**",
+                                        "/api/ghn/webhook/**",
                                         "/oauth2/**",
                                         "/login/oauth2/**",
                                         "/error")

@@ -20,17 +20,17 @@ const FAMILY_ROLE = 'FAMILY_MEMBER';
 
 const createSchema = Yup.object({
   fullName,
-  email: Yup.string().trim().required('Enter an email address.').email('Enter a valid email address.'),
-  phone: phone.required('Enter a phone number.'),
+  email: Yup.string().trim().required('Vui lòng nhập địa chỉ email.').email('Địa chỉ email không hợp lệ.'),
+  phone: phone.required('Vui lòng nhập số điện thoại.'),
   password: newPassword
 });
 const editSchema = Yup.object({ fullName });
 
 // Tạo mới: /family/new. Chỉnh sửa: /family/:id/edit (backend chỉ cho sửa tên).
-export default function StaffFormPage() {
+export default function FamilyFormPage() {
   const { id } = useParams();
   const editing = Boolean(id);
-  useCrumbs(['Family', editing ? 'Edit Family Member' : 'Add Family Member']);
+  useCrumbs(['Gia đình', editing ? 'Sửa thành viên gia đình' : 'Thêm thành viên gia đình']);
   const navigate = useNavigate();
   const [error, setError] = useState('');
   const { data } = useSWR(editing ? ['account', id] : null, () => accountsApi.detail(id), { revalidateOnFocus: false });
@@ -52,7 +52,7 @@ export default function StaffFormPage() {
       try {
         if (editing) {
           await accountsApi.rename(id, values.fullName.trim());
-          navigate(`/family/${id}`, { state: { toast: 'Account updated.' } });
+          navigate(`/family/${id}`, { state: { toast: 'Đã cập nhật tài khoản.' } });
           return;
         }
         const created = await accountsApi.create({
@@ -64,7 +64,7 @@ export default function StaffFormPage() {
           confirmPassword: values.password
         });
         if (!values.activate) await accountsApi.setStatus(created.id, 'DISABLED');
-        navigate('/family', { state: { toast: `Account created for ${created.fullName}.` } });
+        navigate('/family', { state: { toast: `Đã tạo tài khoản cho ${created.fullName}.` } });
       } catch (e) {
         setError(e.message);
       }
@@ -84,10 +84,10 @@ export default function StaffFormPage() {
       <PageHeader
         back={{
           to: editing ? `/family/${id}` : '/family',
-          label: editing ? 'Family member detail' : 'Family list / New member'
+          label: editing ? 'Chi tiết thành viên gia đình' : 'Danh sách gia đình / Thành viên mới'
         }}
-        title={editing ? 'Edit Family Member' : 'Family Member Form'}
-        subtitle={editing ? 'Update the name shown for this account.' : 'Create a secure account for a family member.'}
+        title={editing ? 'Sửa thành viên gia đình' : 'Biểu mẫu thành viên gia đình'}
+        subtitle={editing ? 'Cập nhật tên hiển thị của tài khoản này.' : 'Tạo tài khoản an toàn cho thành viên gia đình.'}
       />
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
@@ -97,32 +97,40 @@ export default function StaffFormPage() {
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1fr) 320px' }, gap: 3, alignItems: 'start' }}>
         <Box component="form" onSubmit={form.handleSubmit} noValidate sx={{ ...cardSx, p: 3 }}>
           <Typography variant="h5" sx={{ color: brand.ink }}>
-            Account details
+            Thông tin tài khoản
           </Typography>
           <Typography variant="caption" sx={{ color: brand.muted }}>
-            {editing ? 'Email and phone cannot be changed here.' : 'All fields are required. Each person gets their own sign-in.'}
+            {editing
+              ? 'Không thể thay đổi email và số điện thoại tại đây.'
+              : 'Tất cả các trường đều bắt buộc. Mỗi người có một tài khoản đăng nhập riêng.'}
           </Typography>
           <Stack spacing={2.5} sx={{ mt: 2.5 }}>
-            <FormField label="Name" error={fieldError('fullName')}>
-              <TextInput label="Name" placeholder="Enter full name" {...bind('fullName')} />
+            <FormField label="Tên" error={fieldError('fullName')}>
+              <TextInput label="Tên" placeholder="Nhập họ và tên" {...bind('fullName')} />
             </FormField>
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2.5 }}>
               <FormField label="Email" error={fieldError('email')}>
                 <TextInput label="Email" placeholder="name@example.com" autoComplete="off" disabled={editing} {...bind('email')} />
               </FormField>
-              <FormField label="Phone" error={fieldError('phone')}>
-                <TextInput label="Phone" placeholder="0912 345 678" autoComplete="off" disabled={editing} {...bind('phone')} />
+              <FormField label="Số điện thoại" error={fieldError('phone')}>
+                <TextInput
+                  label="Số điện thoại"
+                  placeholder="0912 345 678"
+                  autoComplete="off"
+                  disabled={editing}
+                  {...bind('phone')}
+                />
               </FormField>
             </Box>
             {!editing && (
               <FormField
-                label="Password"
+                label="Mật khẩu"
                 error={fieldError('password')}
-                helper="At least 10 characters. The user should change it after their first sign-in."
+                helper="Tối thiểu 10 ký tự. Người dùng nên đổi mật khẩu sau lần đăng nhập đầu tiên."
               >
                 <PasswordInput
-                  label="Password"
-                  placeholder="Create a temporary password"
+                  label="Mật khẩu"
+                  placeholder="Tạo mật khẩu tạm thời"
                   autoComplete="new-password"
                   {...bind('password')}
                 />
@@ -138,25 +146,25 @@ export default function StaffFormPage() {
               >
                 <Box>
                   <Typography variant="subtitle2" sx={{ color: brand.ink }}>
-                    Activate account immediately
+                    Kích hoạt tài khoản ngay
                   </Typography>
                   <Typography variant="caption" sx={{ color: brand.muted }}>
-                    The user can sign in as soon as their account is created.
+                    Người dùng có thể đăng nhập ngay khi tài khoản được tạo.
                   </Typography>
                 </Box>
                 <BrandSwitch
                   checked={form.values.activate}
                   onChange={(event) => form.setFieldValue('activate', event.target.checked)}
-                  slotProps={{ input: { 'aria-label': 'Activate account immediately' } }}
+                  slotProps={{ input: { 'aria-label': 'Kích hoạt tài khoản ngay' } }}
                 />
               </Stack>
             )}
             <Stack direction="row" spacing={1.5} justifyContent="flex-end">
               <OutlineButton component={RouterLink} to={editing ? `/family/${id}` : '/family'}>
-                Cancel
+                Hủy
               </OutlineButton>
               <BrandButton type="submit" disabled={form.isSubmitting || (editing && !data)}>
-                {form.isSubmitting ? 'Saving…' : editing ? 'Save changes' : 'Create Account'}
+                {form.isSubmitting ? 'Đang lưu…' : editing ? 'Lưu thay đổi' : 'Tạo tài khoản'}
               </BrandButton>
             </Stack>
           </Stack>
@@ -165,18 +173,18 @@ export default function StaffFormPage() {
         <Stack spacing={2.5}>
           <Box sx={{ ...cardSx, p: 3 }}>
             <Typography variant="h5" sx={{ color: brand.ink, mb: 2 }}>
-              Family member access
+              Quyền truy cập của thành viên gia đình
             </Typography>
             <RoleChip role={FAMILY_ROLE} />
             <Typography variant="caption" sx={{ color: brand.muted, display: 'block', mt: 0.75 }}>
-              For trusted family members. Family accounts have view-only access to store information.
+              Dành cho các thành viên gia đình đáng tin cậy. Tài khoản gia đình chỉ có quyền xem thông tin cửa hàng.
             </Typography>
           </Box>
-          <NoticeBox title="Your store, your control" icon={<InfoCircleOutlined />}>
-            Only the Shop Owner can add accounts or activate and deactivate access.
+          <NoticeBox title="Cửa hàng của bạn, quyền của bạn" icon={<InfoCircleOutlined />}>
+            Chỉ Chủ cửa hàng mới có thể thêm tài khoản hoặc kích hoạt, vô hiệu hóa quyền truy cập.
           </NoticeBox>
-          <NoticeBox title="A secure start" icon={<InfoCircleOutlined />}>
-            Share temporary credentials privately. Ask the new member to update their password after signing in.
+          <NoticeBox title="Khởi đầu an toàn" icon={<InfoCircleOutlined />}>
+            Hãy gửi thông tin đăng nhập tạm thời qua kênh riêng tư. Yêu cầu thành viên mới đổi mật khẩu sau khi đăng nhập.
           </NoticeBox>
         </Stack>
       </Box>

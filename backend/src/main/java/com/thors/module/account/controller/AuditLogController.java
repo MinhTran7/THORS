@@ -41,10 +41,16 @@ public class AuditLogController {
                 size);
     }
 
-    /** Số liệu trong ngày cho các thẻ thống kê. */
+    /**
+     * GET /api/audit-logs/summary?from=2026-10-14&to=2026-11-05&offset=420 — số liệu cho các thẻ
+     * thống kê trong khoảng ngày đang lọc; bỏ from/to là tính toàn bộ lịch sử.
+     */
     @GetMapping("/summary")
-    Object summary(@RequestParam(defaultValue = "0") int offset) {
-        return service.summary(sessions.current(), offset);
+    Object summary(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(defaultValue = "0") int offset) {
+        return service.summary(sessions.current(), from, to, offset);
     }
 
     @GetMapping("/actions")
