@@ -70,7 +70,7 @@ public class WarehouseBarcodes {
         var rows = s.jdbc().queryForList("""
                 SELECT d.detail_id,d.product_id,d.barcode,d.color,d.size,d.stock_quantity,d.status,p.product_name,
                   COALESCE(l.assigned,0) AS assigned_quantity,
-                  d.stock_quantity-COALESCE(l.assigned,0) AS unassigned_quantity,
+                  GREATEST(0,d.stock_quantity-COALESCE(l.assigned,0)) AS unassigned_quantity,
                   (SELECT pi.image_url FROM product_image pi
                    WHERE pi.product_id=d.product_id AND pi.deleted_at IS NULL
                    ORDER BY pi.is_primary DESC,pi.image_id ASC LIMIT 1) AS image_url

@@ -26,7 +26,7 @@ export const typeLabel = { PURCHASE_ORDER: 'Phiếu đặt hàng', RECEIPT: 'Phi
 // Supplier returns: approval and physical dispatch are separate steps.
 const returnStatusLabel = { PENDING_CONFIRMATION: 'Chờ duyệt', APPROVED: 'Chờ xuất trả', CONFIRMED: 'Đã xuất trả' };
 export const statusText = (status, type) => (type === 'SUPPLIER_RETURN' && returnStatusLabel[status]) || statusLabel[status] || status;
-// Receipt line still returnable: received − dispatched − approved (waiting for dispatch) on other returns.
+// Receipt line still returnable: received − dispatched (confirmed) returns. See returnableQty.
 // Money/goods coming back from the supplier after dispatch; separate from the document status.
 export const settlementStatusLabel = {
   NOT_APPLICABLE: 'Chưa xuất trả',
@@ -43,7 +43,8 @@ export const settlementTypeLabel = {
   EXCHANGE: 'Đổi hàng'
 };
 export const paymentMethodLabel = { CASH: 'Tiền mặt', BANK_TRANSFER: 'Chuyển khoản' };
-export const returnableQty = (i) => Math.max(0, Number(i.quantity) - Number(i.handled_quantity || 0) - Number(i.reserved_quantity || 0));
+// Only dispatched returns (handled_quantity) reduce it; approved returns waiting for dispatch do not.
+export const returnableQty = (i) => Math.max(0, Number(i.quantity) - Number(i.handled_quantity || 0));
 export const money = (v) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(Number(v || 0));
 export const number = (v) => new Intl.NumberFormat('vi-VN').format(Number(v || 0));
 export const variantLabel = (v) => `${v.product_name} · ${v.color} · ${v.size}`;

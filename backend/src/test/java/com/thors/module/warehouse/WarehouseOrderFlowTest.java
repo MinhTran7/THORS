@@ -645,11 +645,16 @@ class WarehouseOrderFlowTest {
         int third = returnDoc(OWNER, r, 1, "Lỗi may");
         dispatch(first, new Pick(returnLine(first), null, 4));
         assertTrue(fails(() -> returnDoc(OWNER, r, 7, "x")).getMessage().contains("còn được trả 6"));
-        run(() -> docs.approve(OWNER, second)); // reserves the remaining 6
-        var over = fails(() -> docs.approve(OWNER, third));
-        assertTrue(over.getMessage().contains("còn được trả 0"), over.getMessage());
-        assertEquals("DRAFT", status(third));
+        // Approval reserves nothing: only dispatched returns reduce what is still returnable.
+        run(() -> docs.approve(OWNER, second));
+        run(() -> docs.approve(OWNER, third));
+        assertEquals("APPROVED", status(third));
         dispatch(second, new Pick(returnLine(second), null, 6));
+        assertEquals(0, stock(1));
+        // Over-return is stopped at dispatch, against what was already dispatched.
+        var over = fails(() -> docs.confirm(OWNER, third, null, List.of(new Pick(returnLine(third), null, 1))));
+        assertTrue(over.getMessage().contains("còn được trả 0"), over.getMessage());
+        assertEquals("APPROVED", status(third));
         assertEquals(0, stock(1));
         assertEquals(10L, n(orderLine(po, 1), "returned_quantity"));
         assertEquals(0L, n(orderLine(po, 1), "remaining_quantity"),

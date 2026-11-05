@@ -126,6 +126,30 @@ public class WarehouseStore {
                     String.format(
                             "Biến thể #%d không đủ hàng có thể bán: tồn %d, đang giữ cho đơn khác %d, cần %d.",
                             detail, stock, Math.max(0, others), qty));
+        var taken = take(actor, detail, qty, stock, orderItem, key, reason);
+        if (db.update(
+                        "UPDATE product_detail SET stock_quantity=stock_quantity-? WHERE detail_id=? AND stock_quantity>=?",
+                        qty,
+                        detail,
+                        qty)
+                != 1) throw invalid("Biến thể #" + detail + ": tồn vừa thay đổi, hãy tải lại.");
+        return taken;
+    }
+
+    /**
+     * Ledger for a sale whose stock_quantity was already reduced by code outside the warehouse (the
+     * Facebook order screen deducts on creation without a ledger row). Writes the same ORDER_OUT rows
+     * and takes the same locations as {@link #sell}, but does not touch stock_quantity again. Caller
+     * holds {@link #lock()}.
+     */
+    public void recordSold(int actor, int detail, int qty, int orderItem, String key, String reason) {
+        var variant = one("SELECT stock_quantity FROM product_detail WHERE detail_id=? FOR UPDATE", detail);
+        take(actor, detail, qty, num(variant, "stock_quantity") + qty, orderItem, key, reason);
+    }
+
+    /** Unplaced first, then the fullest locations; one ORDER_OUT row per source. {@code stock} = before the sale. */
+    private List<Map<String, Object>> take(
+            int actor, int detail, int qty, int stock, int orderItem, String key, String reason) {
         long assigned = count("SELECT COALESCE(SUM(quantity),0) FROM product_location WHERE detail_id=?", detail);
         int left = qty;
         var taken = new ArrayList<Map<String, Object>>();
@@ -151,12 +175,7 @@ public class WarehouseStore {
             taken.add(Map.of("location_id", id, "quantity", part));
             left -= part;
         }
-        if (left > 0 || db.update(
-                        "UPDATE product_detail SET stock_quantity=stock_quantity-? WHERE detail_id=? AND stock_quantity>=?",
-                        qty,
-                        detail,
-                        qty)
-                != 1) throw invalid("Biến thể #" + detail + ": tồn vừa thay đổi, hãy tải lại.");
+        if (left > 0) throw invalid("Biến thể #" + detail + ": tồn vừa thay đổi, hãy tải lại.");
         return taken;
     }
 

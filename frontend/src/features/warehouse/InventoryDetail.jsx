@@ -245,7 +245,18 @@ export default function InventoryDetail({ id, onClose, onChanged }) {
                 </Stack>
                 <Threshold variant={v} onSaved={() => (mutate(), onChanged())} />
                 {v.unassigned_quantity > 0 && (
-                  <Alert severity="warning">Còn {number(v.unassigned_quantity)} sản phẩm chưa xếp vị trí.</Alert>
+                  <Alert
+                    severity="warning"
+                    action={
+                      owner && (
+                        <Button color="inherit" size="small" component={Link} to={`/warehouse/locations?variant=${v.detail_id}&place=1`}>
+                          Xếp lên kệ
+                        </Button>
+                      )
+                    }
+                  >
+                    Còn {number(v.unassigned_quantity)} sản phẩm chưa xếp vị trí.
+                  </Alert>
                 )}
                 {v.hold_shortage > 0 && <Alert severity="error">Đơn đang giữ nhiều hơn tồn {number(v.hold_shortage)} sản phẩm.</Alert>}
                 <Typography variant="body2">
@@ -292,7 +303,22 @@ export default function InventoryDetail({ id, onClose, onChanged }) {
                   { key: 'label', label: 'Vị trí' },
                   { key: 'quantity', label: 'Số lượng', align: 'right', render: (l) => number(l.quantity) },
                   { key: 'description', label: 'Mô tả tại vị trí', render: (l) => l.description || '—' },
-                  { key: 'updated_at', label: 'Cập nhật', render: (l) => (l.updated_at ? when(l.updated_at) : '—') }
+                  { key: 'updated_at', label: 'Cập nhật', render: (l) => (l.updated_at ? when(l.updated_at) : '—') },
+                  ...(owner
+                    ? [
+                        {
+                          key: 'action',
+                          label: '',
+                          align: 'right',
+                          render: (l) =>
+                            l._key === 'unplaced' && l.quantity > 0 ? (
+                              <Button size="small" component={Link} to={`/warehouse/locations?variant=${v.detail_id}&place=1`}>
+                                Xếp lên kệ
+                              </Button>
+                            ) : null
+                        }
+                      ]
+                    : [])
                 ]}
               />
             )}

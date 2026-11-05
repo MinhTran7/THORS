@@ -373,7 +373,7 @@ class WarehouseInventoryTest {
             store.lock();
             return store.sell(1, 1, 3, 3, item, "ORDER_OUT:item:" + item, "Xuất bán");
         });
-        var today = LocalDate.now();
+        var today = LocalDate.now(WarehouseStore.STORE_ZONE);
         var rep = run(() -> inventory.report(OWNER, today, today, null, null, true));
         @SuppressWarnings("unchecked")
         var rows = (List<Map<String, Object>>) rep.get("items");
@@ -454,7 +454,7 @@ class WarehouseInventoryTest {
         assertEquals(new BigDecimal("500"), line.get("opening_value"));
         assertEquals(13L, line.get("closing"));
         assertEquals(new BigDecimal("1540"), line.get("closing_value"));
-        var now = run(() -> inventory.report(OWNER, LocalDate.of(2026, 1, 1), LocalDate.now(), null, null, true));
+        var now = run(() -> inventory.report(OWNER, LocalDate.of(2026, 1, 1), LocalDate.now(WarehouseStore.STORE_ZONE), null, null, true));
         @SuppressWarnings("unchecked")
         var today = ((List<Map<String, Object>>) now.get("items")).stream().filter(x -> id(x, "detail_id") == 5).findFirst().orElseThrow();
         assertEquals(r.get("stock_value"), today.get("closing_value"), "current value = report closing value");

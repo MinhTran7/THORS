@@ -275,7 +275,8 @@ public class WarehouseInventory {
             row.put("status", v.get("status"));
             row.put("stock_quantity", stock);
             row.put("assigned_quantity", assigned);
-            row.put("unassigned_quantity", stock - assigned);
+            // Không bao giờ âm: nếu vị trí ghi nhiều hơn tổng tồn thì coi như không còn hàng chưa xếp.
+            row.put("unassigned_quantity", Math.max(0, stock - assigned));
             row.put("held_quantity", held);
             row.put("available_quantity", Math.max(0, stock - held));
             row.put("hold_shortage", Math.max(0, held - stock));
