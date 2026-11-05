@@ -35,7 +35,11 @@ import {
   LinkOutlined,
   QrcodeOutlined,
   UserOutlined,
-  CheckOutlined
+  CheckOutlined,
+  CopyOutlined,
+  CloseOutlined,
+  BulbOutlined,
+  SwapOutlined
 } from '@ant-design/icons';
 import { getProducts, getProductById } from '../../services/productService';
 import { api } from '../../services/http';
@@ -84,13 +88,27 @@ export default function FacebookPOSPage() {
   const [selectedVariant, setSelectedVariant] = useState(null);
   const [cart, setCart] = useState([]);
 
-  // Thông tin khách hàng chốt đơn
+  // Thông tin khách hàng chốt đơn & Validate
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
+  const [submitAttempted, setSubmitAttempted] = useState(false);
   const [creatingOrder, setCreatingOrder] = useState(false);
   const [orderSuccessMsg, setOrderSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Dialog hiển thị Mã QR VietQR PayOS
+  const [qrModal, setQrModal] = useState({
+    open: false,
+    orderNumber: '',
+    totalAmount: 0,
+    qrImageUrl: '',
+    payUrl: '',
+    bankName: '',
+    accountNumber: '',
+    accountName: '',
+    copied: false
+  });
 
   const chatBoxRef = useRef(null);
 
@@ -141,7 +159,7 @@ export default function FacebookPOSPage() {
         const list = Array.isArray(res) ? res : res?.data ?? [];
         setProducts(list.filter((p) => String(p?.status || '').toUpperCase() === 'ACTIVE'));
       })
-      .catch(() => {});
+      .catch(() => { });
 
     fetchConversationsAndMessages();
 
@@ -195,7 +213,7 @@ export default function FacebookPOSPage() {
           const d = new Date(year, month - 1, day, hour, min, sec);
           if (!isNaN(d.getTime())) return d.getTime();
         }
-      } catch (ignored) {}
+      } catch (ignored) { }
     }
     return 0;
   };
@@ -286,6 +304,42 @@ export default function FacebookPOSPage() {
     }
     return null;
   }, [currentChatMessages]);
+
+  // Quét thông minh sản phẩm khách hoặc shop nhắc đến trong tin nhắn chat
+  const detectedProductSuggestion = useMemo(() => {
+    if (!products.length || !currentChatMessages.length) return null;
+    const recent = currentChatMessages.slice(-6);
+    for (let i = recent.length - 1; i >= 0; i--) {
+      const text = (recent[i].text || '').toLowerCase();
+      if (!text || text.length < 3) continue;
+
+      for (const p of products) {
+        const pName = (p.productName || '').toLowerCase();
+        if (pName && text.includes(pName)) {
+          return {
+            product: p,
+            rawText: recent[i].text
+          };
+        }
+      }
+    }
+    return null;
+  }, [products, currentChatMessages]);
+
+  // Bộ lọc tìm kiếm nhanh sản phẩm
+  const filteredProducts = useMemo(() => {
+    if (!products || !products.length) return [];
+    if (!searchProd.trim()) return products.slice(0, 10);
+    const kw = searchProd.toLowerCase().trim();
+    return products.filter((p) => (p.productName || '').toLowerCase().includes(kw));
+  }, [products, searchProd]);
+
+  // Kiểm tra tính hợp lệ dữ liệu (Validation)
+  const VN_PHONE_REGEX = /^(0[3|5|7|8|9])[0-9]{8}$/;
+  const nameValid = Boolean(customerName && customerName.trim().length >= 2);
+  const phoneValid = Boolean(customerPhone && VN_PHONE_REGEX.test(customerPhone.trim()));
+  const addressValid = Boolean(customerAddress && customerAddress.trim().length >= 6);
+  const cartValid = cart.length > 0;
 
   // Tự động điền thông tin khách hàng khi chọn hoặc chuyển đổi cuộc hội thoại
   useEffect(() => {
@@ -402,13 +456,18 @@ export default function FacebookPOSPage() {
     const targetPsid = selectedPsid;
     try {
       const now = new Date();
-      await api('/facebook/webhook/send', {
+      const sendRes = await api('/facebook/webhook/send', {
         method: 'POST',
         body: {
           recipientPsid: targetPsid,
           message: text.trim()
         }
       });
+
+      if (sendRes && sendRes.success === false) {
+        setErrorMsg(sendRes.error || 'Không thể gửi tin nhắn qua Facebook.');
+        return;
+      }
 
       // Hiển thị ngay lập tức tin nhắn của Shop vào khung chat
       const localMsg = {
@@ -430,14 +489,28 @@ export default function FacebookPOSPage() {
     }
   };
 
-  // 4. Chốt đơn & Tự động tạo link PayOS gửi vào Messenger cho khách
+  // 4. Chốt đơn & Tự động tạo link PayOS + Mã VietQR gửi vào Messenger cho khách
   const handleCreateOrderAndSendPayOS = async () => {
-    if (!cart.length) {
-      setErrorMsg('Vui lòng chọn ít nhất 1 sản phẩm vào đơn!');
-      return;
-    }
+    setSubmitAttempted(true);
+
     if (!selectedPsid) {
       setErrorMsg('Chưa chọn khách hàng Facebook để gửi link đơn!');
+      return;
+    }
+    if (!nameValid) {
+      setErrorMsg('Vui lòng nhập họ tên người nhận (tối thiểu 2 ký tự)!');
+      return;
+    }
+    if (!phoneValid) {
+      setErrorMsg('Số điện thoại không hợp lệ! Vui lòng nhập đúng 10 số di động (ví dụ: 0987654321).');
+      return;
+    }
+    if (!addressValid) {
+      setErrorMsg('Vui lòng nhập địa chỉ giao hàng cụ thể (tối thiểu 6 ký tự)!');
+      return;
+    }
+    if (!cartValid) {
+      setErrorMsg('Vui lòng chọn ít nhất 1 sản phẩm vào đơn hàng!');
       return;
     }
 
@@ -454,7 +527,7 @@ export default function FacebookPOSPage() {
             detailId: line.variantId,
             quantity: line.quantity
           })),
-          customerName: customerName.trim() || `Khách FB (${selectedPsid.slice(-6)})`,
+          customerName: customerName.trim(),
           customerPhone: customerPhone.trim(),
           customerAddress: customerAddress.trim(),
           psid: selectedPsid,
@@ -466,8 +539,11 @@ export default function FacebookPOSPage() {
       const orderNumber = orderResult?.orderNumber || `#${orderId}`;
       const totalAmount = orderResult?.totalAmount || cartTotal;
 
-      // Bước B: Thử tạo link thanh toán PayOS thật nếu PayOS đã cấu hình
+      // Bước B: Thử tạo link thanh toán PayOS thật & Mã VietQR
       let payUrl = `http://localhost:3000/orders/${orderId}`;
+      let qrImageUrl = '';
+      let bankInfo = null;
+
       try {
         const payRes = await api('/payment/payos/create-link', {
           method: 'POST',
@@ -476,8 +552,18 @@ export default function FacebookPOSPage() {
         if (payRes?.checkoutUrl) {
           payUrl = payRes.checkoutUrl;
         }
+        if (payRes?.bin && payRes?.accountNumber) {
+          const desc = `DH ${orderNumber.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20)}`;
+          qrImageUrl = `https://img.vietqr.io/image/${payRes.bin}-${payRes.accountNumber}-compact2.png?amount=${payRes.amount || totalAmount}&addInfo=${encodeURIComponent(desc)}&accountName=${encodeURIComponent(payRes.accountName || 'THORS')}`;
+          bankInfo = {
+            bin: payRes.bin,
+            accountNumber: payRes.accountNumber,
+            accountName: payRes.accountName || 'THORS Studio'
+          };
+        }
       } catch (ignored) {
-        // Nếu PayOS chưa bật, dùng link xem chi tiết đơn hàng
+        // Fallback tạo mã QR dẫn thẳng vào trang chi tiết đơn hàng
+        qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(payUrl)}`;
       }
 
       // Bước C: Tạo tin nhắn xác nhận kèm thông tin thanh toán VietQR / PayOS
@@ -488,21 +574,64 @@ export default function FacebookPOSPage() {
         `\n\n💵 TỔNG CỘNG: ${money(totalAmount)}\n` +
         (customerAddress.trim() ? `📍 Địa chỉ nhận hàng: ${customerAddress.trim()}\n` : '') +
         (customerPhone.trim() ? `📞 SĐT: ${customerPhone.trim()}\n` : '') +
-        `\n💳 Bạn vui lòng quét mã VietQR hoặc truy cập link sau để hoàn tất thanh toán online:\n` +
+        `\n💳 Bạn vui lòng quét mã VietQR hình bên dưới hoặc truy cập link sau để hoàn tất thanh toán online:\n` +
         `${payUrl}\n\n` +
         `Shop sẽ đóng gói và giao hàng ngay khi nhận được thanh toán ạ! ❤️`;
 
       // Bước D: Bắn tin nhắn qua Messenger cho khách hàng
-      await api('/facebook/webhook/send', {
-        method: 'POST',
-        body: {
-          recipientPsid: selectedPsid,
-          message: paymentMsg
+      let sendSuccess = true;
+      let sendWarningMsg = '';
+      try {
+        const sendRes = await api('/facebook/webhook/send', {
+          method: 'POST',
+          body: {
+            recipientPsid: selectedPsid,
+            message: paymentMsg
+          }
+        });
+        if (sendRes && sendRes.success === false) {
+          sendSuccess = false;
+          sendWarningMsg = sendRes.error || '';
         }
+      } catch (err) {
+        sendSuccess = false;
+        sendWarningMsg = err.message || '';
+      }
+
+      // Bước E: Gửi trực tiếp ảnh Mã QR VietQR vào Messenger cho khách hàng
+      if (qrImageUrl && sendSuccess) {
+        try {
+          await api('/facebook/webhook/send-image', {
+            method: 'POST',
+            body: {
+              recipientPsid: selectedPsid,
+              imageUrl: qrImageUrl
+            }
+          });
+        } catch (ignored) { }
+      }
+
+      // Mở modal hiển thị mã QR VietQR trên màn hình Web POS để nhân viên đối soát
+      setQrModal({
+        open: true,
+        orderNumber,
+        totalAmount,
+        qrImageUrl,
+        payUrl,
+        bankName: bankInfo ? `Ngân hàng (BIN: ${bankInfo.bin})` : 'VietQR / PayOS',
+        accountNumber: bankInfo?.accountNumber || '',
+        accountName: bankInfo?.accountName || 'THORS Studio',
+        copied: false
       });
 
-      setOrderSuccessMsg(`Tạo đơn ${orderNumber} thành công! Đơn đã lưu vào mục "Đơn hàng" và đã gửi link thanh toán vào Messenger.`);
+      if (sendSuccess) {
+        setOrderSuccessMsg(`Tạo đơn ${orderNumber} thành công! Đơn đã lưu vào mục "Đơn hàng" và đã gửi link + ảnh mã QR VietQR vào Messenger cho khách.`);
+      } else {
+        setOrderSuccessMsg(`Tạo đơn ${orderNumber} thành công và đã lưu vào mục "Đơn hàng"!`);
+        setErrorMsg(`Chưa gửi được tin nhắn Messenger: ${sendWarningMsg || 'Khách đã quá 24h chưa nhắn tin cho Page, vui lòng bảo khách gửi 1 tin vào Page để nhận tin nhắn!'}`);
+      }
       setCart([]);
+      setSubmitAttempted(false);
       await fetchConversationsAndMessages();
     } catch (e) {
       setErrorMsg('Lỗi tạo đơn: ' + (e.message || 'Vui lòng thử lại'));
@@ -746,7 +875,21 @@ export default function FacebookPOSPage() {
                           lineHeight: 1.45
                         }}
                       >
-                        {msg.text || '👍 [Nhãn dán / Hình ảnh]'}
+                        {msg.imageUrl && (
+                          <Box
+                            component="img"
+                            src={msg.imageUrl}
+                            alt="Hình ảnh"
+                            sx={{
+                              maxWidth: '100%',
+                              maxHeight: 220,
+                              borderRadius: '8px',
+                              mb: msg.text ? 1 : 0,
+                              display: 'block'
+                            }}
+                          />
+                        )}
+                        {msg.text || (msg.imageUrl ? '' : '👍 [Nhãn dán / Hình ảnh]')}
                       </Box>
                       <Typography
                         sx={{
@@ -848,19 +991,24 @@ export default function FacebookPOSPage() {
             </Typography>
             <Stack spacing={1} sx={{ mb: 2 }}>
               <TextField
+                fullWidth
                 size="small"
-                placeholder="Tên khách hàng"
+                placeholder="Tên khách hàng *"
                 value={customerName}
                 onChange={(e) => setCustomerName(e.target.value)}
+                error={submitAttempted && !nameValid}
+                helperText={submitAttempted && !nameValid ? 'Vui lòng nhập họ tên (tối thiểu 2 ký tự)' : ''}
                 sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: 12 } }}
               />
               <Box>
                 <TextField
                   fullWidth
                   size="small"
-                  placeholder="Số điện thoại"
+                  placeholder="Số điện thoại di động *"
                   value={customerPhone}
                   onChange={(e) => setCustomerPhone(e.target.value)}
+                  error={submitAttempted && !phoneValid}
+                  helperText={submitAttempted && !phoneValid ? 'SĐT không hợp lệ (10 số, VD: 0987654321)' : ''}
                   sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: 12 } }}
                 />
                 {detectedPhone && customerPhone !== detectedPhone && (
@@ -876,9 +1024,11 @@ export default function FacebookPOSPage() {
                 <TextField
                   fullWidth
                   size="small"
-                  placeholder="Địa chỉ giao hàng"
+                  placeholder="Địa chỉ nhận hàng cụ thể *"
                   value={customerAddress}
                   onChange={(e) => setCustomerAddress(e.target.value)}
+                  error={submitAttempted && !addressValid}
+                  helperText={submitAttempted && !addressValid ? 'Vui lòng nhập địa chỉ cụ thể (tối thiểu 6 ký tự)' : ''}
                   sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: 12 } }}
                 />
                 {detectedAddress && customerAddress !== detectedAddress && (
@@ -899,81 +1049,271 @@ export default function FacebookPOSPage() {
             <Typography sx={{ fontSize: 12, fontWeight: 700, color: C.text, mb: 1 }}>
               2. Chọn sản phẩm từ kho THORS
             </Typography>
-            <Stack spacing={1} sx={{ mb: 1.5 }}>
-              <Select
-                size="small"
-                displayEmpty
-                value={selectedProduct ? getId(selectedProduct) : ''}
-                onChange={(e) => {
-                  const p = products.find((prod) => getId(prod) === Number(e.target.value));
-                  setSelectedProduct(p || null);
+
+            {/* Gợi ý thông minh khi phát hiện tên sản phẩm trong đoạn chat */}
+            {detectedProductSuggestion && (!selectedProduct || getId(selectedProduct) !== getId(detectedProductSuggestion.product)) && (
+              <Box
+                sx={{
+                  mb: 1.5,
+                  p: 1.2,
+                  borderRadius: '8px',
+                  bgcolor: '#FEF9C3',
+                  border: '1px dashed #EAB308',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 1
                 }}
-                sx={{ borderRadius: '8px', fontSize: 12 }}
               >
-                <MenuItem value="" disabled>
-                  -- Chọn sản phẩm trong kho --
-                </MenuItem>
-                {products.map((p) => (
-                  <MenuItem key={getId(p)} value={getId(p)}>
-                    {p.productName}
-                  </MenuItem>
-                ))}
-              </Select>
+                <Box sx={{ minWidth: 0 }}>
+                  <Stack direction="row" alignItems="center" spacing={0.5}>
+                    <BulbOutlined style={{ color: '#CA8A04', fontSize: 13 }} />
+                    <Typography sx={{ fontSize: 11, fontWeight: 700, color: '#854D0E' }}>
+                      Phát hiện trong hội thoại:
+                    </Typography>
+                  </Stack>
+                  <Typography sx={{ fontSize: 11, color: '#713F12', fontWeight: 600 }} noWrap>
+                    {detectedProductSuggestion.product.productName}
+                  </Typography>
+                </Box>
+                <Button
+                  size="small"
+                  variant="contained"
+                  onClick={() => setSelectedProduct(detectedProductSuggestion.product)}
+                  sx={{
+                    bgcolor: '#EAB308',
+                    color: '#713F12',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    textTransform: 'none',
+                    px: 1,
+                    py: 0.3,
+                    minWidth: 'auto',
+                    boxShadow: 'none',
+                    whiteSpace: 'nowrap',
+                    '&:hover': { bgcolor: '#CA8A04', color: '#fff' }
+                  }}
+                >
+                  + Chọn ngay
+                </Button>
+              </Box>
+            )}
 
-              {/* Biến thể Size / Màu */}
-              {selectedProduct && (
-                <Box sx={{ p: 1, bgcolor: '#F8FAFC', borderRadius: '8px', border: `1px solid ${C.border}` }}>
-                  {loadingVariants ? (
-                    <Box sx={{ textAlign: 'center', py: 1 }}>
-                      <CircularProgress size={16} />
+            {/* Tìm kiếm nhanh & Chọn sản phẩm */}
+            {!selectedProduct ? (
+              <Stack spacing={1} sx={{ mb: 1.5 }}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  placeholder="Gõ tên sản phẩm để tìm nhanh..."
+                  value={searchProd}
+                  onChange={(e) => setSearchProd(e.target.value)}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchOutlined style={{ color: C.muted, fontSize: 13 }} />
+                      </InputAdornment>
+                    ),
+                    endAdornment: searchProd ? (
+                      <InputAdornment position="end">
+                        <IconButton size="small" onClick={() => setSearchProd('')} sx={{ p: 0.25 }}>
+                          <CloseOutlined style={{ fontSize: 10 }} />
+                        </IconButton>
+                      </InputAdornment>
+                    ) : null
+                  }}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: 12 } }}
+                />
+
+                <Box
+                  sx={{
+                    maxHeight: 210,
+                    overflowY: 'auto',
+                    border: `1px solid ${C.border}`,
+                    borderRadius: '8px',
+                    bgcolor: '#FAFAFA'
+                  }}
+                >
+                  {filteredProducts.length === 0 ? (
+                    <Box sx={{ p: 2, textAlign: 'center' }}>
+                      <Typography sx={{ fontSize: 12, color: C.muted }}>Không tìm thấy sản phẩm nào</Typography>
                     </Box>
-                  ) : variants.length === 0 ? (
-                    <Typography sx={{ fontSize: 11, color: C.danger }}>Sản phẩm chưa có biến thể</Typography>
                   ) : (
-                    <Stack spacing={1}>
-                      <Select
-                        size="small"
-                        value={selectedVariant ? (selectedVariant.detailId ?? selectedVariant.variantId ?? selectedVariant.id) : ''}
-                        onChange={(e) => {
-                          const v = variants.find((item) => (item.detailId ?? item.variantId ?? item.id) === Number(e.target.value));
-                          setSelectedVariant(v || null);
-                        }}
-                        sx={{ borderRadius: '6px', fontSize: 12, bgcolor: '#fff' }}
-                      >
-                        {variants.map((v) => {
-                          const vId = v.detailId ?? v.variantId ?? v.id;
-                          const stock = getStock(v);
-                          return (
-                            <MenuItem key={vId} value={vId} disabled={stock <= 0}>
-                              Size {v.size} - Màu {v.color} ({money(getPrice(v))}) - Kho: {stock}
-                            </MenuItem>
-                          );
-                        })}
-                      </Select>
-
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={addToCart}
-                        disabled={!selectedVariant || getStock(selectedVariant) <= 0}
-                        startIcon={<PlusOutlined />}
-                        sx={{
-                          textTransform: 'none',
-                          borderRadius: '6px',
-                          borderColor: '#087F8C',
-                          color: '#087F8C',
-                          fontWeight: 700,
-                          fontSize: 12,
-                          '&:hover': { bgcolor: C.selected, borderColor: '#087F8C' }
-                        }}
-                      >
-                        Thêm vào đơn
-                      </Button>
-                    </Stack>
+                    filteredProducts.map((p) => {
+                      const pId = getId(p);
+                      const pImg = p.imageUrl || p.images?.[0]?.imageUrl;
+                      return (
+                        <Box
+                          key={pId}
+                          onClick={() => setSelectedProduct(p)}
+                          sx={{
+                            p: 1,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 1.2,
+                            cursor: 'pointer',
+                            borderBottom: `1px solid ${C.border}`,
+                            '&:last-child': { borderBottom: 'none' },
+                            '&:hover': { bgcolor: '#F0F9FF' },
+                            transition: 'background-color 0.15s'
+                          }}
+                        >
+                          {pImg ? (
+                            <Avatar src={pImg} variant="rounded" sx={{ width: 32, height: 32 }} />
+                          ) : (
+                            <Avatar variant="rounded" sx={{ width: 32, height: 32, bgcolor: '#E0F2FE', color: '#0284C7', fontSize: 12, fontWeight: 700 }}>
+                              {(p.productName || 'P').charAt(0).toUpperCase()}
+                            </Avatar>
+                          )}
+                          <Box sx={{ flex: 1, minWidth: 0 }}>
+                            <Typography sx={{ fontSize: 12, fontWeight: 600, color: C.text }} noWrap>
+                              {p.productName}
+                            </Typography>
+                            <Typography sx={{ fontSize: 11, color: '#087F8C', fontWeight: 600 }}>
+                              {p.priceRange || (p.minPrice != null ? money(p.minPrice) : 'Liên hệ')}
+                            </Typography>
+                          </Box>
+                          <Chip
+                            size="small"
+                            label="Chọn"
+                            sx={{ fontSize: 10, height: 22, bgcolor: '#E0F2FE', color: '#0284C7', fontWeight: 700, cursor: 'pointer' }}
+                          />
+                        </Box>
+                      );
+                    })
                   )}
                 </Box>
-              )}
-            </Stack>
+              </Stack>
+            ) : (
+              /* Đã chọn sản phẩm -> Hiển thị thông tin & Các biến thể trực quan */
+              <Box sx={{ mb: 1.5 }}>
+                <Box
+                  sx={{
+                    p: 1.2,
+                    bgcolor: '#F0F9FF',
+                    borderRadius: '8px',
+                    border: '1px solid #BAE6FD',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 1,
+                    mb: 1
+                  }}
+                >
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography sx={{ fontSize: 10, color: '#0369A1', fontWeight: 700, textTransform: 'uppercase' }}>
+                      Sản phẩm đang chọn
+                    </Typography>
+                    <Typography sx={{ fontSize: 12, fontWeight: 700, color: C.text }} noWrap>
+                      {selectedProduct.productName}
+                    </Typography>
+                  </Box>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<SwapOutlined />}
+                    onClick={() => {
+                      setSelectedProduct(null);
+                      setSelectedVariant(null);
+                    }}
+                    sx={{
+                      fontSize: 11,
+                      textTransform: 'none',
+                      borderColor: '#0284C7',
+                      color: '#0284C7',
+                      py: 0.25,
+                      px: 1,
+                      borderRadius: '6px',
+                      whiteSpace: 'nowrap',
+                      '&:hover': { bgcolor: '#E0F2FE', borderColor: '#0284C7' }
+                    }}
+                  >
+                    Đổi món
+                  </Button>
+                </Box>
+
+                <Typography sx={{ fontSize: 11, fontWeight: 700, color: C.muted, mb: 0.75 }}>
+                  Chọn biến thể (Size / Màu sắc):
+                </Typography>
+
+                {loadingVariants ? (
+                  <Box sx={{ textAlign: 'center', py: 1.5 }}>
+                    <CircularProgress size={16} />
+                  </Box>
+                ) : variants.length === 0 ? (
+                  <Typography sx={{ fontSize: 11, color: C.danger, mb: 1 }}>Sản phẩm này chưa có biến thể trong kho</Typography>
+                ) : (
+                  <Stack spacing={1}>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+                      {variants.map((v) => {
+                        const vId = v.detailId ?? v.variantId ?? v.id;
+                        const stock = getStock(v);
+                        const isSelected = selectedVariant && (selectedVariant.detailId ?? selectedVariant.variantId ?? selectedVariant.id) === vId;
+                        const outOfStock = stock <= 0;
+
+                        return (
+                          <Box
+                            key={vId}
+                            onClick={() => {
+                              if (!outOfStock) setSelectedVariant(v);
+                            }}
+                            sx={{
+                              p: '6px 10px',
+                              borderRadius: '8px',
+                              border: isSelected ? '2px solid #087F8C' : `1px solid ${C.border}`,
+                              bgcolor: isSelected ? '#E6FFFA' : outOfStock ? '#F3F4F6' : '#fff',
+                              cursor: outOfStock ? 'not-allowed' : 'pointer',
+                              opacity: outOfStock ? 0.6 : 1,
+                              display: 'inline-flex',
+                              flexDirection: 'column',
+                              minWidth: 85,
+                              transition: 'all 0.15s',
+                              '&:hover': !outOfStock ? { borderColor: '#087F8C', bgcolor: isSelected ? '#E6FFFA' : '#FAFAFA' } : {}
+                            }}
+                          >
+                            <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={0.5}>
+                              <Typography sx={{ fontSize: 11, fontWeight: 700, color: isSelected ? '#087F8C' : C.text }}>
+                                {v.size} / {v.color}
+                              </Typography>
+                              {isSelected && <CheckOutlined style={{ fontSize: 10, color: '#087F8C' }} />}
+                            </Stack>
+                            <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={0.5} sx={{ mt: 0.25 }}>
+                              <Typography sx={{ fontSize: 11, fontWeight: 600, color: '#087F8C' }}>
+                                {money(getPrice(v))}
+                              </Typography>
+                              <Typography sx={{ fontSize: 10, color: outOfStock ? C.danger : C.muted }}>
+                                {outOfStock ? 'Hết hàng' : `Kho: ${stock}`}
+                              </Typography>
+                            </Stack>
+                          </Box>
+                        );
+                      })}
+                    </Box>
+
+                    <Button
+                      size="small"
+                      variant="contained"
+                      onClick={addToCart}
+                      disabled={!selectedVariant || getStock(selectedVariant) <= 0}
+                      startIcon={<PlusOutlined />}
+                      sx={{
+                        bgcolor: '#087F8C',
+                        color: '#fff',
+                        borderRadius: '8px',
+                        textTransform: 'none',
+                        fontWeight: 700,
+                        fontSize: 12,
+                        py: 0.8,
+                        boxShadow: 'none',
+                        '&:hover': { bgcolor: '#066670', boxShadow: 'none' }
+                      }}
+                    >
+                      + Thêm vào giỏ hàng
+                    </Button>
+                  </Stack>
+                )}
+              </Box>
+            )}
 
             <Divider sx={{ my: 1.5, borderColor: C.border }} />
 
@@ -981,6 +1321,12 @@ export default function FacebookPOSPage() {
             <Typography sx={{ fontSize: 12, fontWeight: 700, color: C.text, mb: 1 }}>
               3. Giỏ hàng ({cart.length} món)
             </Typography>
+
+            {submitAttempted && !cartValid && (
+              <Alert severity="error" sx={{ mb: 1, py: 0.5, fontSize: 11 }}>
+                Vui lòng chọn ít nhất 1 sản phẩm vào giỏ hàng!
+              </Alert>
+            )}
             {cart.length === 0 ? (
               <Typography sx={{ fontSize: 12, color: C.muted, fontStyle: 'italic', py: 1 }}>
                 Chưa có món nào được chọn
@@ -1038,10 +1384,15 @@ export default function FacebookPOSPage() {
 
           {/* Nút Chốt đơn & Bắn link PayOS */}
           <Box sx={{ p: 1.75, borderTop: `1px solid ${C.border}`, bgcolor: '#fff' }}>
+            {errorMsg && (
+              <Alert severity="warning" onClose={() => setErrorMsg('')} sx={{ mb: 1.5, fontSize: 11.5, py: 0.5, borderRadius: '8px' }}>
+                {errorMsg}
+              </Alert>
+            )}
             <Button
               fullWidth
               variant="contained"
-              disabled={!cart.length || creatingOrder || !selectedPsid}
+              disabled={creatingOrder || !selectedPsid}
               onClick={handleCreateOrderAndSendPayOS}
               startIcon={creatingOrder ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : <QrcodeOutlined />}
               sx={{
@@ -1061,6 +1412,130 @@ export default function FacebookPOSPage() {
           </Box>
         </Card>
       </Box>
+
+      {/* ==================== MODAL XEM MÃ QR VIETQR PAYOS ==================== */}
+      <Dialog
+        open={qrModal.open}
+        onClose={() => setQrModal((prev) => ({ ...prev, open: false }))}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{
+          sx: { borderRadius: '16px', overflow: 'hidden' }
+        }}
+      >
+        <DialogTitle sx={{ p: 2, bgcolor: '#087F8C', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <QrcodeOutlined style={{ fontSize: 20 }} />
+            <Typography sx={{ fontWeight: 800, fontSize: 15, color: '#fff' }}>
+              Mã VietQR Thanh Toán Đơn Hàng
+            </Typography>
+          </Stack>
+          <IconButton size="small" onClick={() => setQrModal((prev) => ({ ...prev, open: false }))} sx={{ color: '#fff' }}>
+            <CloseOutlined />
+          </IconButton>
+        </DialogTitle>
+
+        <DialogContent sx={{ p: 2.5, textAlign: 'center' }}>
+          <Box sx={{ mb: 1 }}>
+            <Chip
+              label={`Đơn hàng ${qrModal.orderNumber}`}
+              color="success"
+              size="small"
+              sx={{ fontWeight: 700, fontSize: 12, mb: 1 }}
+            />
+            <Typography sx={{ fontSize: 20, fontWeight: 900, color: '#087F8C' }}>
+              {money(qrModal.totalAmount)}
+            </Typography>
+          </Box>
+
+          {/* Ảnh QR VietQR */}
+          <Box
+            sx={{
+              p: 1.5,
+              bgcolor: '#fff',
+              border: '2px solid #E5EBF2',
+              borderRadius: '12px',
+              display: 'inline-block',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
+              my: 1
+            }}
+          >
+            {qrModal.qrImageUrl ? (
+              <Box
+                component="img"
+                src={qrModal.qrImageUrl}
+                alt="VietQR PayOS"
+                sx={{ width: 220, height: 220, objectFit: 'contain', display: 'block', mx: 'auto' }}
+              />
+            ) : (
+              <Box sx={{ width: 220, height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <CircularProgress size={30} />
+              </Box>
+            )}
+          </Box>
+
+          <Alert severity="success" icon={<CheckCircleOutlined />} sx={{ mt: 1.5, textAlign: 'left', fontSize: 12 }}>
+            Ảnh mã QR này đã được gửi trực tiếp vào Messenger cho khách hàng!
+          </Alert>
+
+          {/* Thông tin chuyển khoản */}
+          {qrModal.accountNumber && (
+            <Box sx={{ mt: 2, p: 1.5, bgcolor: '#F8FAFC', borderRadius: '10px', border: `1px solid ${C.border}`, textAlign: 'left' }}>
+              <Typography sx={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>TÀI KHOẢN THỤ HƯỞNG</Typography>
+              <Typography sx={{ fontSize: 12, fontWeight: 700, color: C.text, mt: 0.25 }}>
+                {qrModal.bankName} - {qrModal.accountName}
+              </Typography>
+              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 0.5 }}>
+                <Typography sx={{ fontSize: 13, fontWeight: 800, color: '#087F8C', letterSpacing: 0.5 }}>
+                  STK: {qrModal.accountNumber}
+                </Typography>
+                <Button
+                  size="small"
+                  startIcon={<CopyOutlined />}
+                  onClick={() => {
+                    navigator.clipboard.writeText(qrModal.accountNumber);
+                    setQrModal((prev) => ({ ...prev, copied: true }));
+                    setTimeout(() => setQrModal((prev) => ({ ...prev, copied: false })), 2000);
+                  }}
+                  sx={{ fontSize: 11, textTransform: 'none', py: 0.2, px: 1 }}
+                >
+                  {qrModal.copied ? 'Đã chép!' : 'Sao chép STK'}
+                </Button>
+              </Stack>
+            </Box>
+          )}
+        </DialogContent>
+
+        <DialogActions sx={{ p: 2, pt: 0, justifyContent: 'space-between' }}>
+          {qrModal.payUrl ? (
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<LinkOutlined />}
+              onClick={() => window.open(qrModal.payUrl, '_blank')}
+              sx={{ textTransform: 'none', borderRadius: '8px', fontSize: 12 }}
+            >
+              Mở link thanh toán
+            </Button>
+          ) : <Box />}
+          <Button
+            variant="contained"
+            size="small"
+            onClick={() => setQrModal((prev) => ({ ...prev, open: false }))}
+            sx={{
+              bgcolor: '#087F8C',
+              color: '#fff',
+              textTransform: 'none',
+              borderRadius: '8px',
+              fontWeight: 700,
+              fontSize: 12,
+              '&:hover': { bgcolor: '#066670' }
+            }}
+          >
+            Đóng
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

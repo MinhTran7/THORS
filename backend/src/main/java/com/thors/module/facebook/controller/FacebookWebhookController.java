@@ -106,7 +106,23 @@ public class FacebookWebhookController {
             return ResponseEntity.badRequest().body(Map.of("error", "recipientPsid và message không được để trống"));
         }
 
-        boolean success = facebookService.sendMessageToCustomer(recipientPsid, message);
+        Map<String, Object> result = facebookService.sendMessageToCustomerWithDetails(recipientPsid, message);
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * Gửi hình ảnh (Mã QR VietQR / hình ảnh sản phẩm) tới khách hàng qua Messenger
+     */
+    @PostMapping("/send-image")
+    public ResponseEntity<Map<String, Object>> sendImage(@RequestBody Map<String, String> request) {
+        String recipientPsid = request.get("recipientPsid");
+        String imageUrl = request.get("imageUrl");
+
+        if (recipientPsid == null || imageUrl == null || imageUrl.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "recipientPsid và imageUrl không được để trống"));
+        }
+
+        boolean success = facebookService.sendImageToCustomer(recipientPsid, imageUrl);
         return ResponseEntity.ok(Map.of("success", success));
     }
 
