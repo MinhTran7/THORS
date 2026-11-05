@@ -221,26 +221,6 @@ export default function PromotionDetailPage() {
 
   return (
     <Box sx={{ maxWidth: 1400, mx: 'auto', color: C.text, pb: 6 }}>
-      {/* ─── ĐIỀU HƯỚNG QUAY LẠI ─── */}
-      <Box
-        onClick={() => navigate('/promotions')}
-        sx={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 1,
-          color: C.muted,
-          fontSize: 13,
-          fontWeight: 600,
-          cursor: 'pointer',
-          mb: 2,
-          transition: 'color 0.15s ease',
-          '&:hover': { color: C.text }
-        }}
-      >
-        <ArrowLeftOutlined style={{ fontSize: 13 }} />
-        <span>Danh sách khuyến mãi</span>
-      </Box>
-
       {/* ─── TIÊU ĐỀ & NÚT CHỈNH SỬA SANG BÊN PHẢI ─── */}
       <Box
         sx={{

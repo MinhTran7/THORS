@@ -61,30 +61,26 @@ const PAGE_SIZE = 8;
 
 const money = (value) => `${Number(value || 0).toLocaleString('vi-VN')} đ`;
 
-const getLocalToday = () => {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, '0');
-  const day = String(today.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+const toDate = (value) => {
+  const date = value ? new Date(value) : null;
+  return date && !Number.isNaN(date.getTime()) ? date : null;
 };
-
-const getDateOnly = (value) => (value ? String(value).slice(0, 10) : '');
 
 const dateText = (value) => {
-  const dateValue = getDateOnly(value);
-  if (!dateValue) return '—';
-  const [year, month, day] = dateValue.split('-');
-  return `${day}/${month}/${year}`;
+  const date = toDate(value);
+  if (!date) return '—';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 };
 
+// So sánh cả ngày lẫn giờ, khớp với cách backend kiểm tra hết hạn
 function getScheduleStatus(promotion) {
-  const today = getLocalToday();
-  const startDate = getDateOnly(promotion.startDate);
-  const endDate = getDateOnly(promotion.endDate);
+  const now = new Date();
+  const startDate = toDate(promotion.startDate);
+  const endDate = toDate(promotion.endDate);
   if (!startDate || !endDate) return 'UNKNOWN';
-  if (today < startDate) return 'UPCOMING';
-  if (today > endDate) return 'ENDED';
+  if (now < startDate) return 'UPCOMING';
+  if (now >= endDate) return 'ENDED';
   return 'ONGOING';
 }
 
@@ -717,14 +713,18 @@ function OwnerPromotionView() {
             </TableContainer>
 
             {/* Phân trang phía dưới */}
-            <Stack
-              direction={{ xs: 'column', sm: 'row' }}
-              justifyContent="space-between"
-              alignItems="center"
-              spacing={2}
-              sx={{ px: 3, py: 2.5, borderTop: `1px solid ${C.borderLight}` }}
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', sm: '1fr auto 1fr' },
+                alignItems: 'center',
+                gap: 1.5,
+                px: 3,
+                py: 2,
+                borderTop: `1px solid ${C.borderLight}`
+              }}
             >
-              <Typography sx={{ fontSize: 13, color: C.muted }}>
+              <Typography sx={{ fontSize: 13, color: C.muted, textAlign: { xs: 'center', sm: 'left' } }}>
                 Hiển thị {filteredPromotions.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0}–
                 {Math.min(currentPage * PAGE_SIZE, filteredPromotions.length)} / {filteredPromotions.length} khuyến mãi
               </Typography>
@@ -735,10 +735,16 @@ function OwnerPromotionView() {
                 size="small"
                 shape="rounded"
                 sx={{
+                  justifySelf: 'center',
                   '& .MuiPaginationItem-root': {
-                    fontSize: 13,
-                    borderRadius: 1.5
+                    minWidth: 26,
+                    height: 26,
+                    fontSize: 12.5,
+                    borderRadius: 1.5,
+                    transition: 'none',
+                    '&:hover': { bgcolor: '#F1F5F9' }
                   },
+                  '& .MuiTouchRipple-root': { display: 'none' },
                   '& .MuiPaginationItem-root.Mui-selected': {
                     bgcolor: `${C.cyan} !important`,
                     color: `${C.text} !important`,
@@ -746,7 +752,7 @@ function OwnerPromotionView() {
                   }
                 }}
               />
-            </Stack>
+            </Box>
           </>
         )}
       </Box>
@@ -819,7 +825,7 @@ function OwnerPromotionView() {
         </DialogTitle>
         <DialogContent>
           <Typography sx={{ fontSize: 13.5, color: C.muted, lineHeight: 1.6 }}>
-            Chương trình <strong style={{ color: C.text }}>{endedTarget?.name}</strong> đã kết thúc vào ngày{' '}
+            Chương trình <strong style={{ color: C.text }}>{endedTarget?.name}</strong> đã kết thúc vào lúc{' '}
             <strong style={{ color: C.text }}>{dateText(endedTarget?.endDate)}</strong>.
             <br />
             Vui lòng chỉnh sửa ngày kết thúc sang tương lai để có thể bật lại khuyến mãi.

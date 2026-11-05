@@ -592,27 +592,33 @@ export default function InStoreSalesHistoryPage() {
         </Box>
 
         {/* ─── PHÂN TRANG PHÍA DƯỚI ─── */}
-        <Stack
-          direction={{ xs: 'column', sm: 'row' }}
-          justifyContent="space-between"
-          alignItems="center"
-          spacing={2}
-          sx={{ px: 3, py: 2.5, borderTop: `1px solid ${C.borderLight}` }}
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', sm: '1fr auto 1fr' },
+            alignItems: 'center',
+            gap: 1.5,
+            px: 3,
+            py: 2,
+            borderTop: `1px solid ${C.borderLight}`
+          }}
         >
-          <Typography sx={{ fontSize: 13, color: C.muted }}>
+          <Typography sx={{ fontSize: 13, color: C.muted, textAlign: { xs: 'center', sm: 'left' } }}>
             Hiển thị {startRecord}–{endRecord} trong {total} hóa đơn
           </Typography>
 
-          <Stack direction="row" spacing={1} alignItems="center">
+          <Stack direction="row" spacing={0.75} alignItems="center" justifyContent="center">
             {/* Nút lùi trang */}
             <IconButton
               size="small"
+              disableRipple
               onClick={() => setPage((p) => Math.max(0, p - 1))}
               disabled={page === 0}
               sx={{
-                width: 32,
-                height: 32,
-                borderRadius: 2,
+                width: 28,
+                height: 28,
+                borderRadius: 1.5,
+                '&:hover': { bgcolor: '#F1F5F9' },
                 border: `1px solid ${C.border}`,
                 color: C.text,
                 '&.Mui-disabled': { borderColor: C.borderLight, color: '#CBD5E1' }
@@ -634,13 +640,17 @@ export default function InStoreSalesHistoryPage() {
               return (
                 <Button
                   key={p}
+                  disableRipple
+                  disableElevation
                   onClick={() => setPage(p)}
                   sx={{
-                    minWidth: 32,
-                    height: 32,
+                    minWidth: 28,
+                    height: 28,
                     p: 0,
-                    borderRadius: 2,
-                    fontSize: 13,
+                    borderRadius: 1.5,
+                    fontSize: 12.5,
+                    transition: 'none',
+                    '&::after': { display: 'none' },
                     fontWeight: isActive ? 800 : 500,
                     bgcolor: isActive ? C.cyan : 'transparent',
                     color: isActive ? C.text : C.muted,
@@ -658,12 +668,14 @@ export default function InStoreSalesHistoryPage() {
             {/* Nút tiến trang */}
             <IconButton
               size="small"
+              disableRipple
               onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
               disabled={page >= totalPages - 1}
               sx={{
-                width: 32,
-                height: 32,
-                borderRadius: 2,
+                width: 28,
+                height: 28,
+                borderRadius: 1.5,
+                '&:hover': { bgcolor: '#F1F5F9' },
                 border: `1px solid ${C.border}`,
                 color: C.text,
                 '&.Mui-disabled': { borderColor: C.borderLight, color: '#CBD5E1' }
@@ -672,7 +684,7 @@ export default function InStoreSalesHistoryPage() {
               <RightOutlined style={{ fontSize: 11 }} />
             </IconButton>
           </Stack>
-        </Stack>
+        </Box>
       </Box>
     </Box>
   );
