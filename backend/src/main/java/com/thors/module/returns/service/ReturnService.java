@@ -34,7 +34,12 @@ public class ReturnService {
     private final SessionAccess sessionAccess;
     private final Cloudinary cloudinary;
 
-    public ReturnService(ReturnRepository returnRepository, SessionAccess sessionAccess, Cloudinary cloudinary) {
+    public ReturnService(ReturnRepository returnRepository, SessionAccess sessionAccess) {
+        this(returnRepository, sessionAccess, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public ReturnService(ReturnRepository returnRepository, SessionAccess sessionAccess, @org.springframework.lang.Nullable Cloudinary cloudinary) {
         this.returnRepository = returnRepository;
         this.sessionAccess = sessionAccess;
         this.cloudinary = cloudinary;
@@ -496,6 +501,9 @@ public class ReturnService {
         }
         if (file.getSize() > 25 * 1024 * 1024) {
             throw new ApiException(400, "FILE_TOO_LARGE", "Dung lượng tệp tối đa là 25MB.");
+        }
+        if (cloudinary == null) {
+            throw new ApiException(500, "CLOUDINARY_NOT_CONFIGURED", "Dịch vụ tải tệp chưa được cấu hình.");
         }
 
         try {
