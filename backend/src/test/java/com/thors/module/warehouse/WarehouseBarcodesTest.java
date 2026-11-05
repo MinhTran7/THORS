@@ -87,14 +87,14 @@ class WarehouseBarcodesTest {
     }
 
     @Test
-    void conflictingExistingCodeRollsBackTheWholeGeneration() {
+    void codeAlreadyUsedByAnotherVariantGetsAUniqueSuffixAndKeepsTheExistingCode() {
         variant(1, null);
         variant(2, null);
         variant(3, "TH000002");
-        ApiException error = assertThrows(ApiException.class, this::generate);
-        assertEquals(409, error.status);
-        assertNull(db.queryForObject("SELECT barcode FROM product_detail WHERE detail_id=1", String.class));
-        assertEquals(0, db.queryForObject("SELECT COUNT(*) FROM audit_log", Integer.class));
+        assertEquals(2, generate().get("generated"));
+        assertEquals("TH000001", db.queryForObject("SELECT barcode FROM product_detail WHERE detail_id=1", String.class));
+        assertEquals("TH000002-1", db.queryForObject("SELECT barcode FROM product_detail WHERE detail_id=2", String.class));
+        assertEquals("TH000002", db.queryForObject("SELECT barcode FROM product_detail WHERE detail_id=3", String.class));
     }
 
     @Test

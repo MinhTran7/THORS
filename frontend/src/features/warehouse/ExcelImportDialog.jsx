@@ -44,7 +44,8 @@ export default function ExcelImportDialog({
   currentItems,
   manufacturer,
   onApply,
-  onClose
+  onClose,
+  onQuickCreate
 }) {
   const [sheets, setSheets] = useState([]);
   const [sheetIndex, setSheetIndex] = useState(0);
@@ -52,6 +53,8 @@ export default function ExcelImportDialog({
   const [mapping, setMapping] = useState(inferMapping([]));
   const [rows, setRows] = useState([]);
   const [mergeDuplicates, setMergeDuplicates] = useState(false);
+  const [existingMode, setExistingMode] = useState('');
+  const [priceMode, setPriceMode] = useState('');
   const [error, setError] = useState('');
   const [fileName, setFileName] = useState('');
   const [loading, setLoading] = useState(false);
@@ -68,9 +71,13 @@ export default function ExcelImportDialog({
         sourceItems,
         currentItems,
         manufacturer,
-        mergeDuplicates
+        mergeDuplicates,
+        existingMode,
+        priceMode
       }),
     [
+      existingMode,
+      priceMode,
       rows,
       mapping,
       type,
@@ -331,6 +338,39 @@ export default function ExcelImportDialog({
                     </Alert>
                   ))}
 
+                  {report.conflicts > 0 && (
+                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                      <Box sx={{ minWidth: 280 }}>
+                        <Choice
+                          label={`${report.conflicts} biến thể đã có trên phiếu`}
+                          value={existingMode}
+                          onChange={(e) => {
+                            setExistingMode(e.target.value);
+                            setPriceMode('');
+                          }}
+                        >
+                          <MenuItem value="">Chọn cách xử lý</MenuItem>
+                          <MenuItem value="replace">Thay bằng số lượng/đơn giá trong file</MenuItem>
+                          <MenuItem value="add">Cộng thêm số lượng trong file</MenuItem>
+                          <MenuItem value="keep">Giữ dòng đang có, bỏ dòng trong file</MenuItem>
+                        </Choice>
+                      </Box>
+                      {type === 'PURCHASE_ORDER' && existingMode === 'add' && report.priceConflicts > 0 && (
+                        <Box sx={{ minWidth: 280 }}>
+                          <Choice
+                            label={`${report.priceConflicts} dòng khác đơn giá`}
+                            value={priceMode}
+                            onChange={(e) => setPriceMode(e.target.value)}
+                          >
+                            <MenuItem value="">Chọn đơn giá áp dụng</MenuItem>
+                            <MenuItem value="current">Giữ đơn giá đang có trên phiếu</MenuItem>
+                            <MenuItem value="file">Dùng đơn giá trong file</MenuItem>
+                          </Choice>
+                        </Box>
+                      )}
+                    </Stack>
+                  )}
+
                   <Stack
                     direction={{ xs: 'column', sm: 'row' }}
                     sx={{
@@ -461,6 +501,24 @@ export default function ExcelImportDialog({
                                     </MenuItem>
                                   ))}
                                 </Choice>
+                                {onQuickCreate && !row.skipped && !row.variant && (
+                                  <Button
+                                    size="small"
+                                    sx={{ mt: 0.5 }}
+                                    onClick={() =>
+                                      onQuickCreate(
+                                        {
+                                          productName: String(mappedValue(row, mapping, 'productName') || '').trim(),
+                                          color: String(mappedValue(row, mapping, 'color') || '').trim(),
+                                          size: String(mappedValue(row, mapping, 'size') || '').trim()
+                                        },
+                                        (detailId) => updateRow(row.rowNumber, { detailId })
+                                      )
+                                    }
+                                  >
+                                    Hàng mới? Tạo nhanh
+                                  </Button>
+                                )}
                               </TableCell>
 
                               <TableCell>
@@ -584,12 +642,10 @@ export default function ExcelImportDialog({
                   />
 
                   <Alert severity="info">
-                    Các dòng có trong file sẽ điền lại số lượng/đơn giá
-                    trên phiếu; các dòng khác đang nhập tay được giữ lại.
-                    {report.replaced > 0
-                      ? ` Có ${report.replaced} dòng đang có số lượng sẽ được điền lại.`
-                      : ''}
-                    {' '}Bạn vẫn sửa được sau khi áp dụng.
+                    Dòng mới trong file được thêm vào phiếu; các dòng đang
+                    nhập tay khác được giữ lại. Dòng trùng biến thể với phiếu
+                    được xử lý theo lựa chọn ở trên. Xem trước/áp dụng không
+                    lưu phiếu, không tạo sản phẩm. Bạn vẫn sửa được sau khi áp dụng.
                   </Alert>
                 </>
               )}

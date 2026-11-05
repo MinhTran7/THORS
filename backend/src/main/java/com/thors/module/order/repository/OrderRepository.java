@@ -373,6 +373,46 @@ public class OrderRepository {
     }
 
     // ------------------------------------------------------------------
+    // Trừ kho khi Owner xác nhận đơn online
+    // ------------------------------------------------------------------
+
+    /** Dòng hàng cần xuất kho của một đơn: số lượng và phần đang giữ chỗ cho chính dòng đó. */
+    public record StockLine(int orderItemId, int detailId, int quantity, int reserved) {}
+
+    /**
+     * Các dòng của đơn chưa trừ kho: đơn đã đánh dấu trừ kho trả về rỗng, dòng đã có thẻ kho "Xuất bán"
+     * (vd. đơn Facebook đã trừ khi tạo) cũng bỏ qua, để không trừ hai lần.
+     */
+    public List<StockLine> unshippedLines(int orderId) {
+        return db.query(
+                "SELECT oi.order_item_id, oi.detail_id, oi.quantity, oi.reserved_quantity"
+                        + " FROM order_item oi JOIN orders o ON o.order_id = oi.order_id"
+                        + " WHERE oi.order_id = ? AND o.stock_deducted_at IS NULL"
+                        + " AND NOT EXISTS (SELECT 1 FROM stock_adjustment sa"
+                        + "   WHERE sa.order_item_id = oi.order_item_id AND sa.movement_type = 'ORDER_OUT')"
+                        + " ORDER BY oi.order_item_id",
+                (rs, i) ->
+                        new StockLine(
+                                rs.getInt("order_item_id"),
+                                rs.getInt("detail_id"),
+                                rs.getInt("quantity"),
+                                rs.getInt("reserved_quantity")),
+                orderId);
+    }
+
+    /** Đánh dấu đơn đã trừ kho; phần giữ chỗ (nếu có) đã được dùng hết. */
+    public void markStockDeducted(int orderId) {
+        db.update("UPDATE order_item SET reserved_quantity = 0 WHERE order_id = ?", orderId);
+        db.update(
+                "UPDATE orders SET stock_deducted_at = NOW(),"
+                        + " stock_hold_status = IF(stock_hold_status IN ('TEMPORARY','PAID'), 'CONSUMED', stock_hold_status),"
+                        + " stock_hold_closed_at = IF(stock_hold_status = 'CONSUMED' AND stock_hold_closed_at IS NULL,"
+                        + " NOW(), stock_hold_closed_at)"
+                        + " WHERE order_id = ? AND stock_deducted_at IS NULL",
+                orderId);
+    }
+
+    // ------------------------------------------------------------------
     // Dòng sản phẩm rút gọn cho danh sách đơn
     // ------------------------------------------------------------------
 

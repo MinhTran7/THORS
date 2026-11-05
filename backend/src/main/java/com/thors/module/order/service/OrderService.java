@@ -7,6 +7,7 @@ import com.thors.module.notification.service.NotificationTypes;
 import com.thors.module.order.dto.OrderViews.Detail;
 import com.thors.module.order.dto.OrderViews.Page;
 import com.thors.module.order.repository.OrderRepository;
+import com.thors.module.warehouse.WarehouseStore;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -54,10 +55,12 @@ public class OrderService {
 
     private final OrderRepository orders;
     private final NotificationPublisher notifications;
+    private final WarehouseStore warehouse;
 
-    public OrderService(OrderRepository orders, NotificationPublisher notifications) {
+    public OrderService(OrderRepository orders, NotificationPublisher notifications, WarehouseStore warehouse) {
         this.orders = orders;
         this.notifications = notifications;
+        this.warehouse = warehouse;
     }
 
     private static boolean isStore(Account actor) {
@@ -165,7 +168,9 @@ public class OrderService {
     /**
      * Chuyển trạng thái đơn. Owner đi theo luồng xác nhận -> giao -> hoàn tất (hoặc từ chối); Customer
      * chỉ hủy được đơn của mình khi chưa được xác nhận. Mỗi lần chuyển đều gửi thông báo cho bên còn lại.
-     * Bản này chỉ đổi trạng thái, chưa trừ tồn kho.
+     * Owner xác nhận đơn (sang chờ lấy hàng) thì trừ tồn kho ngay trong cùng transaction: mỗi dòng ghi
+     * "Xuất bán" (ORDER_OUT) vào thẻ kho, lấy hàng chưa xếp trước rồi tới vị trí trên kệ. Không đủ hàng
+     * thì không xác nhận được.
      */
     @Transactional
     public Detail changeStatus(
@@ -207,9 +212,24 @@ public class OrderService {
         if (finalReason == null && OrderStatus.REJECTED.equals(target)) finalReason = "Cửa hàng từ chối đơn";
         if (finalReason == null && OrderStatus.CANCELLED.equals(target)) finalReason = "Khách hủy đơn";
 
+        boolean confirm = OrderStatus.AWAITING_PICKUP.equals(target);
+        // Khóa kho trước khi đổi trạng thái, cùng thứ tự với các thao tác kho khác.
+        if (confirm) warehouse.lock();
         if (!orders.transition(orderId, current, target, actor.id(), finalReason, safeCarrier))
             throw new ApiException(
                     409, "ORDER_STATE", "Trạng thái đơn vừa thay đổi, vui lòng tải lại trang.");
+        if (confirm) {
+            for (var line : orders.unshippedLines(orderId))
+                warehouse.sell(
+                        actor.id(),
+                        line.detailId(),
+                        line.quantity(),
+                        line.reserved(),
+                        line.orderItemId(),
+                        "ORDER_OUT:item:" + line.orderItemId(),
+                        "Xuất bán đơn online " + number);
+            orders.markStockDeducted(orderId);
+        }
 
         int customerId = found.userId();
         switch (target) {

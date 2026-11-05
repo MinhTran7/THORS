@@ -30,14 +30,25 @@ import {
   docCode,
   money,
   number,
+  returnableQty,
   typeLabel,
-  variantLabel
+  variantLabel,
+  when
 } from './model';
 
 import ExcelImportDialog from './ExcelImportDialog';
 import { downloadImportTemplate } from './excelWorkbook';
+import PurchaseOrderForm from './PurchaseOrderForm';
 
-export default function DocumentForm({
+export default function DocumentForm(props) {
+  return props.type === 'PURCHASE_ORDER' ? (
+    <PurchaseOrderForm document={props.document} onClose={props.onClose} />
+  ) : (
+    <SourceDocumentForm {...props} />
+  );
+}
+
+function SourceDocumentForm({
   type,
   document,
   source,
@@ -56,14 +67,47 @@ export default function DocumentForm({
     source?.receipt_id ||
     '';
 
+  const isReturn = type === 'SUPPLIER_RETURN';
+  // Returns: received − already dispatched returns (approved but not dispatched returns do not count).
+  // Receipts: what is still to receive. From a purchase order line: ordered − received; from a
+  // supplier return line (exchange): replacement agreed − replacement already received.
+  const exchangeLine = (i) =>
+    documents.find((d) => d.receipt_id === i.receipt_id)?.receipt_type === 'SUPPLIER_RETURN';
+  const open = (i) =>
+    isReturn
+      ? returnableQty(i)
+      : (exchangeLine(i) ? Number(i.exchanged_quantity) : i.quantity) - i.handled_quantity;
+
   const sources = documents.filter(
     (d) =>
-      d.receipt_type ===
-        (type === 'RECEIPT'
-          ? 'PURCHASE_ORDER'
-          : 'RECEIPT') &&
-      d.status === 'CONFIRMED'
+      (type === 'RECEIPT'
+        ? ['PURCHASE_ORDER', 'SUPPLIER_RETURN'].includes(d.receipt_type)
+        : d.receipt_type === 'RECEIPT') &&
+      d.status === 'CONFIRMED' &&
+      ((d.items || []).some((i) => open(i) > 0) ||
+        d.receipt_id === Number(initialSource))
   );
+
+  // Only lines of the chosen receipt; a draft keeps its quantities on the lines it already had.
+  const returnLines = (id, existing = []) =>
+    (
+      documents.find(
+        (d) => d.receipt_id === Number(id)
+      )?.items || []
+    )
+      .filter(
+        (i) =>
+          returnableQty(i) > 0 ||
+          existing.some((e) => e.source_receipt_item_id === i.receipt_item_id)
+      )
+      .map((i) => ({
+        detailId: i.detail_id,
+        sourceItemId: i.receipt_item_id,
+        quantity:
+          existing.find((e) => e.source_receipt_item_id === i.receipt_item_id)?.quantity ?? 0,
+        // Return price comes from the receipt line (receipts have no discount/tax fields).
+        unitPrice: i.unit_price
+      }));
 
   const available = (id) =>
     (
@@ -71,16 +115,14 @@ export default function DocumentForm({
         (d) => d.receipt_id === Number(id)
       )?.items || []
     )
-      .filter(
-        (i) => i.quantity > i.handled_quantity
-      )
+      .filter((i) => open(i) > 0)
       .map((i) => ({
         detailId: i.detail_id,
         sourceItemId: i.receipt_item_id,
-        quantity: 0,
+        // Receipts start with the outstanding quantity.
+        quantity: open(i),
         unitPrice: i.unit_price,
-        remaining:
-          i.quantity - i.handled_quantity
+        remaining: open(i)
       }));
 
   const f = useFormik({
@@ -88,7 +130,11 @@ export default function DocumentForm({
       sourceId: initialSource,
       manufacturer: document?.manufacturer_name || '',
       note: document?.note || '',
-      items: document
+      items: isReturn
+        ? initialSource
+          ? returnLines(initialSource, document?.items)
+          : []
+        : document
         ? document.items.map((i) => ({
             detailId: i.detail_id,
             sourceItemId: i.source_receipt_item_id,
@@ -116,13 +162,9 @@ export default function DocumentForm({
               .typeError('Chọn phiếu nguồn.')
               .required('Chọn phiếu nguồn.')
           : Yup.mixed(),
-      note:
-        type === 'SUPPLIER_RETURN'
-          ? Yup.string()
-              .trim()
-              .required('Nhập lý do trả hàng.')
-              .max(255)
-          : Yup.string().max(255)
+      // The return reason is required before submitting/approving (checked there and in the
+      // backend); a draft may be saved without it.
+      note: Yup.string().max(255)
     }),
 
     onSubmit: async (values) => {
@@ -142,6 +184,22 @@ export default function DocumentForm({
       ) {
         setError(
           'Kiểm tra số lượng từng dòng: phải là số nguyên từ 0 đến 1000000; dòng đặt hàng phải lớn hơn 0.'
+        );
+        return;
+      }
+
+      const over = values.items.find((i) => {
+        const line = (sourceDocument?.items || []).find(
+          (x) => x.receipt_item_id === i.sourceItemId
+        );
+        return line && Number(i.quantity) > open(line);
+      });
+
+      if (over) {
+        setError(
+          type === 'RECEIPT'
+            ? 'Có dòng nhập vượt lượng còn thiếu. Nhận vượt cần Owner duyệt kèm giá và lý do; schema hiện tại chưa lưu được nên hãy nhập tối đa lượng còn thiếu và ghi nhận phần dư ngoài hệ thống.'
+            : 'Có dòng trả vượt số lượng còn được trả.'
         );
         return;
       }
@@ -239,7 +297,9 @@ export default function DocumentForm({
           <DialogTitle>
             {document
               ? `Sửa ${docCode(document)}`
-              : `Tạo ${typeLabel[type].toLowerCase()}`}
+              : isReturn
+                ? 'Tạo phiếu trả'
+                : `Tạo ${typeLabel[type].toLowerCase()}`}
           </DialogTitle>
 
           <DialogContent>
@@ -248,8 +308,8 @@ export default function DocumentForm({
                 {type === 'PURCHASE_ORDER'
                   ? 'Mỗi dòng là một màu/size. Xác nhận phiếu đặt chưa làm tăng tồn kho.'
                   : type === 'RECEIPT'
-                    ? 'Chọn đúng số lượng thực nhận từng màu/size. Chỉ khi Owner xác nhận, hàng mới vào tổng tồn và nằm ở phần chưa xếp vị trí.'
-                    : 'Trả theo phiếu nhập đã xác nhận. Khi xác nhận, hệ thống trừ hàng chưa xếp trước, rồi các vị trí theo thứ tự mã vị trí; xem lịch sử kho để đối chiếu.'}
+                    ? 'Đã điền sẵn lượng còn thiếu; sửa thành số thực nhận từng màu/size (có thể giao nhiều đợt). Phiếu nháp/chờ duyệt chưa tăng tồn; chỉ khi Owner xác nhận, hàng mới vào tổng tồn ở phần chưa xếp vị trí. Đơn giá giữ theo phiếu đặt. Nhận vượt, nhận thay thế màu/size, đổi giá thực nhập và số từ chối tại cửa chưa lưu được trên schema hiện tại.'
+                    : 'Chỉ trả các sản phẩm thuộc phiếu nhập đã chọn. Lưu nháp, gửi duyệt hoặc duyệt phiếu chưa làm giảm tồn kho; tồn chỉ giảm khi xác nhận xuất trả, lúc đó bạn chọn vị trí lấy hàng và số lượng lấy ở từng vị trí.'}
               </Alert>
 
               {type === 'PURCHASE_ORDER' ? (
@@ -275,7 +335,7 @@ export default function DocumentForm({
                 <Choice
                   label={
                     type === 'RECEIPT'
-                      ? 'Phiếu đặt hàng nguồn'
+                      ? 'Phiếu nguồn (đơn đặt hàng, hoặc phiếu trả chờ hàng đổi)'
                       : 'Phiếu nhập hàng nguồn'
                   }
                   value={f.values.sourceId}
@@ -288,7 +348,9 @@ export default function DocumentForm({
                     );
                     f.setFieldValue(
                       'items',
-                      available(e.target.value)
+                      isReturn
+                        ? returnLines(e.target.value)
+                        : available(e.target.value)
                     );
                   }}
                   error={
@@ -301,7 +363,9 @@ export default function DocumentForm({
                   }
                 >
                   <MenuItem value="">
-                    Chọn phiếu đã xác nhận
+                    {isReturn
+                      ? 'Chọn phiếu nhập đã xác nhận'
+                      : 'Chọn phiếu đã xác nhận'}
                   </MenuItem>
 
                   {sources.map((d) => (
@@ -314,6 +378,33 @@ export default function DocumentForm({
                     </MenuItem>
                   ))}
                 </Choice>
+              )}
+
+              {isReturn && sourceDocument && (
+                <Box
+                  sx={{
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    borderRadius: 1,
+                    p: 2,
+                    display: 'grid',
+                    gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
+                    gap: 1
+                  }}
+                >
+                  <Typography>
+                    Nhà cung cấp: <b>{sourceDocument.manufacturer_name}</b>
+                  </Typography>
+                  <Typography>
+                    Mã phiếu nhập: <b>{docCode(sourceDocument)}</b>
+                  </Typography>
+                  <Typography>
+                    Ngày nhập: <b>{when(sourceDocument.confirmed_at || sourceDocument.receipt_date)}</b>
+                  </Typography>
+                  <Typography>
+                    Kho xuất trả: <b>Kho cửa hàng</b>
+                  </Typography>
+                </Box>
               )}
 
               <Field
@@ -497,14 +588,26 @@ export default function DocumentForm({
               <Box sx={{ overflowX: 'auto' }}>
                 <Table size="small">
                   <TableHead>
+                    {isReturn ? (
+                      <TableRow>
+                        <TableCell>Sản phẩm</TableCell>
+                        <TableCell>Màu / size</TableCell>
+                        <TableCell align="right">Đã nhập</TableCell>
+                        <TableCell align="right">Đã trả</TableCell>
+                        <TableCell align="right">Còn được trả</TableCell>
+                        <TableCell sx={{ minWidth: 120 }}>Số lượng trả</TableCell>
+                        <TableCell sx={{ minWidth: 150 }}>Đơn giá trả</TableCell>
+                        <TableCell align="right">Thành tiền</TableCell>
+                      </TableRow>
+                    ) : (
                     <TableRow>
                       <TableCell>
                         Sản phẩm · màu · size
                       </TableCell>
 
-                      {type !== 'PURCHASE_ORDER' && (
+                      {type === 'RECEIPT' && (
                         <TableCell align="right">
-                          Còn được nhập/trả
+                          Còn thiếu
                         </TableCell>
                       )}
 
@@ -524,6 +627,7 @@ export default function DocumentForm({
                         <TableCell />
                       )}
                     </TableRow>
+                    )}
                   </TableHead>
 
                   <TableBody>
@@ -545,18 +649,31 @@ export default function DocumentForm({
 
                       return (
                         <TableRow key={item.detailId}>
+                          {isReturn ? (
+                            <>
+                              <TableCell>
+                                {sourceLine?.product_name || v?.product_name || `Biến thể #${item.detailId}`}
+                              </TableCell>
+                              <TableCell>
+                                {sourceLine?.color || v?.color} / {sourceLine?.size || v?.size}
+                              </TableCell>
+                              <TableCell align="right">{number(sourceLine?.quantity)}</TableCell>
+                              <TableCell align="right">{number(sourceLine?.handled_quantity)}</TableCell>
+                              <TableCell align="right">{number(sourceLine ? open(sourceLine) : 0)}</TableCell>
+                            </>
+                          ) : (
                           <TableCell>
                             {v
                               ? variantLabel(v)
                               : `Biến thể #${item.detailId}`}
                           </TableCell>
+                          )}
 
-                          {type !== 'PURCHASE_ORDER' && (
+                          {type === 'RECEIPT' && (
                             <TableCell align="right">
                               {number(
                                 sourceLine
-                                  ? sourceLine.quantity -
-                                    sourceLine.handled_quantity
+                                  ? open(sourceLine)
                                   : item.remaining
                               )}
                             </TableCell>
@@ -590,6 +707,16 @@ export default function DocumentForm({
                                 }
                               }}
                             />
+                            {sourceLine &&
+                              Number(item.quantity) > open(sourceLine) && (
+                                <Typography variant="caption" color="error" component="div" sx={{ maxWidth: 260 }}>
+                                  {type === 'RECEIPT' && exchangeLine(sourceLine)
+                                    ? `Vượt số hàng đổi còn chờ nhận (${number(open(sourceLine))}).`
+                                    : type === 'RECEIPT'
+                                    ? `Nhận vượt: đặt ${number(sourceLine.quantity)} · đã nhập ${number(sourceLine.handled_quantity)} · còn thiếu ${number(sourceLine.quantity - sourceLine.handled_quantity)} · lần này ${number(item.quantity)} · vượt ${number(Number(item.quantity) - (sourceLine.quantity - sourceLine.handled_quantity))}. Chưa ghi nhận được phần vượt (cần bổ sung schema).`
+                                    : `Vượt số lượng còn được trả (${number(open(sourceLine))}).`}
+                                </Typography>
+                              )}
                           </TableCell>
 
                           <TableCell>
@@ -611,7 +738,7 @@ export default function DocumentForm({
                                   min: 0,
                                   step: 1,
                                   max: 999999999999,
-                                  'aria-label': 'Đơn giá nhập'
+                                  'aria-label': isReturn ? 'Đơn giá trả' : 'Đơn giá nhập'
                                 }
                               }}
                             />
@@ -648,12 +775,12 @@ export default function DocumentForm({
                     {!f.values.items.length && (
                       <TableRow>
                         <TableCell
-                          colSpan={6}
+                          colSpan={8}
                           sx={{ py: 3 }}
                         >
-                          Chọn phiếu nguồn hoặc thêm màu/size
-                          để lập phiếu. Sản phẩm cần có biến thể
-                          trong danh mục trước.
+                          {isReturn
+                            ? 'Chọn phiếu nhập để xem các sản phẩm có thể trả'
+                            : 'Chọn phiếu nguồn hoặc thêm màu/size để lập phiếu. Sản phẩm cần có biến thể trong danh mục trước.'}
                         </TableCell>
                       </TableRow>
                     )}

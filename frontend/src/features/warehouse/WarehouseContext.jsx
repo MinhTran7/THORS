@@ -1,5 +1,5 @@
 import { createContext, useContext, useState } from 'react';
-import useSWR from 'swr';
+import useSWR, { mutate as mutateGlobal } from 'swr';
 import { Alert, Button, CircularProgress, Stack } from '@mui/material';
 import { api } from 'services/http';
 import { useAuth } from 'features/auth/AuthProvider';
@@ -13,7 +13,16 @@ export function WarehouseProvider({ children }) {
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const reload = async () => {
-    await Promise.all([snapshot.mutate(), documents.mutate(), notices.mutate()]);
+    await Promise.all([
+      snapshot.mutate(),
+      documents.mutate(),
+      notices.mutate(),
+      // Order list/detail/picker, per-document history/settlements and supplier credit views are
+      // computed by the backend; refresh them as well.
+      mutateGlobal(
+        (key) => typeof key === 'string' && /^\/warehouse\/(orders|order-variants|suppliers|supplier-credits|documents\/\d+\/|inventory|counts|history)/.test(key)
+      )
+    ]);
   };
   const run = async (fn, success) => {
     setError('');

@@ -399,3 +399,33 @@ export async function downloadImportTemplate({
     1000
   );
 }
+/**
+ * Export a full result set (not only the visible page) as one sheet. Columns: [{header, key, width}].
+ * Rows come from the backend, so cost columns are present only when the API returned them.
+ */
+export async function exportSheet({ fileName, sheetName, columns, rows, notes = [] }) {
+  const Excel = await excel();
+  const book = new Excel.Workbook();
+  book.creator = 'THORS';
+  const sheet = book.addWorksheet(sheetName);
+  sheet.columns = columns;
+  rows.forEach((row) => sheet.addRow(row));
+  sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1677FF' } };
+  sheet.views = [{ state: 'frozen', ySplit: 1 }];
+  sheet.autoFilter = { from: 'A1', to: { row: Math.max(1, sheet.rowCount), column: columns.length } };
+  if (notes.length) {
+    const info = book.addWorksheet('GhiChu');
+    info.columns = [{ header: 'Ghi chú', key: 'note', width: 110 }];
+    notes.forEach((note) => info.addRow({ note }));
+  }
+  const blob = new Blob([await book.xlsx.writeBuffer()], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

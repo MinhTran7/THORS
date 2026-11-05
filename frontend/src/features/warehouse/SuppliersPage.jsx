@@ -1,13 +1,17 @@
 import { useState } from 'react';
+import useSWR from 'swr';
+import { api } from 'services/http';
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, TextField, Typography } from '@mui/material';
 import MainCard from 'components/MainCard';
 import { useWarehouse } from './WarehouseContext';
 import { DataTable, Status, Title } from './components';
-import { docCode, money, number, totalQty, typeLabel, when } from './model';
+import { docCode, money, number, supplierKey, totalQty, typeLabel, when } from './model';
 import { DocumentAction, DocumentDetail } from './DocumentsPage';
 import DocumentForm from './DocumentForm';
 export default function SuppliersPage() {
   const { documents } = useWarehouse();
+  const credits = useSWR('/warehouse/supplier-credits', api);
+  const creditOf = (name) => credits.data?.find((c) => supplierKey(c.supplier_name) === supplierKey(name));
   const [search, setSearch] = useState('');
   const [supplier, setSupplier] = useState(null);
   const [detail, setDetail] = useState(null);
@@ -27,7 +31,12 @@ export default function SuppliersPage() {
         returned: confirmed.filter((d) => d.receipt_type === 'SUPPLIER_RETURN').reduce((n, d) => n + totalQty(d), 0),
         amount: confirmed
           .filter((d) => d.receipt_type !== 'PURCHASE_ORDER')
-          .reduce((n, d) => n + (d.receipt_type === 'RECEIPT' ? 1 : -1) * Number(d.total_amount), 0)
+          .reduce((n, d) => n + (d.receipt_type === 'RECEIPT' ? 1 : -1) * Number(d.total_amount), 0),
+        paid: Number(creditOf(name)?.payment_amount || 0),
+        debt: Number(creditOf(name)?.debt_amount || 0),
+        undeclared: Number(creditOf(name)?.undeclared_receipts || 0),
+        refunded: Number(creditOf(name)?.refund_amount || 0),
+        credit: Number(creditOf(name)?.credit_balance || 0)
       };
     });
   return (
@@ -58,11 +67,30 @@ export default function SuppliersPage() {
             { key: 'orders', label: 'Phiếu đặt', align: 'right', render: (r) => number(r.orders) },
             { key: 'received', label: 'Đã nhập', align: 'right', render: (r) => number(r.received) },
             { key: 'returned', label: 'Đã trả', align: 'right', render: (r) => number(r.returned) },
-            { key: 'amount', label: 'Giá trị nhập sau trả', align: 'right', render: (r) => money(r.amount) }
+            { key: 'amount', label: 'Giá trị nhập sau trả', align: 'right', render: (r) => money(r.amount) },
+            { key: 'paid', label: 'Đã thanh toán', align: 'right', render: (r) => money(r.paid) },
+            {
+              key: 'debt',
+              label: 'Còn nợ',
+              align: 'right',
+              render: (r) => (
+                <>
+                  {money(r.debt)}
+                  {r.undeclared > 0 && (
+                    <Typography variant="caption" color="warning.main" component="div">
+                      + {number(r.undeclared)} phiếu nhập chưa khai báo
+                    </Typography>
+                  )}
+                </>
+              )
+            },
+            { key: 'refunded', label: 'Đã nhận hoàn tiền', align: 'right', render: (r) => money(r.refunded) },
+            { key: 'credit', label: 'Tiền đối trừ đang giữ', align: 'right', render: (r) => money(r.credit) }
           ]}
         />
         <Typography variant="caption" color="text.secondary">
-          Giá trị chứng từ đã xác nhận, chưa theo dõi thanh toán và công nợ. Tên nhà cung cấp được nhập khi lập phiếu đặt.
+          Còn nợ = giá trị phiếu nhập − số đã trả trước khi theo dõi − thanh toán − đối trừ, chỉ tính các phiếu đã xác định. Phiếu nhập cũ
+          chưa khai báo số đã trả được đếm riêng, không mặc định đã trả hay chưa trả. Tên nhà cung cấp được nhập khi lập phiếu đặt.
         </Typography>
       </MainCard>
       {supplier && (
