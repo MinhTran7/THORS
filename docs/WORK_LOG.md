@@ -2,6 +2,14 @@
 
 Đây là bản tổng hợp bằng chứng, không phải nhật ký đầy đủ mọi lần sửa. Không gán tác giả hoặc ngày hoàn thành cho các thay đổi chỉ thấy trong working tree.
 
+## 05/11/2026 — Đưa phần kho vào repo team (nhánh `Minh_Tran`, trên `main` mới nhất)
+
+- Chỉ đưa phần kho: `backend/.../module/warehouse`, test kho, `frontend/src/features/warehouse`, test UI kho, docs kho, `database/SQL_v2.sql` (thay `SQL_v1.sql`) và `database/migrations/`. Thêm 2 icon menu kho trong `layouts/navigation.jsx` (đoạn `warehouseIcons`).
+- **Không** sửa code module khác (đơn hàng, giỏ, checkout, shop, bán tại quầy, sản phẩm, danh mục, hoàn hàng). Vì vậy: giữ hàng/trừ tồn khi xác nhận đơn online, chặn bán phần đang giữ ở POS, giá bán NULL và chặn tạo danh mục cho non-OWNER **chưa** có trong bản này.
+- Tạo nhanh hàng mới: giá bán **bắt buộc**, dùng `ProductService.createProduct(request)` có sẵn.
+- SQL_v2 đã gồm migration 04/11; cần chạy thêm `2026-11-05_supplier_settlement.sql` và `2026-11-06_inventory.sql` để dùng công nợ NCC, tồn kho, kiểm kê, báo cáo.
+- Kiểm chứng: `mvn -o test` 315 test pass (55 test kho); `node tests/run-*.mjs` 4/4 pass; `vite build` thành công.
+
 ## Các mốc xác định được
 
 | Mốc | Nguồn | Nội dung và giới hạn |
@@ -26,6 +34,8 @@
 5. **Bố cục 2D:** cặp thuật toán Java/JS, phát hiện chồng lấn, chuẩn hóa bố cục, đặt kệ tương đối, xếp gọn theo hàng, chỉnh/kéo kệ.
 6. **Excel:** ExcelImportDialog, excelImport.js, excelWorkbook.js và tích hợp trong DocumentForm cho cả hai loại phiếu.
 
+7. **Trả hàng nhà cung cấp (04/11/2026, working tree):** tách duyệt (`APPROVED`, chưa trừ tồn) và xác nhận xuất trả theo vị trí người dùng chọn; Family lập/gửi duyệt; mở form trả từ chi tiết phiếu nhập; lịch sử thao tác; migration `database/migrations/2026-11-04_supplier_return.sql` chưa chạy. Chi tiết: `WAREHOUSE_FLOW.md` mục 3.
+
 Các mục này ghi nhận **đã có code**. Những phần chưa nối route, lệch schema, thiếu test hoặc chưa thử runtime được ghi trong `CURRENT_TASKS.md`.
 
 ## Trạng thái Git khi nhận
@@ -43,6 +53,28 @@ Vì vậy, source thực tế trong ZIP là đầu vào của checkpoint; không
 - Tạo bộ `docs/*.md`, kiểm tra liên kết, đường dẫn tham chiếu và nội dung không chứa secret cấu hình thật.
 
 Không sửa code nghiệp vụ, cấu hình chạy thật hoặc database trong lượt này. Không tạo commit, đẩy Git hoặc triển khai dịch vụ.
+
+## 04/11/2026 — Cải tiến Đặt hàng nhập
+
+**Yêu cầu:** danh sách/chi tiết phiếu đặt có tiến độ riêng; chọn nhà cung cấp trước; chọn hàng trực tiếp + Excel + tạo nhanh; vòng đời phiếu đặt; nhập từ phiếu đặt; ngoại lệ nhận hàng; liên kết trả NCC.
+
+**Backend:** `WarehouseOrders.java` (mới: danh sách/chi tiết/tiến độ, danh sách NCC, bộ chọn hàng), `WarehouseCatalog.java` (mới: tạo nhanh, tái sử dụng ProductService/ProductRepository), `WarehouseDocuments.java` (hủy phiếu đặt đã xác nhận chưa nhập, sao chép, kiểm tra `expectedRemaining`, thông báo vượt/thay thế/đổi giá rõ ràng, chặn nhập khi đã nhận đủ), `WarehouseController.java`, `WarehouseRequests.java`.
+
+**Frontend:** `OrdersPage.jsx`, `OrderDetail.jsx`, `PurchaseOrderForm.jsx`, `VariantPicker.jsx`, `QuickCreateDialog.jsx` (mới); `DocumentForm.jsx` (giao PO cho form mới; phiếu nhập điền sẵn còn thiếu, cảnh báo vượt), `DocumentsPage.jsx` (gửi `expectedRemaining`, sao chép, chi tiết PO), `ExcelImportDialog.jsx`/`excelImport.js` (xử lý dòng trùng với phiếu, tạo nhanh từ dòng không khớp), `WarehouseContext.jsx`, `WarehousePage.jsx`, `model.js`.
+
+**Test:** `WarehouseOrderFlowTest.java` + `warehouse-flow-schema.sql`, `tests/run-warehouse.mjs`, `tests/run-order-ui.mjs`. Kết quả ở VERIFICATION.md.
+
+**Chưa làm (chờ schema):** TASK-11. Không chạy SQL, không đổi schema, không commit.
+
+## 06/11/2026 — Hoàn thiện phân hệ Tồn kho
+
+**Backend:** `WarehouseInventory.java` (mới: danh sách/thống kê/chi tiết/thẻ kho/báo cáo/ngưỡng), `WarehouseCounts.java` (mới: kiểm kê), `WarehouseStore` (`sell`, `held`, `migrated`, `copy`), `WarehouseBarcodes` (tạo cho mục đã chọn, mã duy nhất), `WarehouseDocuments` (xuất trả không lấy phần đang giữ), `WarehouseOrders` (dùng lại tiến độ phiếu đặt), `WarehouseController`, `WarehouseRequests`; bỏ `WarehouseLayout.history` (thay bằng thẻ kho). Đơn bán: `CheckoutService`/`CheckoutRepository` (giữ khi đặt), `OrderService` (xuất khi xác nhận, giải phóng khi từ chối/hủy/hết hạn), `InStoreSalesService` (dùng `sell`), truy vấn có thể bán ở Cart/Checkout/Shop.
+
+**Frontend:** `InventoryPage.jsx` (viết lại), `InventoryDetail.jsx`, `CountsPage.jsx`, `ReportPage.jsx` (mới), `components.jsx` (Metrics bấm lọc, DataTable phân trang backend), `excelWorkbook.js` (`exportSheet`), `model.js`, `WarehousePage.jsx`, `WarehouseContext.jsx`, `LocationsPage.jsx` (`?move=1`), `DocumentsPage.jsx` (`?id=`), `BarcodeScannerDialog.jsx`, `layouts/navigation.jsx`.
+
+**DB:** `database/migrations/2026-11-06_inventory.sql`.
+
+**Test:** `WarehouseInventoryTest.java`, `tests/run-inventory-ui.mjs`, cập nhật `run-barcode.mjs`, `WarehouseBarcodesTest`; harness MySQL rollback. Kết quả ở VERIFICATION.md.
 
 ## Cách cập nhật về sau
 

@@ -1,5 +1,6 @@
 import {
   AppstoreOutlined,
+  DatabaseOutlined,
   EnvironmentOutlined,
   FileTextOutlined,
   HomeOutlined,
@@ -36,21 +37,28 @@ const inStoreSales = {
   ]
 };
 
-const warehouseIcons = [
-  <InboxOutlined />,
-  <ShoppingCartOutlined />,
-  <ImportOutlined />,
-  <RollbackOutlined />,
-  <LayoutOutlined />,
-  <TeamOutlined />,
-  <EnvironmentOutlined />
-];
+const warehouseIcons = {
+  inventory: <InboxOutlined />,
+  orders: <ShoppingCartOutlined />,
+  receipts: <ImportOutlined />,
+  returns: <RollbackOutlined />,
+  layout: <LayoutOutlined />,
+  suppliers: <TeamOutlined />,
+  locations: <EnvironmentOutlined />
+};
 
-const warehouse = warehouseMenu.map(([key, label], index) => ({
-  to: `/warehouse/${key}`,
-  label,
-  icon: warehouseIcons[index]
-}));
+// Mục kho dạng menu đa cấp xổ xuống (giống "Bán hàng tại quầy").
+const warehouse = [
+  {
+    label: 'Kho cửa hàng',
+    icon: <DatabaseOutlined />,
+    children: warehouseMenu.map(([key, label]) => ({
+      to: `/warehouse/${key}`,
+      label,
+      icon: warehouseIcons[key]
+    }))
+  }
+];
 
 // Mỗi vai trò một menu.
 export const NAVIGATION = {

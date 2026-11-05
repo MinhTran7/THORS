@@ -733,18 +733,6 @@ VALUES(?,0,'Sắp xếp vị trí kho',?,'MOVE',?,?,?,?)
                 "Đã cập nhật mô tả và ảnh.");
     }
 
-    public List<Map<String, Object>> history(
-            Account a,
-            int detail) {
-        policy.view(a);
-
-        return s.jdbc().queryForList(
-                "SELECT m.*,u.full_name AS actor_name FROM stock_adjustment m "
-                        + "JOIN `user` u ON u.user_id=m.adjusted_by "
-                        + "WHERE m.detail_id=? ORDER BY m.adjustment_id DESC LIMIT 200",
-                detail);
-    }
-
     public List<Map<String, Object>> notices(Account a) {
         policy.view(a);
 
