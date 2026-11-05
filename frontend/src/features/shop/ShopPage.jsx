@@ -3,16 +3,16 @@ import { Link as RouterLink, useLocation, useNavigate, useOutletContext, useSear
 import { Box } from '@mui/material';
 import { useAuth } from 'features/auth/AuthProvider';
 import { api } from 'services/http';
-import heroImage from 'assets/images/auth/boutique-shopping.png';
 import { money, priceText } from './ShopCommon';
 import PendingCartHandler from './PendingCartHandler';
-import { C, SERIF, Icon, btnSx, container, eyebrowSx, focusRing, h2Sx, iconBtnSx, linkSx, scrollToId, section, srOnly } from './storeTheme';
+import ShopBanner from './ShopBanner';
+import { C, SERIF, Icon, btnSx, container, eyebrowSx, focusRing, h2Sx, linkSx, scrollToId, section, srOnly } from './storeTheme';
 
 /**
  * Trang chủ cửa hàng (đường dẫn '/'). Header, footer và thanh thông báo nằm ở layouts/StorefrontLayout.
- *  - Chưa tìm kiếm: Hero, danh mục, hàng mới về, ưu đãi, toàn bộ sản phẩm.
+ *  - Chưa tìm kiếm: banner (ShopBanner), danh mục, ưu đãi, toàn bộ sản phẩm.
  *  - Đang tìm kiếm (?q=...): chỉ hiện lưới kết quả.
- *  - Lọc danh mục qua ?category=ID; link có #moi / #uu-dai / #tat-ca sẽ tự cuộn tới khối đó.
+ *  - Lọc danh mục qua ?category=ID; link có #uu-dai / #tat-ca sẽ tự cuộn tới khối đó.
  * Dữ liệu: /shop/categories (lấy từ layout), /shop/products, /shop/promotions.
  */
 
@@ -22,14 +22,15 @@ const SORTS = [
   ['price_desc', 'Giá cao đến thấp']
 ];
 const PAGE_SIZE = 20;
-const NEW_COUNT = 8;
-const TILE_COLORS = ['#E4DDD3', '#D9D6D0', '#E8E1D6', '#DCD3C8'];
+const NEW_DAYS = 7; // sản phẩm thêm trong vòng 7 ngày được gắn nhãn "MỚI"
 
-// Link neo trong trang: chặn nhảy mặc định, chạy hành động riêng
-const anchor = (fn) => (e) => {
-  e.preventDefault();
-  fn();
-};
+// Cần API /shop/products trả về createdAt (thời điểm tạo sản phẩm). Không có thì không gắn nhãn.
+function isNewProduct(createdAt) {
+  if (!createdAt) return false;
+  const created = new Date(createdAt).getTime();
+  if (Number.isNaN(created)) return false;
+  return Date.now() - created < NEW_DAYS * 24 * 60 * 60 * 1000;
+}
 
 /* ---------- Ảnh ---------- */
 
@@ -68,94 +69,229 @@ function SectionHead({ title, children }) {
   );
 }
 
-function Hero() {
-  return (
-    <Box component="section" sx={{ ...container, pt: 4 }}>
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', bgcolor: C.sand, minHeight: { xs: 0, sm: 640 } }}>
-        <Box
-          sx={{
-            flex: '1 1 420px',
-            p: { xs: '40px 24px', sm: '72px 56px' },
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-            gap: 3
-          }}
-        >
-          <Box component="p" sx={{ ...eyebrowSx, color: '#5A544C' }}>
-            Bộ sưu tập mới
-          </Box>
-          <Box component="h1" sx={{ m: 0, fontFamily: SERIF, fontWeight: 400, fontSize: 'clamp(44px, 6vw, 72px)', lineHeight: 1.05 }}>
-            Mặc chậm.
-            <br />
-            <em>Mặc lâu.</em>
-          </Box>
-          <Box component="p" sx={{ m: 0, fontSize: 17, lineHeight: 1.6, color: '#3F3A34', maxWidth: 420 }}>
-            Những thiết kế tối giản, chất liệu bền đẹp — để tủ đồ của bạn ít hơn nhưng đúng hơn.
-          </Box>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, mt: 1 }}>
-            <Box component="a" href="#moi" onClick={anchor(() => scrollToId('moi'))} sx={btnSx('dark')}>
-              MUA NGAY
-            </Box>
-            <Box component="a" href="#tat-ca" onClick={anchor(() => scrollToId('tat-ca'))} sx={btnSx('outline')}>
-              XEM TẤT CẢ
-            </Box>
-          </Box>
-        </Box>
-        <Box sx={{ flex: { xs: '1 1 100%', sm: '1 1 520px' }, minHeight: { xs: 360, sm: 520 }, bgcolor: '#CFC6BA', position: 'relative', overflow: 'hidden' }}>
-          <Box component="img" src={heroImage} alt="" sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
-        </Box>
-      </Box>
-    </Box>
-  );
+/* ---------- Icon nét mảnh cho danh mục (chọn theo tên danh mục) ---------- */
+
+const CATEGORY_ICONS = {
+  jacket: (
+    <>
+      <path d="M24 9 L13 13 L7 54 H15 L17 30 V56 H47 V30 L49 54 H57 L51 13 L40 9" />
+      <path d="M24 9 C26 13 29 15 32 15 C35 15 38 13 40 9" />
+      <path d="M32 15 V56" />
+      <path d="M22 40 H27 M37 40 H42" />
+    </>
+  ),
+  shirt: (
+    <>
+      <path d="M23 10 L11 15 L5 28 L13 32 L17 27 V55 H47 V27 L51 32 L59 28 L53 15 L41 10" />
+      <path d="M23 10 C25 14 28 16 32 16 C36 16 39 14 41 10" />
+      <path d="M20 30 C21 35 21 45 20 50 M44 30 C43 35 43 45 44 50" />
+    </>
+  ),
+  pants: (
+    <>
+      <path d="M17 8 H47 L50 57 H36 L32 22 L28 57 H14 Z" />
+      <path d="M17 14 H47" />
+      <path d="M32 14 V22" />
+      <path d="M22 14 V17 M42 14 V17" />
+    </>
+  ),
+  dress: (
+    <>
+      <path d="M25 6 V14 M39 6 V14" />
+      <path d="M25 14 H39 L37 26 L50 57 H14 L27 26 Z" />
+      <path d="M27 26 H37" />
+    </>
+  ),
+  bag: (
+    <>
+      <path d="M11 24 H53 L49 57 H15 Z" />
+      <path d="M23 24 V18 C23 13 27 9 32 9 C37 9 41 13 41 18 V24" />
+      <path d="M23 30 V32 M41 30 V32" />
+    </>
+  ),
+  shoe: (
+    <>
+      <path d="M7 44 V26 L19 24 C21 30 25 34 31 36 L49 40 C55 41 58 44 58 48 V51 H7 Z" />
+      <path d="M7 46 H58" />
+      <path d="M24 30 L27 27 M29 33 L32 30" />
+    </>
+  ),
+  hat: (
+    <>
+      <path d="M18 40 C18 24 46 24 46 40" />
+      <path d="M6 42 C6 38 58 38 58 42 C58 47 6 47 6 42 Z" />
+      <path d="M19 36 H45" />
+    </>
+  ),
+  hanger: (
+    <>
+      <path d="M28 16 C28 12 30 10 33 10 C36 10 38 12 38 15 C38 18 35 19 33 21 V26" />
+      <path d="M33 26 L7 44 C5 46 6 48 9 48 H55 C58 48 59 46 57 44 Z" />
+    </>
+  )
+};
+
+// Thứ tự quan trọng: "áo khoác" phải xét trước "áo"
+const ICON_RULES = [
+  [/áo khoác|jacket|blazer|cardigan/, 'jacket'],
+  [/váy|đầm|dress/, 'dress'],
+  [/quần|pants|jean|short/, 'pants'],
+  [/áo|shirt|thun|sơ mi/, 'shirt'],
+  [/túi|ví|balo|bag/, 'bag'],
+  [/giày|dép|shoe|sneaker/, 'shoe'],
+  [/mũ|nón|hat|cap/, 'hat']
+];
+
+function categoryIcon(name) {
+  const lower = (name || '').toLowerCase();
+  const rule = ICON_RULES.find(([re]) => re.test(lower));
+  return CATEGORY_ICONS[rule ? rule[1] : 'hanger'];
 }
 
+const CAT_ROWS_AT = 10; // nhiều hơn 10 danh mục thì xếp 2 hàng
+const CAT_COL = { xs: 104, md: 176 }; // bề rộng mỗi ô danh mục
+
+const catArrowSx = (side) => ({
+  position: 'absolute',
+  top: '50%',
+  [side]: -8,
+  transform: 'translateY(-50%)',
+  zIndex: 2,
+  width: 40,
+  height: 40,
+  p: 0,
+  borderRadius: '50%',
+  border: `1px solid ${C.line}`,
+  bgcolor: '#FFFFFF',
+  color: C.ink,
+  boxShadow: '0 1px 12px rgba(0,0,0,.12)',
+  cursor: 'pointer',
+  display: { xs: 'none', md: 'flex' },
+  alignItems: 'center',
+  justifyContent: 'center',
+  '&:hover': { color: C.accent },
+  ...focusRing
+});
+
 function Categories({ categories, onPick }) {
+  const trackRef = useRef(null);
+  const [edge, setEdge] = useState({ left: false, right: false });
+  const rows = categories.length > CAT_ROWS_AT ? 2 : 1;
+
+  // Kiểm tra còn cuộn được sang trái/phải không để hiện mũi tên
+  const updateEdge = useCallback(() => {
+    const el = trackRef.current;
+    if (!el) return;
+    setEdge({ left: el.scrollLeft > 4, right: el.scrollLeft + el.clientWidth < el.scrollWidth - 4 });
+  }, []);
+
+  useEffect(() => {
+    updateEdge();
+    window.addEventListener('resize', updateEdge);
+    return () => window.removeEventListener('resize', updateEdge);
+  }, [updateEdge, categories.length]);
+
+  const scroll = (dir) => trackRef.current?.scrollBy({ left: dir * trackRef.current.clientWidth, behavior: 'smooth' });
+
   if (categories.length === 0) return null;
+
   return (
-    <Box component="section" id="danh-muc" sx={section}>
-      <SectionHead title="Mua theo danh mục">
-        <Box component="a" href="#tat-ca" onClick={anchor(() => onPick(0))} sx={{ ...linkSx, fontSize: 14, textDecoration: 'underline' }}>
-          Xem tất cả
-        </Box>
-      </SectionHead>
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: { xs: 1.5, sm: 2.5 } }}>
-        {categories.slice(0, 4).map((c, i) => (
+    <Box component="section" id="danh-muc" sx={{ ...section, scrollMarginTop: 96 }}>
+      <SectionHead title="Danh mục" />
+
+      <Box sx={{ position: 'relative' }}>
+        {edge.left && (
+          <Box component="button" type="button" aria-label="Danh mục trước" onClick={() => scroll(-1)} sx={catArrowSx('left')}>
+            <Icon size={16}>
+              <path d="M15 5l-7 7 7 7" />
+            </Icon>
+          </Box>
+        )}
+
+        {/* Khung cuộn ngang; lưới bên trong rộng vừa nội dung và căn giữa khi ít danh mục */}
+        <Box ref={trackRef} onScroll={updateEdge} sx={{ overflowX: 'auto', scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' } }}>
           <Box
-            key={c.categoryId}
-            component="button"
-            type="button"
-            onClick={() => onPick(c.categoryId)}
             sx={{
-              flex: { xs: '1 1 calc(50% - 6px)', sm: '1 1 260px' },
-              border: 0,
-              p: 0,
-              bgcolor: 'transparent',
-              font: 'inherit',
-              color: C.ink,
-              textAlign: 'left',
-              cursor: 'pointer',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '14px',
-              '&:hover .tile': { filter: 'brightness(.95)' },
-              '&:hover .name': { color: C.accent },
-              ...focusRing
+              display: 'grid',
+              width: 'max-content',
+              mx: 'auto',
+              gridTemplateRows: `repeat(${rows}, auto)`,
+              gridAutoFlow: 'column',
+              gridAutoColumns: { xs: `${CAT_COL.xs}px`, md: `${CAT_COL.md}px` },
+              rowGap: { xs: 2, md: 3 }
             }}
           >
-            <Box
-              className="tile"
-              sx={{ width: '100%', aspectRatio: '3 / 4', bgcolor: TILE_COLORS[i % TILE_COLORS.length], display: 'flex', alignItems: 'flex-end', p: 2.5, boxSizing: 'border-box', transition: 'filter .2s' }}
-            >
-              <Box component="span" sx={{ fontFamily: SERIF, fontSize: 64, lineHeight: 1, color: 'rgba(17,17,17,.35)' }}>
-                {c.categoryName.charAt(0)}
+            {categories.map((c) => (
+              <Box
+                key={c.categoryId}
+                component="button"
+                type="button"
+                onClick={() => onPick(c.categoryId)}
+                sx={{
+                  px: 1,
+                  py: 1,
+                  border: 0,
+                  bgcolor: 'transparent',
+                  font: 'inherit',
+                  color: C.ink,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: { xs: 1.25, md: 2 },
+                  '&:hover .circle': { bgcolor: C.ink, color: '#FFFFFF' },
+                  '&:hover .name': { color: C.accent },
+                  ...focusRing
+                }}
+              >
+                <Box
+                  className="circle"
+                  sx={{
+                    width: { xs: 80, md: 128 },
+                    height: { xs: 80, md: 128 },
+                    flexShrink: 0,
+                    borderRadius: '50%',
+                    bgcolor: C.sand,
+                    color: C.ink,
+                    display: 'grid',
+                    placeItems: 'center',
+                    transition: 'background-color .2s, color .2s',
+                    '& svg': { width: { xs: 46, md: 72 }, height: { xs: 46, md: 72 } }
+                  }}
+                >
+                  <svg aria-hidden="true" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                    {categoryIcon(c.categoryName)}
+                  </svg>
+                </Box>
+                <Box
+                  component="span"
+                  className="name"
+                  sx={{
+                    fontSize: { xs: 15, md: 18 },
+                    fontWeight: 500,
+                    lineHeight: 1.35,
+                    textAlign: 'center',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                    wordBreak: 'break-word'
+                  }}
+                >
+                  {c.categoryName}
+                </Box>
               </Box>
-            </Box>
-            <Box component="span" className="name" sx={{ fontSize: 16, fontWeight: 500 }}>
-              {c.categoryName}
-            </Box>
+            ))}
           </Box>
-        ))}
+        </Box>
+
+        {edge.right && (
+          <Box component="button" type="button" aria-label="Danh mục tiếp theo" onClick={() => scroll(1)} sx={catArrowSx('right')}>
+            <Icon size={16}>
+              <path d="M9 5l7 7-7 7" />
+            </Icon>
+          </Box>
+        )}
       </Box>
     </Box>
   );
@@ -174,8 +310,9 @@ const badgeSx = (bg, color = C.ink) => ({
   py: '5px'
 });
 
-function ProductCard({ product, promo, isNew, sx }) {
+function ProductCard({ product, promo, sx }) {
   const outOfStock = Number(product.totalStock) === 0;
+  const isNew = isNewProduct(product.createdAt);
   return (
     <Box
       component={RouterLink}
@@ -233,57 +370,6 @@ function ProductCard({ product, promo, isNew, sx }) {
             {priceText(product.minPrice, product.maxPrice)}
           </Box>
         )}
-      </Box>
-    </Box>
-  );
-}
-
-const arrowSx = (dark) => ({
-  ...iconBtnSx,
-  border: `1px solid ${C.ink}`,
-  bgcolor: dark ? C.ink : '#FFFFFF',
-  color: dark ? '#FFFFFF' : C.ink,
-  '&:hover': { opacity: 0.85 }
-});
-
-function NewArrivals({ items, promoMap }) {
-  const trackRef = useRef(null);
-  if (items.length === 0) return null;
-
-  const scroll = (dir) => {
-    const el = trackRef.current;
-    if (el) el.scrollBy({ left: dir * el.clientWidth * 0.8, behavior: 'smooth' });
-  };
-
-  return (
-    <Box component="section" id="moi" sx={{ ...section, scrollMarginTop: 96 }}>
-      <SectionHead title="Hàng mới về">
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Box component="button" type="button" aria-label="Sản phẩm trước" onClick={() => scroll(-1)} sx={arrowSx(false)}>
-            <Icon size={18}>
-              <path d="M15 5l-7 7 7 7" />
-            </Icon>
-          </Box>
-          <Box component="button" type="button" aria-label="Sản phẩm tiếp theo" onClick={() => scroll(1)} sx={arrowSx(true)}>
-            <Icon size={18}>
-              <path d="M9 5l7 7-7 7" />
-            </Icon>
-          </Box>
-        </Box>
-      </SectionHead>
-      <Box
-        ref={trackRef}
-        sx={{ display: 'flex', gap: 2.5, overflowX: 'auto', scrollSnapType: 'x mandatory', scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' } }}
-      >
-        {items.map((p) => (
-          <ProductCard
-            key={p.productId}
-            product={p}
-            promo={promoMap.get(p.productId)}
-            isNew
-            sx={{ flex: '0 0 calc((100% - 60px) / 4)', minWidth: { xs: '72%', sm: 260 }, scrollSnapAlign: 'start' }}
-          />
-        ))}
       </Box>
     </Box>
   );
@@ -401,7 +487,6 @@ export default function ShopPage() {
   const query = params.get('q') || '';
   const categoryId = Number(params.get('category')) || 0;
 
-  const [newest, setNewest] = useState([]);
   const [promos, setPromos] = useState([]);
 
   const [sort, setSort] = useState('newest');
@@ -413,9 +498,6 @@ export default function ShopPage() {
 
   // Dữ liệu cho các khối trang chủ (tải một lần)
   useEffect(() => {
-    api(`/shop/products?page=0&size=${NEW_COUNT}&sort=newest`)
-      .then((d) => setNewest(d.items || []))
-      .catch(() => setNewest([]));
     api('/shop/promotions?size=20')
       .then((d) => setPromos(d.items || []))
       .catch(() => setPromos([]));
@@ -455,7 +537,7 @@ export default function ShopPage() {
     if (!hash) return undefined;
     const timer = setTimeout(() => scrollToId(hash), 50);
     return () => clearTimeout(timer);
-  }, [hash, location.key, newest.length, promos.length]);
+  }, [hash, location.key, promos.length, items.length]);
 
   // Chọn danh mục: lọc lưới và cuộn tới lưới
   const pickCategory = (id) => navigate(id ? `/?category=${id}#tat-ca` : '/#tat-ca');
@@ -472,9 +554,8 @@ export default function ShopPage() {
     <>
       {!query && (
         <>
-          <Hero />
+          <ShopBanner />
           <Categories categories={categories} onPick={pickCategory} />
-          <NewArrivals items={newest} promoMap={promoMap} />
           <PromoBanner promos={promos} />
         </>
       )}
