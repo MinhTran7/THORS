@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   Alert,
   Autocomplete,
@@ -30,9 +30,13 @@ const historyNames = {
   COUNT_CANCEL: 'Hủy phiếu'
 };
 
-/** Lines for one variant: every location row it has plus the unplaced part, with today's system figures. */
+/**
+ * Lines for one variant with today's system figures: only locations that currently hold stock, plus the
+ * unplaced part when it is > 0. A variant with no stock anywhere still gets the unplaced line to count.
+ */
 function linesFor(data, variant) {
-  const places = data.locations.filter((l) => l.detail_id === variant.detail_id);
+  const places = data.locations.filter((l) => l.detail_id === variant.detail_id && Number(l.quantity) > 0);
+  const unplaced = Number(variant.unassigned_quantity);
   return [
     ...places.map((l) => ({
       key: `${variant.detail_id}:${l.product_location_id}`,
@@ -45,17 +49,21 @@ function linesFor(data, variant) {
       reason: '',
       note: ''
     })),
-    {
-      key: `${variant.detail_id}:unplaced`,
-      detailId: variant.detail_id,
-      locationId: null,
-      label: variantLabel(variant),
-      place: 'Chưa xếp vị trí',
-      system: Number(variant.unassigned_quantity),
-      counted: '',
-      reason: '',
-      note: ''
-    }
+    ...(unplaced > 0 || !places.length
+      ? [
+          {
+            key: `${variant.detail_id}:unplaced`,
+            detailId: variant.detail_id,
+            locationId: null,
+            label: variantLabel(variant),
+            place: 'Chưa xếp vị trí',
+            system: Math.max(0, unplaced),
+            counted: '',
+            reason: '',
+            note: ''
+          }
+        ]
+      : [])
   ];
 }
 
@@ -245,9 +253,12 @@ function CountForm({ count, initialVariant, onClose, onSaved }) {
         <Button disabled={busy} onClick={onClose}>
           Đóng
         </Button>
-        <Button variant="outlined" disabled={busy || !lines.length || problems.length > 0} onClick={() => save()}>
-          Lưu nháp
-        </Button>
+        {/* Chủ cửa hàng xác nhận thẳng, không cần nháp; nháp chỉ dành cho thành viên trước khi gửi xác nhận. */}
+        {!owner && (
+          <Button variant="outlined" disabled={busy || !lines.length || problems.length > 0} onClick={() => save()}>
+            Lưu nháp
+          </Button>
+        )}
         {owner ? (
           <Button variant="contained" disabled={busy || !lines.length || problems.length > 0} onClick={() => save('confirm')}>
             Xác nhận kiểm kê
@@ -429,9 +440,14 @@ export default function CountsPage() {
             : 'Lập phiếu kiểm kê và gửi chủ cửa hàng xác nhận. Phiếu chưa xác nhận không làm thay đổi tồn.'
         }
         action={
-          <Button variant="contained" onClick={() => setForm({ variant })}>
-            Lập phiếu kiểm kê
-          </Button>
+          <Stack direction="row" spacing={1}>
+            <Button variant="outlined" component={Link} to="/warehouse/inventory">
+              Quay lại kho
+            </Button>
+            <Button variant="contained" onClick={() => setForm({ variant })}>
+              Lập phiếu kiểm kê
+            </Button>
+          </Stack>
         }
       />
       <Metrics

@@ -68,7 +68,7 @@ function SourceDocumentForm({
     '';
 
   const isReturn = type === 'SUPPLIER_RETURN';
-  // Returns: what is still returnable also excludes quantities on other approved returns.
+  // Returns: received − already dispatched returns (approved but not dispatched returns do not count).
   // Receipts: what is still to receive. From a purchase order line: ordered − received; from a
   // supplier return line (exchange): replacement agreed − replacement already received.
   const exchangeLine = (i) =>

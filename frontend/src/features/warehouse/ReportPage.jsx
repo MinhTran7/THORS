@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Alert, Button, Checkbox, CircularProgress, FormControlLabel, MenuItem, Stack, TextField, Typography } from '@mui/material';
 import useSWR from 'swr';
 import MainCard from 'components/MainCard';
@@ -100,9 +100,14 @@ export default function ReportPage() {
         title="Báo cáo tồn kho"
         subtitle="Nhập – xuất – tồn theo kỳ, khớp với thẻ kho và số tồn hiện tại. Chuyển vị trí không làm tăng/giảm tổng tồn."
         action={
-          <Button variant="outlined" disabled={!data?.items?.length} onClick={exportExcel}>
-            Xuất Excel
-          </Button>
+          <Stack direction="row" spacing={1}>
+            <Button variant="outlined" component={Link} to="/warehouse/inventory">
+              Quay lại kho
+            </Button>
+            <Button variant="outlined" disabled={!data?.items?.length} onClick={exportExcel}>
+              Xuất Excel
+            </Button>
+          </Stack>
         }
       />
       <MainCard sx={{ mb: 2 }}>

@@ -441,7 +441,9 @@ try {
   for (const header of ['Đã nhập', 'Đã trả', 'Còn được trả', 'Số lượng trả', 'Đơn giá trả', 'Thành tiền'])
     await returnForm.getByRole('columnheader', { name: header, exact: true }).waitFor();
   assert.equal(await returnForm.getByText('Còn được nhập/trả').count(), 0);
-  await returnForm.getByRole('cell', { name: '45', exact: true }).waitFor(); // 60 received − 15 on an approved return
+  // 60 received, 15 only on an approved (not yet dispatched) return: still 60 returnable (Đã nhập 60 · Còn được trả 60).
+  await returnForm.getByRole('cell', { name: '60', exact: true }).nth(1).waitFor();
+  assert.equal(await returnForm.getByRole('cell', { name: '45', exact: true }).count(), 0, 'approved return does not reduce returnable');
   assert.equal(await returnForm.getByRole('button', { name: 'Thêm dòng', exact: true }).count(), 0, 'no free product lines');
   await returnForm.getByLabel('Số lượng Áo thun · Đen · M', { exact: true }).fill('5');
   await page.screenshot({ path: path.join(artifacts, 'return-form.png'), fullPage: true });

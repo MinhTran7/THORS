@@ -463,9 +463,9 @@ export default function InventoryPage() {
                     {number(r.assigned_quantity)} /{' '}
                     <Typography
                       component="span"
-                      color={r.unassigned_quantity < 0 ? 'error' : r.unassigned_quantity > 0 ? 'warning.main' : 'inherit'}
+                      color={r.unassigned_quantity > 0 ? 'warning.main' : 'inherit'}
                     >
-                      {number(r.unassigned_quantity)}
+                      {number(Math.max(0, Number(r.unassigned_quantity)))}
                     </Typography>
                   </>
                 )

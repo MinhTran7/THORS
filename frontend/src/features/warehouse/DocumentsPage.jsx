@@ -456,8 +456,17 @@ export default function DocumentsPage({ type }) {
             docs
               .filter((d) => d.status === 'CONFIRMED')
               .reduce((n, d) => n + (type === 'PURCHASE_ORDER' ? totalQty(d) - handledQty(d) : totalQty(d)), 0),
-            type === 'PURCHASE_ORDER' ? 'Trên các đơn đặt đang mở' : 'Tính theo số thực nhận / thực trả'
-          ]
+            type === 'PURCHASE_ORDER' ? 'Trên các đơn đặt đang mở' : 'Tính theo số thực nhận'
+          ],
+          ...(type === 'RECEIPT'
+            ? [
+                [
+                  'Số lượng đã xác nhận trả',
+                  docs.filter((d) => d.status === 'CONFIRMED').reduce((n, d) => n + handledQty(d), 0),
+                  'Đã xác nhận xuất trả nhà cung cấp'
+                ]
+              ]
+            : [])
         ]
         }
       />
@@ -570,7 +579,17 @@ export default function DocumentsPage({ type }) {
                     render: (d) => `${number(handledQty(d))} / ${number(totalQty(d) - handledQty(d))}`
                   }
                 ]
-              : []),
+              : type === 'RECEIPT'
+                ? [
+                    {
+                      key: 'returned',
+                      label: 'Đã xác nhận trả',
+                      align: 'right',
+                      // handled_quantity of a receipt line = dispatched (CONFIRMED) supplier returns only.
+                      render: (d) => number(d.status === 'CONFIRMED' ? handledQty(d) : 0)
+                    }
+                  ]
+                : []),
             { key: 'total', label: 'Tổng tiền', align: 'right', render: (d) => money(d.total_amount) },
             { key: 'status', label: 'Trạng thái', render: (d) => <Status value={d.status} /> }
           ]

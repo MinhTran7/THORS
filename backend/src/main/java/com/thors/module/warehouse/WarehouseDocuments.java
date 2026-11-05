@@ -48,8 +48,9 @@ public class WarehouseDocuments {
     }
 
     /**
-     * Quantity of a receipt line already committed to supplier returns: dispatched (CONFIRMED) plus
-     * approved and waiting for dispatch (APPROVED), excluding the return being checked.
+     * Quantity of a receipt line already returned to the supplier: only dispatched returns (CONFIRMED),
+     * excluding the return being checked. Draft/pending/approved returns do not reduce what is still
+     * returnable; over-return is stopped when a return is dispatched (checked again inside the lock).
      */
     private long returned(int sourceItem, Integer self) {
         return s.count(
@@ -57,7 +58,7 @@ public class WarehouseDocuments {
                 SELECT COALESCE(SUM(i.quantity),0) FROM stock_receipt_item i
                 JOIN stock_receipt r ON r.receipt_id=i.receipt_id
                 WHERE i.source_receipt_item_id=? AND r.receipt_type='SUPPLIER_RETURN'
-                  AND r.status IN ('APPROVED','CONFIRMED') AND r.receipt_id<>?
+                  AND r.status='CONFIRMED' AND r.receipt_id<>?
                 """,
                 sourceItem,
                 self == null ? 0 : self);
@@ -465,7 +466,7 @@ public class WarehouseDocuments {
         if (!is(doc, "status", "DRAFT") && !is(doc, "status", "PENDING_CONFIRMATION"))
             throw invalid("Phiếu trả không ở trạng thái có thể duyệt.");
         requireReturnReason(doc);
-        // Counts other approved/dispatched returns, so two approvals cannot over-commit a receipt line.
+        // Checked against already dispatched returns; approval reserves nothing (checked again at dispatch).
         validateExisting(doc);
         int id = num(doc, "receipt_id");
         s.jdbc()
@@ -490,7 +491,8 @@ public class WarehouseDocuments {
             throw invalid("Chỉ xuất trả phiếu đã duyệt (chờ xuất trả).");
         doc = header(id);
         requireReturnReason(doc);
-        // Recheck against the receipt line inside the lock: dispatched + other approved returns.
+        // Recheck inside the lock against returns already dispatched: the first return dispatched wins,
+        // a later one exceeding what is left fails here with "Trả vượt".
         validateExisting(doc);
         var lines = lines(id);
         var byItem = new HashMap<Integer, List<Pick>>();
