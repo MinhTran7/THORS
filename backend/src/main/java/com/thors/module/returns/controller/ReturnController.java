@@ -22,12 +22,40 @@ public class ReturnController {
     }
 
     // ==========================================
-    // LOOKUP ORDER
+    // LOOKUP ORDER & PUBLIC TRACKING
     // ==========================================
 
     @GetMapping("/orders/{orderNumber}")
     public ResponseEntity<ReturnableOrderResponse> getOrderByNumber(@PathVariable String orderNumber) {
         return ResponseEntity.ok(returnService.getOrderByNumber(orderNumber));
+    }
+
+    /**
+     * Tra cứu tiến trình đơn hàng công khai (dành cho khách mua qua Facebook / Khách vãng lai)
+     */
+    @GetMapping("/track/{orderNumber}")
+    public ResponseEntity<ReturnableOrderResponse> trackOrder(
+            @PathVariable String orderNumber,
+            @RequestParam(required = false) String phone
+    ) {
+        return ResponseEntity.ok(returnService.trackOrder(orderNumber, phone));
+    }
+
+    /**
+     * Khách hàng gửi yêu cầu đổi trả online công khai (xác thực qua số điện thoại nhận hàng)
+     */
+    @PostMapping("/public")
+    public ResponseEntity<ReturnRequestResponse> createPublicReturnRequest(@RequestBody CreateReturnRequest request) {
+        ReturnRequestResponse response = returnService.createPublicReturnRequest(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    /**
+     * Tải ảnh/video bằng chứng hàng lỗi từ điện thoại hoặc máy tính
+     */
+    @PostMapping(value = "/upload-evidence", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Map<String, Object>> uploadEvidence(@RequestPart("file") org.springframework.web.multipart.MultipartFile file) {
+        return ResponseEntity.ok(returnService.uploadEvidence(file));
     }
 
     // ==========================================

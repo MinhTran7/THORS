@@ -540,7 +540,8 @@ export default function FacebookPOSPage() {
       const totalAmount = orderResult?.totalAmount || cartTotal;
 
       // Bước B: Thử tạo link thanh toán PayOS thật & Mã VietQR
-      let payUrl = `http://localhost:3000/orders/${orderId}`;
+      const trackingUrl = `${window.location.origin}/tracking/${encodeURIComponent(orderNumber)}`;
+      let payUrl = trackingUrl;
       let qrImageUrl = '';
       let bankInfo = null;
 
@@ -562,11 +563,11 @@ export default function FacebookPOSPage() {
           };
         }
       } catch (ignored) {
-        // Fallback tạo mã QR dẫn thẳng vào trang chi tiết đơn hàng
+        // Fallback tạo mã QR dẫn thẳng vào trang theo dõi đơn hàng công khai
         qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(payUrl)}`;
       }
 
-      // Bước C: Tạo tin nhắn xác nhận kèm thông tin thanh toán VietQR / PayOS
+      // Bước C: Tạo tin nhắn xác nhận kèm thông tin thanh toán VietQR / PayOS và link theo dõi
       const paymentMsg =
         `🎉 Cảm ơn bạn đã đặt hàng tại THORS Studio!\n\n` +
         `📦 THÔNG TIN ĐƠN HÀNG ${orderNumber}:\n` +
@@ -574,8 +575,10 @@ export default function FacebookPOSPage() {
         `\n\n💵 TỔNG CỘNG: ${money(totalAmount)}\n` +
         (customerAddress.trim() ? `📍 Địa chỉ nhận hàng: ${customerAddress.trim()}\n` : '') +
         (customerPhone.trim() ? `📞 SĐT: ${customerPhone.trim()}\n` : '') +
-        `\n💳 Bạn vui lòng quét mã VietQR hình bên dưới hoặc truy cập link sau để hoàn tất thanh toán online:\n` +
+        `\n💳 Bạn vui lòng quét mã VietQR hình bên dưới hoặc truy cập link sau để thanh toán online:\n` +
         `${payUrl}\n\n` +
+        `🔍 Theo dõi hành trình giao hàng & yêu cầu đổi trả online tại:\n` +
+        `${trackingUrl}\n\n` +
         `Shop sẽ đóng gói và giao hàng ngay khi nhận được thanh toán ạ! ❤️`;
 
       // Bước D: Bắn tin nhắn qua Messenger cho khách hàng
