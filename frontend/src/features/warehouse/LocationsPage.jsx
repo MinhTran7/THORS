@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
@@ -810,6 +810,15 @@ export default function LocationsPage({ editLayout = false }) {
   const variant = data.variants.find(
     (v) => v.detail_id === selectedVariant
   );
+
+  // ?variant=..&move=1 (from Tồn kho) opens the existing place/move form for that variant.
+  useEffect(() => {
+    if (!owner || !variant || params.get('move') !== '1') return;
+    setMove({ variant });
+    const next = new URLSearchParams(params);
+    next.delete('move');
+    setParams(next, { replace: true });
+  }, [owner, variant, params, setParams]);
 
   const tier = data.tiers.find(
     (t) => t.shelf_level_id === selected

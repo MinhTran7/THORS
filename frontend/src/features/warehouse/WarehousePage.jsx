@@ -7,6 +7,9 @@ import InventoryPage from './InventoryPage';
 import DocumentsPage from './DocumentsPage';
 import LocationsPage from './LocationsPage';
 import SuppliersPage from './SuppliersPage';
+import OrdersPage from './OrdersPage';
+import CountsPage from './CountsPage';
+import ReportPage from './ReportPage';
 import { DocumentAction, DocumentDetail } from './DocumentsPage';
 import DocumentForm from './DocumentForm';
 import { when } from './model';
@@ -94,9 +97,11 @@ export default function WarehousePage() {
 }
 export const warehouseRoutes = [
   { path: 'inventory', element: <InventoryPage /> },
-  { path: 'orders', element: <DocumentsPage key="orders" type="PURCHASE_ORDER" /> },
+  { path: 'orders', element: <OrdersPage /> },
   { path: 'receipts', element: <DocumentsPage key="receipts" type="RECEIPT" /> },
   { path: 'returns', element: <DocumentsPage key="returns" type="SUPPLIER_RETURN" /> },
+  { path: 'counts', element: <CountsPage /> },
+  { path: 'report', element: <ReportPage /> },
   { path: 'layout', element: <LocationsPage key="layout" editLayout /> },
   { path: 'locations', element: <LocationsPage key="locations" /> },
   { path: 'suppliers', element: <SuppliersPage /> }

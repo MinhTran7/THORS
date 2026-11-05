@@ -1,5 +1,9 @@
 # Công việc còn lại và điểm cần xử lý
 
+> Cập nhật 06/11/2026: Tồn kho hoàn thiện (WORK_LOG 06/11). Đã chạy migration 06/11 (05/11/2026). Còn mở: (1) giờ hiển thị ngoài các màn hình Tồn kho/Thẻ kho/Kiểm kê/Báo cáo vẫn là giờ UTC của DB — chưa sửa toàn ứng dụng theo phạm vi đã chốt; (2) 14 đơn online xác nhận trước nâng cấp chưa từng trừ tồn (danh sách và đề xuất xử lý trong báo cáo 05/11) — chờ Owner quyết định, không tự trừ bù và không dùng kiểm kê che chứng từ thiếu; (3) biến thể #3/#4 lệch do công cụ tạo đơn mẫu cũ (đã sửa: không còn `GREATEST(0, …)`, chỉ bán phần có thể bán, ledger gắn dòng đơn); lịch sử cũ giữ nguyên, được đánh dấu "lịch sử thiếu 11".
+
+> Cập nhật 04/11/2026: đã triển khai cải tiến Đặt hàng nhập (xem WORK_LOG). TASK-05 được xử lý một phần: có `WarehouseOrderFlowTest` (16 test) và `tests/run-warehouse.mjs`; TASK-03 vẫn mở (code trả NCC đã kiểm thử trên H2 với CHECK đề xuất, DB theo dump vẫn từ chối).
+
 Checkpoint 28/10/2026. Lượt này hoàn thành tài liệu; các task dưới đây **chưa được sửa**. Mức ưu tiên là đề xuất dựa trên ảnh hưởng kỹ thuật, không khẳng định đây là thứ tự công việc người dùng đã duyệt.
 
 ## Tổng quan
@@ -16,6 +20,8 @@ Checkpoint 28/10/2026. Lượt này hoàn thành tài liệu; các task dưới 
 | TASK-08 | P1 | Có cấu hình, chưa kiểm chứng dịch vụ | Kiểm tra auth/OAuth/ảnh trên môi trường người dùng. |
 | TASK-09 | P2 | Tài liệu/định hướng chưa đồng bộ | Cập nhật README/cấu hình mẫu/nhãn và hành vi còn dở. |
 | TASK-10 | Backlog | Chưa thấy module source | POS, online sales, payment/shipping, AI và background jobs. |
+| TASK-11 | P0 | Chờ chủ dự án quyết định schema | Nhận vượt/thay thế/đổi giá có duyệt, số giao–chấp nhận–từ chối, hàng giữ chờ trả, “chờ giao bù”. Xem `SCHEMA_PROPOSAL_PURCHASE_RECEIVING.md`. |
+| TASK-12 | P0 | Phát hiện 04/11/2026, chưa sửa | `product_detail.barcode` được snapshot/barcode dùng nhưng không có trong dump; đối chiếu DB thật. |
 
 ## TASK-01 — JAR gửi kèm không chứa module mới
 
@@ -53,6 +59,8 @@ Không mặc định mọi path tạo mới là `/new`: cần đọc Link/naviga
 | `stock_adjustment.ck_stock_adjustment_1` | `ADJUSTMENT`, `RECEIPT`, `ORDER_OUT`, `MOVE`, `RESTOCK`. |
 
 Nếu DB đang chạy đúng các CHECK này, tạo phiếu trả và ghi movement trả sẽ bị từ chối. Đây là suy luận trực tiếp từ schema/code; chưa thực hiện INSERT để tái hiện trên DB thật.
+
+**Cập nhật 04/11/2026:** đã có script `database/migrations/2026-11-04_supplier_return.sql` (CHECK `receipt_type`, `status` thêm `APPROVED`, `movement_type`) — **chưa chạy** trên DB nào. Code và test H2 dùng đúng các CHECK này. Việc còn lại: đối chiếu `SHOW CREATE TABLE`, sao lưu, chạy script trên DB thật.
 
 **Hướng tiếp tục:** đối chiếu `SHOW CREATE TABLE` của hai bảng trên môi trường phù hợp. Nếu nghiệp vụ trả NCC tiếp tục dùng loại riêng, phải thống nhất cả constraint của chứng từ lẫn movement và cách kiểm thử/rollback; không chỉ đổi một dòng UI hoặc bỏ CHECK chung. Có thể cần thay đổi schema, nhưng lượt tài liệu chưa thực hiện/ủy quyền việc đó.
 
