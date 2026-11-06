@@ -33,3 +33,26 @@ export async function seedSampleOrder() {
   return post('/returns/seed-sample-order', {});
 }
 
+export async function trackOrderPublic(orderNumber, phone = '') {
+  if (!orderNumber || !orderNumber.trim()) {
+    throw new Error('Vui lòng nhập mã đơn hàng.');
+  }
+  const query = phone && phone.trim() ? `?phone=${encodeURIComponent(phone.trim())}` : '';
+  return api(`/returns/track/${encodeURIComponent(orderNumber.trim())}${query}`);
+}
+
+export async function createPublicReturnRequest(data) {
+  return post('/returns/public', data);
+}
+
+export async function uploadReturnEvidence(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  return api('/returns/upload-evidence', {
+    method: 'POST',
+    form: formData
+  });
+}
+
+
+

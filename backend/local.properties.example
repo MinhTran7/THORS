@@ -38,3 +38,21 @@ thors.bootstrap.name=THORS Admin
 thors.bootstrap.email=
 thors.bootstrap.phone=
 thors.bootstrap.password=
+
+# Cloudinary (upload anh san pham)
+cloudinary.cloud-name=
+cloudinary.api-key=
+cloudinary.api-secret=
+
+# Cong thanh toan PayOS (VietQR)
+thors.payos.enabled=true
+thors.payos.client-id=
+thors.payos.api-key=
+thors.payos.checksum-key=
+
+# Ket noi Facebook Messenger API (THORS Fanpage)
+thors.facebook.enabled=false
+thors.facebook.page-id=1375988095602878
+thors.facebook.page-name=THORS
+thors.facebook.page-token=
+thors.facebook.webhook.verify-token=thors_secret_webhook_token_2026

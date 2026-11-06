@@ -1,11 +1,14 @@
 import {
   AppstoreOutlined,
+  DatabaseOutlined,
   EnvironmentOutlined,
   FileTextOutlined,
+  HomeOutlined,
   ImportOutlined,
   InboxOutlined,
   LayoutOutlined,
   RollbackOutlined,
+  MessageOutlined,
   ShopOutlined,
   ShoppingCartOutlined,
   ShoppingOutlined,
@@ -16,11 +19,15 @@ import {
 import { warehouseMenu } from 'features/warehouse/model';
 
 const dashboard = { to: '/workspace', label: 'Dashboard', icon: <AppstoreOutlined /> };
+// Trang chủ của khách hàng: mở thẳng trang cửa hàng (ShopPage, đường dẫn '/')
+const home = { to: '/', label: 'Trang chủ', icon: <HomeOutlined /> };
 const profile = { to: '/profile', label: 'Profile', icon: <UserOutlined /> };
 const orders = { to: '/orders', label: 'Đơn hàng', icon: <ShoppingOutlined /> };
 const addresses = { to: '/addresses', label: 'Địa chỉ của tôi', icon: <EnvironmentOutlined /> };
 
 // Mục bán hàng tại quầy dạng menu đa cấp xổ xuống
+const facebookSales = { to: '/facebook', label: 'Bán hàng Facebook', icon: <MessageOutlined /> };
+
 const inStoreSales = {
   label: 'Bán hàng tại quầy',
   icon: <ShoppingCartOutlined />,
@@ -30,21 +37,28 @@ const inStoreSales = {
   ]
 };
 
-const warehouseIcons = [
-  <InboxOutlined />,
-  <ShoppingCartOutlined />,
-  <ImportOutlined />,
-  <RollbackOutlined />,
-  <LayoutOutlined />,
-  <TeamOutlined />,
-  <EnvironmentOutlined />
-];
+const warehouseIcons = {
+  inventory: <InboxOutlined />,
+  orders: <ShoppingCartOutlined />,
+  receipts: <ImportOutlined />,
+  returns: <RollbackOutlined />,
+  layout: <LayoutOutlined />,
+  suppliers: <TeamOutlined />,
+  locations: <EnvironmentOutlined />
+};
 
-const warehouse = warehouseMenu.map(([key, label], index) => ({
-  to: `/warehouse/${key}`,
-  label,
-  icon: warehouseIcons[index]
-}));
+// Mục kho dạng menu đa cấp xổ xuống (giống "Bán hàng tại quầy").
+const warehouse = [
+  {
+    label: 'Kho cửa hàng',
+    icon: <DatabaseOutlined />,
+    children: warehouseMenu.map(([key, label]) => ({
+      to: `/warehouse/${key}`,
+      label,
+      icon: warehouseIcons[key]
+    }))
+  }
+];
 
 // Mỗi vai trò một menu.
 export const NAVIGATION = {
@@ -62,12 +76,19 @@ export const NAVIGATION = {
     { to: '/returns', label: 'Hoàn hàng / Đổi trả', icon: <RollbackOutlined /> },
     { to: '/family', label: 'Family', icon: <TeamOutlined /> },
     inStoreSales,
+    facebookSales,
     { to: '/promotions', label: 'Khuyến mãi', icon: <TagsOutlined /> },
     ...warehouse,
     profile
   ],
-  FAMILY_MEMBER: [dashboard, orders, inStoreSales, ...warehouse, profile],
-  CUSTOMER: [dashboard, orders, addresses, profile]
+  FAMILY_MEMBER: [dashboard, orders, inStoreSales, facebookSales, ...warehouse, profile],
+  CUSTOMER: [
+    home,
+    { to: '/promotions', label: 'Khuyến mãi', icon: <TagsOutlined /> },
+    orders,
+    addresses,
+    profile
+  ]
 };
 
 export const navFor = (role) => NAVIGATION[role] ?? [dashboard, profile];

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
@@ -427,27 +427,67 @@ function RackForm({ rack, tier, rackId, onClose }) {
   );
 }
 
-function MoveForm({ variant, selectedShelf, from, onClose }) {
+// Giá trị đích "Đưa về chưa xếp". Để trống ('') nghĩa là chưa chọn đích và bị chặn.
+const UNASSIGNED = 'UNASSIGNED';
+
+/**
+ * mode = 'place': xếp hàng chưa xếp lên kệ (nguồn cố định là hàng chưa xếp).
+ * mode = 'move': chuyển từ một tầng (nguồn cố định là dòng hàng của tầng đó).
+ * Không truyền mode: form chung, được chọn nguồn.
+ */
+function MoveForm({ variant, selectedShelf, from, mode, onClose }) {
   const { data, run } = useWarehouse();
   const [error, setError] = useState('');
   const requestKey = useRef(crypto.randomUUID());
+  const lockSource = mode === 'place' || mode === 'move';
+
+  const sourceOf = (fromLocationId) =>
+    data.locations.find(
+      (l) => l.product_location_id === Number(fromLocationId)
+    );
+
+  const availableOf = (fromLocationId) => {
+    const src = fromLocationId ? sourceOf(fromLocationId) : null;
+    return src
+      ? Number(src.quantity)
+      : Number(variant.unassigned_quantity);
+  };
 
   const f = useFormik({
     initialValues: {
-      fromLocationId: from || '',
+      fromLocationId: mode === 'place' ? '' : from || '',
       toShelfId: selectedShelf || '',
       quantity: 1,
       description: '',
       photoKeys: []
     },
 
-    validationSchema: Yup.object({
-      quantity: Yup.number()
-        .integer('Số lượng phải là số nguyên.')
-        .min(1)
-        .max(1000000)
-        .required('Nhập số lượng.')
-    }),
+    validateOnMount: true,
+
+    validate: (values) => {
+      const errors = {};
+      const quantity = Number(values.quantity);
+      const available = availableOf(values.fromLocationId);
+
+      if (!values.toShelfId) {
+        errors.toShelfId = 'Chọn vị trí đích.';
+      } else if (
+        values.toShelfId === UNASSIGNED &&
+        !values.fromLocationId
+      ) {
+        errors.toShelfId = 'Hàng đang ở chưa xếp; hãy chọn một tầng.';
+      }
+
+      if (values.quantity === '' || !Number.isInteger(quantity)) {
+        errors.quantity = 'Số lượng phải là số nguyên.';
+      } else if (quantity < 1) {
+        errors.quantity = 'Số lượng tối thiểu là 1.';
+      } else if (quantity > available) {
+        errors.quantity = `Vượt số lượng nguồn hiện có (${number(available)}).`;
+      }
+
+      return errors;
+    },
 
     onSubmit: async (values) => {
       setError('');
@@ -462,9 +502,10 @@ function MoveForm({ variant, selectedShelf, from, onClose }) {
                 fromLocationId: values.fromLocationId
                   ? Number(values.fromLocationId)
                   : null,
-                toShelfId: values.toShelfId
-                  ? Number(values.toShelfId)
-                  : null,
+                toShelfId:
+                  values.toShelfId === UNASSIGNED
+                    ? null
+                    : Number(values.toShelfId),
                 quantity: Number(values.quantity),
                 description: values.description,
                 photoKeys: values.photoKeys,
@@ -481,10 +522,12 @@ function MoveForm({ variant, selectedShelf, from, onClose }) {
     }
   });
 
-  const currentFrom = data.locations.find(
-    (l) =>
-      l.product_location_id === Number(f.values.fromLocationId)
-  );
+  const currentFrom = f.values.fromLocationId
+    ? sourceOf(f.values.fromLocationId)
+    : undefined;
+
+  const toShelf =
+    f.values.toShelfId && f.values.toShelfId !== UNASSIGNED;
 
   const existing = data.locations.find(
     (l) =>
@@ -493,7 +536,7 @@ function MoveForm({ variant, selectedShelf, from, onClose }) {
   );
 
   const needMetadata =
-    f.values.toShelfId &&
+    toShelf &&
     (
       !existing ||
       !existing.description?.trim() ||
@@ -503,9 +546,14 @@ function MoveForm({ variant, selectedShelf, from, onClose }) {
       )
     );
 
-  const available = currentFrom
-    ? currentFrom.quantity
-    : Number(variant.unassigned_quantity);
+  const available = availableOf(f.values.fromLocationId);
+
+  const title =
+    mode === 'place'
+      ? 'Xếp lên kệ'
+      : mode === 'move'
+        ? 'Chuyển vị trí'
+        : 'Xếp / chuyển vị trí';
 
   return (
     <Dialog
@@ -516,7 +564,7 @@ function MoveForm({ variant, selectedShelf, from, onClose }) {
     >
       <Box component="form" onSubmit={f.handleSubmit}>
         <DialogTitle>
-          Xếp / chuyển vị trí · {variantLabel(variant)}
+          {title} · {variantLabel(variant)}
         </DialogTitle>
 
         <DialogContent>
@@ -528,6 +576,7 @@ function MoveForm({ variant, selectedShelf, from, onClose }) {
             <Choice
               label="Lấy hàng từ"
               value={f.values.fromLocationId}
+              disabled={lockSource}
               onChange={(e) =>
                 f.setFieldValue('fromLocationId', e.target.value)
               }
@@ -559,9 +608,11 @@ function MoveForm({ variant, selectedShelf, from, onClose }) {
               onChange={(e) =>
                 f.setFieldValue('toShelfId', e.target.value)
               }
+              error={Boolean(f.errors.toShelfId)}
+              helperText={f.errors.toShelfId}
             >
-              <MenuItem value="">
-                Đưa về hàng chưa xếp vị trí
+              <MenuItem value="" disabled>
+                Chọn kệ / tầng đích…
               </MenuItem>
 
               {data.tiers
@@ -584,6 +635,15 @@ function MoveForm({ variant, selectedShelf, from, onClose }) {
                     {locationLabel(data, t.shelf_level_id)}
                   </MenuItem>
                 ))}
+
+              {f.values.fromLocationId && (
+                <MenuItem
+                  value={UNASSIGNED}
+                  sx={{ fontStyle: 'italic', color: 'text.secondary' }}
+                >
+                  Đưa về chưa xếp (không đặt trên kệ)
+                </MenuItem>
+              )}
             </Choice>
 
             <Field
@@ -593,14 +653,12 @@ function MoveForm({ variant, selectedShelf, from, onClose }) {
               type="number"
               value={f.values.quantity}
               onChange={f.handleChange}
-              error={
-                f.touched.quantity &&
-                Boolean(f.errors.quantity)
-              }
-              helperText={
-                f.touched.quantity &&
-                f.errors.quantity
-              }
+              onBlur={f.handleBlur}
+              error={Boolean(f.errors.quantity)}
+              helperText={f.errors.quantity}
+              slotProps={{
+                htmlInput: { min: 1, max: available, step: 1 }
+              }}
             />
 
             {needMetadata && (
@@ -641,6 +699,7 @@ function MoveForm({ variant, selectedShelf, from, onClose }) {
             variant="contained"
             disabled={
               f.isSubmitting ||
+              !f.isValid ||
               available < 1 ||
               (
                 needMetadata &&
@@ -809,6 +868,27 @@ export default function LocationsPage({ editLayout = false }) {
 
   const variant = data.variants.find(
     (v) => v.detail_id === selectedVariant
+  );
+
+  // ?variant=..&move=1 (from Tồn kho) opens the existing place/move form for that variant.
+  // ?variant=..&place=1 opens "Xếp lên kệ" with source = hàng chưa xếp of that variant.
+  useEffect(() => {
+    if (!owner || !variant) return;
+    const place = params.get('place') === '1';
+    if (!place && params.get('move') !== '1') return;
+    setMove(
+      place && Number(variant.unassigned_quantity) > 0
+        ? { variant, mode: 'place' }
+        : { variant }
+    );
+    const next = new URLSearchParams(params);
+    next.delete('move');
+    next.delete('place');
+    setParams(next, { replace: true });
+  }, [owner, variant, params, setParams]);
+
+  const unplaced = data.variants.filter(
+    (v) => Number(v.unassigned_quantity) > 0
   );
 
   const tier = data.tiers.find(
@@ -1164,6 +1244,17 @@ export default function LocationsPage({ editLayout = false }) {
               {variantLabel(variant)}
               {' '}· Tổng tồn {number(variant.stock_quantity)}
               {' '}· Chưa xếp {number(variant.unassigned_quantity)}
+
+              {owner && Number(variant.unassigned_quantity) > 0 && (
+                <Button
+                  size="small"
+                  onClick={() =>
+                    setMove({ variant, mode: 'place' })
+                  }
+                >
+                  Xếp lên kệ
+                </Button>
+              )}
 
               {owner && (
                 <Button
@@ -1587,17 +1678,20 @@ export default function LocationsPage({ editLayout = false }) {
                           direction="row"
                           sx={{ flexWrap: 'wrap' }}
                         >
-                          <Button
-                            size="small"
-                            onClick={() =>
-                              setMove({
-                                variant: v,
-                                from: l.product_location_id
-                              })
-                            }
-                          >
-                            Chuyển hàng
-                          </Button>
+                          {v && (
+                            <Button
+                              size="small"
+                              onClick={() =>
+                                setMove({
+                                  variant: v,
+                                  mode: 'move',
+                                  from: l.product_location_id
+                                })
+                              }
+                            >
+                              Chuyển vị trí
+                            </Button>
+                          )}
 
                           <Button
                             size="small"
@@ -1636,6 +1730,61 @@ export default function LocationsPage({ editLayout = false }) {
           </Stack>
         </MainCard>
       </Box>
+
+      {!editLayout && (
+        <MainCard
+          title={`Hàng chưa xếp (${number(
+            unplaced.reduce(
+              (n, v) => n + Number(v.unassigned_quantity),
+              0
+            )
+          )})`}
+          sx={{ mt: 2.5 }}
+        >
+          {!unplaced.length ? (
+            <Typography color="text.secondary">
+              Toàn bộ hàng đã được xếp vị trí.
+            </Typography>
+          ) : (
+            <Stack spacing={1}>
+              {unplaced.map((v) => (
+                <Stack
+                  key={v.detail_id}
+                  direction="row"
+                  sx={{
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 1,
+                    flexWrap: 'wrap',
+                    borderTop: '1px solid',
+                    borderColor: 'divider',
+                    pt: 1
+                  }}
+                >
+                  <Typography>
+                    {variantLabel(v)}
+                    {' '}· Chưa xếp{' '}
+                    <b>{number(v.unassigned_quantity)}</b>
+                    {' '}/ tổng tồn {number(v.stock_quantity)}
+                  </Typography>
+
+                  {owner && (
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={() =>
+                        setMove({ variant: v, mode: 'place' })
+                      }
+                    >
+                      Xếp lên kệ
+                    </Button>
+                  )}
+                </Stack>
+              ))}
+            </Stack>
+          )}
+        </MainCard>
+      )}
 
       {rackForm && owner && (
         <RackForm

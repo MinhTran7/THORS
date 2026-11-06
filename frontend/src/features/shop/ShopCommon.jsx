@@ -4,7 +4,6 @@ import { Box, Button, IconButton, InputBase, Tooltip, Typography } from '@mui/ma
 import { SearchOutlined, ShoppingCartOutlined } from '@ant-design/icons';
 import { brand } from 'features/account/tokens';
 import ThorsMark from 'layouts/ThorsMark';
-import CartButton from 'components/CartButton';
 
 // Phần dùng chung cho trang danh sách (ShopPage) và trang chi tiết (ShopProductPage)
 
@@ -23,7 +22,8 @@ export function Photo({ src, name, sx }) {
   );
 }
 
-export function ShopHeader({ account, initialQuery = '', onSearch }) {
+// Ô tìm kiếm dùng chung cho header khách vãng lai và thanh tìm kiếm trong khung đã đăng nhập
+function SearchForm({ initialQuery, onSearch, sx }) {
   const [input, setInput] = useState(initialQuery);
   useEffect(() => setInput(initialQuery), [initialQuery]);
 
@@ -31,6 +31,33 @@ export function ShopHeader({ account, initialQuery = '', onSearch }) {
     e.preventDefault();
     onSearch(input.trim());
   };
+
+  return (
+    <Box
+      component="form"
+      onSubmit={submit}
+      sx={{ display: 'flex', alignItems: 'center', border: `1.5px solid ${brand.cyan}`, borderRadius: '10px', bgcolor: '#fff', pl: 1.5, ...sx }}
+    >
+      <InputBase fullWidth placeholder="Tìm sản phẩm..." value={input} onChange={(e) => setInput(e.target.value)} inputProps={{ 'aria-label': 'Tìm sản phẩm' }} />
+      <IconButton type="submit" aria-label="Tìm kiếm">
+        <SearchOutlined />
+      </IconButton>
+    </Box>
+  );
+}
+
+// Thanh tìm kiếm đặt ở đầu nội dung trang khi đã đăng nhập (header và sidebar do ThorsLayout lo)
+export function ShopSearchBar({ initialQuery = '', onSearch }) {
+  return (
+    <Box sx={{ mb: 2, maxWidth: 1240, mx: 'auto' }}>
+      <SearchForm initialQuery={initialQuery} onSearch={onSearch} sx={{ maxWidth: 600 }} />
+    </Box>
+  );
+}
+
+export function ShopHeader({ account, initialQuery = '', onSearch }) {
+  // Đã đăng nhập: đang nằm trong khung chung nên chỉ cần ô tìm kiếm, không vẽ thêm header
+  if (account) return <ShopSearchBar initialQuery={initialQuery} onSearch={onSearch} />;
 
   return (
     <Box component="header" sx={{ position: 'sticky', top: 0, zIndex: 10, bgcolor: brand.surface, borderBottom: `1px solid ${brand.line}` }}>
@@ -42,40 +69,20 @@ export function ShopHeader({ account, initialQuery = '', onSearch }) {
           </Typography>
         </Box>
 
-        <Box
-          component="form"
-          onSubmit={submit}
-          sx={{ flexGrow: 1, maxWidth: 600, display: 'flex', alignItems: 'center', border: `1.5px solid ${brand.cyan}`, borderRadius: '10px', bgcolor: '#fff', pl: 1.5 }}
-        >
-          <InputBase fullWidth placeholder="Tìm sản phẩm..." value={input} onChange={(e) => setInput(e.target.value)} inputProps={{ 'aria-label': 'Tìm sản phẩm' }} />
-          <IconButton type="submit" aria-label="Tìm kiếm">
-            <SearchOutlined />
-          </IconButton>
-        </Box>
+        <SearchForm initialQuery={initialQuery} onSearch={onSearch} sx={{ flexGrow: 1, maxWidth: 600 }} />
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 'auto' }}>
-          {!account ? (
-            <>
-              <Tooltip title="Đăng nhập để xem giỏ hàng">
-                <IconButton component={RouterLink} to="/login" size="small" aria-label="Giỏ hàng">
-                  <ShoppingCartOutlined />
-                </IconButton>
-              </Tooltip>
-              <Button component={RouterLink} to="/login">
-                Đăng nhập
-              </Button>
-              <Button component={RouterLink} to="/register" variant="contained">
-                Đăng ký
-              </Button>
-            </>
-          ) : (
-            <>
-              {account.role === 'CUSTOMER' && <CartButton />}
-              <Button component={RouterLink} to="/workspace" variant="outlined">
-                Tài khoản
-              </Button>
-            </>
-          )}
+          <Tooltip title="Đăng nhập để xem giỏ hàng">
+            <IconButton component={RouterLink} to="/login" size="small" aria-label="Giỏ hàng">
+              <ShoppingCartOutlined />
+            </IconButton>
+          </Tooltip>
+          <Button component={RouterLink} to="/login">
+            Đăng nhập
+          </Button>
+          <Button component={RouterLink} to="/register" variant="contained">
+            Đăng ký
+          </Button>
         </Box>
       </Box>
     </Box>

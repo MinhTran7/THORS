@@ -4,7 +4,8 @@ import WarehousePage, { warehouseRoutes } from 'features/warehouse/WarehousePage
 
 // Authentication
 import RequireAuth from 'features/auth/RequireAuth';
-import ThorsLayout from 'layouts/ThorsLayout';
+import { useAuth } from 'features/auth/AuthProvider';
+import OptionalLayout from 'layouts/OptionalLayout';
 import LoginPage from 'features/auth/pages/LoginPage';
 import RegisterPage from 'features/auth/pages/RegisterPage';
 import ForgotPage from 'features/auth/pages/ForgotPage';
@@ -29,6 +30,7 @@ import NotificationPage from 'features/notification/NotificationPage';
 // Online Order Management
 import OrderListPage from 'features/order/OrderListPage';
 import OrderDetailPage from 'features/order/OrderDetailPage';
+import OrderTrackingPage from 'features/order/OrderTrackingPage';
 
 // Category Management
 import CategoryPage from 'features/category/CategoryPage';
@@ -50,7 +52,7 @@ import EditPromotionPage from 'features/promotion/EditPromotionPage';
 
 // Returns Management (Đổi trả / Hoàn hàng)
 import ReturnsPage from 'features/returns/ReturnsPage';
-
+import FacebookPOSPage from 'features/facebook/FacebookPOSPage';
 // Customer Addresses
 import CustomerAddressPage from 'features/customer/CustomerAddressPage';
 import AddAddressPage from 'features/customer/AddAddressPage';
@@ -65,9 +67,14 @@ import CartPage from 'features/cart/CartPage';
 import CheckoutPage from 'features/cart/CheckoutPage';
 import OrderSuccessPage from 'features/cart/OrderSuccessPage';
 
+// Sau khi đăng nhập mọi người đều vào /workspace: khách hàng được chuyển thẳng sang trang shop,
+// các vai trò khác (chủ cửa hàng, nhân viên, admin) vẫn thấy trang Dashboard như cũ.
+function WorkspaceEntry() {
+  const { account } = useAuth();
+  return account?.role === 'CUSTOMER' ? <Navigate to="/" replace /> : <WorkspacePage />;
+}
+
 export default createBrowserRouter([
-  { path: '/', element: <ShopPage /> },
-  { path: '/shop/products/:productId', element: <ShopProductPage /> },
   { path: '/login', element: <LoginPage /> },
   { path: '/register', element: <RegisterPage /> },
   { path: '/forgot-password', element: <ForgotPage /> },
@@ -78,12 +85,17 @@ export default createBrowserRouter([
   { path: '/auth/google/callback', element: <GoogleCallback /> },
 
   {
-    element: <RequireAuth />,
+    // Khung chung: đã đăng nhập thì có sidebar + header (ThorsLayout), chưa đăng nhập thì trang trần.
+    // Trang shop mở được cho cả khách chưa đăng nhập; các trang còn lại bắt buộc đăng nhập (RequireAuth).
+    element: <OptionalLayout />,
     children: [
+      { path: '/', element: <ShopPage /> },
+      { path: '/shop/products/:productId', element: <ShopProductPage /> },
+      { path: '/tracking/:orderNumber', element: <OrderTrackingPage /> },
       {
-        element: <ThorsLayout />,
+        element: <RequireAuth />,
         children: [
-          { path: '/workspace', element: <WorkspacePage /> },
+          { path: '/workspace', element: <WorkspaceEntry /> },
           { path: '/profile', element: <ProfilePage /> },
           { path: '/profile/edit', element: <UpdateProfilePage /> },
           { path: '/profile/password', element: <ChangePasswordPage /> },
@@ -102,7 +114,8 @@ export default createBrowserRouter([
             element: <RequireAuth roles={['CUSTOMER', 'OWNER', 'FAMILY_MEMBER']} />,
             children: [
               { path: '/orders', element: <OrderListPage /> },
-              { path: '/orders/:id', element: <OrderDetailPage /> }
+              { path: '/orders/:id', element: <OrderDetailPage /> },
+              { path: '/promotions', element: <PromotionPage /> }
             ]
           },
           {
@@ -137,7 +150,8 @@ export default createBrowserRouter([
             children: [
               { path: '/in-store-sales', element: <InStoreSalesPage /> },
               { path: '/in-store-sales/history', element: <InStoreSalesHistoryPage /> },
-              { path: '/in-store-sales/history/:orderId', element: <InStoreSaleDetailPage /> }
+              { path: '/in-store-sales/history/:orderId', element: <InStoreSaleDetailPage /> },
+              { path: '/facebook', element: <FacebookPOSPage /> }
             ]
           },
           {
@@ -155,7 +169,6 @@ export default createBrowserRouter([
               { path: '/products/:productId/edit', element: <EditProductPage /> },
               { path: '/returns', element: <ReturnsPage /> },
               // Promotion (của phuoc)
-              { path: '/promotions', element: <PromotionPage /> },
               { path: '/promotions/add', element: <AddPromotionPage /> },
               { path: '/promotions/:promotionId', element: <PromotionDetailPage /> },
               { path: '/promotions/:promotionId/edit', element: <EditPromotionPage /> }

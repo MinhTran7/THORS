@@ -1,4 +1,4 @@
-import { api } from 'services/http';
+import { api, post } from 'services/http';
 
 function query(params = {}) {
   const search = new URLSearchParams();
@@ -30,7 +30,9 @@ export const ordersApi = {
       { method: 'POST' }
     ),
   // Khoảng cách từ cửa hàng tới địa chỉ giao và hình thức giao gợi ý (chỉ cửa hàng)
-  deliverySuggestion: (id) => api(`/orders/${id}/delivery-suggestion`)
+  deliverySuggestion: (id) => api(`/orders/${id}/delivery-suggestion`),
+  createPayOSLink: (orderId) => post('/payment/payos/create-link', { orderId }),
+  checkPayOSStatus: (orderId) => api(`/payment/payos/status/${orderId}`)
 };
 
 // Danh mục địa chỉ của GHN (3 cấp kiểu cũ: Tỉnh > Quận/Huyện > Phường/Xã), mỗi mục { id, name }

@@ -65,6 +65,7 @@ public class PromotionService {
         throw forbidden();
     }
 
+
     @Transactional
     public Promotion create(CreatePromotionRequest request) {
         requireOwner();
@@ -284,7 +285,8 @@ public class PromotionService {
                 promotion.maxDiscountAmount(),
                 promotion.usageLimit(),
                 promotion.applyScope(),
-                repository.findProductIds(promotion.promotionId())
+                repository.findProductIds(promotion.promotionId()),
+                promotion.usedCount()
         );
     }
 

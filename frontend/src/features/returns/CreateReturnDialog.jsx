@@ -21,18 +21,10 @@ import {
   Divider,
   Paper,
   Chip,
-  RadioGroup,
-  FormControlLabel,
-  Radio,
-  MenuItem,
-  Select,
-  InputLabel,
-  FormControl,
-  Grid
+  FormControlLabel
 } from '@mui/material';
-import { SearchOutlined, CheckCircleOutlined, ThunderboltOutlined, BankOutlined } from '@ant-design/icons';
+import { SearchOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { getReturnableOrder, createReturnRequest } from '../../services/returnService';
-import { VIETNAMESE_BANKS } from '../../utils/vietqr';
 
 const COLORS = {
   text: '#202D42',
@@ -57,20 +49,9 @@ export default function CreateReturnDialog({ open, onClose, onSuccess }) {
 
   // Return form state
   const [reason, setReason] = useState('');
-  const [requestType, setRequestType] = useState('RETURN');
-  const [instantComplete, setInstantComplete] = useState(true); // Default to in-store direct completion
-  const [selectedItems, setSelectedItems] = useState({}); // { [orderItemId]: { checked, quantity, itemReason } }
+  const [selectedItems, setSelectedItems] = useState({}); // { [orderItemId]: { checked, quantity, itemReason, restock } }
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
-
-  // Online return state
-  const [bankCode, setBankCode] = useState('MB');
-  const [bankAccountNumber, setBankAccountNumber] = useState('');
-  const [bankAccountName, setBankAccountName] = useState('');
-  const [returnShippingFee, setReturnShippingFee] = useState(0);
-  const [returnShippingPayer, setReturnShippingPayer] = useState('CUSTOMER');
-  const [returnTrackingCode, setReturnTrackingCode] = useState('');
-  const [evidenceUrls, setEvidenceUrls] = useState('');
 
   const resetDialog = () => {
     setOrderNumber('');
@@ -78,18 +59,9 @@ export default function CreateReturnDialog({ open, onClose, onSuccess }) {
     setSearchError('');
     setOrderData(null);
     setReason('');
-    setRequestType('RETURN');
-    setInstantComplete(true);
     setSelectedItems({});
     setSubmitting(false);
     setSubmitError('');
-    setBankCode('MB');
-    setBankAccountNumber('');
-    setBankAccountName('');
-    setReturnShippingFee(0);
-    setReturnShippingPayer('CUSTOMER');
-    setReturnTrackingCode('');
-    setEvidenceUrls('');
   };
 
   const handleClose = () => {
@@ -118,7 +90,7 @@ export default function CreateReturnDialog({ open, onClose, onSuccess }) {
       data.items?.forEach((item) => {
         initial[item.orderItemId] = {
           checked: false,
-          quantity: item.quantityReturnable > 0 ? 1 : 0,
+          quantity: item.quantityReturnable,
           itemReason: '',
           restock: true
         };
@@ -185,7 +157,7 @@ export default function CreateReturnDialog({ open, onClose, onSuccess }) {
         orderItemId: Number(id),
         quantityReturned: val.quantity,
         quantityReceived: val.quantity,
-        quantityRestocked: instantComplete && val.restock === false ? 0 : val.quantity,
+        quantityRestocked: val.restock === false ? 0 : val.quantity,
         itemReason: val.itemReason || reason.trim()
       }));
 
@@ -203,25 +175,14 @@ export default function CreateReturnDialog({ open, onClose, onSuccess }) {
         customerName: orderData.customerName,
         customerPhone: orderData.customerPhone,
         reason: reason.trim(),
-        requestType,
-        instantComplete,
-        bankCode: !instantComplete ? bankCode : null,
-        bankAccountNumber: !instantComplete ? bankAccountNumber.trim() : null,
-        bankAccountName: !instantComplete ? bankAccountName.trim().toUpperCase() : null,
-        returnShippingFee: !instantComplete ? Number(returnShippingFee) || 0 : 0,
-        returnShippingPayer: !instantComplete ? returnShippingPayer : 'CUSTOMER',
-        returnTrackingCode: !instantComplete && returnTrackingCode.trim() ? returnTrackingCode.trim() : null,
-        evidenceUrls: !instantComplete && evidenceUrls.trim() ? evidenceUrls.trim() : null,
+        requestType: 'RETURN',
+        instantComplete: true,
         items: itemsToReturn
       });
 
       handleClose();
       if (onSuccess) {
-        onSuccess(
-          instantComplete
-            ? `Cửa hàng đã hoàn tất đổi trả & tự động cộng lại tồn kho cho đơn ${orderData.orderNumber}!`
-            : `Đã tiếp nhận yêu cầu hoàn hàng cho đơn ${orderData.orderNumber}!`
-        );
+        onSuccess(`Cửa hàng đã hoàn tất đổi trả & tự động cộng lại tồn kho cho đơn ${orderData.orderNumber}!`);
       }
     } catch (err) {
       console.error('Submit return request failed:', err);
@@ -234,7 +195,7 @@ export default function CreateReturnDialog({ open, onClose, onSuccess }) {
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
       <DialogTitle sx={{ fontWeight: 700, color: COLORS.text }}>
-        Tạo phiếu đổi trả & hoàn hàng
+        Tạo phiếu đổi trả trực tiếp tại quầy
       </DialogTitle>
 
       <DialogContent dividers>
@@ -288,35 +249,14 @@ export default function CreateReturnDialog({ open, onClose, onSuccess }) {
           <Box>
             <Divider sx={{ mb: 2 }} />
 
-            {/* PROCESSING MODE SELECTION */}
-            <Paper sx={{ p: 1.5, mb: 2, bgcolor: '#F0FCFE', border: `1px solid ${COLORS.cyan}`, borderRadius: 2 }}>
-              <Typography fontSize={12} fontWeight={700} color={COLORS.text} sx={{ mb: 0.5 }}>
-                Hình thức xử lý của Cửa hàng:
+            {/* PROCESSING BANNER */}
+            <Paper sx={{ p: 1.5, mb: 2, bgcolor: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 2 }}>
+              <Typography fontSize={12} fontWeight={700} color={COLORS.green}>
+                ⚡ Đổi trả trực tiếp tại quầy (In-Store Retail Return)
               </Typography>
-              <RadioGroup
-                row
-                value={instantComplete ? 'instant' : 'pending'}
-                onChange={(e) => setInstantComplete(e.target.value === 'instant')}
-              >
-                <FormControlLabel
-                  value="instant"
-                  control={<Radio size="small" />}
-                  label={
-                    <Typography fontSize={12} fontWeight={600} color={COLORS.green}>
-                      ⚡ Đổi trả trực tiếp tại quầy (Kiểm hàng, hoàn tiền & nhập kho ngay)
-                    </Typography>
-                  }
-                />
-                <FormControlLabel
-                  value="pending"
-                  control={<Radio size="small" />}
-                  label={
-                    <Typography fontSize={12} color={COLORS.muted}>
-                      📦 Tiếp nhận từ xa / Online (Chờ khách gửi hàng về rồi mới duyệt)
-                    </Typography>
-                  }
-                />
-              </RadioGroup>
+              <Typography fontSize={11} color={COLORS.muted} sx={{ mt: 0.25 }}>
+                Khách mang sản phẩm đến quầy. Nhân viên kiểm tra hàng thực tế, hoàn tiền trực tiếp và hệ thống sẽ tự động cộng lại tồn kho.
+              </Typography>
             </Paper>
 
             <Paper sx={{ p: 2, mb: 2.5, bgcolor: '#F7F9FC', border: `1px solid ${COLORS.border}`, borderRadius: 2 }}>
@@ -352,11 +292,9 @@ export default function CreateReturnDialog({ open, onClose, onSuccess }) {
                     <TableCell align="center" sx={{ fontSize: 11, fontWeight: 600, color: COLORS.muted }}>ĐÃ MUA</TableCell>
                     <TableCell align="center" sx={{ fontSize: 11, fontWeight: 600, color: COLORS.muted }}>CÒN ĐƯỢC TRẢ</TableCell>
                     <TableCell align="center" sx={{ fontSize: 11, fontWeight: 600, color: COLORS.muted }}>SL TRẢ</TableCell>
-                    {instantComplete && (
-                      <TableCell align="center" sx={{ fontSize: 11, fontWeight: 600, color: COLORS.muted }}>
-                        NHẬP LẠI KHO?
-                      </TableCell>
-                    )}
+                    <TableCell align="center" sx={{ fontSize: 11, fontWeight: 600, color: COLORS.muted }}>
+                      NHẬP LẠI KHO?
+                    </TableCell>
                     <TableCell sx={{ fontSize: 11, fontWeight: 600, color: COLORS.muted }}>LÝ DO CHI TIẾT</TableCell>
                   </TableRow>
                 </TableHead>
@@ -407,34 +345,25 @@ export default function CreateReturnDialog({ open, onClose, onSuccess }) {
                             onChange={(e) => handleItemQtyChange(item.orderItemId, e.target.value, item.quantityReturnable)}
                           />
                         </TableCell>
-
-                        {instantComplete && (
-                          <TableCell align="center" sx={{ minWidth: 150 }}>
-                            <FormControlLabel
-                              control={
-                                <Checkbox
-                                  size="small"
-                                  checked={itemState.restock !== false}
-                                  disabled={!itemState.checked || submitting}
-                                  onChange={(e) => handleItemRestockToggle(item.orderItemId, e.target.checked)}
-                                  sx={{ color: COLORS.green, '&.Mui-checked': { color: COLORS.green }, p: 0.5 }}
-                                />
-                              }
-                              label={
-                                <Typography
-                                  fontSize={11}
-                                  fontWeight={700}
-                                  color={itemState.restock !== false ? COLORS.green : COLORS.red}
-                                >
-                                  {itemState.restock !== false ? 'Có (Cộng kho)' : 'Hàng lỗi (Không cộng kho)'}
-                                </Typography>
-                              }
-                              sx={{ m: 0 }}
-                            />
-                          </TableCell>
-                        )}
-
-                        <TableCell>
+                        <TableCell align="center" sx={{ minWidth: 150 }}>
+                          <FormControlLabel
+                            control={
+                              <Checkbox
+                                size="small"
+                                checked={itemState.restock !== false}
+                                disabled={!itemState.checked || submitting}
+                                onChange={(e) => handleItemRestockToggle(item.orderItemId, e.target.checked)}
+                                sx={{ color: COLORS.green, '&.Mui-checked': { color: COLORS.green }, p: 0.5 }}
+                              />
+                            }
+                            label={
+                              <Typography fontSize={11} fontWeight={600} color={itemState.restock !== false ? COLORS.green : COLORS.muted}>
+                                {itemState.restock !== false ? 'Cộng tồn kho' : 'Hàng lỗi (Bỏ)'}
+                              </Typography>
+                            }
+                          />
+                        </TableCell>
+                        <TableCell sx={{ minWidth: 140 }}>
                           <TextField
                             size="small"
                             fullWidth
@@ -452,7 +381,7 @@ export default function CreateReturnDialog({ open, onClose, onSuccess }) {
               </Table>
             </TableContainer>
 
-            {/* STEP 3: REASON & TYPE */}
+            {/* STEP 3: REASON */}
             <Typography fontSize={13} fontWeight={700} color={COLORS.text} sx={{ mb: 1 }}>
               Bước 3: Lý do hoàn trả chung
             </Typography>
@@ -467,82 +396,6 @@ export default function CreateReturnDialog({ open, onClose, onSuccess }) {
               onChange={(e) => setReason(e.target.value)}
               sx={{ mb: 2 }}
             />
-
-            {/* STEP 4: ONLINE BANKING & SHIPPING (ONLY FOR ONLINE/REMOTE RETURNS) */}
-            {!instantComplete && (
-              <Paper sx={{ p: 2, mb: 2, bgcolor: '#F7F9FC', border: `1px solid ${COLORS.border}`, borderRadius: 2 }}>
-                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
-                  <BankOutlined style={{ color: COLORS.green, fontSize: 16 }} />
-                  <Typography fontSize={13} fontWeight={700} color={COLORS.text}>
-                    Bước 4: Thông tin nhận tiền hoàn & vận chuyển bưu cục (Online)
-                  </Typography>
-                </Stack>
-
-                <Grid container spacing={2}>
-                  <Grid item xs={12} sm={4}>
-                    <FormControl size="small" fullWidth>
-                      <InputLabel id="bank-select-label">Ngân hàng</InputLabel>
-                      <Select
-                        labelId="bank-select-label"
-                        label="Ngân hàng"
-                        value={bankCode}
-                        onChange={(e) => setBankCode(e.target.value)}
-                      >
-                        {VIETNAMESE_BANKS.map((b) => (
-                          <MenuItem key={b.code} value={b.code}>
-                            {b.shortName} - {b.name}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                  </Grid>
-
-                  <Grid item xs={12} sm={4}>
-                    <TextField
-                      size="small"
-                      fullWidth
-                      label="Số tài khoản nhận tiền"
-                      placeholder="Ví dụ: 0987654321"
-                      value={bankAccountNumber}
-                      onChange={(e) => setBankAccountNumber(e.target.value)}
-                    />
-                  </Grid>
-
-                  <Grid item xs={12} sm={4}>
-                    <TextField
-                      size="small"
-                      fullWidth
-                      label="Tên chủ tài khoản"
-                      placeholder="NGUYEN VAN A"
-                      value={bankAccountName}
-                      onChange={(e) => setBankAccountName(e.target.value.toUpperCase())}
-                    />
-                  </Grid>
-
-                  <Grid item xs={12} sm={6}>
-                    <TextField
-                      size="small"
-                      fullWidth
-                      label="Mã vận đơn bưu cục (Nếu có)"
-                      placeholder="Ví dụ: VNPost, GHN, GHTK..."
-                      value={returnTrackingCode}
-                      onChange={(e) => setReturnTrackingCode(e.target.value)}
-                    />
-                  </Grid>
-
-                  <Grid item xs={12} sm={6}>
-                    <TextField
-                      size="small"
-                      fullWidth
-                      label="Link ảnh lỗi sản phẩm (URL)"
-                      placeholder="https://... hoặc mô tả hình ảnh"
-                      value={evidenceUrls}
-                      onChange={(e) => setEvidenceUrls(e.target.value)}
-                    />
-                  </Grid>
-                </Grid>
-              </Paper>
-            )}
 
             {submitError && (
               <Alert severity="error" sx={{ mb: 2 }}>
@@ -561,20 +414,16 @@ export default function CreateReturnDialog({ open, onClose, onSuccess }) {
           variant="contained"
           disabled={!orderData || submitting}
           onClick={handleSubmit}
-          startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : instantComplete ? <ThunderboltOutlined /> : <CheckCircleOutlined />}
+          startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : <ThunderboltOutlined />}
           sx={{
-            bgcolor: instantComplete ? COLORS.green : '#0E7A88',
+            bgcolor: COLORS.green,
             color: '#FFFFFF',
             fontWeight: 700,
             textTransform: 'none',
-            '&:hover': { bgcolor: instantComplete ? '#1E6B55' : '#095B66' }
+            '&:hover': { bgcolor: '#1E6B55' }
           }}
         >
-          {submitting
-            ? 'Đang xử lý...'
-            : instantComplete
-            ? 'Xác nhận hoàn hàng & Nhập kho ngay'
-            : 'Gửi yêu cầu hoàn hàng'}
+          {submitting ? 'Đang xử lý...' : 'Xác nhận hoàn hàng & Nhập kho ngay'}
         </Button>
       </DialogActions>
     </Dialog>

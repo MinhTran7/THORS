@@ -1,10 +1,11 @@
-import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useParams, useSearchParams } from 'react-router-dom';
 import useSWR, { useSWRConfig } from 'swr';
 import {
   Alert,
   Box,
   Button,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -20,6 +21,7 @@ import {
   TextField,
   Typography
 } from '@mui/material';
+import { QrcodeOutlined, RollbackOutlined } from '@ant-design/icons';
 import { Stack } from 'features/account/components/Flex';
 import { useCrumbs } from 'layouts/crumbs';
 import { useAuth } from 'features/auth/AuthProvider';
@@ -35,6 +37,8 @@ import AddressNotFoundDialog, { ADDRESS_NOT_FOUND, INVALID_ADDRESS_REASON } from
 import DeliveryChoice from './DeliveryChoice';
 import { ghnReady } from './GhnAddressFields';
 import { formatVnd, orderStatusMeta, paymentMethodLabel, paymentStatusMeta, preparationMeta, shipmentStatusLabel } from './constants';
+import PayOSPaymentModal from './components/PayOSPaymentModal';
+import CustomerReturnDialog from '../returns/CustomerReturnDialog';
 
 const dateTime = (value) => (value ? `${formatLogDate(value)} · ${formatTime(value)}` : null);
 
@@ -128,7 +132,7 @@ function ActionButtons({ actions, busy, onAction }) {
 
 /* ------------------------------------------------------------------ Khách hàng (kiểu Shopee) */
 
-function CustomerView({ order, status, actions, busy, onAction, actionError }) {
+function CustomerView({ order, status, actions, busy, onAction, actionError, onPayNow, payLoading, payError, onOpenReturn }) {
   const payment = paymentStatusMeta(order.paymentStatus);
   const closed = CLOSED.includes(order.orderStatus);
   const completed = COMPLETED_STEPS[order.orderStatus] ?? 0;
@@ -171,7 +175,7 @@ function CustomerView({ order, status, actions, busy, onAction, actionError }) {
                 }}
               >
                 {STEP_LABELS.map((label, index) => (
-                  <Step key={label}>
+                  <Step key={label} completed={index < completed}>
                     <StepLabel
                       optional={times[index] ? <Typography variant="caption" sx={{ color: brand.muted }}>{dateTime(times[index])}</Typography> : null}
                     >
@@ -190,29 +194,52 @@ function CustomerView({ order, status, actions, busy, onAction, actionError }) {
         </Box>
       </Box>
 
-      {/* Địa chỉ nhận hàng và thanh toán */}
-      <Box sx={{ display: 'grid', gap: 2.5, alignItems: 'stretch', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' } }}>
+      {/* Thông tin nhận hàng và thanh toán */}
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' }, gap: 2.5 }}>
         <Section title="Địa chỉ nhận hàng">
-          <Typography variant="body1" sx={{ color: brand.ink, fontWeight: 600 }}>
+          <Typography variant="body1" sx={{ fontWeight: 700, color: brand.ink }}>
             {order.deliveryName || '—'}
           </Typography>
-          <Typography variant="body2" sx={{ color: brand.muted, mt: 0.25 }}>
+          <Typography variant="body2" sx={{ color: brand.muted, mt: 0.5 }}>
             {order.deliveryPhone || '—'}
           </Typography>
-          <Typography variant="body2" sx={{ color: brand.ink, mt: 0.5 }}>
+          <Typography variant="body1" sx={{ color: brand.ink, mt: 1, whiteSpace: 'pre-line' }}>
             {order.deliveryAddress || '—'}
           </Typography>
         </Section>
 
-        <Section title="Giao hàng và thanh toán">
-          {shipment && <Info label="Hình thức giao">{shipment.carrier ? carrierLabel(shipment.carrier) : null}</Info>}
-          {shipment?.trackingNumber && <Info label="Mã vận đơn">{shipment.trackingNumber}</Info>}
-          {shipment?.status && <Info label="Trạng thái giao">{shipmentStatusLabel(shipment.status)}</Info>}
-          <Info label="Phương thức thanh toán">{paymentMethodLabel(order.paymentMethod)}</Info>
-          <Info label="Thanh toán">
+        <Section title="Thanh toán">
+          <Info label="Phương thức">{paymentMethodLabel(order.paymentMethod)}</Info>
+          <Info label="Trạng thái">
             <StatusPill tone={payment.tone} label={payment.label} />
           </Info>
           {order.orderStatus === 'AWAITING_PAYMENT' && order.paymentExpiresAt && <Info label="Hạn thanh toán">{dateTime(order.paymentExpiresAt)}</Info>}
+
+          {order.paymentMethod === 'ONLINE' && order.paymentStatus !== 'PAID' && !closed && (
+            <Box sx={{ mt: 1.5, pt: 1, borderTop: `1px dashed ${brand.line}` }}>
+              {payError && (
+                <Alert severity="error" sx={{ mb: 1, fontSize: 13 }}>
+                  {payError}
+                </Alert>
+              )}
+              <Button
+                fullWidth
+                variant="contained"
+                startIcon={payLoading ? <CircularProgress size={16} color="inherit" /> : <QrcodeOutlined />}
+                disabled={payLoading}
+                onClick={onPayNow}
+                sx={{
+                  bgcolor: '#16a34a',
+                  '&:hover': { bgcolor: '#15803d' },
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  py: 0.75
+                }}
+              >
+                {payLoading ? 'Đang tạo mã…' : 'Thanh toán ngay qua PayOS / VietQR'}
+              </Button>
+            </Box>
+          )}
         </Section>
       </Box>
 
@@ -262,10 +289,21 @@ function CustomerView({ order, status, actions, busy, onAction, actionError }) {
           </Box>
         </Box>
 
-        {actions.length > 0 && (
+        {(actions.length > 0 || ['DELIVERED', 'COMPLETED'].includes(order.orderStatus)) && (
           <Box sx={{ px: 3, pb: 3 }}>
             <Stack direction="row" spacing={1.5} justifyContent="flex-end" sx={{ flexWrap: 'wrap', rowGap: 1 }}>
-              <ActionButtons actions={actions} busy={busy} onAction={onAction} />
+              {['DELIVERED', 'COMPLETED'].includes(order.orderStatus) && (
+                <Button
+                  variant="outlined"
+                  color="warning"
+                  onClick={onOpenReturn}
+                  startIcon={<RollbackOutlined />}
+                  sx={{ fontWeight: 600, textTransform: 'none' }}
+                >
+                  Yêu cầu Trả hàng / Hoàn tiền
+                </Button>
+              )}
+              {actions.length > 0 && <ActionButtons actions={actions} busy={busy} onAction={onAction} />}
             </Stack>
             {actionError && (
               <Typography color="error" variant="body2" sx={{ mt: 1, textAlign: 'right' }}>
@@ -281,7 +319,7 @@ function CustomerView({ order, status, actions, busy, onAction, actionError }) {
 
 /* ------------------------------------------------------------------ Chủ shop và người xử lý đơn */
 
-function StaffView({ order, status, actions, busy, onAction, actionError, back }) {
+function StaffView({ order, status, actions, busy, onAction, actionError, back, onPayNow, payLoading, payError }) {
   const payment = paymentStatusMeta(order.paymentStatus);
   const prep = order.preparationStatus && order.preparationStatus !== 'NOT_STARTED' ? preparationMeta(order.preparationStatus) : null;
   const staffView = Boolean(order.customer);
@@ -335,6 +373,31 @@ function StaffView({ order, status, actions, busy, onAction, actionError, back }
               <StatusPill tone={payment.tone} label={payment.label} />
             </Info>
             {order.orderStatus === 'AWAITING_PAYMENT' && order.paymentExpiresAt && <Info label="Hạn thanh toán">{dateTime(order.paymentExpiresAt)}</Info>}
+            {order.paymentMethod === 'ONLINE' && order.paymentStatus !== 'PAID' && !CLOSED.includes(order.orderStatus) && (
+              <Box sx={{ mt: 1.5, pt: 1, borderTop: `1px dashed ${brand.line}` }}>
+                {payError && (
+                  <Alert severity="error" sx={{ mb: 1, fontSize: 13 }}>
+                    {payError}
+                  </Alert>
+                )}
+                <Button
+                  fullWidth
+                  variant="contained"
+                  startIcon={payLoading ? <CircularProgress size={16} color="inherit" /> : <QrcodeOutlined />}
+                  disabled={payLoading}
+                  onClick={onPayNow}
+                  sx={{
+                    bgcolor: '#16a34a',
+                    '&:hover': { bgcolor: '#15803d' },
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    py: 0.75
+                  }}
+                >
+                  {payLoading ? 'Đang tạo mã…' : 'Tạo mã thanh toán PayOS / VietQR'}
+                </Button>
+              </Box>
+            )}
             {order.confirmedAt && (
               <Info label="Xác nhận lúc">
                 {dateTime(order.confirmedAt)}
@@ -356,14 +419,14 @@ function StaffView({ order, status, actions, busy, onAction, actionError, back }
           )}
         </Box>
 
-        {/* Hàng dưới: sản phẩm (cuộn trong khung nếu nhiều dòng) và tổng tiền */}
-        <Box sx={{ display: 'grid', gap: 3, alignItems: 'start', gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1fr) 380px' } }}>
+        {/* Hàng dưới: bảng sản phẩm và tổng tiền */}
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 2fr) minmax(0, 1fr)' }, gap: 3, alignItems: 'start' }}>
           <Box sx={{ ...cardSx, overflow: 'hidden' }}>
-            <Typography variant="subtitle1" sx={{ fontWeight: 700, color: brand.ink, px: 3, pt: 3, pb: 1.5 }}>
+            <Typography variant="h6" sx={{ fontWeight: 700, color: brand.ink, p: 3, pb: 2 }}>
               Sản phẩm đã đặt
             </Typography>
-            <Box sx={{ overflow: 'auto', maxHeight: { xs: 'none', md: 'calc(100vh - 620px)' }, minHeight: { md: 220 } }}>
-              <Table size="small" stickyHeader sx={{ minWidth: 480, '& .MuiTableCell-root': { py: 1.75 } }}>
+            <Box sx={{ overflowX: 'auto' }}>
+              <Table size="small" sx={{ minWidth: 540 }}>
                 <TableHead>
                   <TableRow>
                     <TableCell sx={headCellSx}>Sản phẩm</TableCell>
@@ -427,6 +490,7 @@ function StaffView({ order, status, actions, busy, onAction, actionError, back }
 export default function OrderDetailPage() {
   useCrumbs(['Đơn hàng', 'Chi tiết đơn hàng']);
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const { account } = useAuth();
   const { mutate: globalMutate } = useSWRConfig();
   const { data: order, error, isLoading, mutate } = useSWR(['order', id], () => ordersApi.detail(id), {
@@ -444,7 +508,41 @@ export default function OrderDetailPage() {
   const [addressBlocked, setAddressBlocked] = useState(false); // không tìm thấy địa chỉ giao -> không bàn giao
   const [addressAlert, setAddressAlert] = useState(null); // { order, message } khi backend báo không tìm thấy địa chỉ
 
-  const back ={ to: '/orders', label: 'Quay lại danh sách đơn' };
+  const [payModalOpen, setPayModalOpen] = useState(false);
+  const [paymentData, setPaymentData] = useState(null);
+  const [payLoading, setPayLoading] = useState(false);
+  const [payError, setPayError] = useState('');
+
+  const [returnDialogOpen, setReturnDialogOpen] = useState(false);
+  const [returnSuccessMsg, setReturnSuccessMsg] = useState('');
+
+  // Tự động kiểm tra trạng thái thanh toán nếu quay lại từ PayOS với URL ?payment=success
+  const orderIdVal = order?.id || Number(id);
+
+  useEffect(() => {
+    if (searchParams.get('payment') === 'success' && orderIdVal && order?.paymentStatus !== 'PAID') {
+      ordersApi.checkPayOSStatus(orderIdVal).then((res) => {
+        if (res.paid) mutate();
+      }).catch(() => {});
+    }
+  }, [searchParams, orderIdVal, order?.paymentStatus, mutate]);
+
+  const handlePayNow = async () => {
+    if (!orderIdVal) return;
+    setPayLoading(true);
+    setPayError('');
+    try {
+      const res = await ordersApi.createPayOSLink(orderIdVal);
+      setPaymentData(res);
+      setPayModalOpen(true);
+    } catch (err) {
+      setPayError(err.message || 'Không thể tạo liên kết thanh toán PayOS.');
+    } finally {
+      setPayLoading(false);
+    }
+  };
+
+  const back = { to: '/orders', label: 'Quay lại danh sách đơn' };
 
   // Chỉ hiện màn hình lỗi khi chưa có dữ liệu; nếu lần tải lại ngầm bị lỗi thì vẫn giữ dữ liệu cũ
   if (error && !order) {
@@ -517,10 +615,26 @@ export default function OrderDetailPage() {
     }
   };
 
-  const viewProps = { order, status, actions, busy, onAction: start, actionError: dialog ? '' : actionError };
+  const viewProps = {
+    order,
+    status,
+    actions,
+    busy,
+    onAction: start,
+    actionError: dialog ? '' : actionError,
+    onPayNow: handlePayNow,
+    payLoading,
+    payError,
+    onOpenReturn: () => setReturnDialogOpen(true)
+  };
 
   return (
     <Box>
+      {returnSuccessMsg && (
+        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setReturnSuccessMsg('')}>
+          {returnSuccessMsg}
+        </Alert>
+      )}
       {isCustomer ? (
         <>
           <PageHeader back={back} title="Chi tiết đơn hàng" />
@@ -583,6 +697,30 @@ export default function OrderDetailPage() {
         onClose={() => setAddressAlert(null)}
         onReject={order.orderStatus === 'PENDING_CONFIRMATION' ? rejectForInvalidAddress : undefined}
       />
+
+      {/* Modal thanh toán PayOS / VietQR */}
+      <PayOSPaymentModal
+        open={payModalOpen}
+        onClose={() => setPayModalOpen(false)}
+        paymentData={paymentData}
+        onSuccess={() => {
+          mutate();
+        }}
+      />
+
+      {/* Modal Trả hàng / Hoàn tiền cho Khách hàng */}
+      {returnDialogOpen && (
+        <CustomerReturnDialog
+          open={returnDialogOpen}
+          onClose={() => setReturnDialogOpen(false)}
+          orderData={order}
+          isPublic={false}
+          onSuccess={(msg) => {
+            setReturnSuccessMsg(msg);
+            mutate();
+          }}
+        />
+      )}
     </Box>
   );
 }

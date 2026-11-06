@@ -15,10 +15,13 @@ Checkpoint 28/10/2026. “Có source” trong bảng không phải xác nhận �
 | Danh mục | Danh sách, tạo, sửa, đổi trạng thái. | FE và API có source; `/categories` chưa nối router. |
 | Sản phẩm | Danh sách/chi tiết/thống kê, tạo/sửa/đổi trạng thái, biến thể màu–size–giá, ảnh. | FE và API có source; nhóm `/products...` chưa nối router. |
 | Dashboard | Workspace có gọi thống kê sản phẩm và các vùng hiển thị quản trị. | Không được coi các card/bảng template là doanh thu/đơn hàng đã tích hợp. |
-| Tồn kho | Tổng tồn/đã xếp/chưa xếp, tìm/lọc theo biến thể, lịch sử biến động. | Có `/warehouse/inventory`; cần chạy backend source đúng. |
+| Tồn kho | Tổng/đã xếp/chưa xếp, đang giữ, có thể bán, đang đặt; thống kê bấm lọc; tìm (tên/mã SP/mã biến thể/mã vạch), lọc màu/size/danh mục/vị trí/trạng thái, sắp xếp, phân trang phía backend, giữ bộ lọc trên URL; chi tiết biến thể; thẻ kho + lịch sử chuyển vị trí; ngưỡng tối thiểu; cảnh báo; xuất Excel toàn bộ kết quả lọc. | `/warehouse/inventory`; cần migration `2026-11-06_inventory.sql`. |
+| Giữ hàng đơn bán | Kho chỉ đọc `order_item.reserved_quantity` để hiển thị đang giữ/có thể bán. | **Chưa tích hợp** vào đơn online/bán tại quầy (code của module khác, cần chủ module đồng ý). |
+| Kiểm kê | Phiếu theo vị trí/phần chưa xếp, Family gửi xác nhận, Owner xác nhận/duyệt, chặn khi tồn đổi sau lúc đếm, chặn chênh lệch thiếu chứng từ. | `/warehouse/counts`; cần migration 06/11. |
+| Báo cáo tồn kho | Nhập–xuất–tồn theo kỳ, giá trị tồn theo giá vốn bình quân phiếu nhập (Owner), Excel. | `/warehouse/report`. Chưa có phân hệ báo cáo chung — trang nằm trong Kho. |
 | Phiếu đặt | Nháp, sửa/gửi/xác nhận/hủy/đóng; nhà cung cấp; nhiều dòng biến thể. | Có `/warehouse/orders`; không tăng tồn khi xác nhận. |
 | Phiếu nhập | Liên kết đơn đặt, nhiều đợt nhập, giới hạn theo nguồn; Owner xác nhận tăng tồn. | Có `/warehouse/receipts`; Family tạo phiếu của mình. |
-| Trả nhà cung cấp | Chứng từ liên kết phiếu nhập; trừ tồn khi Owner xác nhận; ghi lịch sử. | Có `/warehouse/returns` và code backend; bị chặn bởi CHECK trong dump (`TASK-03`). |
+| Trả hàng nhà cung cấp | Chứng từ liên kết phiếu nhập; Owner duyệt (chưa trừ tồn) rồi xác nhận xuất trả theo vị trí đã chọn; ghi lịch sử. Sau xuất trả: hoàn tiền nhiều lần, giảm công nợ phiếu nhập, giữ/dùng tiền đối trừ, đổi hàng (nhập qua phiếu nhập từ phiếu trả). Thanh toán phiếu nhập nhiều lần và công nợ theo NCC. | Có `/warehouse/returns`, nút trong chi tiết phiếu nhập; cần migration `2026-11-05_supplier_settlement.sql` (SQL_v2 đã có phần 04/11). Phiếu nhập cũ cần khai báo số đã trả trước. |
 | Nhập Excel | Cả phiếu đặt/phiếu nhập; mapping/preview/sửa dòng/gộp trùng/tải mẫu. | Đã tích hợp DocumentForm; chưa thử với file thực tế của người dùng. |
 | Sơ đồ kệ/tầng | Xem, lọc vị trí, chỉnh kệ/tầng, kéo kệ, đặt tương đối, xếp gọn, tránh chồng lấn. | Có `/warehouse/locations`, `/warehouse/layout`; cần kiểm chứng hình ảnh thực tế. |
 | Gán/chuyển vị trí | Gán hàng chưa xếp, chuyển giữa tầng, rút về chưa xếp; mô tả/ảnh; idempotency. | Trong LocationsPage/dialog; không phải các route `/warehouse/assign` cũ. |
@@ -30,7 +33,9 @@ Checkpoint 28/10/2026. “Có source” trong bảng không phải xác nhận �
 | Thao tác | OWNER | FAMILY_MEMBER | ADMIN | STAFF | CUSTOMER |
 |---|---|---|---|---|---|
 | Vào trang kho / xem snapshot, chứng từ, ảnh, lịch sử | Có | Có | Không | Không | Không |
-| Tạo phiếu đặt / phiếu trả NCC | Có | Không | Không | Không | Không |
+| Tạo phiếu đặt | Có | Không | Không | Không | Không |
+| Lập/sửa nháp/gửi duyệt phiếu trả NCC | Có | Có (phiếu của mình) | Không | Không | Không |
+| Duyệt / xác nhận xuất trả phiếu trả NCC | Có | Không | Không | Không | Không |
 | Tạo phiếu nhập nháp | Có | Có | Không | Không | Không |
 | Sửa/gửi phiếu nhập nháp | Có | Chỉ phiếu do mình tạo | Không | Không | Không |
 | Xác nhận/từ chối/hủy/đóng chứng từ | Có, theo trạng thái hợp lệ | Không | Không | Không | Không |

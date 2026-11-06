@@ -7,6 +7,8 @@ import {
   CircularProgress,
   IconButton,
   InputAdornment,
+  MenuItem,
+  Select,
   Stack,
   Table,
   TableBody,
@@ -18,7 +20,9 @@ import {
   Typography
 } from '@mui/material';
 import {
+  ClearOutlined,
   CreditCardOutlined,
+  BankOutlined,
   DollarOutlined,
   EyeOutlined,
   LeftOutlined,
@@ -48,6 +52,12 @@ const C = {
 };
 
 const PAGE_SIZE = 8;
+
+function isCashMethod(method) {
+  if (!method) return true;
+  const m = String(method).toUpperCase();
+  return m === 'CASH' || m.includes('TIEN_MAT') || m.includes('TIỀN MẶT');
+}
 
 const money = (value) => `${Number(value || 0).toLocaleString('vi-VN')} đ`;
 
@@ -87,21 +97,36 @@ export default function InStoreSalesHistoryPage() {
   const [q, setQ] = useState('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
+  const [sellerId, setSellerId] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('');
   const [page, setPage] = useState(0);
 
   const debouncedSearch = useDebounced(q.trim(), 350);
+
+  // Lấy danh sách thu ngân để phục vụ bộ lọc
+  const { data: sellersData } = useSWR(
+    '/sales/in-store/sellers',
+    () => api('/sales/in-store/sellers'),
+    { revalidateOnFocus: false }
+  );
+  const sellers = sellersData || [];
 
   const params = {
     q: debouncedSearch || undefined,
     fromDate: fromDate || undefined,
     toDate: toDate || undefined,
+    sellerId: sellerId || undefined,
+    paymentMethod: paymentMethod || undefined,
     page,
     size: PAGE_SIZE
   };
 
+  const queryStr = buildQuery(params);
+  const swrKey = `/sales/in-store${queryStr}`;
+
   const { data, error, isLoading } = useSWR(
-    ['/sales/in-store', params],
-    () => api(`/sales/in-store${buildQuery(params)}`),
+    swrKey,
+    (url) => api(url),
     { keepPreviousData: true, revalidateOnFocus: false }
   );
 
@@ -132,6 +157,8 @@ export default function InStoreSalesHistoryPage() {
     setQ('');
     setFromDate('');
     setToDate('');
+    setSellerId('');
+    setPaymentMethod('');
     setPage(0);
   }
 
@@ -164,9 +191,6 @@ export default function InStoreSalesHistoryPage() {
         <Typography variant="h3" sx={{ fontWeight: 800, color: C.text }}>
           Danh sách hóa đơn
         </Typography>
-        <Typography variant="body2" sx={{ color: C.muted, mt: 0.5 }}>
-          Danh sách hóa đơn bán hàng trực tiếp tại quầy.
-        </Typography>
       </Box>
 
       {/* ─── THANH BỘ LỌC PHÍA TRÊN ─── */}
@@ -176,15 +200,15 @@ export default function InStoreSalesHistoryPage() {
           display: 'grid',
           gridTemplateColumns: {
             xs: '1fr',
-            sm: '1fr 1fr',
-            md: 'minmax(280px, 1.8fr) 180px 180px auto'
+            sm: 'repeat(2, 1fr)',
+            md: 'minmax(150px, 1.8fr) 140px 140px 130px 130px auto'
           },
-          gap: 2,
-          alignItems: 'end'
+          gap: { xs: 1.5, lg: 2 },
+          alignItems: 'flex-end'
         }}
       >
         {/* Tìm kiếm theo mã hóa đơn */}
-        <Box>
+        <Box sx={{ minWidth: 0 }}>
           <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>
             Tìm kiếm hóa đơn
           </Typography>
@@ -214,8 +238,82 @@ export default function InStoreSalesHistoryPage() {
           />
         </Box>
 
+        {/* Lọc theo thu ngân */}
+        <Box sx={{ minWidth: 0 }}>
+          <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>
+            Thu ngân
+          </Typography>
+          <Select
+            fullWidth
+            size="small"
+            displayEmpty
+            value={sellerId}
+            onChange={(e) => {
+              setSellerId(e.target.value);
+              setPage(0);
+            }}
+            renderValue={(val) => {
+              if (!val) return 'Tất cả';
+              const found = sellers.find((s) => String(s.id) === String(val));
+              return found ? found.name : 'Tất cả';
+            }}
+            sx={{
+              bgcolor: C.surface,
+              borderRadius: 2.5,
+              height: 44,
+              fontSize: 13.5,
+              '& .MuiOutlinedInput-notchedOutline': { borderColor: C.border },
+              '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: C.cyan },
+              '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: C.cyan }
+            }}
+          >
+            <MenuItem value="">Tất cả</MenuItem>
+            {sellers.map((s) => (
+              <MenuItem key={s.id} value={String(s.id)}>
+                {s.name}
+              </MenuItem>
+            ))}
+          </Select>
+        </Box>
+
+        {/* Lọc theo phương thức thanh toán */}
+        <Box sx={{ minWidth: 0 }}>
+          <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>
+            Phương thức
+          </Typography>
+          <Select
+            fullWidth
+            size="small"
+            displayEmpty
+            value={paymentMethod}
+            onChange={(e) => {
+              setPaymentMethod(e.target.value);
+              setPage(0);
+            }}
+            renderValue={(val) => {
+              if (!val) return 'Tất cả';
+              if (val === 'CASH') return 'Tiền mặt';
+              if (val === 'TRANSFER') return 'Chuyển khoản';
+              return 'Tất cả';
+            }}
+            sx={{
+              bgcolor: C.surface,
+              borderRadius: 2.5,
+              height: 44,
+              fontSize: 13.5,
+              '& .MuiOutlinedInput-notchedOutline': { borderColor: C.border },
+              '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: C.cyan },
+              '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: C.cyan }
+            }}
+          >
+            <MenuItem value="">Tất cả</MenuItem>
+            <MenuItem value="CASH">Tiền mặt</MenuItem>
+            <MenuItem value="TRANSFER">Chuyển khoản</MenuItem>
+          </Select>
+        </Box>
+
         {/* Từ ngày - Chặn tuyệt đối ngày tương lai */}
-        <Box>
+        <Box sx={{ minWidth: 0 }}>
           <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>
             Từ ngày
           </Typography>
@@ -247,7 +345,7 @@ export default function InStoreSalesHistoryPage() {
         </Box>
 
         {/* Đến ngày - Chặn tuyệt đối ngày tương lai */}
-        <Box>
+        <Box sx={{ minWidth: 0 }}>
           <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>
             Đến ngày
           </Typography>
@@ -280,31 +378,55 @@ export default function InStoreSalesHistoryPage() {
           />
         </Box>
 
-        {/* Nút Xóa lọc */}
-        <Button
-          variant="outlined"
-          startIcon={<ReloadOutlined style={{ fontSize: 14 }} />}
-          onClick={handleResetFilters}
-          sx={{
-            height: 44,
-            px: 2.5,
-            borderRadius: 2.5,
-            textTransform: 'none',
-            fontSize: 13.5,
-            fontWeight: 600,
-            borderColor: C.border,
-            bgcolor: C.surface,
-            color: C.text,
-            boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
-            '&:hover': {
-              bgcolor: C.cream,
-              borderColor: C.creamHover,
-              color: C.creamText
-            }
-          }}
-        >
-          Xóa lọc
-        </Button>
+        {/* Button chữ Bỏ lọc: chiều rộng gọn, không viền phát sáng khi bấm/hover */}
+        <Box sx={{ minWidth: 0, display: 'flex' }}>
+          <Button
+            variant="outlined"
+            onClick={handleResetFilters}
+            disableRipple
+            sx={{
+              height: 44,
+              px: 1.75,
+              minWidth: 'unset',
+              borderRadius: 2.5,
+              textTransform: 'none',
+              fontSize: 13,
+              fontWeight: 600,
+              borderColor: C.border,
+              bgcolor: C.surface,
+              color: C.text,
+              whiteSpace: 'nowrap',
+              outline: 'none',
+              boxShadow: 'none !important',
+              transition: 'none',
+              '&:hover': {
+                bgcolor: C.surface,
+                borderColor: C.border,
+                color: C.text,
+                outline: 'none',
+                boxShadow: 'none !important'
+              },
+              '&:focus': {
+                outline: 'none',
+                boxShadow: 'none !important'
+              },
+              '&:focus-visible': {
+                outline: 'none',
+                boxShadow: 'none !important'
+              },
+              '&.Mui-focusVisible': {
+                outline: 'none',
+                boxShadow: 'none !important'
+              },
+              '&:active': {
+                outline: 'none',
+                boxShadow: 'none !important'
+              }
+            }}
+          >
+            Bỏ lọc
+          </Button>
+        </Box>
       </Box>
 
       {/* ─── KHỐI BẢNG DANH SÁCH HÓA ĐƠN (Đã bỏ thanh header bên trong) ─── */}
@@ -327,23 +449,23 @@ export default function InStoreSalesHistoryPage() {
         <Box sx={{ overflowX: 'auto' }}>
           <Table size="medium">
             <TableHead>
-              <TableRow sx={{ '& th': { borderBottom: `1px solid ${C.borderLight}`, py: 1.75 } }}>
-                <TableCell sx={{ color: C.muted, fontSize: 12.5, fontWeight: 500, pl: 3 }}>
+              <TableRow sx={{ '& th': { borderBottom: `1px solid ${C.border}`, py: 1.75, bgcolor: '#F8FAFC' } }}>
+                <TableCell sx={{ color: '#475569', fontSize: 13, fontWeight: 600, pl: 3 }}>
                   Mã hóa đơn
                 </TableCell>
-                <TableCell sx={{ color: C.muted, fontSize: 12.5, fontWeight: 500 }}>
+                <TableCell sx={{ color: '#475569', fontSize: 13, fontWeight: 600 }}>
                   Thời gian
                 </TableCell>
-                <TableCell sx={{ color: C.muted, fontSize: 12.5, fontWeight: 500 }}>
+                <TableCell sx={{ color: '#475569', fontSize: 13, fontWeight: 600 }}>
                   Thu ngân
                 </TableCell>
-                <TableCell sx={{ color: C.muted, fontSize: 12.5, fontWeight: 500 }} align="right">
+                <TableCell sx={{ color: '#475569', fontSize: 13, fontWeight: 600 }} align="right">
                   Tổng tiền
                 </TableCell>
-                <TableCell sx={{ color: C.muted, fontSize: 12.5, fontWeight: 500, pl: 4 }}>
+                <TableCell sx={{ color: '#475569', fontSize: 13, fontWeight: 600, pl: 4 }}>
                   Phương thức
                 </TableCell>
-                <TableCell sx={{ color: C.muted, fontSize: 12.5, fontWeight: 500, pr: 3 }} align="center">
+                <TableCell sx={{ color: '#475569', fontSize: 13, fontWeight: 600, pr: 3 }} align="center">
                   Thao tác
                 </TableCell>
               </TableRow>
@@ -373,7 +495,7 @@ export default function InStoreSalesHistoryPage() {
                 </TableRow>
               ) : (
                 items.map((sale) => {
-                  const isCash = sale.paymentMethod === 'CASH';
+                  const isCash = isCashMethod(sale.paymentMethod);
                   const { date, time } = formatReceiptDate(sale.orderDate);
 
                   return (
@@ -442,29 +564,22 @@ export default function InStoreSalesHistoryPage() {
                         </Box>
                       </TableCell>
 
-                      {/* Thao tác - Nút vuông bo góc với icon mắt */}
+                      {/* Thao tác - Icon mắt đơn giản, không viền hộp, không button hover */}
                       <TableCell align="center" sx={{ pr: 3 }}>
                         <Tooltip title="Xem chi tiết hóa đơn">
                           <IconButton
                             size="small"
                             onClick={() => navigate(`/in-store-sales/history/${sale.orderId}`)}
                             sx={{
-                              width: 32,
-                              height: 32,
-                              borderRadius: 2,
-                              border: `1px solid ${C.border}`,
-                              bgcolor: C.surface,
                               color: '#64748B',
-                              transition: 'all 0.15s ease',
+                              p: 0.75,
                               '&:hover': {
-                                bgcolor: C.cyan,
-                                color: C.text,
-                                borderColor: C.cyanHover,
-                                transform: 'scale(1.05)'
+                                color: '#0F172A',
+                                bgcolor: 'transparent'
                               }
                             }}
                           >
-                            <EyeOutlined style={{ fontSize: 14 }} />
+                            <EyeOutlined style={{ fontSize: 17 }} />
                           </IconButton>
                         </Tooltip>
                       </TableCell>
