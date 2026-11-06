@@ -847,6 +847,39 @@ CREATE TABLE IF NOT EXISTS `shift_change_request` (
 
 -- Dumping data for table thors_restore.shift_change_request: ~0 rows (approximately)
 
+-- Dumping structure for table thors_restore.shipping_address
+CREATE TABLE IF NOT EXISTS `shipping_address` (
+  `address_id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `recipient_name` varchar(100) NOT NULL,
+  `phone` varchar(15) NOT NULL,
+  `province_code` varchar(20) NOT NULL,
+  `province_name` varchar(100) NOT NULL,
+  `district_code` varchar(20) DEFAULT NULL,
+  `district_name` varchar(100) DEFAULT NULL,
+  `ward_code` varchar(20) NOT NULL,
+  `ward_name` varchar(100) NOT NULL,
+  `address_detail` varchar(255) NOT NULL,
+  `latitude` decimal(10,7) DEFAULT NULL,
+  `longitude` decimal(10,7) DEFAULT NULL,
+  `is_default` tinyint(1) NOT NULL DEFAULT '0',
+  `is_deleted` tinyint(1) NOT NULL DEFAULT '0',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `default_user_id` int GENERATED ALWAYS AS (if(((`is_default` = 1) and (`is_deleted` = 0)),`user_id`,NULL)) VIRTUAL,
+  PRIMARY KEY (`address_id`),
+  UNIQUE KEY `uq_shipping_address_default` (`default_user_id`),
+  KEY `idx_shipping_address_user` (`user_id`,`is_deleted`),
+  CONSTRAINT `fk_shipping_address_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`user_id`),
+  CONSTRAINT `chk_shipping_address_default` CHECK ((`is_default` in (0,1))),
+  CONSTRAINT `chk_shipping_address_deleted` CHECK ((`is_deleted` in (0,1))),
+  CONSTRAINT `chk_shipping_address_default_active` CHECK ((not((`is_default` = 1) and (`is_deleted` = 1)))),
+  CONSTRAINT `chk_shipping_address_required` CHECK (((char_length(trim(`recipient_name`)) >= 2) and (char_length(trim(`phone`)) >= 10) and (trim(`province_code`) <> '') and (trim(`province_name`) <> '') and (trim(`ward_code`) <> '') and (trim(`ward_name`) <> '') and (char_length(trim(`address_detail`)) >= 2))),
+  CONSTRAINT `chk_shipping_address_coordinates` CHECK ((((`latitude` is null) and (`longitude` is null)) or ((`latitude` is not null) and (`longitude` is not null) and (`latitude` between -90 and 90) and (`longitude` between -180 and 180))))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- Dumping data for table thors_restore.shipping_address: ~0 rows (approximately)
+
 -- Dumping structure for table thors_restore.stock_adjustment
 CREATE TABLE IF NOT EXISTS `stock_adjustment` (
   `adjustment_id` int NOT NULL AUTO_INCREMENT,
