@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { Link as RouterLink, useParams, useSearchParams } from 'react-router-dom';
 import useSWR, { useSWRConfig } from 'swr';
 import {
   Alert,
@@ -39,10 +39,24 @@ import { ghnReady } from './GhnAddressFields';
 import { formatVnd, orderStatusMeta, paymentMethodLabel, paymentStatusMeta, preparationMeta, shipmentStatusLabel } from './constants';
 import PayOSPaymentModal from './components/PayOSPaymentModal';
 import CustomerReturnDialog from '../returns/CustomerReturnDialog';
+import {
+  C,
+  SANS,
+  SERIF,
+  StatusText,
+  StoreThumb,
+  dangerBtnSx,
+  eyebrowSx as storeEyebrowSx,
+  pageTitleSx,
+  panelSx,
+  panelTitleSx,
+  storeBtnSx,
+  storeDialogPaperSx,
+  storeInputsSx,
+  textLinkSx
+} from './storeStyle';
 
 const dateTime = (value) => (value ? `${formatLogDate(value)} · ${formatTime(value)}` : null);
-
-const TONE_COLOR = { success: 'success.main', danger: 'error.main', warning: 'warning.dark', neutral: 'text.secondary' };
 
 // Các bước khách thấy trên thanh tiến trình, và số bước đã xong theo trạng thái đơn
 const STEP_LABELS = ['Đặt hàng', 'Xác nhận', 'Vận chuyển', 'Đã giao', 'Hoàn thành'];
@@ -130,188 +144,210 @@ function ActionButtons({ actions, busy, onAction }) {
   );
 }
 
-/* ------------------------------------------------------------------ Khách hàng (kiểu Shopee) */
+/* ------------------------------------------------------------------ Khách hàng (giao diện cửa hàng) */
 
-function CustomerView({ order, status, actions, busy, onAction, actionError, onPayNow, payLoading, payError, onOpenReturn }) {
+function StorePanel({ title, children, sx }) {
+  return (
+    <Box component="section" sx={{ ...panelSx, p: { xs: 2.5, sm: 3.5 }, ...sx }}>
+      <Box component="h2" sx={panelTitleSx}>
+        {title}
+      </Box>
+      {children}
+    </Box>
+  );
+}
+
+function StoreRow({ label, children, strong = false }) {
+  return (
+    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 2, py: 0.9, fontSize: 14 }}>
+      <Box component="span" sx={{ color: strong ? C.ink : C.muted, fontWeight: strong ? 600 : 400, flexShrink: 0 }}>
+        {label}
+      </Box>
+      <Box component="span" sx={{ textAlign: 'right', wordBreak: 'break-word', ...(strong ? { fontFamily: SERIF, fontSize: 26 } : {}) }}>
+        {children ?? '—'}
+      </Box>
+    </Box>
+  );
+}
+
+function CustomerView({ order, status, actions, busy, onAction, actionError, onPayNow, payLoading, payError, onOpenReturn, back }) {
   const payment = paymentStatusMeta(order.paymentStatus);
   const closed = CLOSED.includes(order.orderStatus);
   const completed = COMPLETED_STEPS[order.orderStatus] ?? 0;
   const shipment = order.shipment;
   const times = [order.orderDate, order.confirmedAt, shipment?.pickedUpAt, shipment?.deliveredAt, null];
   const hint = customerHint(order);
+  const canReturn = ['DELIVERED', 'COMPLETED'].includes(order.orderStatus);
+  const canPay = order.paymentMethod === 'ONLINE' && order.paymentStatus !== 'PAID' && !closed;
 
   return (
-    <Box sx={{ display: 'grid', gap: 2.5 }}>
-      {/* Trạng thái và tiến trình */}
-      <Box sx={{ ...cardSx, overflow: 'hidden' }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5, px: 3, py: 2, borderBottom: `1px solid ${brand.line}` }}>
-          <Typography variant="body2" sx={{ color: brand.muted }}>
-            Mã đơn hàng:{' '}
-            <Typography component="span" variant="body2" sx={{ color: brand.ink, fontWeight: 700 }}>
-              {order.orderNumber}
-            </Typography>
-            {' · '}Đặt lúc {dateTime(order.orderDate) ?? '—'}
-          </Typography>
-          <Typography sx={{ fontWeight: 700, letterSpacing: 0.3, color: TONE_COLOR[status.tone] ?? 'text.secondary' }}>{status.label.toUpperCase()}</Typography>
-        </Box>
-        <Box sx={{ px: { xs: 2, md: 6 }, py: 4 }}>
-          {closed ? (
-            <Alert severity="error">
-              <Typography sx={{ fontWeight: 600 }}>
-                {status.label}
-                {order.cancelledAt ? ` · ${dateTime(order.cancelledAt)}` : ''}
-              </Typography>
-              {order.cancelReason && <Typography variant="body2">Lý do: {order.cancelReason}</Typography>}
-            </Alert>
-          ) : (
-            <>
-              <Stepper
-                alternativeLabel
-                activeStep={completed}
-                sx={{
-                  // Bước đang chờ tô màu cam, chỉ bước đã xong mới có dấu tích xanh
-                  '& .MuiStepIcon-root.Mui-active': { color: 'warning.main' },
-                  '& .MuiStepLabel-label.Mui-active': { color: 'warning.dark', fontWeight: 600 }
-                }}
-              >
-                {STEP_LABELS.map((label, index) => (
-                  <Step key={label} completed={index < completed}>
-                    <StepLabel
-                      optional={times[index] ? <Typography variant="caption" sx={{ color: brand.muted }}>{dateTime(times[index])}</Typography> : null}
-                    >
-                      {index === completed && CURRENT_STEP_LABEL[order.orderStatus] ? CURRENT_STEP_LABEL[order.orderStatus] : label}
-                    </StepLabel>
-                  </Step>
-                ))}
-              </Stepper>
-              {hint && (
-                <Typography variant="body2" sx={{ color: brand.muted, textAlign: 'center', mt: 3 }}>
-                  {hint}
-                </Typography>
-              )}
-            </>
-          )}
-        </Box>
+    <Box>
+      {/* Đầu trang: quay lại, mã đơn, trạng thái */}
+      <Box component={RouterLink} to={back.to} sx={{ ...textLinkSx, mb: 3 }}>
+        <span aria-hidden="true">←</span> {back.label.toUpperCase()}
       </Box>
-
-      {/* Thông tin nhận hàng và thanh toán */}
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' }, gap: 2.5 }}>
-        <Section title="Địa chỉ nhận hàng">
-          <Typography variant="body1" sx={{ fontWeight: 700, color: brand.ink }}>
-            {order.deliveryName || '—'}
-          </Typography>
-          <Typography variant="body2" sx={{ color: brand.muted, mt: 0.5 }}>
-            {order.deliveryPhone || '—'}
-          </Typography>
-          <Typography variant="body1" sx={{ color: brand.ink, mt: 1, whiteSpace: 'pre-line' }}>
-            {order.deliveryAddress || '—'}
-          </Typography>
-        </Section>
-
-        <Section title="Thanh toán">
-          <Info label="Phương thức">{paymentMethodLabel(order.paymentMethod)}</Info>
-          <Info label="Trạng thái">
-            <StatusPill tone={payment.tone} label={payment.label} />
-          </Info>
-          {order.orderStatus === 'AWAITING_PAYMENT' && order.paymentExpiresAt && <Info label="Hạn thanh toán">{dateTime(order.paymentExpiresAt)}</Info>}
-
-          {order.paymentMethod === 'ONLINE' && order.paymentStatus !== 'PAID' && !closed && (
-            <Box sx={{ mt: 1.5, pt: 1, borderTop: `1px dashed ${brand.line}` }}>
-              {payError && (
-                <Alert severity="error" sx={{ mb: 1, fontSize: 13 }}>
-                  {payError}
-                </Alert>
-              )}
-              <Button
-                fullWidth
-                variant="contained"
-                startIcon={payLoading ? <CircularProgress size={16} color="inherit" /> : <QrcodeOutlined />}
-                disabled={payLoading}
-                onClick={onPayNow}
-                sx={{
-                  bgcolor: '#16a34a',
-                  '&:hover': { bgcolor: '#15803d' },
-                  textTransform: 'none',
-                  fontWeight: 600,
-                  py: 0.75
-                }}
-              >
-                {payLoading ? 'Đang tạo mã…' : 'Thanh toán ngay qua PayOS / VietQR'}
-              </Button>
-            </Box>
-          )}
-        </Section>
-      </Box>
-
-      {/* Sản phẩm, tổng tiền và nút thao tác */}
-      <Box sx={{ ...cardSx, overflow: 'hidden' }}>
-        <Typography variant="body1" sx={{ fontWeight: 700, color: brand.ink, px: 3, py: 2, borderBottom: `1px solid ${brand.line}` }}>
-          {STORE_NAME}
-        </Typography>
-        {order.lines.map((line, index) => (
-          <Box key={line.orderItemId} sx={{ display: 'flex', gap: 2, px: 3, py: 2, borderBottom: index < order.lines.length - 1 ? `1px solid ${brand.line}` : 'none' }}>
-            <Box
-              component={line.imageUrl ? 'img' : 'div'}
-              src={line.imageUrl || undefined}
-              alt={line.productName}
-              sx={{ width: 84, height: 84, borderRadius: '6px', objectFit: 'cover', bgcolor: brand.neutralBg, border: `1px solid ${brand.line}`, flexShrink: 0 }}
-            />
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography variant="body1" sx={{ fontWeight: 500, color: brand.ink }}>
-                {line.productName}
-              </Typography>
-              <Typography variant="body2" sx={{ color: brand.muted, mt: 0.25 }}>
-                Phân loại: {[line.size, line.color].filter(Boolean).join(', ') || '—'}
-              </Typography>
-              <Typography variant="body2" sx={{ color: brand.ink, mt: 0.25 }}>
-                x{line.quantity}
-              </Typography>
-            </Box>
-            <Typography variant="body1" sx={{ color: brand.ink, alignSelf: 'center', whiteSpace: 'nowrap' }}>
-              {formatVnd(line.lineTotal)}
-            </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 2, mb: { xs: 4, sm: 5 } }}>
+        <Box>
+          <Box component="p" sx={{ ...storeEyebrowSx, mb: 1.5 }}>
+            Đặt lúc {dateTime(order.orderDate) ?? '—'}
           </Box>
-        ))}
+          <Box component="h1" sx={pageTitleSx}>
+            Đơn hàng #{order.orderNumber}
+          </Box>
+        </Box>
+        <StatusText tone={status.tone} label={status.label} sx={{ fontSize: 13 }} />
+      </Box>
 
-        <Box sx={{ borderTop: `1px solid ${brand.line}`, px: 3, py: 2 }}>
-          <Box sx={{ ml: 'auto', maxWidth: 440 }}>
-            <Amount label="Tổng tiền hàng" value={order.itemsAmount} />
+      {/* Tiến trình đơn */}
+      <Box sx={{ bgcolor: C.sand, px: { xs: 2, md: 6 }, py: { xs: 4, sm: 5 }, mb: 3 }}>
+        {closed ? (
+          <Box sx={{ textAlign: 'center' }}>
+            <Box sx={{ fontFamily: SERIF, fontSize: { xs: 24, sm: 30 }, color: C.accent }}>
+              {status.label}
+              {order.cancelledAt ? ` · ${dateTime(order.cancelledAt)}` : ''}
+            </Box>
+            {order.cancelReason && (
+              <Box component="p" sx={{ m: 0, mt: 1, fontSize: 15, color: C.muted }}>
+                Lý do: {order.cancelReason}
+              </Box>
+            )}
+          </Box>
+        ) : (
+          <>
+            <Stepper
+              alternativeLabel
+              activeStep={completed}
+              sx={{
+                // Bước đã xong màu đen, bước đang chờ màu đỏ rượu, bước chưa tới màu nhạt
+                '& .MuiStepIcon-root': { color: '#D9D3CA' },
+                '& .MuiStepIcon-root.Mui-completed': { color: C.ink },
+                '& .MuiStepIcon-root.Mui-active': { color: C.accent },
+                '& .MuiStepLabel-label': { fontFamily: SANS, fontSize: 13, color: C.muted },
+                '& .MuiStepLabel-label.Mui-completed': { color: C.ink, fontWeight: 500 },
+                '& .MuiStepLabel-label.Mui-active': { color: C.accent, fontWeight: 600 },
+                '& .MuiStepConnector-line': { borderColor: '#CFC8BD' }
+              }}
+            >
+              {STEP_LABELS.map((label, index) => (
+                <Step key={label} completed={index < completed}>
+                  <StepLabel
+                    optional={
+                      times[index] ? (
+                        <Box component="span" sx={{ display: 'block', fontSize: 12, color: C.muted, mt: 0.25 }}>
+                          {dateTime(times[index])}
+                        </Box>
+                      ) : null
+                    }
+                  >
+                    {index === completed && CURRENT_STEP_LABEL[order.orderStatus] ? CURRENT_STEP_LABEL[order.orderStatus] : label}
+                  </StepLabel>
+                </Step>
+              ))}
+            </Stepper>
+            {hint && (
+              <Box component="p" sx={{ m: 0, mt: 4, fontSize: 14, color: C.muted, textAlign: 'center' }}>
+                {hint}
+              </Box>
+            )}
+          </>
+        )}
+      </Box>
+
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 7fr) minmax(0, 5fr)' }, gap: 3, alignItems: 'start' }}>
+        {/* Sản phẩm trong đơn */}
+        <StorePanel title={`Sản phẩm (${order.lines.length})`}>
+          {order.lines.map((line, index) => (
+            <Box key={line.orderItemId} sx={{ display: 'flex', gap: { xs: 1.5, sm: 2.5 }, py: 2.5, borderTop: index > 0 ? `1px solid ${C.line}` : 'none', pt: index === 0 ? 0 : 2.5 }}>
+              <StoreThumb src={line.imageUrl} name={line.productName} width={88} />
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Box sx={{ fontSize: 15, fontWeight: 500, lineHeight: 1.4 }}>{line.productName}</Box>
+                <Box sx={{ fontSize: 13, color: C.muted, mt: 0.75 }}>{[line.size, line.color].filter(Boolean).join(' · ') || '—'}</Box>
+                <Box sx={{ fontSize: 13, color: C.muted, mt: 0.5 }}>Số lượng: {line.quantity}</Box>
+              </Box>
+              <Box sx={{ fontSize: 15, fontWeight: 600, whiteSpace: 'nowrap' }}>{formatVnd(line.lineTotal)}</Box>
+            </Box>
+          ))}
+        </StorePanel>
+
+        <Box sx={{ display: 'grid', gap: 3 }}>
+          {/* Tổng tiền */}
+          <StorePanel title="Tóm tắt đơn hàng">
+            <StoreRow label="Tổng tiền hàng">{formatVnd(order.itemsAmount)}</StoreRow>
             {order.promotionDiscountAmount > 0 && (
-              <Amount label={order.promotionName ? `Khuyến mãi · ${order.promotionName}` : 'Khuyến mãi'} value={order.promotionDiscountAmount} negative />
+              <StoreRow label={order.promotionName ? `Khuyến mãi · ${order.promotionName}` : 'Khuyến mãi'}>− {formatVnd(order.promotionDiscountAmount)}</StoreRow>
             )}
             {order.couponDiscountAmount > 0 && (
-              <Amount label={order.couponCode ? `Mã giảm giá · ${order.couponCode}` : 'Mã giảm giá'} value={order.couponDiscountAmount} negative />
+              <StoreRow label={order.couponCode ? `Mã giảm giá · ${order.couponCode}` : 'Mã giảm giá'}>− {formatVnd(order.couponDiscountAmount)}</StoreRow>
             )}
-            <Amount label="Phí vận chuyển" value={order.shippingFee} />
-            <Box sx={{ borderTop: `1px solid ${brand.line}`, mt: 1, pt: 1 }}>
-              <Amount label="Thành tiền" value={order.totalAmount} strong />
+            <StoreRow label="Phí vận chuyển">{formatVnd(order.shippingFee)}</StoreRow>
+            <Box sx={{ borderTop: `1px solid ${C.line}`, mt: 1.5, pt: 1.5 }}>
+              <StoreRow label="Thành tiền" strong>
+                {formatVnd(order.totalAmount)}
+              </StoreRow>
             </Box>
-          </Box>
-        </Box>
+          </StorePanel>
 
-        {(actions.length > 0 || ['DELIVERED', 'COMPLETED'].includes(order.orderStatus)) && (
-          <Box sx={{ px: 3, pb: 3 }}>
-            <Stack direction="row" spacing={1.5} justifyContent="flex-end" sx={{ flexWrap: 'wrap', rowGap: 1 }}>
-              {['DELIVERED', 'COMPLETED'].includes(order.orderStatus) && (
-                <Button
-                  variant="outlined"
-                  color="warning"
-                  onClick={onOpenReturn}
-                  startIcon={<RollbackOutlined />}
-                  sx={{ fontWeight: 600, textTransform: 'none' }}
-                >
-                  Yêu cầu Trả hàng / Hoàn tiền
-                </Button>
-              )}
-              {actions.length > 0 && <ActionButtons actions={actions} busy={busy} onAction={onAction} />}
-            </Stack>
-            {actionError && (
-              <Typography color="error" variant="body2" sx={{ mt: 1, textAlign: 'right' }}>
-                {actionError}
-              </Typography>
+          {/* Thanh toán */}
+          <StorePanel title="Thanh toán">
+            <StoreRow label="Phương thức">{paymentMethodLabel(order.paymentMethod)}</StoreRow>
+            <StoreRow label="Trạng thái">
+              <StatusText tone={payment.tone} label={payment.label} />
+            </StoreRow>
+            {order.orderStatus === 'AWAITING_PAYMENT' && order.paymentExpiresAt && <StoreRow label="Hạn thanh toán">{dateTime(order.paymentExpiresAt)}</StoreRow>}
+            {canPay && (
+              <Box sx={{ mt: 2 }}>
+                {payError && (
+                  <Alert severity="error" sx={{ mb: 1.5, borderRadius: 0, fontSize: 13 }}>
+                    {payError}
+                  </Alert>
+                )}
+                <Box component="button" type="button" disabled={payLoading} onClick={onPayNow} sx={{ ...storeBtnSx('dark'), width: '100%' }}>
+                  {payLoading ? <CircularProgress size={14} color="inherit" /> : <QrcodeOutlined />}
+                  {payLoading ? 'ĐANG TẠO MÃ…' : 'THANH TOÁN QUA VIETQR'}
+                </Box>
+              </Box>
             )}
-          </Box>
-        )}
+          </StorePanel>
+
+          {/* Địa chỉ nhận hàng */}
+          <StorePanel title="Địa chỉ nhận hàng">
+            <Box sx={{ fontSize: 15, fontWeight: 600 }}>{order.deliveryName || '—'}</Box>
+            <Box sx={{ fontSize: 14, color: C.muted, mt: 0.5 }}>{order.deliveryPhone || '—'}</Box>
+            <Box sx={{ fontSize: 14, mt: 1.25, lineHeight: 1.6, whiteSpace: 'pre-line' }}>{order.deliveryAddress || '—'}</Box>
+          </StorePanel>
+
+          {/* Thao tác của khách */}
+          {(actions.length > 0 || canReturn) && (
+            <Box>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+                {actions
+                  .filter((action) => action.primary)
+                  .map((action) => (
+                    <Box key={action.to} component="button" type="button" disabled={busy} onClick={() => onAction(action)} sx={{ ...storeBtnSx('dark'), width: '100%' }}>
+                      {action.label.toUpperCase()}
+                    </Box>
+                  ))}
+                {canReturn && (
+                  <Box component="button" type="button" onClick={onOpenReturn} sx={{ ...storeBtnSx('outline'), width: '100%' }}>
+                    <RollbackOutlined /> YÊU CẦU TRẢ HÀNG / HOÀN TIỀN
+                  </Box>
+                )}
+                {actions
+                  .filter((action) => !action.primary)
+                  .map((action) => (
+                    <Box key={action.to} component="button" type="button" disabled={busy} onClick={() => onAction(action)} sx={{ ...dangerBtnSx, width: '100%' }}>
+                      {action.label.toUpperCase()}
+                    </Box>
+                  ))}
+              </Box>
+              {actionError && (
+                <Box component="p" role="alert" sx={{ m: 0, mt: 1.5, fontSize: 14, color: C.accent }}>
+                  {actionError}
+                </Box>
+              )}
+            </Box>
+          )}
+        </Box>
       </Box>
     </Box>
   );
@@ -636,15 +672,18 @@ export default function OrderDetailPage() {
         </Alert>
       )}
       {isCustomer ? (
-        <>
-          <PageHeader back={back} title="Chi tiết đơn hàng" />
-          <CustomerView {...viewProps} />
-        </>
+        <CustomerView {...viewProps} back={back} />
       ) : (
         <StaffView {...viewProps} back={back} />
       )}
 
-      <Dialog open={Boolean(dialog)} onClose={() => !busy && setDialog(null)} fullWidth maxWidth="xs">
+      <Dialog
+        open={Boolean(dialog)}
+        onClose={() => !busy && setDialog(null)}
+        fullWidth
+        maxWidth="xs"
+        slotProps={isCustomer ? { paper: { sx: { ...storeDialogPaperSx, ...storeInputsSx, '& .MuiButton-root': { borderRadius: 0, fontFamily: SANS } } } } : undefined}
+      >
         <DialogTitle>{dialog?.label}</DialogTitle>
         <DialogContent>
           {dialog?.askCarrier ? (

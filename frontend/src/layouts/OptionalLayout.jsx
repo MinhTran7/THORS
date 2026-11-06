@@ -1,10 +1,16 @@
 import { Outlet, useLocation } from 'react-router-dom';
 import { CircularProgress, Stack } from '@mui/material';
 import { useAuth } from 'features/auth/AuthProvider';
+import StorefrontLayout from './StorefrontLayout';
 import ThorsLayout from './ThorsLayout';
 
 // Trang chủ cửa hàng tự có header + footer riêng nên luôn hiển thị tràn màn hình, không bọc sidebar.
 const STOREFRONT_PATHS = ['/'];
+
+// Các trang của khách hàng dùng khung cửa hàng (header + footer của shop) thay cho sidebar quản trị.
+// Owner / Family Member mở cùng đường dẫn vẫn thấy giao diện quản trị như cũ.
+const CUSTOMER_STOREFRONT_PATHS = ['/orders'];
+const inStorefront = (pathname) => CUSTOMER_STOREFRONT_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 
 /**
  * Khung giao diện dùng cho cả trang công khai và trang cần đăng nhập:
@@ -24,5 +30,6 @@ export default function OptionalLayout() {
     );
   }
   if (STOREFRONT_PATHS.includes(pathname)) return <Outlet />;
+  if (account?.role === 'CUSTOMER' && inStorefront(pathname)) return <StorefrontLayout />;
   return account ? <ThorsLayout /> : <Outlet />;
 }
