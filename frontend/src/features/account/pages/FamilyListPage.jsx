@@ -44,18 +44,27 @@ import UserAvatar from '../components/UserAvatar';
 // Trang này chỉ quản lý Family member nên role luôn cố định.
 const FAMILY_ROLE = 'FAMILY_MEMBER';
 
-// Dùng 'ALL' thay cho '' để Select luôn hiển thị được nhãn "All statuses".
+// Dùng 'ALL' thay cho '' để Select luôn hiển thị được nhãn "Tất cả trạng thái".
 const ALL = 'ALL';
 const STATUS_OPTIONS = [
-  { value: ALL, label: 'All statuses' },
-  { value: 'ACTIVE', label: 'Active' },
-  { value: 'DISABLED', label: 'Inactive' },
-  { value: 'LOCKED', label: 'Locked' },
-  { value: 'PENDING_VERIFICATION', label: 'Pending' }
+  { value: ALL, label: 'Tất cả trạng thái' },
+  { value: 'ACTIVE', label: 'Đã kích hoạt' },
+  { value: 'DISABLED', label: 'Đã vô hiệu hóa' },
+  { value: 'LOCKED', label: 'Đã khóa' },
+  { value: 'PENDING_VERIFICATION', label: 'Chờ xác minh' }
 ];
 
-export default function StaffListPage() {
-  useCrumbs(['Family']);
+// Độ rộng cột cố định để bảng không bị nhảy khi nhãn trạng thái đổi (vd. "Đã kích hoạt" ↔ "Đã vô hiệu hóa").
+const COLUMNS = [
+  { label: 'Tên', width: '20%' },
+  { label: 'Vai trò', width: '16%' },
+  { label: 'Liên hệ', width: '26%' },
+  { label: 'Trạng thái', width: '24%' },
+  { label: 'Thao tác', width: '14%' }
+];
+
+export default function FamilyListPage() {
+  useCrumbs(['Gia đình']);
   const location = useLocation();
   const [toast, showToast] = useToast();
   const [q, setQ] = useState('');
@@ -75,6 +84,12 @@ export default function StaffListPage() {
     () => accountsApi.list({ q: '', role: FAMILY_ROLE, status: 'ACTIVE', page: 0, size: 1 }),
     { revalidateOnFocus: false }
   );
+  // Đếm số family member bị vô hiệu hóa (DISABLED). Không tính tài khoản chờ xác minh hay bị khóa.
+  const disabledCount = useSWR(
+    ['family-disabled-count'],
+    () => accountsApi.list({ q: '', role: FAMILY_ROLE, status: 'DISABLED', page: 0, size: 1 }),
+    { revalidateOnFocus: false }
+  );
 
   useEffect(() => {
     if (location.state?.toast) {
@@ -85,7 +100,8 @@ export default function StaffListPage() {
 
   const total = summary.data?.byRole?.[FAMILY_ROLE] ?? 0;
   const active = activeCount.data?.total ?? 0;
-  const statsLoading = summary.isLoading || activeCount.isLoading;
+  const inactive = disabledCount.data?.total ?? 0;
+  const statsLoading = summary.isLoading || activeCount.isLoading || disabledCount.isLoading;
 
   const filter = (setter) => (value) => {
     setter(value);
@@ -93,12 +109,15 @@ export default function StaffListPage() {
   };
 
   async function toggle(account) {
+    // Chỉ cho bật/tắt khi tài khoản đang ACTIVE hoặc DISABLED.
+    // Tài khoản LOCKED (admin khóa) hoặc PENDING_VERIFICATION (chưa xác minh email) không được đổi ở đây.
+    if (account.status !== 'ACTIVE' && account.status !== 'DISABLED') return;
     const next = account.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE';
     setBusy(account.id);
     try {
       await accountsApi.setStatus(account.id, next);
-      await Promise.all([list.mutate(), summary.mutate(), activeCount.mutate()]);
-      showToast(next === 'ACTIVE' ? `${account.fullName} can sign in again.` : `${account.fullName} was deactivated.`);
+      await Promise.all([list.mutate(), summary.mutate(), activeCount.mutate(), disabledCount.mutate()]);
+      showToast(next === 'ACTIVE' ? `${account.fullName} có thể đăng nhập trở lại.` : `Đã vô hiệu hóa tài khoản ${account.fullName}.`);
     } catch (e) {
       showToast(e.message, 'error');
     } finally {
@@ -111,33 +130,33 @@ export default function StaffListPage() {
   return (
     <Box>
       <PageHeader
-        title="Family List"
-        subtitle="Manage the family members who can view your store."
+        title="Danh sách thành viên gia đình"
+        subtitle="Quản lý các thành viên gia đình được phép xem cửa hàng của bạn."
         action={
           <BrandButton component={RouterLink} to="/family/new" startIcon={<PlusOutlined />}>
-            Add Member
+            Thêm thành viên
           </BrandButton>
         }
       />
       <StatRow>
         <StatCard
-          label="Family members"
+          label="Thành viên gia đình"
           value={total}
-          caption={`${total} family ${total === 1 ? 'member' : 'members'}`}
+          caption={`${total} thành viên`}
           icon={<TeamOutlined />}
           loading={statsLoading}
         />
         <StatCard
-          label="Active accounts"
+          label="Tài khoản đã kích hoạt"
           value={active}
-          caption="Ready to access the store"
+          caption="Sẵn sàng truy cập cửa hàng"
           icon={<UserSwitchOutlined />}
           loading={statsLoading}
         />
         <StatCard
-          label="Inactive accounts"
-          value={Math.max(total - active, 0)}
-          caption="Access temporarily disabled"
+          label="Tài khoản đã vô hiệu hóa"
+          value={inactive}
+          caption="Tạm thời không thể truy cập cửa hàng"
           icon={<UserDeleteOutlined />}
           warning
           loading={statsLoading}
@@ -146,9 +165,9 @@ export default function StaffListPage() {
 
       <Toolbar>
         <Box sx={{ flex: 1 }}>
-          <SearchField placeholder="Search by name, email or phone" value={q} onChange={filter(setQ)} />
+          <SearchField placeholder="Tìm theo tên, email hoặc số điện thoại" value={q} onChange={filter(setQ)} />
         </Box>
-        <FilterSelect label="Filter by status" value={status} onChange={filter(setStatus)} options={STATUS_OPTIONS} />
+        <FilterSelect label="Lọc theo trạng thái" value={status} onChange={filter(setStatus)} options={STATUS_OPTIONS} />
       </Toolbar>
 
       <Box sx={{ ...cardSx, overflow: 'hidden' }}>
@@ -158,12 +177,12 @@ export default function StaffListPage() {
           </Typography>
         )}
         <Box sx={{ overflowX: 'auto' }}>
-          <Table size="small" sx={{ minWidth: 720 }}>
+          <Table size="small" sx={{ minWidth: 860, tableLayout: 'fixed' }}>
             <TableHead>
               <TableRow>
-                {['Name', 'Role', 'Contact', 'Status', 'Actions'].map((label) => (
-                  <TableCell key={label} sx={headCellSx}>
-                    {label}
+                {COLUMNS.map((col) => (
+                  <TableCell key={col.label} sx={{ ...headCellSx, width: col.width }}>
+                    {col.label}
                   </TableCell>
                 ))}
               </TableRow>
@@ -171,7 +190,9 @@ export default function StaffListPage() {
             <TableBody>
               {items.map((account) => {
                 const locked = account.status === 'LOCKED';
+                const pending = account.status === 'PENDING_VERIFICATION';
                 const meta = ACCOUNT_STATUS[account.status] ?? { label: account.status, tone: 'neutral' };
+                const switchHint = locked ? 'Đã bị quản trị viên khóa. Chỉ quản trị viên mới có thể mở khóa.' : '';
                 return (
                   <TableRow key={account.id} hover>
                     <TableCell sx={bodyCellSx}>
@@ -186,21 +207,24 @@ export default function StaffListPage() {
                       <RoleChip role={account.role} />
                     </TableCell>
                     <TableCell sx={bodyCellSx}>
-                      <Typography variant="body2">{account.email}</Typography>
+                      <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>
+                        {account.email}
+                      </Typography>
                       <Typography variant="caption" sx={{ color: brand.muted }}>
                         {account.phone || '—'}
                       </Typography>
                     </TableCell>
                     <TableCell sx={bodyCellSx}>
                       <Stack direction="row" spacing={1} alignItems="center">
-                        <Tooltip title={locked ? 'Locked by an administrator. Only an admin can unlock it.' : ''}>
-                          <span>
+                        {/* Tài khoản chờ xác minh chưa thể khóa/mở khóa: ẩn công tắc nhưng vẫn giữ chỗ để nhãn không bị lệch. */}
+                        <Tooltip title={switchHint}>
+                          <span style={pending ? { visibility: 'hidden' } : undefined} aria-hidden={pending || undefined}>
                             <BrandSwitch
                               size="small"
                               checked={account.status === 'ACTIVE'}
-                              disabled={locked || busy === account.id}
+                              disabled={locked || pending || busy === account.id}
                               onChange={() => toggle(account)}
-                              slotProps={{ input: { 'aria-label': `Access for ${account.fullName}` } }}
+                              slotProps={{ input: { 'aria-label': `Quyền truy cập của ${account.fullName}` } }}
                             />
                           </span>
                         </Tooltip>
@@ -215,19 +239,19 @@ export default function StaffListPage() {
                           to={`/family/${account.id}`}
                           sx={{ color: brand.ink, fontWeight: 600, minWidth: 0 }}
                         >
-                          View
+                          Xem
                         </Button>
                         <IconButton
                           size="small"
                           component={RouterLink}
                           to={`/family/${account.id}/edit`}
-                          aria-label={`Edit ${account.fullName}`}
+                          aria-label={`Chỉnh sửa ${account.fullName}`}
                         >
                           <EditOutlined />
                         </IconButton>
                         <IconButton
                           size="small"
-                          aria-label={`More actions for ${account.fullName}`}
+                          aria-label={`Thao tác khác cho ${account.fullName}`}
                           onClick={(event) => setMenu({ anchor: event.currentTarget, account })}
                         >
                           <MoreOutlined />
@@ -237,7 +261,9 @@ export default function StaffListPage() {
                   </TableRow>
                 );
               })}
-              {!list.isLoading && items.length === 0 && <EmptyRow colSpan={5}>No family members match your search.</EmptyRow>}
+              {!list.isLoading && items.length === 0 && (
+                <EmptyRow colSpan={5}>Không có thành viên gia đình nào phù hợp với tìm kiếm.</EmptyRow>
+              )}
             </TableBody>
           </Table>
         </Box>
@@ -246,13 +272,13 @@ export default function StaffListPage() {
           totalPages={list.data?.totalPages ?? 0}
           total={list.data?.total ?? 0}
           size={PAGE_SIZE}
-          noun="family members"
+          noun="thành viên"
           onPage={setPage}
         />
       </Box>
 
       <Typography variant="caption" sx={{ color: brand.muted, display: 'block', mt: 2.5 }}>
-        Only the Shop Owner can create accounts or change access. Every account has its own secure sign-in.
+        Chỉ Chủ cửa hàng mới có thể tạo tài khoản hoặc thay đổi quyền truy cập. Mỗi tài khoản có đăng nhập an toàn riêng.
       </Typography>
 
       <Menu anchorEl={menu?.anchor} open={Boolean(menu)} onClose={() => setMenu(null)}>
@@ -262,7 +288,7 @@ export default function StaffListPage() {
             setMenu(null);
           }}
         >
-          <ListItemText>Reset password</ListItemText>
+          <ListItemText>Đặt lại mật khẩu</ListItemText>
         </MenuItem>
       </Menu>
       {resetting && (

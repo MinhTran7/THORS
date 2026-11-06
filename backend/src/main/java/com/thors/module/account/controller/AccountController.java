@@ -4,21 +4,27 @@ import com.thors.module.account.dto.AccountRequests.*;
 import com.thors.module.account.mapper.AccountMapper;
 import com.thors.module.account.service.AccountService;
 import com.thors.module.account.service.AuditLogService;
+import com.thors.module.account.service.AvatarImageService;
 import com.thors.security.SessionAccess;
 import jakarta.validation.Valid;
 import java.util.Map;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/accounts")
 public class AccountController {
   private final AccountService service;
   private final AuditLogService audits;
+  private final AvatarImageService avatars;
   private final SessionAccess sessions;
 
-  public AccountController(AccountService service, AuditLogService audits, SessionAccess sessions) {
+  public AccountController(
+      AccountService service, AuditLogService audits, AvatarImageService avatars, SessionAccess sessions) {
     this.service = service;
     this.audits = audits;
+    this.avatars = avatars;
     this.sessions = sessions;
   }
 
@@ -32,6 +38,21 @@ public class AccountController {
   @PatchMapping("/profile")
   Object updateProfile(@Valid @RequestBody UpdateProfile r) {
     return service.updateProfile(sessions.current(), r);
+  }
+
+  /**
+   * PUT /api/accounts/profile/avatar (multipart, field "file"): gọi khi người dùng bấm Lưu. Đẩy ảnh lên
+   * Cloudinary, đặt làm avatar, xóa ảnh cũ; trả về hồ sơ mới.
+   */
+  @PutMapping(value = "/profile/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  Object replaceAvatar(@RequestPart("file") MultipartFile file) {
+    return avatars.replace(sessions.current(), file);
+  }
+
+  /** DELETE /api/accounts/profile/avatar: gỡ avatar và xóa ảnh trên Cloudinary; trả về hồ sơ mới. */
+  @DeleteMapping("/profile/avatar")
+  Object removeAvatar() {
+    return avatars.remove(sessions.current());
   }
 
   @PostMapping("/profile/phone")

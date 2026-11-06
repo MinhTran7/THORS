@@ -4,6 +4,7 @@ import com.thors.common.ApiException;
 import com.thors.module.account.dto.AuditLogViews.*;
 import com.thors.module.account.entity.Account;
 import com.thors.module.account.repository.AuditLogRepository;
+import java.time.LocalDate;
 import java.util.List;
 import org.springframework.stereotype.Service;
 
@@ -22,8 +23,7 @@ public class AuditLogService {
         if (page < 0) throw new ApiException(400, "PAGE", "Trang không hợp lệ.");
         if (size < 1 || size > MAX_SIZE)
             throw new ApiException(400, "PAGE_SIZE", "Kích thước trang phải từ 1 đến " + MAX_SIZE + ".");
-        if (f.from() != null && f.to() != null && f.to().isBefore(f.from()))
-            throw new ApiException(400, "DATE_RANGE", "Ngày kết thúc phải sau hoặc bằng ngày bắt đầu.");
+        dateRange(f.from(), f.to());
         String action = blankToNull(f.action());
         String q = blankToNull(f.q());
         String status = blankToNull(f.status());
@@ -38,10 +38,12 @@ public class AuditLogService {
                 size);
     }
 
-    public Summary summary(Account actor, int offset) {
+    /** Thống kê theo cùng khoảng ngày với danh sách; from/to null là không giới hạn phía đó. */
+    public Summary summary(Account actor, LocalDate from, LocalDate to, int offset) {
         admin(actor);
+        dateRange(from, to);
         offset(offset);
-        return logs.summary(offset);
+        return logs.summary(from, to, offset);
     }
 
     public List<String> actions(Account actor) {
@@ -62,6 +64,11 @@ public class AuditLogService {
     private void admin(Account actor) {
         if (!"ADMIN".equals(actor.role()))
             throw new ApiException(403, "ROLE", "Chỉ quản trị viên được xem nhật ký hệ thống.");
+    }
+
+    private static void dateRange(LocalDate from, LocalDate to) {
+        if (from != null && to != null && to.isBefore(from))
+            throw new ApiException(400, "DATE_RANGE", "Ngày kết thúc phải sau hoặc bằng ngày bắt đầu.");
     }
 
     private static void offset(int minutes) {

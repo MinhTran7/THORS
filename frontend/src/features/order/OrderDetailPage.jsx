@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import useSWR from 'swr';
+import useSWR, { useSWRConfig } from 'swr';
 import {
   Alert,
   Box,
@@ -10,7 +10,6 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  MenuItem,
   Step,
   StepLabel,
   Stepper,
@@ -22,7 +21,7 @@ import {
   TextField,
   Typography
 } from '@mui/material';
-import { QrcodeOutlined } from '@ant-design/icons';
+import { QrcodeOutlined, RollbackOutlined } from '@ant-design/icons';
 import { Stack } from 'features/account/components/Flex';
 import { useCrumbs } from 'layouts/crumbs';
 import { useAuth } from 'features/auth/AuthProvider';
@@ -32,10 +31,14 @@ import { brand, cardSx } from 'features/account/tokens';
 import { OutlineButton } from 'features/account/components/Brand';
 import { StatusPill } from 'features/account/components/Chips';
 import { bodyCellSx, headCellSx, NoticeBox, PageHeader } from 'features/account/components/Blocks';
-import { ordersApi } from './api';
-import { CARRIERS, CUSTOMER_ACTIONS, OWNER_ACTIONS, carrierLabel } from './orderActions';
+import { FINAL_STATUSES, LIVE_INTERVAL, LIVE_SWR, ordersApi, refreshAllOrders } from './api';
+import { CUSTOMER_ACTIONS, OWNER_ACTIONS, carrierLabel, ownerActionsFor } from './orderActions';
+import AddressNotFoundDialog, { ADDRESS_NOT_FOUND, INVALID_ADDRESS_REASON } from './AddressNotFoundDialog';
+import DeliveryChoice from './DeliveryChoice';
+import { ghnReady } from './GhnAddressFields';
 import { formatVnd, orderStatusMeta, paymentMethodLabel, paymentStatusMeta, preparationMeta, shipmentStatusLabel } from './constants';
 import PayOSPaymentModal from './components/PayOSPaymentModal';
+import CustomerReturnDialog from '../returns/CustomerReturnDialog';
 
 const dateTime = (value) => (value ? `${formatLogDate(value)} · ${formatTime(value)}` : null);
 
@@ -46,6 +49,15 @@ const STEP_LABELS = ['Đặt hàng', 'Xác nhận', 'Vận chuyển', 'Đã giao
 const COMPLETED_STEPS = { AWAITING_PAYMENT: 0, PENDING_CONFIRMATION: 1, AWAITING_PICKUP: 2, SHIPPING: 3, DELIVERED: 4, COMPLETED: 5 };
 const CLOSED = ['CANCELLED', 'REJECTED', 'EXPIRED'];
 
+// Nhãn của bước đang chờ, để khách không hiểu nhầm là bước đó đã xong
+const CURRENT_STEP_LABEL = {
+  AWAITING_PAYMENT: 'Chờ thanh toán',
+  PENDING_CONFIRMATION: 'Chờ xác nhận',
+  AWAITING_PICKUP: 'Chờ lấy hàng',
+  SHIPPING: 'Đang giao',
+  DELIVERED: 'Chờ hoàn tất'
+};
+
 function customerHint(order) {
   const self = order.shipment?.carrier === 'SELF';
   switch (order.orderStatus) {
@@ -54,7 +66,7 @@ function customerHint(order) {
     case 'PENDING_CONFIRMATION':
       return 'Cửa hàng đang xem xét đơn hàng của bạn.';
     case 'AWAITING_PICKUP':
-      return 'Cửa hàng đang chuẩn bị hàng.';
+      return order.shipment?.trackingNumber ? 'Cửa hàng đã gửi đơn cho đơn vị vận chuyển, đang chờ đến lấy hàng.' : 'Cửa hàng đang chuẩn bị hàng.';
     case 'SHIPPING':
       return self ? 'Cửa hàng đang giao hàng đến bạn.' : 'Đơn vị vận chuyển đang giao hàng đến bạn.';
     case 'DELIVERED':
@@ -120,7 +132,7 @@ function ActionButtons({ actions, busy, onAction }) {
 
 /* ------------------------------------------------------------------ Khách hàng (kiểu Shopee) */
 
-function CustomerView({ order, status, actions, busy, onAction, actionError, onPayNow, payLoading, payError }) {
+function CustomerView({ order, status, actions, busy, onAction, actionError, onPayNow, payLoading, payError, onOpenReturn }) {
   const payment = paymentStatusMeta(order.paymentStatus);
   const closed = CLOSED.includes(order.orderStatus);
   const completed = COMPLETED_STEPS[order.orderStatus] ?? 0;
@@ -153,10 +165,22 @@ function CustomerView({ order, status, actions, busy, onAction, actionError, onP
             </Alert>
           ) : (
             <>
-              <Stepper alternativeLabel activeStep={completed}>
+              <Stepper
+                alternativeLabel
+                activeStep={completed}
+                sx={{
+                  // Bước đang chờ tô màu cam, chỉ bước đã xong mới có dấu tích xanh
+                  '& .MuiStepIcon-root.Mui-active': { color: 'warning.main' },
+                  '& .MuiStepLabel-label.Mui-active': { color: 'warning.dark', fontWeight: 600 }
+                }}
+              >
                 {STEP_LABELS.map((label, index) => (
                   <Step key={label} completed={index < completed}>
-                    <StepLabel optional={times[index] ? <Typography variant="caption">{dateTime(times[index])}</Typography> : null}>{label}</StepLabel>
+                    <StepLabel
+                      optional={times[index] ? <Typography variant="caption" sx={{ color: brand.muted }}>{dateTime(times[index])}</Typography> : null}
+                    >
+                      {index === completed && CURRENT_STEP_LABEL[order.orderStatus] ? CURRENT_STEP_LABEL[order.orderStatus] : label}
+                    </StepLabel>
                   </Step>
                 ))}
               </Stepper>
@@ -265,10 +289,21 @@ function CustomerView({ order, status, actions, busy, onAction, actionError, onP
           </Box>
         </Box>
 
-        {actions.length > 0 && (
+        {(actions.length > 0 || ['DELIVERED', 'COMPLETED'].includes(order.orderStatus)) && (
           <Box sx={{ px: 3, pb: 3 }}>
             <Stack direction="row" spacing={1.5} justifyContent="flex-end" sx={{ flexWrap: 'wrap', rowGap: 1 }}>
-              <ActionButtons actions={actions} busy={busy} onAction={onAction} />
+              {['DELIVERED', 'COMPLETED'].includes(order.orderStatus) && (
+                <Button
+                  variant="outlined"
+                  color="warning"
+                  onClick={onOpenReturn}
+                  startIcon={<RollbackOutlined />}
+                  sx={{ fontWeight: 600, textTransform: 'none' }}
+                >
+                  Yêu cầu Trả hàng / Hoàn tiền
+                </Button>
+              )}
+              {actions.length > 0 && <ActionButtons actions={actions} busy={busy} onAction={onAction} />}
             </Stack>
             {actionError && (
               <Typography color="error" variant="body2" sx={{ mt: 1, textAlign: 'right' }}>
@@ -457,18 +492,29 @@ export default function OrderDetailPage() {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const { account } = useAuth();
-  const { data: order, error, isLoading, mutate } = useSWR(['order', id], () => ordersApi.detail(id), { revalidateOnFocus: false });
+  const { mutate: globalMutate } = useSWRConfig();
+  const { data: order, error, isLoading, mutate } = useSWR(['order', id], () => ordersApi.detail(id), {
+    ...LIVE_SWR,
+    // Đơn đã kết thúc thì không cần hỏi lại nữa
+    refreshInterval: (latest) => (latest && FINAL_STATUSES.includes(latest.orderStatus) ? 0 : LIVE_INTERVAL)
+  });
 
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState('');
   const [dialog, setDialog] = useState(null); // thao tác đang chờ nhập lý do hoặc chọn hình thức giao
   const [reason, setReason] = useState('');
   const [carrier, setCarrier] = useState('SELF');
+  const [ghn, setGhn] = useState(null); // { provinceId, districtId, wardCode, weightG } khi gửi GHN
+  const [addressBlocked, setAddressBlocked] = useState(false); // không tìm thấy địa chỉ giao -> không bàn giao
+  const [addressAlert, setAddressAlert] = useState(null); // { order, message } khi backend báo không tìm thấy địa chỉ
 
   const [payModalOpen, setPayModalOpen] = useState(false);
   const [paymentData, setPaymentData] = useState(null);
   const [payLoading, setPayLoading] = useState(false);
   const [payError, setPayError] = useState('');
+
+  const [returnDialogOpen, setReturnDialogOpen] = useState(false);
+  const [returnSuccessMsg, setReturnSuccessMsg] = useState('');
 
   // Tự động kiểm tra trạng thái thanh toán nếu quay lại từ PayOS với URL ?payment=success
   const orderIdVal = order?.id || Number(id);
@@ -498,7 +544,8 @@ export default function OrderDetailPage() {
 
   const back = { to: '/orders', label: 'Quay lại danh sách đơn' };
 
-  if (error) {
+  // Chỉ hiện màn hình lỗi khi chưa có dữ liệu; nếu lần tải lại ngầm bị lỗi thì vẫn giữ dữ liệu cũ
+  if (error && !order) {
     return (
       <Box>
         <PageHeader back={back} title="Chi tiết đơn hàng" />
@@ -517,21 +564,42 @@ export default function OrderDetailPage() {
 
   const isCustomer = account.role === 'CUSTOMER';
   const status = orderStatusMeta(order.orderStatus);
-  const actions = (isCustomer ? CUSTOMER_ACTIONS : account.role === 'OWNER' ? OWNER_ACTIONS : {})[order.orderStatus] ?? [];
+  const actions = isCustomer
+    ? (CUSTOMER_ACTIONS[order.orderStatus] ?? [])
+    : account.role === 'OWNER'
+      ? ownerActionsFor(order)
+      : [];
 
   const run = async (action, why, carrierValue) => {
     setBusy(true);
     setActionError('');
     try {
-      await ordersApi.changeStatus(id, action.to, why, carrierValue);
+      await ordersApi.changeStatus(id, action.to, why, carrierValue, ghn);
       setDialog(null);
       setReason('');
       await mutate();
+      refreshAllOrders(globalMutate); // để danh sách và số đếm trên tab cũng cập nhật theo
     } catch (e) {
-      setActionError(e.message || 'Không đổi được trạng thái đơn.');
+      if (e.code === ADDRESS_NOT_FOUND) {
+        // Hiện hộp thoại giữa màn hình để chủ shop không bỏ sót, thay cho dòng báo lỗi nhỏ
+        setDialog(null);
+        setAddressAlert({ order, message: e.message });
+      } else {
+        setActionError(e.message || 'Không đổi được trạng thái đơn.');
+      }
     } finally {
       setBusy(false);
     }
+  };
+
+  // Từ hộp thoại "Không tìm thấy địa chỉ": mở luồng từ chối đơn, điền sẵn lý do địa chỉ không hợp lệ
+  const rejectForInvalidAddress = () => {
+    const reject = (OWNER_ACTIONS[order.orderStatus] ?? []).find((a) => a.to === 'REJECTED');
+    setAddressAlert(null);
+    if (!reject) return;
+    setActionError('');
+    setReason(INVALID_ADDRESS_REASON);
+    setDialog(reject);
   };
 
   const start = (action) => {
@@ -539,6 +607,8 @@ export default function OrderDetailPage() {
     if (action.askReason || action.askCarrier) {
       setReason('');
       setCarrier('SELF');
+      setGhn(null);
+      setAddressBlocked(false);
       setDialog(action);
     } else {
       run(action);
@@ -554,11 +624,17 @@ export default function OrderDetailPage() {
     actionError: dialog ? '' : actionError,
     onPayNow: handlePayNow,
     payLoading,
-    payError
+    payError,
+    onOpenReturn: () => setReturnDialogOpen(true)
   };
 
   return (
     <Box>
+      {returnSuccessMsg && (
+        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setReturnSuccessMsg('')}>
+          {returnSuccessMsg}
+        </Alert>
+      )}
       {isCustomer ? (
         <>
           <PageHeader back={back} title="Chi tiết đơn hàng" />
@@ -572,30 +648,15 @@ export default function OrderDetailPage() {
         <DialogTitle>{dialog?.label}</DialogTitle>
         <DialogContent>
           {dialog?.askCarrier ? (
-            <>
-              <Typography variant="body2" sx={{ color: brand.muted, mb: 1.5 }}>
-                Địa chỉ giao:{' '}
-                <Typography component="span" variant="body2" sx={{ color: brand.ink, fontWeight: 600 }}>
-                  {order.deliveryAddress || '—'}
-                </Typography>
-              </Typography>
-              <TextField
-                select
-                autoFocus
-                fullWidth
-                margin="dense"
-                label="Hình thức giao hàng"
-                value={carrier}
-                onChange={(e) => setCarrier(e.target.value)}
-                helperText={carrier === 'SELF' ? 'Dùng khi địa chỉ gần: cửa hàng tự giao, không cần mã vận đơn.' : 'Dùng khi địa chỉ xa: giao qua đơn vị vận chuyển.'}
-              >
-                {CARRIERS.map((item) => (
-                  <MenuItem key={item.value} value={item.value}>
-                    {item.label}
-                  </MenuItem>
-                ))}
-              </TextField>
-            </>
+            <DeliveryChoice
+              orderId={order.id}
+              address={order.deliveryAddress}
+              carrier={carrier}
+              onChange={setCarrier}
+              ghn={ghn}
+              onGhnChange={setGhn}
+              onBlockedChange={setAddressBlocked}
+            />
           ) : (
             <TextField
               autoFocus
@@ -619,11 +680,23 @@ export default function OrderDetailPage() {
           <Button disabled={busy} onClick={() => setDialog(null)}>
             Quay lại
           </Button>
-          <Button variant="contained" color={dialog?.askCarrier ? 'primary' : 'error'} disableElevation disabled={busy} onClick={() => run(dialog, reason, carrier)}>
+          <Button
+            variant="contained"
+            color={dialog?.askCarrier ? 'primary' : 'error'}
+            disableElevation
+            disabled={busy || (dialog?.askCarrier && (addressBlocked || (carrier === 'GHN' && !ghnReady(ghn))))}
+            onClick={() => run(dialog, reason, carrier)}
+          >
             {busy ? 'Đang xử lý...' : 'Xác nhận'}
           </Button>
         </DialogActions>
       </Dialog>
+
+      <AddressNotFoundDialog
+        value={addressAlert}
+        onClose={() => setAddressAlert(null)}
+        onReject={order.orderStatus === 'PENDING_CONFIRMATION' ? rejectForInvalidAddress : undefined}
+      />
 
       {/* Modal thanh toán PayOS / VietQR */}
       <PayOSPaymentModal
@@ -634,6 +707,20 @@ export default function OrderDetailPage() {
           mutate();
         }}
       />
+
+      {/* Modal Trả hàng / Hoàn tiền cho Khách hàng */}
+      {returnDialogOpen && (
+        <CustomerReturnDialog
+          open={returnDialogOpen}
+          onClose={() => setReturnDialogOpen(false)}
+          orderData={order}
+          isPublic={false}
+          onSuccess={(msg) => {
+            setReturnSuccessMsg(msg);
+            mutate();
+          }}
+        />
+      )}
     </Box>
   );
 }

@@ -29,6 +29,7 @@ public class OrderViews {
             String deliveryAddress,
             long itemCount,
             String firstItemName,
+            String shippingCarrier,
             List<Preview> lines) {
 
         public ListItem withLines(List<Preview> newLines) {
@@ -46,6 +47,7 @@ public class OrderViews {
                     deliveryAddress,
                     itemCount,
                     firstItemName,
+                    shippingCarrier,
                     newLines);
         }
     }

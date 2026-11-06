@@ -1,26 +1,28 @@
 import { useEffect, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
-import { Box, Button, Chip, IconButton, Typography } from '@mui/material';
-import { LeftOutlined, RightOutlined } from '@ant-design/icons';
-import { brand } from 'features/account/tokens';
+import { Box } from '@mui/material';
 import { api } from 'services/http';
-import { Photo, money, priceText } from './ShopCommon';
+import heroImage from 'assets/images/auth/boutique-shopping.png';
+import { money, priceText } from './ShopCommon';
+import { C, SERIF, Icon, btnSx, container, eyebrowSx, focusRing, iconBtnSx, scrollToId } from './storeTheme';
 
 /**
- * Banner tràn hai bên đầu trang chủ. Tự chuyển slide mỗi 5 giây, xen kẽ:
+ * Banner lớn đầu trang chủ. Tự chuyển slide mỗi 5 giây, xen kẽ:
  *   hàng mới về -> hàng đang khuyến mãi -> hàng mới về -> ...
  * Dữ liệu: GET /api/shop/products?sort=newest và GET /api/shop/promotions.
  * Nếu chưa có khuyến mãi nào, banner chỉ chạy các slide hàng mới về.
+ * Chưa có sản phẩm nào (hoặc đang tải) thì hiện banner giới thiệu cửa hàng.
+ * Rê chuột hoặc focus vào banner thì tạm dừng; người dùng bật "giảm chuyển động" thì không tự chạy.
  */
 
 const PER_KIND = 4; // số sản phẩm tối đa mỗi loại
 const INTERVAL_MS = 5000;
-const MAX_WIDTH = 1480; // khung nội dung bên trong banner (phải bằng với các trang cửa hàng khác)
-const HEIGHT = { xs: 270, md: 380 };
+const HEIGHT = { xs: 660, md: 600 };
 
+// Mỗi loại slide một tông màu
 const THEME = {
-  new: { bg: `linear-gradient(110deg, ${brand.cyanSoft} 0%, #ffffff 100%)`, tag: 'HÀNG MỚI VỀ', tagBg: brand.ink },
-  promo: { bg: 'linear-gradient(110deg, #ffe0ec 0%, #fff6fa 100%)', tag: 'KHUYẾN MÃI', tagBg: '#d6453d' }
+  new: { bg: C.sand, text: C.ink, sub: '#3F3A34', eyebrow: '#5A544C', tag: 'Hàng mới về', mainBtn: 'dark' },
+  promo: { bg: C.accent, text: '#FFFFFF', sub: 'rgba(255,255,255,.85)', eyebrow: 'rgba(255,255,255,.85)', tag: 'Đang khuyến mãi', mainBtn: 'light' }
 };
 
 function interleave(a, b) {
@@ -31,6 +33,167 @@ function interleave(a, b) {
   }
   return out;
 }
+
+// Link "Xem tất cả": cuộn xuống lưới sản phẩm
+const toGrid = (e) => {
+  e.preventDefault();
+  scrollToId('tat-ca');
+};
+
+// Nút viền: trên nền đỏ (khuyến mãi) thì viền trắng chữ trắng
+const outlineSx = (kind) =>
+  kind === 'promo'
+    ? { ...btnSx('outline'), bgcolor: 'transparent', color: '#FFFFFF', borderColor: '#FFFFFF', '&:hover': { opacity: 0.85, color: '#FFFFFF' } }
+    : btnSx('outline');
+
+function SlideFrame({ kind, active, children, image }) {
+  return (
+    <Box
+      aria-hidden={!active}
+      sx={{
+        position: 'absolute',
+        inset: 0,
+        display: 'flex',
+        flexDirection: { xs: 'column', md: 'row' },
+        bgcolor: THEME[kind].bg,
+        color: THEME[kind].text,
+        opacity: active ? 1 : 0,
+        visibility: active ? 'visible' : 'hidden',
+        transition: 'opacity .6s ease, visibility .6s',
+        '@media (prefers-reduced-motion: reduce)': { transition: 'none' }
+      }}
+    >
+      <Box
+        sx={{
+          flex: { xs: '0 0 auto', md: '1 1 0' },
+          minWidth: 0,
+          p: { xs: '32px 24px', md: '72px 56px' },
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          gap: { xs: 2, md: 3 }
+        }}
+      >
+        {children}
+      </Box>
+      <Box sx={{ flex: { xs: '1 1 0', md: '1.15 1 0' }, minHeight: 0, position: 'relative', overflow: 'hidden', bgcolor: kind === 'promo' ? '#3A1212' : '#CFC6BA' }}>
+        {image}
+      </Box>
+    </Box>
+  );
+}
+
+function SlideImage({ src, name, kind }) {
+  if (src) {
+    return <Box component="img" src={src} alt={name} sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />;
+  }
+  return (
+    <Box sx={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}>
+      <Box component="span" sx={{ fontFamily: SERIF, fontSize: 120, color: kind === 'promo' ? 'rgba(255,255,255,.3)' : 'rgba(17,17,17,.25)' }}>
+        {name?.charAt(0)}
+      </Box>
+    </Box>
+  );
+}
+
+const titleSx = {
+  m: 0,
+  fontFamily: SERIF,
+  fontWeight: 400,
+  fontSize: { xs: 34, sm: 44, md: 'clamp(44px, 5vw, 64px)' },
+  lineHeight: 1.08,
+  display: '-webkit-box',
+  WebkitLineClamp: 2,
+  WebkitBoxOrient: 'vertical',
+  overflow: 'hidden'
+};
+
+// Banner giới thiệu khi chưa có sản phẩm để chạy slide
+function IntroSlide() {
+  return (
+    <SlideFrame kind="new" active image={<Box component="img" src={heroImage} alt="" sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}>
+      <Box component="p" sx={{ ...eyebrowSx, color: THEME.new.eyebrow }}>
+        Bộ sưu tập mới
+      </Box>
+      <Box component="h1" sx={{ ...titleSx, fontSize: 'clamp(44px, 6vw, 72px)', WebkitLineClamp: 'unset' }}>
+        Mặc chậm.
+        <br />
+        <em>Mặc lâu.</em>
+      </Box>
+      <Box component="p" sx={{ m: 0, fontSize: 17, lineHeight: 1.6, color: THEME.new.sub, maxWidth: 420 }}>
+        Những thiết kế tối giản, chất liệu bền đẹp — để tủ đồ của bạn ít hơn nhưng đúng hơn.
+      </Box>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, mt: 1 }}>
+        <Box component="a" href="#tat-ca" onClick={toGrid} sx={btnSx('dark')}>
+          MUA NGAY
+        </Box>
+      </Box>
+    </SlideFrame>
+  );
+}
+
+function ProductSlide({ p, active }) {
+  const theme = THEME[p.kind];
+  const tab = active ? 0 : -1;
+  return (
+    <SlideFrame kind={p.kind} active={active} image={<SlideImage src={p.imageUrl} name={p.productName} kind={p.kind} />}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+        <Box component="p" sx={{ ...eyebrowSx, color: theme.eyebrow }}>
+          {theme.tag}
+        </Box>
+        {p.kind === 'promo' && (
+          <Box component="span" sx={{ bgcolor: '#FFFFFF', color: C.accent, fontSize: 12, fontWeight: 600, letterSpacing: '0.08em', px: 1, py: '4px' }}>
+            {p.discountLabel}
+          </Box>
+        )}
+      </Box>
+
+      <Box component="h2" sx={titleSx}>
+        {p.productName}
+      </Box>
+
+      {p.kind === 'promo' ? (
+        <>
+          {p.promotionName && (
+            <Box component="p" sx={{ m: 0, fontSize: 16, color: theme.sub }}>
+              {p.promotionName}
+            </Box>
+          )}
+          <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1.5, flexWrap: 'wrap' }}>
+            <Box component="span" sx={{ fontSize: { xs: 24, md: 30 }, fontWeight: 600 }}>
+              {Number(p.maxPrice) > Number(p.minPrice) ? 'Từ ' : ''}
+              {money(p.salePrice)}
+            </Box>
+            <Box component="span" sx={{ fontSize: { xs: 16, md: 18 }, color: theme.sub, textDecoration: 'line-through' }}>
+              {money(p.minPrice)}
+            </Box>
+          </Box>
+        </>
+      ) : (
+        <Box component="span" sx={{ fontSize: { xs: 22, md: 26 }, fontWeight: 600 }}>
+          {priceText(p.minPrice, p.maxPrice)}
+        </Box>
+      )}
+
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, mt: 1 }}>
+        <Box component={RouterLink} to={`/shop/products/${p.productId}`} tabIndex={tab} sx={btnSx(theme.mainBtn)}>
+          {p.kind === 'promo' ? 'MUA ƯU ĐÃI' : 'XEM NGAY'}
+        </Box>
+        <Box component="a" href="#tat-ca" onClick={toGrid} tabIndex={tab} sx={outlineSx(p.kind)}>
+          XEM TẤT CẢ
+        </Box>
+      </Box>
+    </SlideFrame>
+  );
+}
+
+const arrowSx = (dark) => ({
+  ...iconBtnSx,
+  border: `1px solid ${C.ink}`,
+  bgcolor: dark ? C.ink : '#FFFFFF',
+  color: dark ? '#FFFFFF' : C.ink,
+  '&:hover': { opacity: 0.85 }
+});
 
 export default function ShopBanner() {
   const [slides, setSlides] = useState([]);
@@ -66,155 +229,72 @@ export default function ShopBanner() {
 
   const go = (delta) => setIndex((i) => (i + delta + count) % count);
 
-  const slideSx = (active, kind) => ({
-    position: 'absolute',
-    inset: 0,
-    background: THEME[kind]?.bg ?? THEME.new.bg,
-    opacity: active ? 1 : 0,
-    pointerEvents: active ? 'auto' : 'none',
-    transition: 'opacity .6s ease'
-  });
-
-  const innerSx = {
-    maxWidth: MAX_WIDTH,
-    mx: 'auto',
-    boxSizing: 'border-box',
-    height: '100%',
-    px: { xs: '16px', md: '32px' },
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 3
-  };
-
-  const arrowSx = (side) => ({
-    position: 'absolute',
-    [side]: { xs: 4, md: 16 },
-    top: '50%',
-    transform: 'translateY(-50%)',
-    bgcolor: 'rgba(255,255,255,.8)',
-    '&:hover': { bgcolor: '#fff' }
-  });
-
   return (
     <Box
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
-      sx={{ position: 'relative', width: '100%', height: HEIGHT, overflow: 'hidden', borderBottom: `1px solid ${brand.line}` }}
+      component="section"
       aria-roledescription="carousel"
       aria-label="Hàng mới về và khuyến mãi"
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      onFocus={() => setPaused(true)}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget)) setPaused(false);
+      }}
+      sx={{ ...container, pt: 4 }}
     >
-      {count === 0 ? (
-        <Box sx={slideSx(true, 'new')}>
-          <Box sx={innerSx}>
-            <Box>
-              <Typography sx={{ fontSize: { xs: 24, md: 40 }, fontWeight: 800, color: brand.ink, lineHeight: 1.2 }}>
-                Chào mừng đến THORS
-              </Typography>
-              <Typography sx={{ mt: 1, color: brand.muted }}>Thời trang đẹp, giao tận nhà.</Typography>
-            </Box>
-          </Box>
-        </Box>
-      ) : (
-        slides.map((p, i) => {
-          const active = i === index;
-          const theme = THEME[p.kind];
-          return (
-            <Box key={`${p.kind}-${p.productId}`} sx={slideSx(active, p.kind)} aria-hidden={!active}>
-              <Box sx={innerSx}>
-                <Box sx={{ minWidth: 0, flex: 1 }}>
-                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', mb: 1.5 }}>
-                    <Chip label={theme.tag} size="small" sx={{ bgcolor: theme.tagBg, color: '#fff', fontWeight: 700, letterSpacing: 0.5 }} />
-                    {p.kind === 'promo' && (
-                      <Chip label={`Giảm ${p.discountLabel.replace('-', '')}`} size="small" sx={{ bgcolor: '#fff', color: '#d6453d', fontWeight: 800, border: '1px solid #d6453d' }} />
-                    )}
-                  </Box>
-                  <Typography
-                    sx={{
-                      fontSize: { xs: 22, md: 38 },
-                      fontWeight: 800,
-                      lineHeight: 1.2,
-                      color: brand.ink,
-                      display: '-webkit-box',
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: 'vertical',
-                      overflow: 'hidden'
-                    }}
-                  >
-                    {p.productName}
-                  </Typography>
-
-                  {p.kind === 'promo' ? (
-                    <>
-                      <Typography sx={{ mt: 0.5, fontSize: 14, color: brand.muted }}>{p.promotionName}</Typography>
-                      <Box sx={{ mt: 1, display: 'flex', alignItems: 'baseline', gap: 1.5, flexWrap: 'wrap' }}>
-                        <Typography sx={{ fontSize: { xs: 20, md: 30 }, fontWeight: 800, color: '#d6453d' }}>
-                          {Number(p.maxPrice) > Number(p.minPrice) ? 'Từ ' : ''}
-                          {money(p.salePrice)}
-                        </Typography>
-                        <Typography sx={{ fontSize: { xs: 14, md: 18 }, color: brand.muted, textDecoration: 'line-through' }}>
-                          {money(p.minPrice)}
-                        </Typography>
-                      </Box>
-                    </>
-                  ) : (
-                    <Typography sx={{ mt: 1, fontSize: { xs: 18, md: 26 }, fontWeight: 700, color: '#1b8ea1' }}>
-                      {priceText(p.minPrice, p.maxPrice)}
-                    </Typography>
-                  )}
-
-                  <Button
-                    component={RouterLink}
-                    to={`/shop/products/${p.productId}`}
-                    variant="contained"
-                    size="large"
-                    tabIndex={active ? 0 : -1}
-                    sx={{ mt: 2.5 }}
-                  >
-                    Xem ngay
-                  </Button>
-                </Box>
-                <Photo
-                  src={p.imageUrl}
-                  name={p.productName}
-                  sx={{ width: { xs: 120, md: 300 }, height: { xs: 120, md: 300 }, borderRadius: '18px', flexShrink: 0 }}
-                />
-              </Box>
-            </Box>
-          );
-        })
-      )}
+      <Box sx={{ position: 'relative', height: HEIGHT, overflow: 'hidden' }}>
+        {count === 0 ? <IntroSlide /> : slides.map((p, i) => <ProductSlide key={`${p.kind}-${p.productId}`} p={p} active={i === index} />)}
+      </Box>
 
       {count > 1 && (
-        <>
-          <IconButton aria-label="Slide trước" onClick={() => go(-1)} sx={arrowSx('left')}>
-            <LeftOutlined />
-          </IconButton>
-          <IconButton aria-label="Slide sau" onClick={() => go(1)} sx={arrowSx('right')}>
-            <RightOutlined />
-          </IconButton>
-          <Box sx={{ position: 'absolute', bottom: 12, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 0.75 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, mt: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             {slides.map((p, i) => (
               <Box
                 key={`${p.kind}-${p.productId}`}
                 component="button"
                 type="button"
-                aria-label={`Slide ${i + 1}`}
+                aria-label={`Slide ${i + 1}: ${p.productName}`}
+                aria-current={i === index}
                 onClick={() => setIndex(i)}
                 sx={{
-                  width: i === index ? 24 : 8,
-                  height: 8,
+                  width: 32,
+                  height: 24,
                   p: 0,
                   border: 0,
-                  borderRadius: 4,
+                  bgcolor: 'transparent',
                   cursor: 'pointer',
-                  bgcolor: i === index ? brand.ink : 'rgba(22,34,46,.25)',
-                  transition: 'width .25s'
+                  display: 'flex',
+                  alignItems: 'center',
+                  ...focusRing,
+                  '&::before': {
+                    content: '""',
+                    display: 'block',
+                    width: '100%',
+                    height: 2,
+                    bgcolor: i === index ? C.ink : '#CFCAC2',
+                    transition: 'background-color .25s'
+                  }
                 }}
               />
             ))}
+            <Box component="span" sx={{ ml: 1, fontSize: 13, color: C.muted, fontVariantNumeric: 'tabular-nums' }}>
+              {String(index + 1).padStart(2, '0')} / {String(count).padStart(2, '0')}
+            </Box>
           </Box>
-        </>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Box component="button" type="button" aria-label="Slide trước" onClick={() => go(-1)} sx={arrowSx(false)}>
+              <Icon size={18}>
+                <path d="M15 5l-7 7 7 7" />
+              </Icon>
+            </Box>
+            <Box component="button" type="button" aria-label="Slide sau" onClick={() => go(1)} sx={arrowSx(true)}>
+              <Icon size={18}>
+                <path d="M9 5l7 7-7 7" />
+              </Icon>
+            </Box>
+          </Box>
+        </Box>
       )}
     </Box>
   );

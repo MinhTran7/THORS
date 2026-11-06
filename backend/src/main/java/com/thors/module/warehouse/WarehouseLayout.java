@@ -34,7 +34,7 @@ public class WarehouseLayout {
 
         var variants = s.jdbc().queryForList("""
 SELECT d.detail_id,d.product_id,d.barcode,d.color,d.size,d.stock_quantity,d.status,p.product_name,
-  COALESCE(l.assigned,0) AS assigned_quantity,d.stock_quantity-COALESCE(l.assigned,0) AS unassigned_quantity
+  COALESCE(l.assigned,0) AS assigned_quantity,GREATEST(0,d.stock_quantity-COALESCE(l.assigned,0)) AS unassigned_quantity
 FROM product_detail d JOIN product p ON p.product_id=d.product_id
 LEFT JOIN (SELECT detail_id,SUM(quantity) AS assigned FROM product_location GROUP BY detail_id) l ON l.detail_id=d.detail_id
 ORDER BY p.product_name,d.color,d.size
@@ -731,18 +731,6 @@ VALUES(?,0,'Sắp xếp vị trí kho',?,'MOVE',?,?,?,?)
         return Map.of(
                 "message",
                 "Đã cập nhật mô tả và ảnh.");
-    }
-
-    public List<Map<String, Object>> history(
-            Account a,
-            int detail) {
-        policy.view(a);
-
-        return s.jdbc().queryForList(
-                "SELECT m.*,u.full_name AS actor_name FROM stock_adjustment m "
-                        + "JOIN `user` u ON u.user_id=m.adjusted_by "
-                        + "WHERE m.detail_id=? ORDER BY m.adjustment_id DESC LIMIT 200",
-                detail);
     }
 
     public List<Map<String, Object>> notices(Account a) {

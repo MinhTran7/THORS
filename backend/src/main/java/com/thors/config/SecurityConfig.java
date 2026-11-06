@@ -77,7 +77,12 @@ public class SecurityConfig {
                                 c -> c.csrfTokenRepository(new HttpSessionCsrfTokenRepository())
                                                 .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
                                                 .ignoringRequestMatchers("/api/payment/payos/webhook",
-                                                                "/api/facebook/webhook/**"));
+                                                                "/api/facebook/webhook/**",
+                                                                "/api/returns/public",
+                                                                "/api/returns/upload-evidence",
+                                                                // GHN gọi webhook từ máy chủ của họ, không có cookie/CSRF; được bảo vệ
+                                                                // bằng chuỗi bí mật trong đường dẫn (thors.ghn.webhook-secret)
+                                                                "/api/ghn/webhook/**"));
                 http.authorizeHttpRequests(
                                 a -> a.requestMatchers(
                                                 "/api/auth/csrf",
@@ -98,6 +103,10 @@ public class SecurityConfig {
                                                 "/login/oauth2/**",
                                                 "/api/payment/payos/webhook",
                                                 "/api/facebook/webhook/**",
+                                                "/api/returns/track/**",
+                                                "/api/returns/public",
+                                                "/api/returns/upload-evidence",
+                                                "/api/ghn/webhook/**",
                                                 "/error")
                                                 .permitAll()
                                                 .requestMatchers("/api/warehouse", "/api/warehouse/**")

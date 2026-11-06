@@ -50,6 +50,37 @@ const STATUS_OPTIONS = [
   ...Object.entries(LOG_STATUS).map(([value, meta]) => ({ value, label: meta.label }))
 ];
 
+const RANGE_OPTIONS = [
+  { value: '7d', label: '7 ngày qua' },
+  { value: '30d', label: '30 ngày qua' },
+  { value: 'all', label: 'Tất cả thời gian' },
+  { value: 'custom', label: 'Tùy chọn ngày…' }
+];
+
+const daysAgo = (n) => {
+  const today = new Date();
+  return toYmd(new Date(today.getFullYear(), today.getMonth(), today.getDate() - n));
+};
+
+// "N ngày qua" tính cả hôm nay. Chuỗi rỗng = không giới hạn phía đó.
+function presetRange(preset) {
+  if (preset === '7d') return { from: daysAgo(6), to: daysAgo(0) };
+  if (preset === '30d') return { from: daysAgo(29), to: daysAgo(0) };
+  return { from: '', to: '' };
+}
+
+const dmy = (ymd) => ymd.split('-').reverse().join('/');
+
+function rangeCaption(preset, from, to) {
+  if (preset === 'custom') {
+    if (from && to) return `Từ ${dmy(from)} đến ${dmy(to)}`;
+    if (from) return `Từ ${dmy(from)} đến nay`;
+    if (to) return `Đến hết ${dmy(to)}`;
+    return 'Toàn bộ lịch sử';
+  }
+  return preset === 'all' ? 'Toàn bộ lịch sử' : `Trong ${RANGE_OPTIONS.find((o) => o.value === preset).label}`;
+}
+
 // Hàng thấp hơn mặc định để một trang 10 dòng đỡ phải cuộn.
 const cellSx = { ...bodyCellSx, py: 1 };
 
@@ -67,11 +98,13 @@ function subtitle(item) {
 export default function SystemLogPage() {
   useCrumbs(['Nhật ký hệ thống']);
   const [toast, showToast] = useToast();
-  const today = new Date();
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('');
-  const [from, setFrom] = useState(toYmd(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1)));
-  const [to, setTo] = useState(toYmd(today));
+  const [preset, setPreset] = useState('7d');
+  // Chỉ dùng khi chọn "Tùy chọn ngày…"; các mốc nhanh tính lại mỗi lần render nên qua nửa đêm vẫn đúng.
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+  const { from, to } = preset === 'custom' ? { from: customFrom, to: customTo } : presetRange(preset);
   const [page, setPage] = useState(0);
   const [exporting, setExporting] = useState(false);
   const [refreshedAt, setRefreshedAt] = useState(null);
@@ -84,15 +117,29 @@ export default function SystemLogPage() {
     revalidateOnFocus: false,
     onSuccess: () => setRefreshedAt(new Date())
   });
-  const summary = useSWR(['system-log-summary', offset], () => logsApi.summary(offset), { revalidateOnFocus: false });
+  const summaryParams = { from, to, offset };
+  const summary = useSWR(['system-log-summary', summaryParams], () => logsApi.summary(summaryParams), {
+    keepPreviousData: true,
+    revalidateOnFocus: false
+  });
 
   const filter = (setter) => (value) => {
     setter(value);
     setPage(0);
   };
 
+  // Chuyển sang "Tùy chọn ngày…" thì giữ nguyên khoảng đang xem làm điểm bắt đầu để sửa tiếp.
+  const choosePreset = (value) => {
+    if (value === 'custom' && preset !== 'custom') {
+      setCustomFrom(from);
+      setCustomTo(to);
+    }
+    filter(setPreset)(value);
+  };
+
   const stats = summary.data;
-  const successRate = stats && stats.eventsToday > 0 ? Math.round((stats.successfulToday / stats.eventsToday) * 100) : 100;
+  const successRate = stats && stats.events > 0 ? Math.round((stats.successful / stats.events) * 100) : 100;
+  const caption = rangeCaption(preset, from, to);
 
   async function exportCsv() {
     setExporting(true);
@@ -145,26 +192,20 @@ export default function SystemLogPage() {
         }
       />
       <StatRow>
-        <StatCard
-          label="Sự kiện hôm nay"
-          value={stats?.eventsToday}
-          caption="Trên toàn bộ tài khoản hệ thống"
-          icon={<FileTextOutlined />}
-          loading={!stats}
-        />
+        <StatCard label="Tổng sự kiện" value={stats?.events} caption={caption} icon={<FileTextOutlined />} loading={!stats} />
         <StatCard
           label="Hành động thành công"
-          value={stats?.successfulToday}
+          value={stats?.successful}
           caption={`${successRate}% hoàn tất thành công`}
           icon={<CheckCircleOutlined />}
           loading={!stats}
         />
         <StatCard
           label="Hành động thất bại"
-          value={stats?.failedToday}
-          caption={stats ? `${stats.failedSignInsToday} lần đăng nhập sai · ${stats.pausedSignInsToday} lần tạm khóa đăng nhập` : ' '}
+          value={stats?.failed}
+          caption={stats ? `${stats.failedSignIns} lần đăng nhập sai · ${stats.pausedSignIns} lần tạm khóa đăng nhập` : ' '}
           icon={<CloseCircleOutlined />}
-          warning={Boolean(stats?.failedToday)}
+          warning={Boolean(stats?.failed)}
           loading={!stats}
         />
       </StatRow>
@@ -174,8 +215,13 @@ export default function SystemLogPage() {
           <SearchField placeholder="Tìm người dùng, hành động hoặc địa chỉ IP" value={q} onChange={filter(setQ)} />
         </Box>
         <FilterSelect label="Lọc theo trạng thái" value={status} onChange={filter(setStatus)} options={STATUS_OPTIONS} minWidth={180} />
-        {dateField('Từ ngày', from, setFrom)}
-        {dateField('Đến ngày', to, setTo)}
+        <FilterSelect label="Khoảng thời gian" value={preset} onChange={choosePreset} options={RANGE_OPTIONS} minWidth={170} />
+        {preset === 'custom' && (
+          <>
+            {dateField('Từ ngày', customFrom, setCustomFrom)}
+            {dateField('Đến ngày', customTo, setCustomTo)}
+          </>
+        )}
       </Toolbar>
 
       <Box sx={{ ...cardSx, overflow: 'hidden' }}>

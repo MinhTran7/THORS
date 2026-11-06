@@ -169,7 +169,7 @@ public class CheckoutService {
 
     /** Mã đơn dạng ORD-20261031-A1B2C3 (19 ký tự, cột order_number tối đa 30). */
     private String newOrderNumber() {
-        String date = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE);
+        String date = LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).format(DateTimeFormatter.BASIC_ISO_DATE);
         String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 6).toUpperCase();
         return "ORD-" + date + "-" + suffix;
     }

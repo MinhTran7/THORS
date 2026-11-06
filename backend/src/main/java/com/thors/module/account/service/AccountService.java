@@ -51,8 +51,8 @@ public class AccountService {
   }
 
   /**
-   * Update Profile: tên, số điện thoại, địa chỉ, ảnh đại diện. Email không đổi được. Trường null =
-   * giữ nguyên; address/avatarUrl là chuỗi rỗng = xóa; phone để trống = giữ nguyên.
+   * Update Profile: tên, số điện thoại, địa chỉ. Email không đổi được; ảnh đại diện đổi qua
+   * AvatarImageService. Trường null = giữ nguyên; address rỗng = xóa; phone để trống = giữ nguyên.
    */
   @Transactional
   public AccountDetail updateProfile(Account actor, UpdateProfile r) {
@@ -62,10 +62,21 @@ public class AccountService {
     String name = ContactNormalizer.name(r.fullName());
     String phone = phoneChanges ? ContactNormalizer.phone(r.phone()) : a.phone();
     String address = r.address() == null ? a.address() : emptyToNull(r.address());
-    String avatar = r.avatarUrl() == null ? a.avatarUrl() : avatarUrl(r.avatarUrl());
-    users.updateProfile(a.id(), name, phone, address, avatar);
+    users.updateProfile(a.id(), name, phone, address);
     users.audit(a.id(), "PROFILE_UPDATE", a.id(), "Profile information updated");
     return detail(users.byId(a.id()).orElseThrow());
+  }
+
+  /**
+   * Đặt (url khác null) hoặc gỡ (null) ảnh đại diện của chính người đang đăng nhập. Trả về đường dẫn
+   * ảnh cũ để AvatarImageService xóa trên Cloudinary sau khi giao dịch này đã commit.
+   */
+  @Transactional
+  public String setAvatar(Account actor, String url) {
+    var a = users.lock(actor.id());
+    users.avatar(a.id(), url);
+    users.audit(a.id(), "PROFILE_UPDATE", a.id(), url == null ? "Avatar removed" : "Avatar updated");
+    return a.avatarUrl();
   }
 
   /** Giữ lại cho client cũ: thêm số điện thoại khi tài khoản chưa có. */
@@ -357,11 +368,4 @@ public class AccountService {
     return s.isEmpty() ? null : s;
   }
 
-  private static String avatarUrl(String v) {
-    String s = emptyToNull(v);
-    if (s == null) return null;
-    if (s.length() > 500 || !s.startsWith("https://"))
-      throw new ApiException(400, "AVATAR_URL", "Đường dẫn ảnh đại diện không hợp lệ.");
-    return s;
-  }
 }

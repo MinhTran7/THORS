@@ -237,6 +237,9 @@ export default function BarcodeScannerDialog({ onClose }) {
               <Button component={Link} to={`/warehouse/locations?variant=${result.variant.detail_id}`} onClick={onClose} variant="outlined">
                 Xem vị trí trên sơ đồ
               </Button>
+              <Button component={Link} to={`/warehouse/inventory?detail=${result.variant.detail_id}`} onClick={onClose}>
+                Xem chi tiết tồn kho
+              </Button>
             </Stack>
           )}
         </Stack>

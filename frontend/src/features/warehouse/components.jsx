@@ -20,15 +20,15 @@ import {
   Typography
 } from '@mui/material';
 import MainCard from 'components/MainCard';
-import { statusLabel, number } from './model';
+import { statusText, number } from './model';
 import { api } from 'services/http';
 import { useWarehouse } from './WarehouseContext';
 export const active = (v) => Boolean(Number(v));
-export function Status({ value }) {
+export function Status({ value, type }) {
   return (
     <Chip
       size="small"
-      label={statusLabel[value] || value}
+      label={statusText(value, type)}
       color={
         ['CONFIRMED', 'AVAILABLE'].includes(value)
           ? 'success'
@@ -36,7 +36,9 @@ export function Status({ value }) {
             ? 'error'
             : ['PENDING_CONFIRMATION', 'MAINTENANCE'].includes(value)
               ? 'warning'
-              : 'default'
+              : value === 'APPROVED'
+                ? 'info'
+                : 'default'
       }
       variant="outlined"
     />
@@ -55,14 +57,31 @@ export function Title({ title, subtitle, action }) {
     </Stack>
   );
 }
-export function Metrics({ items }) {
+// items: [title, value, hint, onClick?, active?, display?]; onClick makes the card a filter toggle.
+export function Metrics({ items, columns }) {
   return (
-    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', lg: `repeat(${items.length},1fr)` }, gap: 2, mb: 3 }}>
-      {items.map(([title, val, hint]) => (
-        <MainCard key={title} contentSX={{ p: 2.5 }}>
+    <Box
+      sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', lg: `repeat(${columns || items.length},1fr)` }, gap: 2, mb: 3 }}
+    >
+      {items.map(([title, val, hint, onClick, activeCard, display]) => (
+        <MainCard
+          key={title}
+          contentSX={{ p: 2.5 }}
+          sx={onClick ? { cursor: 'pointer', borderColor: activeCard ? 'primary.main' : undefined, borderWidth: activeCard ? 2 : 1 } : undefined}
+          {...(onClick
+            ? {
+                role: 'button',
+                tabIndex: 0,
+                'aria-pressed': Boolean(activeCard),
+                'aria-label': `Lọc: ${title}`,
+                onClick,
+                onKeyDown: (e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onClick())
+              }
+            : {})}
+        >
           <Typography color="text.secondary">{title}</Typography>
           <Typography variant="h2" sx={{ my: 1 }}>
-            {number(val)}
+            {display ?? number(val)}
           </Typography>
           <Typography variant="caption" color="text.secondary">
             {hint}
@@ -97,10 +116,14 @@ export function Choice({ label, children, ...props }) {
     </Field>
   );
 }
-export function DataTable({ columns, rows, empty = 'Chưa có dữ liệu.', onRow }) {
-  const [page, setPage] = useState(0);
-  const [size, setSize] = useState(20);
-  const current = Math.min(page, Math.max(0, Math.ceil(rows.length / size) - 1));
+// server = {total, page, size, onPage, onSize}: rows are already one page from the backend.
+export function DataTable({ columns, rows, empty = 'Chưa có dữ liệu.', onRow, server }) {
+  const [localPage, setPage] = useState(0);
+  const [localSize, setSize] = useState(20);
+  const size = server ? server.size : localSize;
+  const page = server ? server.page : localPage;
+  const current = server ? page : Math.min(page, Math.max(0, Math.ceil(rows.length / size) - 1));
+  const visible = server ? rows : rows.slice(current * size, (current + 1) * size);
   return (
     <>
       <TableContainer>
@@ -122,7 +145,7 @@ export function DataTable({ columns, rows, empty = 'Chưa có dữ liệu.', onR
                 </TableCell>
               </TableRow>
             ) : (
-              rows.slice(current * size, (current + 1) * size).map((row, index) => (
+              visible.map((row, index) => (
                 <TableRow
                   hover
                   key={row._key ?? row.detail_id ?? row.receipt_id ?? index}
@@ -142,11 +165,12 @@ export function DataTable({ columns, rows, empty = 'Chưa có dữ liệu.', onR
       </TableContainer>
       <TablePagination
         component="div"
-        count={rows.length}
+        count={server ? server.total : rows.length}
         rowsPerPage={size}
         page={current}
-        onPageChange={(_, p) => setPage(p)}
+        onPageChange={(_, p) => (server ? server.onPage(p) : setPage(p))}
         onRowsPerPageChange={(e) => {
+          if (server) return server.onSize(Number(e.target.value));
           setSize(Number(e.target.value));
           setPage(0);
         }}

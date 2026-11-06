@@ -12,6 +12,17 @@ export const OWNER_ACTIONS = {
   SHIPPING: [{ to: 'DELIVERED', label: 'Xác nhận đã giao', primary: true }]
 };
 
+// Hãng giao tự báo trạng thái về hệ thống: khi đã tạo vận đơn, đơn tự chuyển "Đang giao" lúc hãng lấy
+// hàng và "Đã giao" lúc giao xong, Owner không bấm tay
+export const CARRIER_MANAGED = ['GHN'];
+
+/** Nút của Owner cho một đơn; carrier lấy từ order.shippingCarrier (danh sách) hoặc order.shipment.carrier (chi tiết). */
+export const ownerActionsFor = (order) => {
+  const actions = OWNER_ACTIONS[order?.orderStatus] ?? [];
+  const carrier = order?.shippingCarrier ?? order?.shipment?.carrier;
+  return CARRIER_MANAGED.includes(carrier) ? actions.filter((a) => a.to !== 'SHIPPING' && a.to !== 'DELIVERED') : actions;
+};
+
 // Khách: hủy khi cửa hàng chưa xác nhận, xác nhận đã nhận hàng khi đơn đã giao
 const CANCEL = { to: 'CANCELLED', label: 'Hủy đơn', askReason: true };
 export const CUSTOMER_ACTIONS = {
