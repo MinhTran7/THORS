@@ -22,7 +22,7 @@ import {
   TextField,
   Typography
 } from '@mui/material';
-import { QrcodeOutlined } from '@ant-design/icons';
+import { QrcodeOutlined, RollbackOutlined } from '@ant-design/icons';
 import { Stack } from 'features/account/components/Flex';
 import { useCrumbs } from 'layouts/crumbs';
 import { useAuth } from 'features/auth/AuthProvider';
@@ -36,6 +36,7 @@ import { ordersApi } from './api';
 import { CARRIERS, CUSTOMER_ACTIONS, OWNER_ACTIONS, carrierLabel } from './orderActions';
 import { formatVnd, orderStatusMeta, paymentMethodLabel, paymentStatusMeta, preparationMeta, shipmentStatusLabel } from './constants';
 import PayOSPaymentModal from './components/PayOSPaymentModal';
+import CustomerReturnDialog from '../returns/CustomerReturnDialog';
 
 const dateTime = (value) => (value ? `${formatLogDate(value)} · ${formatTime(value)}` : null);
 
@@ -120,7 +121,7 @@ function ActionButtons({ actions, busy, onAction }) {
 
 /* ------------------------------------------------------------------ Khách hàng (kiểu Shopee) */
 
-function CustomerView({ order, status, actions, busy, onAction, actionError, onPayNow, payLoading, payError }) {
+function CustomerView({ order, status, actions, busy, onAction, actionError, onPayNow, payLoading, payError, onOpenReturn }) {
   const payment = paymentStatusMeta(order.paymentStatus);
   const closed = CLOSED.includes(order.orderStatus);
   const completed = COMPLETED_STEPS[order.orderStatus] ?? 0;
@@ -265,10 +266,21 @@ function CustomerView({ order, status, actions, busy, onAction, actionError, onP
           </Box>
         </Box>
 
-        {actions.length > 0 && (
+        {(actions.length > 0 || ['DELIVERED', 'COMPLETED'].includes(order.orderStatus)) && (
           <Box sx={{ px: 3, pb: 3 }}>
             <Stack direction="row" spacing={1.5} justifyContent="flex-end" sx={{ flexWrap: 'wrap', rowGap: 1 }}>
-              <ActionButtons actions={actions} busy={busy} onAction={onAction} />
+              {['DELIVERED', 'COMPLETED'].includes(order.orderStatus) && (
+                <Button
+                  variant="outlined"
+                  color="warning"
+                  onClick={onOpenReturn}
+                  startIcon={<RollbackOutlined />}
+                  sx={{ fontWeight: 600, textTransform: 'none' }}
+                >
+                  Yêu cầu Trả hàng / Hoàn tiền
+                </Button>
+              )}
+              {actions.length > 0 && <ActionButtons actions={actions} busy={busy} onAction={onAction} />}
             </Stack>
             {actionError && (
               <Typography color="error" variant="body2" sx={{ mt: 1, textAlign: 'right' }}>
@@ -470,6 +482,9 @@ export default function OrderDetailPage() {
   const [payLoading, setPayLoading] = useState(false);
   const [payError, setPayError] = useState('');
 
+  const [returnDialogOpen, setReturnDialogOpen] = useState(false);
+  const [returnSuccessMsg, setReturnSuccessMsg] = useState('');
+
   // Tự động kiểm tra trạng thái thanh toán nếu quay lại từ PayOS với URL ?payment=success
   const orderIdVal = order?.id || Number(id);
 
@@ -554,11 +569,17 @@ export default function OrderDetailPage() {
     actionError: dialog ? '' : actionError,
     onPayNow: handlePayNow,
     payLoading,
-    payError
+    payError,
+    onOpenReturn: () => setReturnDialogOpen(true)
   };
 
   return (
     <Box>
+      {returnSuccessMsg && (
+        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setReturnSuccessMsg('')}>
+          {returnSuccessMsg}
+        </Alert>
+      )}
       {isCustomer ? (
         <>
           <PageHeader back={back} title="Chi tiết đơn hàng" />
@@ -634,6 +655,20 @@ export default function OrderDetailPage() {
           mutate();
         }}
       />
+
+      {/* Modal Trả hàng / Hoàn tiền cho Khách hàng */}
+      {returnDialogOpen && (
+        <CustomerReturnDialog
+          open={returnDialogOpen}
+          onClose={() => setReturnDialogOpen(false)}
+          orderData={order}
+          isPublic={false}
+          onSuccess={(msg) => {
+            setReturnSuccessMsg(msg);
+            mutate();
+          }}
+        />
+      )}
     </Box>
   );
 }

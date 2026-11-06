@@ -41,6 +41,10 @@ public class ReturnRepository {
                 payment_status,
                 delivery_name,
                 delivery_phone,
+                delivery_address,
+                shipping_carrier,
+                tracking_number,
+                shipment_status,
                 order_date,
                 total_amount
             FROM orders
@@ -60,6 +64,10 @@ public class ReturnRepository {
                     res.setPaymentStatus(rs.getString("payment_status"));
                     res.setCustomerName(rs.getString("delivery_name"));
                     res.setCustomerPhone(rs.getString("delivery_phone"));
+                    res.setDeliveryAddress(rs.getString("delivery_address"));
+                    res.setShippingCarrier(rs.getString("shipping_carrier"));
+                    res.setTrackingNumber(rs.getString("tracking_number"));
+                    res.setShipmentStatus(rs.getString("shipment_status"));
                     Timestamp ts = rs.getTimestamp("order_date");
                     res.setOrderDate(ts != null ? ts.toLocalDateTime() : null);
                     res.setTotalAmount(rs.getBigDecimal("total_amount"));
@@ -70,6 +78,25 @@ public class ReturnRepository {
 
             if (order != null) {
                 order.setItems(findOrderItemsWithReturnedStats(order.getOrderId()));
+
+                // Tìm yêu cầu đổi trả gần nhất nếu có
+                String retSql = """
+                    SELECT return_request_id, status, reason, requested_at 
+                    FROM return_request 
+                    WHERE order_id = ? 
+                    ORDER BY return_request_id DESC LIMIT 1
+                    """;
+                try {
+                    jdbcTemplate.query(retSql, rrs -> {
+                        if (rrs.next()) {
+                            order.setActiveReturnId(rrs.getInt("return_request_id"));
+                            order.setActiveReturnStatus(rrs.getString("status"));
+                            order.setActiveReturnReason(rrs.getString("reason"));
+                            Timestamp rts = rrs.getTimestamp("requested_at");
+                            order.setActiveReturnCreatedAt(rts != null ? rts.toLocalDateTime() : null);
+                        }
+                    }, order.getOrderId());
+                } catch (Exception ignored) {}
             }
 
             return Optional.ofNullable(order);

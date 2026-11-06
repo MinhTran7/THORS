@@ -13,6 +13,15 @@ public class ReturnableOrderResponse {
     private String paymentStatus;
     private String customerName;
     private String customerPhone;
+    private String deliveryAddress;
+    private String shippingCarrier;
+    private String trackingNumber;
+    private String shipmentStatus;
+    private Integer activeReturnId;
+    private String activeReturnStatus;
+    private String activeReturnReason;
+    private LocalDateTime activeReturnCreatedAt;
+    private boolean verified;
     private LocalDateTime orderDate;
     private BigDecimal totalAmount;
     private List<OrderItemDetail> items;
@@ -171,6 +180,78 @@ public class ReturnableOrderResponse {
 
     public void setTotalAmount(BigDecimal totalAmount) {
         this.totalAmount = totalAmount;
+    }
+
+    public String getDeliveryAddress() {
+        return deliveryAddress;
+    }
+
+    public void setDeliveryAddress(String deliveryAddress) {
+        this.deliveryAddress = deliveryAddress;
+    }
+
+    public String getShippingCarrier() {
+        return shippingCarrier;
+    }
+
+    public void setShippingCarrier(String shippingCarrier) {
+        this.shippingCarrier = shippingCarrier;
+    }
+
+    public String getTrackingNumber() {
+        return trackingNumber;
+    }
+
+    public void setTrackingNumber(String trackingNumber) {
+        this.trackingNumber = trackingNumber;
+    }
+
+    public String getShipmentStatus() {
+        return shipmentStatus;
+    }
+
+    public void setShipmentStatus(String shipmentStatus) {
+        this.shipmentStatus = shipmentStatus;
+    }
+
+    public Integer getActiveReturnId() {
+        return activeReturnId;
+    }
+
+    public void setActiveReturnId(Integer activeReturnId) {
+        this.activeReturnId = activeReturnId;
+    }
+
+    public String getActiveReturnStatus() {
+        return activeReturnStatus;
+    }
+
+    public void setActiveReturnStatus(String activeReturnStatus) {
+        this.activeReturnStatus = activeReturnStatus;
+    }
+
+    public String getActiveReturnReason() {
+        return activeReturnReason;
+    }
+
+    public void setActiveReturnReason(String activeReturnReason) {
+        this.activeReturnReason = activeReturnReason;
+    }
+
+    public LocalDateTime getActiveReturnCreatedAt() {
+        return activeReturnCreatedAt;
+    }
+
+    public void setActiveReturnCreatedAt(LocalDateTime activeReturnCreatedAt) {
+        this.activeReturnCreatedAt = activeReturnCreatedAt;
+    }
+
+    public boolean isVerified() {
+        return verified;
+    }
+
+    public void setVerified(boolean verified) {
+        this.verified = verified;
     }
 
     public List<OrderItemDetail> getItems() {

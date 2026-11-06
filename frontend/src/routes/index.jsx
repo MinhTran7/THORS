@@ -30,6 +30,7 @@ import NotificationPage from 'features/notification/NotificationPage';
 // Online Order Management
 import OrderListPage from 'features/order/OrderListPage';
 import OrderDetailPage from 'features/order/OrderDetailPage';
+import OrderTrackingPage from 'features/order/OrderTrackingPage';
 
 // Category Management
 import CategoryPage from 'features/category/CategoryPage';
@@ -88,6 +89,7 @@ export default createBrowserRouter([
     children: [
       { path: '/', element: <ShopPage /> },
       { path: '/shop/products/:productId', element: <ShopProductPage /> },
+      { path: '/tracking/:orderNumber', element: <OrderTrackingPage /> },
       {
         element: <RequireAuth />,
         children: [

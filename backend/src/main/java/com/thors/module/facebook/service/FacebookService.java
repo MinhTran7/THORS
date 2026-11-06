@@ -12,12 +12,25 @@ import jakarta.annotation.PostConstruct;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.PrintWriter;
+import com.thors.common.ApiException;
+import com.thors.module.account.entity.Account;
+import com.thors.security.SessionAccess;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.sql.PreparedStatement;
+import java.sql.Statement;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
@@ -33,8 +46,17 @@ public class FacebookService {
     @Value("${thors.facebook.page-id:1375988095602878}")
     private String pageId;
 
+    private final JdbcTemplate jdbc;
+    private final SessionAccess sessionAccess;
     private final RestTemplate restTemplate = new RestTemplate();
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    public FacebookService(
+            @Autowired(required = false) JdbcTemplate jdbc,
+            @Autowired(required = false) SessionAccess sessionAccess) {
+        this.jdbc = jdbc;
+        this.sessionAccess = sessionAccess;
+    }
 
     // Lưu danh sách tin nhắn nhận được gần đây (in-memory)
     private final List<Map<String, Object>> recentMessages = new CopyOnWriteArrayList<>();
@@ -158,12 +180,12 @@ public class FacebookService {
     }
 
     /**
-     * Gửi tin nhắn trả lời khách hàng qua Messenger API
+     * Gửi tin nhắn trả lời khách hàng qua Messenger API (trả về chi tiết kết quả)
      */
-    public boolean sendMessageToCustomer(String recipientPsid, String text) {
+    public Map<String, Object> sendMessageToCustomerWithDetails(String recipientPsid, String text) {
         if (pageToken == null || pageToken.isBlank()) {
             log.warn("Chưa cấu hình thors.facebook.page-token, không thể gửi tin nhắn");
-            return false;
+            return Map.of("success", false, "error", "Chưa cấu hình Facebook Page Token trên hệ thống.");
         }
 
         try {
@@ -185,8 +207,19 @@ public class FacebookService {
                 String nowIso = java.time.Instant.now().toString();
                 String formattedTime = LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss dd/MM/yyyy"));
 
+                // Lấy message_id thật do Facebook trả về
+                String fbMid = null;
+                try {
+                    Map<String, Object> respMap = objectMapper.readValue(response.getBody(), Map.class);
+                    if (respMap != null && respMap.containsKey("message_id")) {
+                        fbMid = String.valueOf(respMap.get("message_id"));
+                    }
+                } catch (Exception ignored) {
+                }
+                String finalMid = (fbMid != null && !fbMid.isBlank()) ? fbMid : UUID.randomUUID().toString();
+
                 Map<String, Object> sentRecord = new HashMap<>();
-                sentRecord.put("mid", UUID.randomUUID().toString());
+                sentRecord.put("mid", finalMid);
                 sentRecord.put("senderPsid", recipientPsid);
                 sentRecord.put("senderName", "THORS Studio");
                 sentRecord.put("text", text);
@@ -202,10 +235,104 @@ public class FacebookService {
                     return conv;
                 });
 
-                return true;
+                return Map.of("success", true, "mid", finalMid);
             }
         } catch (Exception e) {
             log.error("Lỗi khi gọi Facebook Send API tới PSID " + recipientPsid, e);
+            String errMsg = "Lỗi gửi tin qua Facebook.";
+            if (e instanceof org.springframework.web.client.HttpStatusCodeException se) {
+                String respBody = se.getResponseBodyAsString();
+                log.error("Facebook API error body: {}", respBody);
+                if (respBody.contains("2018278") || respBody.contains("ngoài khoảng thời gian cho phép")
+                        || respBody.contains("outside the allowed window")) {
+                    errMsg = "Khách hàng đã quá 24h chưa gửi tin nhắn mới cho Fanpage (chính sách bảo vệ 24h của Meta). Hãy nhờ khách gửi 1 tin bất kỳ (như 'alo' hoặc '.') vào Fanpage để mở lại cửa sổ gửi tin nhắn!";
+                } else {
+                    errMsg = "Meta Graph API lỗi: " + se.getStatusCode();
+                }
+            }
+            return Map.of("success", false, "error", errMsg);
+        }
+        return Map.of("success", false, "error", "Không thể gửi tin nhắn tới Facebook.");
+    }
+
+    /**
+     * Gửi tin nhắn trả lời khách hàng qua Messenger API
+     */
+    public boolean sendMessageToCustomer(String recipientPsid, String text) {
+        Map<String, Object> res = sendMessageToCustomerWithDetails(recipientPsid, text);
+        return Boolean.TRUE.equals(res.get("success"));
+    }
+
+    /**
+     * Gửi hình ảnh (Mã QR VietQR / hình ảnh sản phẩm) tới khách hàng qua Facebook
+     * Messenger API
+     */
+    public boolean sendImageToCustomer(String recipientPsid, String imageUrl) {
+        if (pageToken == null || pageToken.isBlank() || imageUrl == null || imageUrl.isBlank()) {
+            log.warn("Thiếu pageToken hoặc imageUrl, không thể gửi ảnh");
+            return false;
+        }
+
+        try {
+            String url = "https://graph.facebook.com/v21.0/me/messages?access_token=" + pageToken;
+
+            Map<String, Object> body = Map.of(
+                    "recipient", Map.of("id", recipientPsid),
+                    "message", Map.of(
+                            "attachment", Map.of(
+                                    "type", "image",
+                                    "payload", Map.of(
+                                            "url", imageUrl,
+                                            "is_reusable", true))));
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
+            ResponseEntity<String> response = restTemplate.postForEntity(url, entity, String.class);
+
+            if (response.getStatusCode().is2xxSuccessful()) {
+                log.info("==> Gửi ảnh thành công tới PSID {}: {}", recipientPsid, imageUrl);
+
+                String nowIso = java.time.Instant.now().toString();
+                String formattedTime = LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss dd/MM/yyyy"));
+
+                String fbMid = null;
+                try {
+                    Map<String, Object> respMap = objectMapper.readValue(response.getBody(), Map.class);
+                    if (respMap != null && respMap.containsKey("message_id")) {
+                        fbMid = String.valueOf(respMap.get("message_id"));
+                    }
+                } catch (Exception ignored) {
+                }
+                String finalMid = (fbMid != null && !fbMid.isBlank()) ? fbMid : UUID.randomUUID().toString();
+
+                Map<String, Object> sentRecord = new HashMap<>();
+                sentRecord.put("mid", finalMid);
+                sentRecord.put("senderPsid", recipientPsid);
+                sentRecord.put("senderName", "THORS Studio");
+                sentRecord.put("text", "[Hình ảnh mã QR VietQR]");
+                sentRecord.put("imageUrl", imageUrl);
+                sentRecord.put("rawTime", nowIso);
+                sentRecord.put("timestamp", formattedTime);
+                sentRecord.put("from", "SHOP");
+                recentMessages.add(sentRecord);
+
+                conversations.computeIfPresent(recipientPsid, (k, conv) -> {
+                    conv.put("lastMessage", "Bạn đã gửi 1 hình ảnh");
+                    conv.put("lastTimestamp", formattedTime);
+                    return conv;
+                });
+
+                return true;
+            }
+        } catch (Exception e) {
+            if (e instanceof org.springframework.web.client.HttpStatusCodeException se) {
+                log.error("Lỗi khi gửi ảnh qua Facebook tới PSID {}: HTTP {} - {}", recipientPsid, se.getStatusCode(),
+                        se.getResponseBodyAsString());
+            } else {
+                log.error("Lỗi khi gửi ảnh qua Facebook tới PSID " + recipientPsid, e);
+            }
         }
         return false;
     }
@@ -318,6 +445,16 @@ public class FacebookService {
                                 String fromId = fromObj != null ? String.valueOf(fromObj.get("id")) : "";
                                 boolean isShop = pageId != null && pageId.equals(fromId);
 
+                                // Bỏ qua nếu tin nhắn của Shop vừa gửi đã được ghi nhận trước đó
+                                boolean duplicateShopMsg = isShop && recentMessages.stream()
+                                        .anyMatch(existing -> "SHOP".equals(existing.get("from"))
+                                                && customerPsid.equals(existing.get("senderPsid"))
+                                                && text.equals(existing.get("text")));
+                                if (duplicateShopMsg) {
+                                    existingMids.add(mid);
+                                    continue;
+                                }
+
                                 String rawTime = m.get("created_time") != null ? String.valueOf(m.get("created_time"))
                                         : "";
 
@@ -368,9 +505,16 @@ public class FacebookService {
         }
     }
 
+    private volatile long lastSyncTime = 0;
+    private static final long AUTO_SYNC_INTERVAL_MS = 10_000; // Tự động đồng bộ ngầm sau mỗi 10 giây
+
     public List<Map<String, Object>> getRecentMessages() {
         if (recentMessages.isEmpty()) {
             syncConversationsFromFacebook();
+            lastSyncTime = System.currentTimeMillis();
+        } else if (System.currentTimeMillis() - lastSyncTime > AUTO_SYNC_INTERVAL_MS) {
+            lastSyncTime = System.currentTimeMillis();
+            CompletableFuture.runAsync(this::syncConversationsFromFacebook);
         }
         return recentMessages;
     }
@@ -378,6 +522,10 @@ public class FacebookService {
     public Collection<Map<String, Object>> getConversations() {
         if (conversations.isEmpty()) {
             syncConversationsFromFacebook();
+            lastSyncTime = System.currentTimeMillis();
+        } else if (System.currentTimeMillis() - lastSyncTime > AUTO_SYNC_INTERVAL_MS) {
+            lastSyncTime = System.currentTimeMillis();
+            CompletableFuture.runAsync(this::syncConversationsFromFacebook);
         }
         return conversations.values();
     }
@@ -390,5 +538,171 @@ public class FacebookService {
             }
         } catch (Exception ignored) {
         }
+    }
+
+    /**
+     * Tạo đơn hàng từ Facebook POS và lưu trực tiếp vào Quản lý Đơn hàng (orders)
+     */
+    @Transactional
+    public Map<String, Object> createOrderFromFacebook(Map<String, Object> req) {
+        if (jdbc == null) {
+            throw new ApiException(500, "DB_ERROR", "Dịch vụ cơ sở dữ liệu chưa sẵn sàng.");
+        }
+
+        Integer actorId = 1;
+        if (sessionAccess != null) {
+            try {
+                Account actor = sessionAccess.current();
+                if (actor != null) {
+                    actorId = actor.id();
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
+        String customerName = req.get("customerName") != null ? String.valueOf(req.get("customerName")).trim() : "";
+        String customerPhone = req.get("customerPhone") != null ? String.valueOf(req.get("customerPhone")).trim() : "";
+        String customerAddress = req.get("customerAddress") != null ? String.valueOf(req.get("customerAddress")).trim()
+                : "";
+        String paymentMethod = req.get("paymentMethod") != null
+                ? String.valueOf(req.get("paymentMethod")).trim().toUpperCase()
+                : "ONLINE";
+        String psid = req.get("psid") != null ? String.valueOf(req.get("psid")) : "";
+
+        if (customerName.isBlank()) {
+            customerName = "Khách Facebook"
+                    + (psid.length() > 6 ? " (#" + psid.substring(psid.length() - 6) + ")" : "");
+        }
+
+        List<Map<String, Object>> items = (List<Map<String, Object>>) req.get("items");
+        if (items == null || items.isEmpty()) {
+            throw new ApiException(400, "EMPTY_CART", "Đơn hàng phải có ít nhất 1 sản phẩm.");
+        }
+
+        long itemsAmount = 0;
+        List<Map<String, Object>> validItems = new ArrayList<>();
+
+        for (Map<String, Object> it : items) {
+            int detailId = ((Number) it.get("detailId")).intValue();
+            int quantity = ((Number) it.get("quantity")).intValue();
+            if (quantity <= 0)
+                continue;
+
+            List<Map<String, Object>> rows = jdbc.queryForList("""
+                    SELECT pd.detail_id, pd.product_id, p.product_name, pd.size, pd.color, pd.price, pd.stock_quantity
+                    FROM product_detail pd
+                    JOIN product p ON p.product_id = pd.product_id
+                    WHERE pd.detail_id = ?
+                    """, detailId);
+
+            if (rows.isEmpty()) {
+                throw new ApiException(400, "PRODUCT_NOT_FOUND",
+                        "Không tìm thấy thông tin sản phẩm (ID: " + detailId + ").");
+            }
+
+            Map<String, Object> row = rows.get(0);
+            int stock = ((Number) row.get("stock_quantity")).intValue();
+            String pName = String.valueOf(row.get("product_name"));
+            String size = String.valueOf(row.get("size"));
+            String color = String.valueOf(row.get("color"));
+            long price = ((Number) row.get("price")).longValue();
+
+            if (quantity > stock) {
+                throw new ApiException(400, "OUT_OF_STOCK",
+                        "Sản phẩm \"" + pName + "\" (" + size + "/" + color + ") chỉ còn " + stock + " cái trong kho.");
+            }
+
+            long lineTotal = price * quantity;
+            itemsAmount += lineTotal;
+
+            Map<String, Object> itemData = new HashMap<>(row);
+            itemData.put("buyQuantity", quantity);
+            itemData.put("unitPrice", price);
+            validItems.add(itemData);
+        }
+
+        long totalAmount = itemsAmount;
+        String dateStr = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE);
+        String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 6).toUpperCase();
+        String orderNumber = "ORD-" + dateStr + "-FB" + suffix.substring(0, 4);
+
+        String initialStatus = "PENDING_CONFIRMATION";
+
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        final String finalCustomerName = customerName;
+        final String finalCustomerPhone = customerPhone;
+        final String finalCustomerAddress = customerAddress;
+        final String finalPaymentMethod = paymentMethod;
+        final long finalItemsAmount = itemsAmount;
+        final long finalTotalAmount = totalAmount;
+        final int finalActorId = actorId;
+
+        jdbc.update(con -> {
+            PreparedStatement ps = con.prepareStatement("""
+                    INSERT INTO orders (
+                        user_id, created_by, order_number, order_type, order_date,
+                        order_status, preparation_status, payment_method, payment_status,
+                        items_amount, promotion_discount_amount, coupon_discount_amount,
+                        shipping_fee, total_amount,
+                        delivery_name, delivery_phone, delivery_address
+                    ) VALUES (
+                        ?, ?, ?, 'Online', NOW(),
+                        ?, 'NOT_STARTED', ?, 'UNPAID',
+                        ?, 0, 0,
+                        0, ?,
+                        ?, ?, ?
+                    )
+                    """, Statement.RETURN_GENERATED_KEYS);
+            ps.setInt(1, finalActorId);
+            ps.setInt(2, finalActorId);
+            ps.setString(3, orderNumber);
+            ps.setString(4, initialStatus);
+            ps.setString(5, finalPaymentMethod);
+            ps.setLong(6, finalItemsAmount);
+            ps.setLong(7, finalTotalAmount);
+            ps.setString(8, finalCustomerName);
+            ps.setString(9, finalCustomerPhone);
+            ps.setString(10, finalCustomerAddress.isBlank() ? "Giao hàng qua Facebook" : finalCustomerAddress);
+            return ps;
+        }, keyHolder);
+
+        int orderId = keyHolder.getKey().intValue();
+
+        for (Map<String, Object> line : validItems) {
+            int detailId = ((Number) line.get("detail_id")).intValue();
+            int qty = ((Number) line.get("buyQuantity")).intValue();
+            long unitPrice = ((Number) line.get("unitPrice")).longValue();
+
+            jdbc.update("""
+                    INSERT INTO order_item (order_id, detail_id, product_name_snapshot, size_snapshot,
+                                            color_snapshot, quantity, unit_price)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    orderId,
+                    detailId,
+                    line.get("product_name"),
+                    line.get("size"),
+                    line.get("color"),
+                    qty,
+                    unitPrice);
+
+            // Trừ tồn kho thực tế ngay lập tức
+            jdbc.update(
+                    "UPDATE product_detail SET stock_quantity = stock_quantity - ? WHERE detail_id = ? AND stock_quantity >= ?",
+                    qty, detailId, qty);
+        }
+
+        log.info("==> Đã tạo đơn hàng Facebook #{} ({}) cho khách: {} - Tổng tiền: {}",
+                orderId, orderNumber, customerName, totalAmount);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("orderId", orderId);
+        result.put("orderNumber", orderNumber);
+        result.put("totalAmount", totalAmount);
+        result.put("deliveryName", customerName);
+        result.put("deliveryPhone", customerPhone);
+        result.put("deliveryAddress", customerAddress);
+        result.put("status", initialStatus);
+        return result;
     }
 }

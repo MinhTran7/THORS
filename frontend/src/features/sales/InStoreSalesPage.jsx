@@ -45,7 +45,6 @@ export default function InStoreSalesPage() {
       id: 1,
       label: 'Hóa đơn 1',
       cart: [],
-      customer: '',
       payment: 'Cash',
       received: '',
       discount: '',
@@ -68,7 +67,6 @@ export default function InStoreSalesPage() {
   }
 
   const cart = activeOrder.cart || [];
-  const customer = activeOrder.customer || '';
   const payment = activeOrder.payment || 'Cash';
   const received = activeOrder.received || '';
   const discount = activeOrder.discount || '';
@@ -81,7 +79,6 @@ export default function InStoreSalesPage() {
     }));
   };
 
-  const setCustomer = (val) => updateActiveOrder({ customer: val });
   const setPayment = (val) => updateActiveOrder({ payment: val });
   const setReceived = (val) => updateActiveOrder({ received: val });
   const setDiscount = (val) => updateActiveOrder({ discount: val });
@@ -109,7 +106,6 @@ export default function InStoreSalesPage() {
       id: newId,
       label: `Hóa đơn ${nextNum}`,
       cart: [],
-      customer: '',
       payment: 'Cash',
       received: '',
       discount: '',
@@ -156,7 +152,6 @@ export default function InStoreSalesPage() {
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [completedSale, setCompletedSale] = useState(null);
   const [completedCart, setCompletedCart] = useState([]);
-  const [completedCustomer, setCompletedCustomer] = useState('');
   const [completedReceived, setCompletedReceived] = useState(0);
   const [completedChange, setCompletedChange] = useState(0);
   const [completedAt, setCompletedAt] = useState(null);
@@ -367,14 +362,12 @@ export default function InStoreSalesPage() {
             quantity: line.quantity
           })),
           discountAmount: discountNum,
-          paymentMethod: payment === 'Cash' ? 'CASH' : 'BANK_TRANSFER',
-          customerName: customer.trim() || null
+          paymentMethod: payment === 'Cash' ? 'CASH' : 'BANK_TRANSFER'
         }
       });
 
       setCompletedSale(result);
       setCompletedCart([...cart]);
-      setCompletedCustomer(customer.trim());
       setCompletedReceived(receivedValue);
       setCompletedChange(payment === 'Cash' ? Math.max(0, receivedValue - total) : 0);
       setCompletedAt(new Date());
@@ -391,7 +384,6 @@ export default function InStoreSalesPage() {
             id: Date.now(),
             label: 'Hóa đơn 1',
             cart: [],
-            customer: '',
             payment: 'Cash',
             received: '',
             discount: '',
@@ -418,7 +410,6 @@ export default function InStoreSalesPage() {
       cart: [],
       discount: '',
       received: '',
-      customer: '',
       isEditingDiscount: false
     });
     setError('');
@@ -428,12 +419,9 @@ export default function InStoreSalesPage() {
     setReceiptOpen(false);
     setCompletedSale(null);
     setCompletedCart([]);
-    setCompletedCustomer('');
     setCompletedReceived(0);
     setCompletedChange(0);
     setCompletedAt(null);
-    setCustomer('');
-    setPayment('Cash');
   }
 
   return (
@@ -1420,7 +1408,6 @@ export default function InStoreSalesPage() {
         onClose={handleReceiptClose}
         saleData={completedSale}
         cartItems={completedCart}
-        customerName={completedCustomer}
         sellerName={account?.fullName ?? ''}
         amountReceived={completedReceived}
         changeDue={completedChange}
