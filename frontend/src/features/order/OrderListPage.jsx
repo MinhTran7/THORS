@@ -445,8 +445,8 @@ export default function OrderListPage() {
             ? {
                 ...storeDialogPaperSx,
                 ...storeInputsSx,
-                '& .MuiButton-root': { borderRadius: 0, fontFamily: SANS },
-                '& .MuiRadio-root.Mui-checked': { color: C.ink }
+                '& .MuiButton-root': { borderRadius: '14px', fontFamily: SANS },
+                '& .MuiRadio-root.Mui-checked': { color: C.teal }
               }
             : { borderRadius: '16px', p: 1 }
         }
@@ -638,7 +638,7 @@ export default function OrderListPage() {
             aria-label="Lọc đơn theo trạng thái"
             sx={{
               minHeight: 48,
-              '& .MuiTabs-indicator': { bgcolor: C.ink, height: 2 },
+              '& .MuiTabs-indicator': { bgcolor: C.teal, height: 3, borderRadius: '3px' },
               '& .MuiTab-root': {
                 minHeight: 48,
                 minWidth: 0,
@@ -661,12 +661,12 @@ export default function OrderListPage() {
         <Box sx={{ mb: 3, ...storeInputsSx }}>{filterBar('Tìm theo mã đơn hoặc tên sản phẩm...')}</Box>
 
         {rowError && !dialog && (
-          <Alert severity="error" sx={{ mb: 2, borderRadius: 0 }}>
+          <Alert severity="error" sx={{ mb: 2, borderRadius: '14px' }}>
             {rowError}
           </Alert>
         )}
         {list.error && !list.data && (
-          <Alert severity="error" sx={{ mb: 2, borderRadius: 0 }}>
+          <Alert severity="error" sx={{ mb: 2, borderRadius: '14px' }}>
             {list.error.message}
           </Alert>
         )}

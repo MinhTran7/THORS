@@ -6,7 +6,8 @@ import { useAuth } from 'features/auth/AuthProvider';
 import { STORE_NAME } from 'features/account/constants';
 import { api } from 'services/http';
 import StoreNotificationBell from 'features/notification/StoreNotificationBell';
-import { C, FONT_URL, SANS, SERIF, Icon, btnSx, container, focusRing, iconBtnSx, linkSx, srOnly } from 'features/shop/storeTheme';
+import { ThorsLogo } from 'features/auth/components/ShopAuthArt';
+import { C, FONT_URL, RADIUS, SANS, Icon, btnSx, container, focusRing, iconBtnSx, linkSx, srOnly } from 'features/shop/storeTheme';
 
 /**
  * Khung giao diện cửa hàng cho khách: thanh thông báo + header + footer kiểu thời trang tối giản.
@@ -36,7 +37,8 @@ function storeTheme(outer) {
   );
   return {
     ...outer,
-    palette: { ...outer.palette, primary: { ...outer.palette.primary, main: C.ink, light: '#3A3A3A', dark: '#000000', contrastText: '#FFFFFF' } },
+    // Màu chính = xanh ngọc như link trên trang đăng nhập (nút đặc được tô xanh nhạt ở StorefrontLayout bên dưới)
+    palette: { ...outer.palette, primary: { ...outer.palette.primary, main: C.teal, light: C.cyan, dark: '#158A98', contrastText: '#FFFFFF' } },
     typography: { ...typography, fontFamily: SANS }
   };
 }
@@ -111,7 +113,7 @@ function StoreHeader({ categories }) {
       ];
 
   return (
-    <Box component="header" sx={{ position: 'sticky', top: 0, zIndex: 20, bgcolor: '#FFFFFF', borderBottom: `1px solid ${C.line}` }}>
+    <Box component="header" sx={{ position: 'sticky', top: 0, zIndex: 20, bgcolor: C.cream, borderBottom: '1px solid #F2EBD3' }}>
       <Box sx={{ ...container, py: '18px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
         <Box
           component="nav"
@@ -136,13 +138,20 @@ function StoreHeader({ categories }) {
               {c.categoryName}
             </Box>
           ))}
-          <Box component={RouterLink} to="/#uu-dai" sx={{ ...linkSx, color: C.accent }}>
+          <Box component={RouterLink} to="/#uu-dai" sx={{ ...linkSx, color: C.accent, fontWeight: 700 }}>
             Sale
           </Box>
         </Box>
 
-        <Box component={RouterLink} to="/" sx={{ ...linkSx, fontFamily: SERIF, fontSize: { xs: 22, sm: 30 }, letterSpacing: '0.12em', flex: '0 0 auto' }}>
-          {STORE_NAME.toUpperCase()}
+        {/* Logo giống trang đăng nhập */}
+        <Box
+          component={RouterLink}
+          to="/"
+          aria-label={`${STORE_NAME} — Trang chủ`}
+          sx={{ ...linkSx, display: 'inline-flex', alignItems: 'center', gap: 1.25, fontSize: { xs: 20, sm: 24 }, fontWeight: 700, letterSpacing: '3px', flex: '0 0 auto', '&:hover': { color: C.ink } }}
+        >
+          <ThorsLogo size={34} />
+          <span>{STORE_NAME.toUpperCase()}</span>
         </Box>
 
         <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end', alignItems: 'center', flex: { xs: '0 0 auto', md: '1 1 200px' } }}>
@@ -189,7 +198,8 @@ function StoreHeader({ categories }) {
           {(isCustomer || !account) && (
             <Box
               component={RouterLink}
-              to={isCustomer ? '/cart' : '/login'}
+              // Chưa đăng nhập: đăng nhập xong vào thẳng giỏ hàng
+              to={isCustomer ? '/cart' : `/login?returnTo=${encodeURIComponent('/cart')}`}
               aria-label={isCustomer ? `Giỏ hàng, ${cartCount} sản phẩm` : 'Đăng nhập để xem giỏ hàng'}
               sx={{ ...iconBtnSx, width: 'auto', gap: '6px', fontSize: 14 }}
             >
@@ -217,7 +227,20 @@ function StoreHeader({ categories }) {
               placeholder="Tìm sản phẩm..."
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              sx={{ flex: 1, minWidth: 0, height: 48, border: `1px solid ${C.ink}`, px: 2, font: 'inherit', fontSize: 15, ...focusRing }}
+              sx={{
+                flex: 1,
+                minWidth: 0,
+                height: 48,
+                border: `1.5px solid ${C.line}`,
+                borderRadius: RADIUS.box,
+                bgcolor: '#FAFDFD',
+                px: 2,
+                mr: 1,
+                font: 'inherit',
+                fontSize: 15,
+                outline: 0,
+                '&:focus': { borderColor: C.cyan }
+              }}
             />
             <Box component="button" type="submit" sx={{ ...btnSx('dark'), py: 0, height: 48, px: '28px' }}>
               TÌM
@@ -239,7 +262,7 @@ function StoreFooter({ categories }) {
       <Box sx={{ ...container, pt: 9, pb: 4, display: 'flex', flexDirection: 'column', gap: 6 }}>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
           <Box sx={{ flex: '2 1 280px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <Box sx={{ fontFamily: SERIF, fontSize: 26, letterSpacing: '0.12em', color: '#FFFFFF' }}>{STORE_NAME.toUpperCase()}</Box>
+            <Box sx={{ fontSize: 24, fontWeight: 700, letterSpacing: '3px', color: '#FFFFFF' }}>{STORE_NAME.toUpperCase()}</Box>
             <Box component="p" sx={{ m: 0, fontSize: 14, lineHeight: 1.7, maxWidth: 320 }}>
               Thời trang tối giản, chất liệu bền đẹp — giao tận nhà.
             </Box>
@@ -252,19 +275,6 @@ function StoreFooter({ categories }) {
             {categories.slice(0, 4).map((c) => (
               <Box key={c.categoryId} component={RouterLink} to={`/?category=${c.categoryId}#tat-ca`} sx={footerLinkSx}>
                 {c.categoryName}
-              </Box>
-            ))}
-          </Box>
-          <Box component="nav" aria-label="Tài khoản" sx={footerColSx}>
-            <Box sx={footerTitleSx}>Tài khoản</Box>
-            {[
-              ['/orders', 'Tra cứu đơn hàng'],
-              ['/cart', 'Giỏ hàng'],
-              ['/addresses', 'Địa chỉ giao hàng'],
-              ['/profile', 'Thông tin cá nhân']
-            ].map(([to, label]) => (
-              <Box key={to} component={RouterLink} to={to} sx={footerLinkSx}>
-                {label}
               </Box>
             ))}
           </Box>
@@ -305,11 +315,20 @@ export default function StorefrontLayout() {
       sx={{
         fontFamily: SANS,
         color: C.ink,
-        bgcolor: '#FFFFFF',
+        bgcolor: C.cream,
         minHeight: '100vh',
         display: 'flex',
         flexDirection: 'column',
-        '& .MuiButton-root': { borderRadius: 0, boxShadow: 'none' }
+        // Nút MUI bên trong giống nút trên trang đăng nhập: bo 14px, nút chính xanh ngọc nhạt, nút phụ viền nhạt
+        '& .MuiButton-root': { borderRadius: RADIUS.box, boxShadow: 'none', textTransform: 'none', fontWeight: 700 },
+        '& .MuiButton-root:hover': { boxShadow: 'none' },
+        '& .MuiButton-contained': { bgcolor: C.cyan, color: C.cyanInk, fontWeight: 800, '&:hover': { bgcolor: '#8FE6EF' } },
+        '& .MuiButton-contained.Mui-disabled': { bgcolor: '#E5E7EB', color: '#9CA3AF' },
+        '& .MuiButton-outlined': { borderWidth: '1.5px', borderColor: C.line, color: '#374151', '&:hover': { borderWidth: '1.5px', borderColor: C.cyan, bgcolor: '#FAFDFD' } },
+        '& .MuiButton-text': { color: C.teal },
+        '& .MuiOutlinedInput-root': { borderRadius: RADIUS.box },
+        // Tiêu đề đậm như "Đăng nhập"
+        '& main h1, & main h2': { fontWeight: '800 !important', letterSpacing: '-0.5px' }
       }}
     >
       <Box sx={{ bgcolor: C.ink, color: '#FFFFFF', fontSize: 13, letterSpacing: '0.04em', textAlign: 'center', py: '11px', px: 2 }}>
@@ -317,7 +336,7 @@ export default function StorefrontLayout() {
       </Box>
       <StoreHeader categories={categories} />
 
-      <Box component="main" sx={{ flex: 1, bgcolor: fullBleed ? '#FFFFFF' : '#F7F5F2' }}>
+      <Box component="main" sx={{ flex: 1, bgcolor: C.cream }}>
         <ThemeProvider theme={storeTheme}>
           {fullBleed ? (
             <Outlet context={{ categories }} />

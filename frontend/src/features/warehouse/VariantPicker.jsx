@@ -11,12 +11,12 @@ import {
   TableBody,
   TableCell,
   TableHead,
-  TablePagination,
   TableRow,
   TextField,
   Tooltip,
   Typography
 } from '@mui/material';
+import { Pager } from 'features/account/components/Blocks';
 import { api } from 'services/http';
 import { money, number, variantLabel, when } from './model';
 
@@ -218,19 +218,17 @@ export default function VariantPicker({ supplier, excludeOrderId, categories, se
         <Button variant="contained" disabled={!selected.size} onClick={onAdd}>
           Thêm {selected.size} biến thể đã chọn vào phiếu
         </Button>
-        <TablePagination
-          component="div"
-          count={result?.total || 0}
+        <Pager
           page={Math.min(page, Math.max(0, Math.ceil((result?.total || 0) / size) - 1))}
-          rowsPerPage={size}
-          onPageChange={(_, p) => setPage(p)}
-          onRowsPerPageChange={(e) => {
-            setSize(Number(e.target.value));
+          total={result?.total || 0}
+          size={size}
+          noun="biến thể"
+          onPage={setPage}
+          onSize={(value) => {
+            setSize(value);
             setPage(0);
           }}
-          rowsPerPageOptions={[10, 20, 50]}
-          labelRowsPerPage="Số dòng"
-          labelDisplayedRows={({ from, to, count }) => `${from}–${to} / ${count}`}
+          sizeOptions={[10, 20, 50]}
         />
       </Stack>
     </Box>

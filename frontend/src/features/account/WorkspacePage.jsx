@@ -307,7 +307,7 @@ function OwnerDashboard({ account }) {
               mb: 0.5
             }}
           >
-            THORS STUDIO
+            THORS
           </Typography>
 
           <Typography
