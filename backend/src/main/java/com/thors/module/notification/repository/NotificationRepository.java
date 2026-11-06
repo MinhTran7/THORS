@@ -11,6 +11,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -75,6 +76,24 @@ public class NotificationRepository {
                         args.toArray());
 
         return new Slice(items, total == null ? 0 : total);
+    }
+
+    /** Một thông báo của người dùng (theo user_notification_id); rỗng nếu không có hoặc của người khác. */
+    public Optional<Item> findOne(int userId, int userNotificationId) {
+        return db.query(
+                        """
+                        SELECT un.user_notification_id, un.notification_id, un.is_read, un.read_at,
+                               n.title, n.message, n.type,
+                               n.related_entity_type, n.related_entity_id, n.created_at
+                        FROM user_notification un
+                        JOIN notification n ON n.notification_id = un.notification_id
+                        WHERE un.user_notification_id = ? AND un.user_id = ?
+                        """,
+                        mapper,
+                        userNotificationId,
+                        userId)
+                .stream()
+                .findFirst();
     }
 
     public long countUnread(int userId) {

@@ -9,7 +9,6 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  Divider,
   FormControlLabel,
   MenuItem,
   Radio,
@@ -28,13 +27,10 @@ import { Stack } from 'features/account/components/Flex';
 import {
   ClockCircleOutlined,
   EyeOutlined,
-  FileTextOutlined,
   InboxOutlined,
   PhoneOutlined,
   PlusOutlined,
-  ShopOutlined,
-  ShoppingOutlined,
-  TagOutlined
+  ShoppingOutlined
 } from '@ant-design/icons';
 import { useCrumbs } from 'layouts/crumbs';
 import { useAuth } from 'features/auth/AuthProvider';
@@ -51,6 +47,21 @@ import AddressNotFoundDialog, { ADDRESS_NOT_FOUND, INVALID_ADDRESS_REASON } from
 import DeliveryChoice from './DeliveryChoice';
 import { ghnReady } from './GhnAddressFields';
 import { formatVnd, orderStatusMeta, paymentMethodLabel, paymentStatusMeta, preparationMeta } from './constants';
+import {
+  C,
+  SANS,
+  SERIF,
+  StatusText,
+  StoreThumb,
+  dangerBtnSx,
+  eyebrowSx as storeEyebrowSx,
+  pageTitleSx,
+  panelSx,
+  storeBtnSx,
+  storeDialogPaperSx,
+  storeInputsSx,
+  storePagerSx
+} from './storeStyle';
 
 // Các tab của khách (kiểu "Đơn mua"): mỗi tab là một hoặc nhiều trạng thái
 const CUSTOMER_TABS = [
@@ -190,234 +201,104 @@ function CustomerOrderCard({ order, onOpen, actions, onAction, busy }) {
   const lines = order.lines ?? [];
 
   return (
-    <Box
-      sx={{
-        ...cardSx,
-        mb: 2,
-        overflow: 'hidden',
-        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
-        transition: 'all 0.2s ease',
-        '&:hover': {
-          boxShadow: '0 4px 14px rgba(0, 0, 0, 0.07)',
-          borderColor: '#D4D6CC'
-        }
-      }}
-    >
-      {/* Đầu thẻ: cửa hàng và trạng thái */}
+    <Box component="article" sx={{ ...panelSx, mb: 3, transition: 'border-color .2s', '&:hover': { borderColor: '#CFCAC2' } }}>
+      {/* Đầu thẻ: mã đơn, ngày đặt và trạng thái */}
       <Box
         sx={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          gap: 2,
-          px: 2.5,
-          py: 1.5,
-          bgcolor: '#FAFAF7',
-          borderBottom: `1px solid ${brand.line}`
+          flexWrap: 'wrap',
+          gap: 1.5,
+          px: { xs: 2, sm: 3 },
+          py: 2,
+          borderBottom: `1px solid ${C.line}`
         }}
       >
-        <Stack direction="row" spacing={1} alignItems="center">
-          <Box
-            sx={{
-              width: 28,
-              height: 28,
-              borderRadius: '6px',
-              bgcolor: brand.cyanSoft,
-              color: brand.inkOnCyan,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 14
-            }}
-          >
-            <ShopOutlined />
+        <Box sx={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: { xs: 1, sm: 2 } }}>
+          <Box component="span" sx={{ fontSize: 14, fontWeight: 600, letterSpacing: '0.04em' }}>
+            #{order.orderNumber}
           </Box>
-          <Typography variant="body2" sx={{ fontWeight: 700, color: brand.ink }}>
-            THORS Studio
-          </Typography>
-        </Stack>
-
-        <Stack direction="row" spacing={1.5} alignItems="center" sx={{ flexWrap: 'wrap' }}>
-          <Stack direction="row" spacing={0.5} alignItems="center" sx={{ ...orderNumberSx, fontSize: 13, fontFamily: 'monospace' }}>
-            <FileTextOutlined style={{ fontSize: 12 }} />
-            <span>#{order.orderNumber}</span>
-          </Stack>
-          <Divider orientation="vertical" flexItem sx={{ height: 14, my: 'auto', borderColor: brand.line }} />
-          <StatusPill tone={meta.tone} label={meta.label.toUpperCase()} />
-        </Stack>
+          <Box component="span" sx={{ fontSize: 13, color: C.muted }}>
+            {formatDate(order.orderDate)} · {formatTime(order.orderDate)}
+          </Box>
+        </Box>
+        <StatusText tone={meta.tone} label={meta.label} />
       </Box>
 
       {/* Các sản phẩm trong đơn: bấm vào để xem chi tiết */}
-      <Box onClick={onOpen} sx={{ cursor: 'pointer' }}>
+      <Box
+        role="link"
+        tabIndex={0}
+        aria-label={`Xem chi tiết đơn ${order.orderNumber}`}
+        onClick={onOpen}
+        onKeyDown={(e) => (e.key === 'Enter' ? onOpen() : undefined)}
+        sx={{ cursor: 'pointer', px: { xs: 2, sm: 3 }, '&:hover .name': { color: C.accent }, '&:focus-visible': { outline: `2px solid ${C.accent}`, outlineOffset: '-2px' } }}
+      >
         {lines.map((line, index) => (
           <Box
             key={`${order.id}-${index}`}
-            sx={{
-              display: 'flex',
-              gap: 2,
-              px: 2.5,
-              py: 2,
-              borderBottom: index < lines.length - 1 ? `1px solid ${brand.line}` : 'none',
-              transition: 'background-color 0.15s ease',
-              '&:hover': { bgcolor: '#FDFDFB' }
-            }}
+            sx={{ display: 'flex', gap: { xs: 1.5, sm: 2.5 }, py: 2.5, borderBottom: index < lines.length - 1 ? `1px solid ${C.line}` : 'none' }}
           >
-            {line.imageUrl ? (
-              <Box
-                component="img"
-                src={line.imageUrl}
-                alt={line.productName}
-                sx={{
-                  width: 80,
-                  height: 80,
-                  borderRadius: '8px',
-                  objectFit: 'cover',
-                  bgcolor: brand.neutralBg,
-                  border: `1px solid ${brand.line}`,
-                  flexShrink: 0
-                }}
-              />
-            ) : (
-              <Box
-                sx={{
-                  width: 80,
-                  height: 80,
-                  borderRadius: '8px',
-                  bgcolor: '#F3F4EE',
-                  border: `1px solid ${brand.line}`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: brand.muted,
-                  fontSize: 24,
-                  flexShrink: 0
-                }}
-              >
-                <ShoppingOutlined />
-              </Box>
-            )}
+            <StoreThumb src={line.imageUrl} name={line.productName} width={80} />
             <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography
-                variant="body1"
-                sx={{
-                  fontWeight: 600,
-                  fontSize: 15,
-                  color: brand.ink,
-                  display: '-webkit-box',
-                  WebkitLineClamp: 2,
-                  WebkitBoxOrient: 'vertical',
-                  overflow: 'hidden',
-                  lineHeight: 1.35
-                }}
+              <Box
+                className="name"
+                sx={{ fontSize: 15, fontWeight: 500, lineHeight: 1.4, transition: 'color .2s', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
               >
                 {line.productName}
-              </Typography>
-              <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.75, flexWrap: 'wrap' }}>
-                {[line.size, line.color].filter(Boolean).length > 0 && (
-                  <Box
-                    component="span"
-                    sx={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 0.5,
-                      bgcolor: brand.neutralBg,
-                      color: brand.muted,
-                      px: 0.8,
-                      py: 0.2,
-                      borderRadius: '6px',
-                      fontSize: 12
-                    }}
-                  >
-                    <TagOutlined style={{ fontSize: 10 }} />
-                    {[line.size, line.color].filter(Boolean).join(', ')}
-                  </Box>
-                )}
-                <Typography variant="body2" sx={{ color: brand.muted, fontSize: 13 }}>
-                  Số lượng: <strong>x{line.quantity}</strong>
-                </Typography>
-              </Stack>
+              </Box>
+              {[line.size, line.color].filter(Boolean).length > 0 && (
+                <Box sx={{ fontSize: 13, color: C.muted, mt: 0.75 }}>{[line.size, line.color].filter(Boolean).join(' · ')}</Box>
+              )}
+              <Box sx={{ fontSize: 13, color: C.muted, mt: 0.5 }}>Số lượng: {line.quantity}</Box>
             </Box>
-            <Box sx={{ textAlign: 'right', alignSelf: 'center', pl: 1 }}>
-              <Typography variant="body1" sx={{ color: brand.ink, fontWeight: 600, whiteSpace: 'nowrap', fontSize: 15 }}>
-                {formatVnd(line.unitPrice)}
-              </Typography>
-            </Box>
+            <Box sx={{ fontSize: 15, fontWeight: 600, whiteSpace: 'nowrap', alignSelf: 'flex-start' }}>{formatVnd(line.unitPrice)}</Box>
           </Box>
         ))}
         {lines.length === 0 && (
-          <Box sx={{ px: 2.5, py: 2.5, display: 'flex', alignItems: 'center', gap: 1.5, color: brand.muted }}>
-            <ShoppingOutlined style={{ fontSize: 20 }} />
-            <Typography variant="body2">
-              {order.firstItemName || '—'} · {order.itemCount} sản phẩm
-            </Typography>
+          <Box sx={{ py: 2.5, fontSize: 14, color: C.muted }}>
+            {order.firstItemName || '—'} · {order.itemCount} sản phẩm
           </Box>
         )}
       </Box>
 
-      {/* Chân thẻ: thành tiền và nút thao tác */}
-      <Box sx={{ px: 2.5, py: 2, bgcolor: '#FAFAF7', borderTop: `1px solid ${brand.line}` }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5, mb: 1.75 }}>
-          <Stack direction="row" spacing={1} alignItems="center" sx={{ color: brand.muted, fontSize: 13, flexWrap: 'wrap' }}>
-            <Stack direction="row" spacing={0.5} alignItems="center">
-              <ClockCircleOutlined style={{ fontSize: 12 }} />
-              <span>
-                {formatDate(order.orderDate)} · {formatTime(order.orderDate)}
-              </span>
-            </Stack>
-            <span>·</span>
+      {/* Chân thẻ: thanh toán, thành tiền và nút thao tác */}
+      <Box sx={{ px: { xs: 2, sm: 3 }, py: 2.5, bgcolor: C.sand }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 1.5, mb: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: 1, fontSize: 13, color: C.muted }}>
             <span>{paymentMethodLabel(order.paymentMethod)}</span>
-            <StatusPill tone={pay.tone} label={pay.label} />
-          </Stack>
-
-          <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
-            <Typography variant="body2" sx={{ color: brand.muted, fontSize: 14 }}>
-              Thành tiền:
-            </Typography>
-            <Typography sx={{ fontSize: 20, fontWeight: 700, color: brand.ink }}>{formatVnd(order.totalAmount)}</Typography>
+            <span aria-hidden="true">·</span>
+            <StatusText tone={pay.tone} label={pay.label} sx={{ fontSize: 11 }} />
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1.25 }}>
+            <Box component="span" sx={{ fontSize: 13, color: C.muted }}>
+              Thành tiền
+            </Box>
+            <Box component="span" sx={{ fontFamily: SERIF, fontSize: 24 }}>
+              {formatVnd(order.totalAmount)}
+            </Box>
           </Box>
         </Box>
 
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 1.25, flexWrap: 'wrap' }}>
-          <OutlineButton
-            size="small"
-            component={RouterLink}
-            to={`/orders/${order.id}`}
-            startIcon={<EyeOutlined />}
-            sx={{ fontSize: 13, py: 0.6, px: 1.75 }}
-          >
-            Xem chi tiết
-          </OutlineButton>
-          {actions.map((action) =>
-            action.primary ? (
-              <BrandButton
-                key={action.to}
-                size="small"
-                disableElevation
-                disabled={busy}
-                onClick={() => onAction(action)}
-                sx={{ fontSize: 13, py: 0.6, px: 2 }}
-              >
-                {action.label}
-              </BrandButton>
-            ) : (
-              <OutlineButton
-                key={action.to}
-                size="small"
-                disabled={busy}
-                onClick={() => onAction(action)}
-                sx={{
-                  fontSize: 13,
-                  py: 0.6,
-                  px: 1.75,
-                  color: action.askReason ? brand.dangerInk : brand.ink,
-                  borderColor: action.askReason ? '#FCA5A5' : brand.line,
-                  '&:hover': { bgcolor: action.askReason ? brand.dangerBg : undefined }
-                }}
-              >
-                {action.label}
-              </OutlineButton>
-            )
-          )}
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', flexWrap: 'wrap', gap: 1.25 }}>
+          {actions
+            .filter((action) => !action.primary)
+            .map((action) => (
+              <Box key={action.to} component="button" type="button" disabled={busy} onClick={() => onAction(action)} sx={dangerBtnSx}>
+                {action.label.toUpperCase()}
+              </Box>
+            ))}
+          <Box component={RouterLink} to={`/orders/${order.id}`} sx={storeBtnSx('outline')}>
+            XEM CHI TIẾT
+          </Box>
+          {actions
+            .filter((action) => action.primary)
+            .map((action) => (
+              <Box key={action.to} component="button" type="button" disabled={busy} onClick={() => onAction(action)} sx={storeBtnSx('dark')}>
+                {action.label.toUpperCase()}
+              </Box>
+            ))}
         </Box>
       </Box>
     </Box>
@@ -558,7 +439,18 @@ export default function OrderListPage() {
       onClose={() => busyId === null && setDialog(null)}
       fullWidth
       maxWidth="xs"
-      slotProps={{ paper: { sx: { borderRadius: '16px', p: 1 } } }}
+      slotProps={{
+        paper: {
+          sx: isCustomer
+            ? {
+                ...storeDialogPaperSx,
+                ...storeInputsSx,
+                '& .MuiButton-root': { borderRadius: 0, fontFamily: SANS },
+                '& .MuiRadio-root.Mui-checked': { color: C.ink }
+              }
+            : { borderRadius: '16px', p: 1 }
+        }
+      }}
     >
       <DialogTitle sx={{ pb: 1, fontWeight: 700, fontSize: 18, color: brand.ink }}>{dialog?.action.label}</DialogTitle>
       <DialogContent sx={{ pt: 1 }}>
@@ -724,56 +616,57 @@ export default function OrderListPage() {
   if (isCustomer) {
     return (
       <Box>
-        <PageHeader title="Đơn hàng của tôi" subtitle="Theo dõi các đơn bạn đã đặt trên website." />
+        <Box sx={{ mb: { xs: 4, sm: 5 } }}>
+          <Box component="p" sx={{ ...storeEyebrowSx, mb: 1.5 }}>
+            Tài khoản của tôi
+          </Box>
+          <Box component="h1" sx={pageTitleSx}>
+            Đơn hàng của tôi
+          </Box>
+          <Box component="p" sx={{ m: 0, mt: 1.5, fontSize: 15, color: C.muted }}>
+            Theo dõi các đơn bạn đã đặt tại cửa hàng.
+          </Box>
+        </Box>
 
-        <Box sx={{ ...cardSx, p: 0.5, mb: 2, bgcolor: brand.surface, borderRadius: '12px' }}>
+        <Box sx={{ borderBottom: `1px solid ${C.line}`, mb: 3 }}>
           <Tabs
             value={status}
             onChange={(_, value) => filter(setStatus)(value)}
             variant="scrollable"
             scrollButtons="auto"
             allowScrollButtonsMobile
+            aria-label="Lọc đơn theo trạng thái"
             sx={{
-              minHeight: 44,
-              '& .MuiTabs-indicator': {
-                bgcolor: brand.cyan,
-                height: 3,
-                borderRadius: '3px 3px 0 0'
-              },
+              minHeight: 48,
+              '& .MuiTabs-indicator': { bgcolor: C.ink, height: 2 },
               '& .MuiTab-root': {
-                minHeight: 44,
-                py: 1.25,
+                minHeight: 48,
+                minWidth: 0,
                 px: { xs: 1.5, sm: 2.25 },
                 textTransform: 'none',
-                fontWeight: 600,
+                fontWeight: 500,
                 fontSize: 14,
-                color: brand.muted,
-                transition: 'color 0.2s ease',
-                '&.Mui-selected': {
-                  color: brand.ink,
-                  fontWeight: 700
-                },
-                '&:hover': {
-                  color: brand.ink
-                }
+                color: C.muted,
+                '&.Mui-selected': { color: C.ink, fontWeight: 600 },
+                '&:hover': { color: C.ink }
               }
             }}
           >
             {CUSTOMER_TABS.map((tab) => (
-              <Tab key={tab.value} value={tab.value} label={tab.label} sx={{ minWidth: { xs: 100, sm: 120 } }} />
+              <Tab key={tab.value} value={tab.value} label={tab.label} />
             ))}
           </Tabs>
         </Box>
 
-        <Box sx={{ mb: 2 }}>{filterBar('Tìm theo mã đơn hoặc tên sản phẩm...')}</Box>
+        <Box sx={{ mb: 3, ...storeInputsSx }}>{filterBar('Tìm theo mã đơn hoặc tên sản phẩm...')}</Box>
 
         {rowError && !dialog && (
-          <Alert severity="error" sx={{ mb: 2, borderRadius: '10px' }}>
+          <Alert severity="error" sx={{ mb: 2, borderRadius: 0 }}>
             {rowError}
           </Alert>
         )}
         {list.error && !list.data && (
-          <Alert severity="error" sx={{ mb: 2, borderRadius: '10px' }}>
+          <Alert severity="error" sx={{ mb: 2, borderRadius: 0 }}>
             {list.error.message}
           </Alert>
         )}
@@ -790,36 +683,25 @@ export default function OrderListPage() {
         ))}
 
         {!list.isLoading && items.length === 0 && (
-          <Box sx={{ ...cardSx, py: 9, textAlign: 'center', bgcolor: brand.surface, borderRadius: '14px' }}>
-            <Box
-              sx={{
-                width: 64,
-                height: 64,
-                borderRadius: '50%',
-                bgcolor: '#F3F4EE',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#9CA3AF',
-                fontSize: 32,
-                mb: 2
-              }}
-            >
-              <InboxOutlined />
+          <Box sx={{ bgcolor: C.sand, py: { xs: 8, sm: 10 }, px: 2, textAlign: 'center' }}>
+            <Box component="h2" sx={{ m: 0, fontFamily: SERIF, fontWeight: 400, fontSize: { xs: 26, sm: 32 } }}>
+              {hasFilter ? 'Không tìm thấy đơn hàng nào' : 'Bạn chưa có đơn hàng nào'}
             </Box>
-            <Typography variant="h5" sx={{ color: brand.ink, fontWeight: 700, fontSize: 17 }}>
-              {hasFilter ? 'Không tìm thấy đơn hàng nào' : 'Chưa có đơn hàng nào'}
-            </Typography>
-            <Typography variant="body2" sx={{ color: brand.muted, mt: 0.75, maxWidth: 360, mx: 'auto', fontSize: 14 }}>
+            <Box component="p" sx={{ m: 0, mt: 1.5, mb: hasFilter ? 0 : 4, fontSize: 15, color: C.muted, maxWidth: 420, mx: 'auto' }}>
               {hasFilter
                 ? 'Thử thay đổi từ khóa, bộ lọc hoặc chọn tab trạng thái khác.'
-                : 'Các đơn hàng bạn đặt trên hệ thống sẽ xuất hiện tại đây.'}
-            </Typography>
+                : 'Khám phá bộ sưu tập mới và đặt món đồ đầu tiên của bạn.'}
+            </Box>
+            {!hasFilter && (
+              <Box component={RouterLink} to="/" sx={storeBtnSx('dark')}>
+                TIẾP TỤC MUA SẮM
+              </Box>
+            )}
           </Box>
         )}
 
         {items.length > 0 && (
-          <Box sx={{ ...cardSx, overflow: 'hidden', mt: 2 }}>
+          <Box sx={{ ...storePagerSx, mt: 1 }}>
             <Pager
               page={page}
               totalPages={list.data?.totalPages ?? 0}

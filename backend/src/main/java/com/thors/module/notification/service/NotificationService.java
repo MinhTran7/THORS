@@ -2,6 +2,7 @@ package com.thors.module.notification.service;
 
 import com.thors.common.ApiException;
 import com.thors.module.account.entity.Account;
+import com.thors.module.notification.dto.NotificationViews.Item;
 import com.thors.module.notification.dto.NotificationViews.Page;
 import com.thors.module.notification.repository.NotificationRepository;
 import org.springframework.stereotype.Service;
@@ -25,6 +26,13 @@ public class NotificationService {
         int totalPages = (int) Math.ceil(slice.total() / (double) safeSize);
 
         return new Page(slice.items(), safePage, safeSize, slice.total(), totalPages);
+    }
+
+    /** Xem chi tiết một thông báo của chính mình; thông báo của người khác coi như không tồn tại. */
+    public Item detail(Account actor, int userNotificationId) {
+        return repository
+                .findOne(actor.id(), userNotificationId)
+                .orElseThrow(() -> new ApiException(404, "NOTIFICATION_NOT_FOUND", "Không tìm thấy thông báo."));
     }
 
     public long unreadCount(Account actor) {
