@@ -145,26 +145,6 @@ export default function InStoreSaleDetailPage() {
 
   return (
     <Box sx={{ maxWidth: 1400, mx: 'auto', color: C.text, pb: 6 }}>
-      {/* ─── ĐIỀU HƯỚNG QUAY LẠI ─── */}
-      <Box
-        onClick={() => navigate('/in-store-sales/history')}
-        sx={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 1,
-          color: C.muted,
-          fontSize: 13,
-          fontWeight: 600,
-          cursor: 'pointer',
-          mb: 2,
-          transition: 'color 0.15s ease',
-          '&:hover': { color: C.text }
-        }}
-      >
-        <ArrowLeftOutlined style={{ fontSize: 13 }} />
-        <span>Lịch sử hóa đơn</span>
-      </Box>
-
       {/* ─── TIÊU ĐỀ & NÚT IN HÓA ĐƠN SANG HẲN BÊN PHẢI ─── */}
       <Box
         sx={{
@@ -476,8 +456,6 @@ export default function InStoreSaleDetailPage() {
         cartItems={cartItems}
         customerName={data?.customerName || ''}
         sellerName={data?.sellerName || ''}
-        amountReceived={data?.totalAmount || 0}
-        changeDue={0}
         completedAt={data?.orderDate}
         closeText="Đóng"
       />

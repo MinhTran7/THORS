@@ -1,72 +1,99 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Stack, Typography } from '@mui/material';
-import shopping from 'assets/images/auth/boutique-shopping.png';
-import welcome from 'assets/images/auth/boutique-welcome.png';
+import { EyeInvisibleOutlined, EyeOutlined } from '@ant-design/icons';
+import ShopAuthArt, { ThorsLogo } from './ShopAuthArt';
 import './ShopAuthShell.css';
 
+const STORY = {
+  login: {
+    title: (
+      <>
+        Chào mừng bạn
+        <br />
+        đến với <em>THORS</em>
+      </>
+    ),
+    lead: 'Hãy đăng nhập để cùng trải nghiệm nào!'
+  },
+  register: {
+    title: (
+      <>
+        Mở tài khoản,
+        <br />
+        mở thêm <em>niềm vui</em>
+      </>
+    ),
+    lead: 'Đăng ký ngay để trở thành người bạn của THORS nào!'
+  }
+};
+
+// Khung chung cho trang Đăng nhập / Đăng ký: giới thiệu bên trái, form bên phải
 export default function ShopAuthShell({ variant = 'login', title, subtitle, children }) {
-  const register = variant === 'register';
+  const story = STORY[variant];
   return (
-    <main className={`shop-auth shop-auth--${variant}`}>
-      <section className="shop-auth__story" aria-label="THORS — Phong cách của bạn">
-        {!register && <img className="shop-auth__hero" src={shopping} alt="Khách hàng chọn túi tại cửa hàng" />}
+    <main className="shop-auth">
+      <section className="shop-auth__story">
         <Link to="/" className="shop-auth__brand" aria-label="THORS — Trang chủ">
-          THORS<span>YOUR STYLE. YOUR STORY.</span>
+          <ThorsLogo />
+          <span>THORS</span>
         </Link>
-        <div className="shop-auth__story-copy">
-          <span className="shop-auth__eyebrow">{register ? 'BẮT ĐẦU CÂU CHUYỆN CỦA BẠN' : 'PHONG CÁCH MỖI NGÀY'}</span>
-          <h2>
-            {register ? (
-              <>
-                Một tài khoản.
-                <br />
-                Nhiều trải nghiệm.
-              </>
-            ) : (
-              <>
-                Chào mừng bạn
-                <br />
-                trở lại.
-              </>
-            )}
-          </h2>
-          <p>
-            {register
-              ? 'Khám phá những lựa chọn mới và tìm thấy phong cách của riêng bạn cùng THORS.'
-              : 'Những lựa chọn yêu thích đang chờ bạn. Tiếp tục câu chuyện phong cách cùng THORS.'}
-          </p>
-        </div>
-        {register && (
-          <div className="shop-auth__collage">
-            <img className="shop-auth__photo-main" src={shopping} alt="Khám phá phụ kiện tại THORS" />
-            <img className="shop-auth__photo-small" src={welcome} alt="Khách hàng nhận túi mua sắm tại cửa hàng" />
-            <span className="shop-auth__stamp" aria-hidden="true">
-              THORS
-              <br />
-              <small>MADE FOR YOU</small>
+        <div className="shop-auth__intro">
+          <h2 className="shop-auth__headline">
+            {story.title}
+            <span className="shop-auth__hook">
+              <ShopAuthArt />
             </span>
-          </div>
-        )}
-        <div className="shop-auth__story-footer">
-          <span>THORS / EVERYDAY ESSENTIALS</span>
-          <span aria-hidden="true">✦</span>
+          </h2>
+          <p className="shop-auth__lead">{story.lead}</p>
         </div>
       </section>
+
       <section className="shop-auth__panel" aria-labelledby="shop-auth-title">
-        <div className="shop-auth__form">
-          <span className="shop-auth__eyebrow">{register ? 'GIA NHẬP THORS' : 'TÀI KHOẢN THORS'}</span>
-          <Stack spacing={2.5}>
-            <div className="shop-auth__heading">
-              <Typography component="h1" id="shop-auth-title">
-                {title}
-              </Typography>
-              <Typography>{subtitle}</Typography>
-            </div>
-            {children}
-          </Stack>
+        <div className="shop-auth__card">
+          <h1 id="shop-auth-title">{title}</h1>
+          <p className="shop-auth__subtitle">{subtitle}</p>
+          <div className="shop-auth__body">{children}</div>
         </div>
-        <p className="shop-auth__copyright">© {new Date().getFullYear()} THORS. Phong cách của riêng bạn.</p>
       </section>
     </main>
+  );
+}
+
+// Ô nhập dùng với FieldsForm (Formik): chỉ báo lỗi sau khi bấm nút gửi
+export function ShopField({ form, name, label, icon, type = 'text', hint, ...props }) {
+  const [visible, setVisible] = useState(false);
+  const error = form.submitCount > 0 && form.errors[name];
+  const isPassword = type === 'password';
+
+  return (
+    <div className={`shop-field${error ? ' shop-field--error' : ''}`}>
+      <label className="shop-field__label" htmlFor={name}>
+        {label}
+      </label>
+      <div className="shop-field__box">
+        {icon}
+        <input
+          id={name}
+          name={name}
+          type={isPassword && visible ? 'text' : type}
+          value={form.values[name]}
+          onChange={form.handleChange}
+          onBlur={form.handleBlur}
+          aria-invalid={Boolean(error)}
+          {...props}
+        />
+        {isPassword && (
+          <button
+            type="button"
+            className="shop-field__eye"
+            aria-label={visible ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+            onClick={() => setVisible((v) => !v)}
+          >
+            {visible ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+          </button>
+        )}
+      </div>
+      <p className="shop-field__hint">{error || hint}</p>
+    </div>
   );
 }

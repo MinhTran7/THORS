@@ -1,9 +1,10 @@
-import ShopAuthShell from '../components/ShopAuthShell';
-import { GoogleOutlined, FacebookFilled } from '@ant-design/icons';
+import ShopAuthShell, { ShopField } from '../components/ShopAuthShell';
+import { FacebookIcon, GoogleIcon } from '../components/ShopAuthArt';
+import { LockOutlined, MailOutlined } from '@ant-design/icons';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Alert, Button, Divider, Stack, Typography } from '@mui/material';
+import { Alert, Button, Divider } from '@mui/material';
 import * as Yup from 'yup';
-import { FieldsForm, Field } from '../components/AuthForm';
+import { FieldsForm } from '../components/AuthForm';
 import { useCapabilities } from '../components/ChannelPicker';
 import { useAuth } from '../AuthProvider';
 import { identity, safeReturn } from '../validation';
@@ -81,11 +82,18 @@ export default function LoginPage() {
           >
             {(form) => (
               <>
-                <Field form={form} name="identifier" label="Email" autoComplete="username" />
-                <Field form={form} name="password" label="Mật khẩu" type="password" autoComplete="current-password" />
-                <Typography component={Link} to="/forgot-password" color="primary" className="shop-auth__forgot">
+                <ShopField form={form} name="identifier" label="Email" icon={<MailOutlined />} autoComplete="username" />
+                <ShopField
+                  form={form}
+                  name="password"
+                  label="Mật khẩu"
+                  type="password"
+                  icon={<LockOutlined />}
+                  autoComplete="current-password"
+                />
+                <Link to="/forgot-password" className="shop-auth__forgot">
                   Quên mật khẩu?
-                </Typography>
+                </Link>
               </>
             )}
           </FieldsForm>
@@ -93,7 +101,7 @@ export default function LoginPage() {
           <Button
             variant="outlined"
             size="large"
-            startIcon={<GoogleOutlined style={{ color: '#4285f4' }} />}
+            startIcon={<GoogleIcon />}
             disabled={!capabilities?.google}
             onClick={() => {
               sessionStorage.setItem('thorsReturnTo', returnTo);
@@ -105,7 +113,7 @@ export default function LoginPage() {
           <Button
             variant="outlined"
             size="large"
-            startIcon={<FacebookFilled style={{ color: '#1877f2' }} />}
+            startIcon={<FacebookIcon />}
             disabled={!capabilities?.facebook}
             onClick={() => {
               sessionStorage.setItem('thorsReturnTo', returnTo);
@@ -114,12 +122,9 @@ export default function LoginPage() {
           >
             Tiếp tục với Facebook
           </Button>
-          <Stack direction="row" spacing={1} sx={{ justifyContent: 'center' }}>
-            <Typography>Chưa có tài khoản?</Typography>
-            <Typography component={Link} to="/register" color="primary">
-              Đăng ký
-            </Typography>
-          </Stack>
+          <p className="shop-auth__switch">
+            Chưa có tài khoản? <Link to="/register">Đăng ký</Link>
+          </p>
         </>
       )}
     </ShopAuthShell>

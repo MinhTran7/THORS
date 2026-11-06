@@ -1,8 +1,9 @@
-import ShopAuthShell from '../components/ShopAuthShell';
-import { GoogleOutlined, FacebookFilled } from '@ant-design/icons';
+import ShopAuthShell, { ShopField } from '../components/ShopAuthShell';
+import { FacebookIcon, GoogleIcon } from '../components/ShopAuthArt';
+import { LockOutlined, MailOutlined, SafetyOutlined, UserOutlined } from '@ant-design/icons';
 import { Link, useNavigate } from 'react-router-dom';
-import { Button, Divider, Typography } from '@mui/material';
-import { FieldsForm, Field } from '../components/AuthForm';
+import { Button, Divider } from '@mui/material';
+import { FieldsForm } from '../components/AuthForm';
 import { useCapabilities } from '../components/ChannelPicker';
 import { registerSchema } from '../validation';
 import { post } from 'services/http';
@@ -22,11 +23,25 @@ export default function RegisterPage() {
       >
         {(form) => (
           <>
-            <Field form={form} name="fullName" label="Họ tên" autoComplete="name" />
-            <Field form={form} name="identifier" label="Email" autoComplete="username" />
-            <Field form={form} name="password" label="Mật khẩu" type="password" autoComplete="new-password" />
-            <p className="shop-auth__signup-note">Mật khẩu từ 10 ký tự. Bạn sẽ nhận mã OTP để xác minh email.</p>
-            <Field form={form} name="confirmPassword" label="Xác nhận mật khẩu" type="password" autoComplete="new-password" />
+            <ShopField form={form} name="fullName" label="Họ tên" icon={<UserOutlined />} autoComplete="name" />
+            <ShopField form={form} name="identifier" label="Email" icon={<MailOutlined />} autoComplete="username" />
+            <ShopField
+              form={form}
+              name="password"
+              label="Mật khẩu"
+              type="password"
+              icon={<LockOutlined />}
+              hint="Mật khẩu từ 10 ký tự. Bạn sẽ nhận mã OTP để xác minh email."
+              autoComplete="new-password"
+            />
+            <ShopField
+              form={form}
+              name="confirmPassword"
+              label="Xác nhận mật khẩu"
+              type="password"
+              icon={<SafetyOutlined />}
+              autoComplete="new-password"
+            />
           </>
         )}
       </FieldsForm>
@@ -35,7 +50,7 @@ export default function RegisterPage() {
         <Button
           variant="outlined"
           size="large"
-          startIcon={<GoogleOutlined style={{ color: '#4285f4' }} />}
+          startIcon={<GoogleIcon />}
           disabled={!capabilities?.google}
           onClick={() => window.location.assign('/oauth2/authorization/google')}
         >
@@ -44,7 +59,7 @@ export default function RegisterPage() {
         <Button
           variant="outlined"
           size="large"
-          startIcon={<FacebookFilled style={{ color: '#1877f2' }} />}
+          startIcon={<FacebookIcon />}
           disabled={!capabilities?.facebook}
           onClick={() => {
             sessionStorage.setItem('thorsReturnTo', '/');
@@ -54,9 +69,9 @@ export default function RegisterPage() {
           Facebook
         </Button>
       </div>
-      <Typography component={Link} to="/login" color="primary" sx={{ textAlign: 'center' }}>
-        Đã có tài khoản? Đăng nhập
-      </Typography>
+      <p className="shop-auth__switch">
+        Đã có tài khoản? <Link to="/login">Đăng nhập</Link>
+      </p>
     </ShopAuthShell>
   );
 }
