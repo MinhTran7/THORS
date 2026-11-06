@@ -9,7 +9,15 @@ const STOREFRONT_PATHS = ['/', '/shop/products/:productId', '/cart', '/checkout'
 
 // Các trang tài khoản chỉ dùng giao diện cửa hàng khi người xem là KHÁCH HÀNG;
 // Owner / Family Member / Admin mở cùng đường dẫn vẫn thấy giao diện quản trị (sidebar).
-const CUSTOMER_STOREFRONT_PATHS = ['/orders', '/orders/:id'];
+const CUSTOMER_STOREFRONT_PATHS = [
+  '/orders',
+  '/orders/:id',
+  '/profile',
+  '/profile/edit',
+  '/profile/password',
+  '/notifications',
+  '/notifications/:id'
+];
 
 /**
  * Khung giao diện dùng cho cả trang công khai và trang cần đăng nhập:

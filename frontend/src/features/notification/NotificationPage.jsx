@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
-import { Box, ButtonBase, Typography } from '@mui/material';
+import { Alert, Box, Button, ButtonBase, Typography } from '@mui/material';
+import { StoreAccountShell, storePanelSx, useIsCustomer } from 'features/account/components/StoreAccount';
+import { C, SERIF } from 'features/shop/storeTheme';
 import { Stack } from 'features/account/components/Flex';
 import { CheckOutlined } from '@ant-design/icons';
 import { useCrumbs } from 'layouts/crumbs';
@@ -13,7 +15,7 @@ import { StatusPill } from 'features/account/components/Chips';
 import { FilterSelect, PageHeader, Pager, Toolbar } from 'features/account/components/Blocks';
 import { useToast } from 'features/account/components/Toast';
 import { notificationTypeLabel } from './constants';
-import { entityPath, notificationsApi, refreshNotifications, UNREAD_KEY } from './api';
+import { customerNotificationPath, entityPath, notificationsApi, refreshNotifications, UNREAD_KEY } from './api';
 
 const FILTER_OPTIONS = [
   { value: 'all', label: 'Tất cả thông báo' },
@@ -23,6 +25,7 @@ const FILTER_OPTIONS = [
 export default function NotificationPage() {
   useCrumbs(['Thông báo']);
   const navigate = useNavigate();
+  const isCustomer = useIsCustomer();
   const [toast, showToast] = useToast();
   const [filter, setFilter] = useState('all');
   const [page, setPage] = useState(0);
@@ -48,7 +51,8 @@ export default function NotificationPage() {
       showToast(e.message, 'error');
       return;
     }
-    const path = entityPath(item);
+    // Khách: thông báo không gắn đơn hàng thì mở trang chi tiết thông báo
+    const path = isCustomer ? customerNotificationPath(item) : entityPath(item);
     if (path) navigate(path);
   }
 
@@ -63,6 +67,153 @@ export default function NotificationPage() {
     } finally {
       setBusy(false);
     }
+  }
+
+  if (isCustomer) {
+    return (
+      <StoreAccountShell
+        title="Thông báo"
+        subtitle={unreadCount > 0 ? `Bạn có ${unreadCount} thông báo chưa đọc.` : 'Bạn đã đọc hết thông báo.'}
+        action={
+          <Button variant="outlined" disabled={busy || unreadCount === 0} onClick={readAll} sx={{ px: 2.5, py: 1.25 }}>
+            Đánh dấu tất cả đã đọc
+          </Button>
+        }
+      >
+        {/* Lọc: Tất cả / Chưa đọc, kiểu tab gạch chân như trang đơn hàng */}
+        <Box role="tablist" aria-label="Lọc thông báo" sx={{ display: 'flex', gap: 3, borderBottom: `1px solid ${C.line}`, mb: 3 }}>
+          {FILTER_OPTIONS.map((option) => {
+            const selected = filter === option.value;
+            return (
+              <Box
+                key={option.value}
+                component="button"
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                onClick={() => {
+                  setFilter(option.value);
+                  setPage(0);
+                }}
+                sx={{
+                  border: 0,
+                  bgcolor: 'transparent',
+                  font: 'inherit',
+                  fontSize: 14,
+                  fontWeight: selected ? 600 : 500,
+                  color: selected ? C.ink : C.muted,
+                  px: 0,
+                  py: 1.5,
+                  mb: '-1px',
+                  borderBottom: `2px solid ${selected ? C.ink : 'transparent'}`,
+                  cursor: 'pointer',
+                  '&:hover': { color: C.ink }
+                }}
+              >
+                {option.value === 'all' ? 'Tất cả' : 'Chưa đọc'}
+              </Box>
+            );
+          })}
+        </Box>
+
+        {list.error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {list.error.message}
+          </Alert>
+        )}
+
+        {!list.error && items.length === 0 && !list.isLoading && (
+          <Box sx={{ bgcolor: C.sand, py: { xs: 8, sm: 10 }, px: 2, textAlign: 'center' }}>
+            <Box component="h2" sx={{ m: 0, fontFamily: SERIF, fontWeight: 400, fontSize: { xs: 24, sm: 30 } }}>
+              {filter === 'unread' ? 'Không có thông báo chưa đọc' : 'Bạn chưa có thông báo nào'}
+            </Box>
+            <Box component="p" sx={{ m: 0, mt: 1.5, fontSize: 15, color: C.muted }}>
+              Cập nhật về đơn hàng và tài khoản sẽ xuất hiện tại đây.
+            </Box>
+          </Box>
+        )}
+
+        {items.length > 0 && (
+          <Box sx={{ ...storePanelSx }}>
+            {items.map((item, index) => (
+              <Box
+                key={item.id}
+                component="button"
+                type="button"
+                onClick={() => open(item)}
+                sx={{
+                  display: 'flex',
+                  gap: 2,
+                  width: '100%',
+                  textAlign: 'left',
+                  border: 0,
+                  borderTop: index > 0 ? `1px solid ${C.line}` : 0,
+                  px: { xs: 2.5, sm: 3.5 },
+                  py: 2.75,
+                  font: 'inherit',
+                  color: C.ink,
+                  cursor: 'pointer',
+                  bgcolor: item.read ? '#FFFFFF' : C.sand,
+                  '&:hover': { bgcolor: item.read ? '#FAF8F5' : '#E8E3DB' },
+                  '&:hover .title': { color: C.accent },
+                  '&:focus-visible': { outline: `2px solid ${C.accent}`, outlineOffset: '-2px' }
+                }}
+              >
+                <Box
+                  component="span"
+                  aria-label={item.read ? 'Đã đọc' : 'Chưa đọc'}
+                  sx={{ width: 8, height: 8, borderRadius: '50%', mt: '8px', flexShrink: 0, bgcolor: item.read ? 'transparent' : C.accent }}
+                />
+                <Box component="span" sx={{ display: 'block', minWidth: 0, flex: 1 }}>
+                  <Box component="span" sx={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', columnGap: 1.5, rowGap: 0.5 }}>
+                    <Box component="span" className="title" sx={{ fontSize: 15, fontWeight: item.read ? 500 : 600 }}>
+                      {item.title}
+                    </Box>
+                    <Box
+                      component="span"
+                      sx={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: C.muted }}
+                    >
+                      {notificationTypeLabel(item.type)}
+                    </Box>
+                  </Box>
+                  <Box
+                    component="span"
+                    sx={{ display: 'block', mt: 0.75, fontSize: 14, color: C.muted, lineHeight: 1.6, whiteSpace: 'pre-line' }}
+                  >
+                    {item.message}
+                  </Box>
+                  <Box component="span" sx={{ display: 'block', mt: 1, fontSize: 12, color: C.muted }}>
+                    {formatLogDate(item.createdAt)} · {formatTime(item.createdAt)}
+                  </Box>
+                </Box>
+                <Box component="span" aria-hidden="true" sx={{ alignSelf: 'center', fontSize: 18, color: C.muted }}>
+                  →
+                </Box>
+              </Box>
+            ))}
+          </Box>
+        )}
+
+        {items.length > 0 && (
+          <Box
+            sx={{
+              mt: 1,
+              '& .MuiButton-root[aria-current="page"]': { bgcolor: C.ink, color: '#FFFFFF' }
+            }}
+          >
+            <Pager
+              page={page}
+              totalPages={list.data?.totalPages ?? 0}
+              total={list.data?.total ?? 0}
+              size={PAGE_SIZE}
+              noun="thông báo"
+              onPage={setPage}
+            />
+          </Box>
+        )}
+        {toast}
+      </StoreAccountShell>
+    );
   }
 
   return (
@@ -120,7 +271,14 @@ export default function NotificationPage() {
             <Stack direction="row" spacing={1.5} alignItems="flex-start">
               <Box
                 aria-label={item.read ? 'Đã đọc' : 'Chưa đọc'}
-                sx={{ width: 8, height: 8, borderRadius: '50%', mt: 0.9, flexShrink: 0, bgcolor: item.read ? 'transparent' : brand.cyanHover }}
+                sx={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  mt: 0.9,
+                  flexShrink: 0,
+                  bgcolor: item.read ? 'transparent' : brand.cyanHover
+                }}
               />
               <Box sx={{ minWidth: 0, flexGrow: 1 }}>
                 <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: 'wrap' }}>

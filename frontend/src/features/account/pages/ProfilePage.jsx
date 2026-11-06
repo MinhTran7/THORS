@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
-import { Alert, Box, Chip, Divider, Skeleton, Typography } from '@mui/material';
+import { Alert, Box, Button, Chip, Divider, Skeleton, Typography } from '@mui/material';
+import { C, SERIF } from 'features/shop/storeTheme';
+import { StoreAccountShell, storePanelSx, storePanelTitleSx } from '../components/StoreAccount';
 import { Stack } from '../components/Flex';
 import {
   CalendarOutlined,
@@ -146,6 +148,167 @@ function InfoItem({ label, value, caption, icon }) {
   );
 }
 
+/* ------------------------------------------------------------------ Khách hàng (giao diện cửa hàng) */
+
+function StoreInfoRow({ label, children }) {
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'baseline',
+        gap: 2,
+        py: 1.75,
+        borderTop: `1px solid ${C.line}`,
+        fontSize: 14
+      }}
+    >
+      <Box component="span" sx={{ color: C.muted, flexShrink: 0 }}>
+        {label}
+      </Box>
+      <Box component="span" sx={{ textAlign: 'right', fontWeight: 500, minWidth: 0, overflowWrap: 'anywhere' }}>
+        {children || '—'}
+      </Box>
+    </Box>
+  );
+}
+
+function StoreSecurityRow({ title, description, action }) {
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: 2,
+        py: 2.25,
+        borderTop: `1px solid ${C.line}`
+      }}
+    >
+      <Box sx={{ minWidth: 0, flex: '1 1 260px' }}>
+        <Box sx={{ fontSize: 15, fontWeight: 600 }}>{title}</Box>
+        <Box sx={{ fontSize: 13, color: C.muted, mt: 0.5, lineHeight: 1.55 }}>{description}</Box>
+      </Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>{action}</Box>
+    </Box>
+  );
+}
+
+const storeTagSx = { fontSize: 11, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', whiteSpace: 'nowrap' };
+
+function CustomerProfile({ data, loading, fullName, passwordEnabled, googleLinked, canLinkGoogle, linking, onLinkGoogle, errorText }) {
+  return (
+    <StoreAccountShell title="Hồ sơ của tôi" subtitle="Thông tin cá nhân và bảo mật tài khoản của bạn.">
+      {errorText && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {errorText}
+        </Alert>
+      )}
+
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '320px minmax(0, 1fr)' }, gap: 3, alignItems: 'start' }}>
+        {/* Cột trái: ảnh, tên và nút thao tác */}
+        <Box sx={{ ...storePanelSx, p: { xs: 3, sm: 4 }, textAlign: 'center' }}>
+          {loading ? (
+            <Skeleton variant="circular" width={112} height={112} sx={{ mx: 'auto' }} />
+          ) : (
+            <UserAvatar
+              name={fullName}
+              src={data?.avatarUrl}
+              size={112}
+              sx={{ mx: 'auto', bgcolor: C.photo, color: C.ink, fontFamily: SERIF }}
+            />
+          )}
+          <Box
+            component="h2"
+            sx={{ m: 0, mt: 2.5, fontFamily: SERIF, fontWeight: 400, fontSize: 26, lineHeight: 1.2, overflowWrap: 'anywhere' }}
+          >
+            {fullName}
+          </Box>
+          {data?.createdAt && <Box sx={{ fontSize: 13, color: C.muted, mt: 1 }}>Thành viên từ {formatMonthYear(data.createdAt)}</Box>}
+          <Stack spacing={1.25} sx={{ mt: 3.5 }}>
+            <Button component={RouterLink} to="/profile/edit" variant="contained" fullWidth sx={{ py: 1.5 }}>
+              CẬP NHẬT HỒ SƠ
+            </Button>
+            {passwordEnabled && (
+              <Button component={RouterLink} to="/profile/password" variant="outlined" fullWidth sx={{ py: 1.5 }}>
+                ĐỔI MẬT KHẨU
+              </Button>
+            )}
+          </Stack>
+        </Box>
+
+        {/* Cột phải: thông tin và bảo mật */}
+        <Stack spacing={3}>
+          <Box component="section" sx={{ ...storePanelSx, p: { xs: 3, sm: 4 } }}>
+            <Box component="h2" sx={{ ...storePanelTitleSx, mb: 1 }}>
+              Thông tin cá nhân
+            </Box>
+            <StoreInfoRow label="Họ và tên">{loading ? <Skeleton width={140} /> : data?.fullName}</StoreInfoRow>
+            <StoreInfoRow label="Email">{loading ? <Skeleton width={180} /> : data?.email}</StoreInfoRow>
+            <StoreInfoRow label="Số điện thoại">{loading ? <Skeleton width={110} /> : data?.phone}</StoreInfoRow>
+          </Box>
+
+          <Box component="section" sx={{ ...storePanelSx, p: { xs: 3, sm: 4 } }}>
+            <Box component="h2" sx={{ ...storePanelTitleSx, mb: 1 }}>
+              Bảo mật & đăng nhập
+            </Box>
+            <StoreSecurityRow
+              title="Tài khoản Google"
+              description={
+                googleLinked
+                  ? 'Đã liên kết với email này để đăng nhập nhanh.'
+                  : 'Liên kết Google dùng cùng email để đăng nhập thuận tiện hơn.'
+              }
+              action={
+                googleLinked ? (
+                  <Box component="span" sx={{ ...storeTagSx, color: '#2F6B3F' }}>
+                    Đã liên kết
+                  </Box>
+                ) : canLinkGoogle ? (
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={onLinkGoogle}
+                    disabled={linking}
+                    startIcon={<GoogleOutlined />}
+                    sx={{ px: 2 }}
+                  >
+                    {linking ? 'Đang chuyển hướng…' : 'Liên kết ngay'}
+                  </Button>
+                ) : (
+                  <Box component="span" sx={{ ...storeTagSx, color: C.muted }}>
+                    Chưa liên kết
+                  </Box>
+                )
+              }
+            />
+            <StoreSecurityRow
+              title="Mật khẩu"
+              description={
+                passwordEnabled
+                  ? 'Bạn nên đổi mật khẩu định kỳ để giữ tài khoản an toàn.'
+                  : 'Tài khoản đăng nhập bằng Google nên không có mật khẩu riêng.'
+              }
+              action={
+                passwordEnabled ? (
+                  <Button component={RouterLink} to="/profile/password" variant="outlined" size="small" sx={{ px: 2 }}>
+                    Đổi mật khẩu
+                  </Button>
+                ) : (
+                  <Box component="span" sx={{ ...storeTagSx, color: C.muted }}>
+                    Đăng nhập Google
+                  </Box>
+                )
+              }
+            />
+          </Box>
+        </Stack>
+      </Box>
+    </StoreAccountShell>
+  );
+}
+
 export default function ProfilePage() {
   useCrumbs(CRUMBS);
   const { account } = useAuth();
@@ -173,6 +336,22 @@ export default function ProfilePage() {
       setError(e.message || 'Không thể liên kết tài khoản Google. Vui lòng thử lại.');
       setLinking(false);
     }
+  }
+
+  if (role === 'CUSTOMER') {
+    return (
+      <CustomerProfile
+        data={data}
+        loading={loading}
+        fullName={fullName}
+        passwordEnabled={passwordEnabled}
+        googleLinked={googleLinked}
+        canLinkGoogle={Boolean(capabilities?.google)}
+        linking={linking}
+        onLinkGoogle={linkGoogle}
+        errorText={loadError || error ? error || loadError?.message || 'Không thể tải hồ sơ. Vui lòng thử lại.' : ''}
+      />
+    );
   }
 
   return (
@@ -243,7 +422,13 @@ export default function ProfilePage() {
             <Divider sx={{ my: 2.25, borderColor: brand.line }} />
 
             <Stack spacing={1.25}>
-              <BrandButton component={RouterLink} to="/profile/edit" startIcon={<EditOutlined />} fullWidth sx={{ fontSize: fs.body, py: 1 }}>
+              <BrandButton
+                component={RouterLink}
+                to="/profile/edit"
+                startIcon={<EditOutlined />}
+                fullWidth
+                sx={{ fontSize: fs.body, py: 1 }}
+              >
                 Cập nhật hồ sơ
               </BrandButton>
               {passwordEnabled && (

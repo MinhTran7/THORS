@@ -5,6 +5,7 @@ import { ThemeProvider } from '@mui/material/styles';
 import { useAuth } from 'features/auth/AuthProvider';
 import { STORE_NAME } from 'features/account/constants';
 import { api } from 'services/http';
+import StoreNotificationBell from 'features/notification/StoreNotificationBell';
 import { C, FONT_URL, SANS, SERIF, Icon, btnSx, container, focusRing, iconBtnSx, linkSx, srOnly } from 'features/shop/storeTheme';
 
 /**
@@ -151,6 +152,8 @@ function StoreHeader({ categories }) {
               <path d="M20 20l-4-4" />
             </Icon>
           </Box>
+
+          {isCustomer && <StoreNotificationBell />}
 
           {account ? (
             <>

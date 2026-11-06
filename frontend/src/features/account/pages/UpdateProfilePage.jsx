@@ -17,12 +17,15 @@ import { FormField, TextInput } from '../components/Form';
 import { NoticeBox, PageHeader } from '../components/Blocks';
 import { useToast } from '../components/Toast';
 import UserAvatar from '../components/UserAvatar';
+import { C } from 'features/shop/storeTheme';
+import { StoreAccountShell, storeNoticeSx, storePanelSx, useIsCustomer } from '../components/StoreAccount';
 
 const schema = Yup.object({ fullName, phone });
 
 export default function UpdateProfilePage() {
   useCrumbs(['Hồ sơ', 'Cập nhật hồ sơ']);
   const { reload } = useAuth();
+  const isCustomer = useIsCustomer();
   const { data, mutate } = useSWR('account-profile', accountsApi.profile, { revalidateOnFocus: false });
   const [toast, showToast] = useToast();
   const [error, setError] = useState('');
@@ -72,20 +75,26 @@ export default function UpdateProfilePage() {
   const saving = form.isSubmitting;
   const fieldError = (name) => (form.touched[name] && form.errors[name]) || '';
 
+  const header = {
+    back: { to: '/profile', label: 'Hồ sơ cá nhân' },
+    title: 'Cập nhật hồ sơ',
+    subtitle: 'Giữ thông tin luôn mới để chúng tôi có thể liên lạc với bạn.'
+  };
+  // Khách hàng: khung cửa hàng (khung vuông, nút đen); các vai trò khác giữ giao diện quản trị
+  const card = isCustomer ? storePanelSx : cardSx;
+  const Shell = isCustomer ? StoreAccountShell : Box;
+  const shellProps = isCustomer ? header : {};
+
   return (
-    <Box>
-      <PageHeader
-        back={{ to: '/profile', label: 'Hồ sơ cá nhân' }}
-        title="Cập nhật hồ sơ"
-        subtitle="Giữ thông tin luôn mới để chúng tôi có thể liên lạc với bạn."
-      />
+    <Shell {...shellProps}>
+      {!isCustomer && <PageHeader {...header} />}
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
           {error}
         </Alert>
       )}
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1fr) 380px' }, gap: 3, alignItems: 'start' }}>
-        <Box component="form" onSubmit={form.handleSubmit} noValidate sx={{ ...cardSx, p: 3.5 }}>
+        <Box component="form" onSubmit={form.handleSubmit} noValidate sx={{ ...card, p: 3.5 }}>
           <Typography variant="h5" sx={{ color: brand.ink, fontSize: fs.cardTitle }}>
             Thông tin chi tiết
           </Typography>
@@ -119,7 +128,7 @@ export default function UpdateProfilePage() {
                 <TextInput label="Email" value={data?.email ?? ''} disabled />
               </FormField>
             </Box>
-            <NoticeBox title="Thay đổi thông tin liên hệ?" icon={<InfoCircleOutlined />}>
+            <NoticeBox title="Thay đổi thông tin liên hệ?" icon={<InfoCircleOutlined />} sx={isCustomer ? storeNoticeSx : undefined}>
               Email là tên đăng nhập của bạn nên không thể đổi tại đây. Số điện thoại mới có hiệu lực ngay sau khi bạn lưu.
             </NoticeBox>
             <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="flex-end" alignItems={{ sm: 'center' }} spacing={1.5}>
@@ -131,7 +140,7 @@ export default function UpdateProfilePage() {
         </Box>
 
         <Box>
-          <Box sx={{ ...cardSx, p: 3.5 }}>
+          <Box sx={{ ...card, p: 3.5 }}>
             <Typography variant="h5" sx={{ color: brand.ink, mb: 2, fontSize: fs.cardTitle }}>
               Ảnh đại diện
             </Typography>
@@ -153,9 +162,9 @@ export default function UpdateProfilePage() {
                 p: 3,
                 display: 'block',
                 textAlign: 'center',
-                border: `1.5px dashed ${brand.cyan}`,
-                borderRadius: '12px',
-                bgcolor: '#F4FCFD',
+                border: `1.5px dashed ${isCustomer ? C.ink : brand.cyan}`,
+                borderRadius: isCustomer ? 0 : '12px',
+                bgcolor: isCustomer ? C.sand : '#F4FCFD',
                 cursor: saving ? 'not-allowed' : 'pointer',
                 opacity: saving ? 0.6 : 1
               }}
@@ -179,7 +188,10 @@ export default function UpdateProfilePage() {
                 {photoError}
               </Alert>
             )}
-            <OutlineButton fullWidth sx={{ mt: 1.5, fontSize: fs.body }} disabled={!avatar || saving}
+            <OutlineButton
+              fullWidth
+              sx={{ mt: 1.5, fontSize: fs.body }}
+              disabled={!avatar || saving}
               onClick={() => {
                 setPhotoError('');
                 // Đánh dấu xóa ảnh khi Lưu; chưa có ảnh đã lưu thì chỉ cần bỏ ảnh vừa chọn.
@@ -194,10 +206,13 @@ export default function UpdateProfilePage() {
           </Typography>
         </Box>
       </Box>
-      <OutlineButton component={RouterLink} to="/profile" startIcon={<ArrowLeftOutlined />} sx={{ mt: 4, fontSize: fs.body }}>
-        Quay lại hồ sơ
-      </OutlineButton>
+      {/* Khách đã có link quay lại ở đầu trang */}
+      {!isCustomer && (
+        <OutlineButton component={RouterLink} to="/profile" startIcon={<ArrowLeftOutlined />} sx={{ mt: 4, fontSize: fs.body }}>
+          Quay lại hồ sơ
+        </OutlineButton>
+      )}
       {toast}
-    </Box>
+    </Shell>
   );
 }

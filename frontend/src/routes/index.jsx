@@ -26,6 +26,7 @@ import { AuthShell } from 'features/auth/components/AuthForm';
 
 // Notification Management
 import NotificationPage from 'features/notification/NotificationPage';
+import NotificationDetailPage from 'features/notification/NotificationDetailPage';
 
 // Online Order Management
 import OrderListPage from 'features/order/OrderListPage';
@@ -100,6 +101,7 @@ export default createBrowserRouter([
           { path: '/profile/edit', element: <UpdateProfilePage /> },
           { path: '/profile/password', element: <ChangePasswordPage /> },
           { path: '/notifications', element: <NotificationPage /> },
+          { path: '/notifications/:id', element: <NotificationDetailPage /> },
           {
             // Giỏ hàng và đặt hàng chỉ dành cho khách hàng
             element: <RequireAuth roles={['CUSTOMER']} />,

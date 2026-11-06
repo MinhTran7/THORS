@@ -30,6 +30,12 @@ public class NotificationController {
         return Map.of("count", service.unreadCount(sessions.current()));
     }
 
+    /** GET /api/notifications/{id}: chi tiết một thông báo của người đang đăng nhập (id = user_notification_id). */
+    @GetMapping("/{id}")
+    Object detail(@PathVariable int id) {
+        return service.detail(sessions.current(), id);
+    }
+
     @PatchMapping("/{id}/read")
     Object markRead(@PathVariable int id) {
         service.markRead(sessions.current(), id);
