@@ -25,7 +25,6 @@ import { crumbsForPath } from './routeCrumbs';
 import ThorsMark from './ThorsMark';
 
 const SIDEBAR_WIDTH = 256;
-const SIDEBAR_GAP = 12; // khoảng hở quanh sidebar nổi trên nền kem
 
 // Màu theo trang Đăng nhập
 const ACCENT = brand.cyan;
@@ -35,37 +34,30 @@ const SIDEBAR_BG = 'linear-gradient(180deg, #FFFFFF 0%, #FFFFFF 40%, #F1FCFD 100
 
 const textProps = { fontSize: 14, fontWeight: 'inherit', noWrap: true };
 const iconBoxSx = {
-  width: 30,
-  height: 30,
+  width: 24,
   minWidth: 0,
   mr: 1.25,
-  borderRadius: '10px',
   display: 'grid',
   placeItems: 'center',
   color: 'inherit',
-  fontSize: 16,
-  transition: 'background-color .2s'
+  fontSize: 16
 };
 const itemSx = {
-  minHeight: 44,
-  px: 1,
-  mb: 0.5,
-  borderRadius: '14px',
-  color: brand.muted,
-  fontWeight: 600,
+  minHeight: 42,
+  px: 1.25,
+  mb: 0.25,
+  borderRadius: '10px',
+  color: brand.ink,
+  fontWeight: 500,
   transition: 'background-color .2s, color .2s',
-  '&:hover': { bgcolor: HOVER_BG, color: brand.ink },
-  '&:hover .nav-icon': { bgcolor: '#FFFFFF' }
+  '&:hover': { bgcolor: HOVER_BG, color: brand.ink }
 };
-// Mục đang chọn: viên xanh ngọc nhạt như nút "Đăng nhập", icon nằm trong ô trắng
+// Mục đang chọn: nền xanh ngọc nhạt
+const SELECT_MAIN = '#48EFFE';
+const SELECT_BG = 'rgba(72, 239, 254, 0.2)';
 const selectedSx = {
-  '&.Mui-selected, &.Mui-selected:hover': {
-    bgcolor: ACCENT,
-    color: brand.inkOnCyan,
-    fontWeight: 800,
-    boxShadow: '0 8px 18px -12px rgba(14, 58, 65, 0.55)'
-  },
-  '&.Mui-selected .nav-icon': { bgcolor: '#FFFFFF' }
+  '&.Mui-selected, &.Mui-selected:hover': { bgcolor: SELECT_BG, color: brand.ink, fontWeight: 600 },
+  '&.Mui-selected .nav-icon': { color: '#2BDDF0' }
 };
 
 const navListSx = {
@@ -79,7 +71,8 @@ const navListSx = {
   '&::-webkit-scrollbar': { display: 'none' }
 };
 
-const childListSx = { ml: 2.5, pl: 1.25, mb: 0.75, borderLeft: `2px dashed ${brand.cardLine}` };
+// Menu sổ xuống: đường dọc xám thẳng hàng với icon mục cha
+const childListSx = { ml: '22px', pl: 1, mb: 0.5, borderLeft: `2px solid ${brand.cardLine}` };
 
 function NavLink({ item, selected, nested = false, onClick }) {
   return (
@@ -91,27 +84,25 @@ function NavLink({ item, selected, nested = false, onClick }) {
       sx={{
         ...itemSx,
         ...selectedSx,
+        // Mục con: chữ xám, đậm lên khi được chọn
         ...(nested && {
-          minHeight: 38,
+          minHeight: 40,
           position: 'relative',
-          // Mục con đang chọn: nền nhạt hơn mục cha, chấm hồng trên đường kẻ dọc
-          '&.Mui-selected, &.Mui-selected:hover': { bgcolor: '#E6F9FB', color: brand.ink, fontWeight: 700, boxShadow: 'none' },
+          color: brand.muted,
+          // Đoạn đường dọc cạnh mục đang chọn chuyển sang xanh
           '&.Mui-selected::before': {
             content: '""',
             position: 'absolute',
-            left: -15,
-            top: '50%',
-            width: 8,
-            height: 8,
-            mt: '-4px',
-            borderRadius: '50%',
-            bgcolor: brand.pink,
-            boxShadow: '0 0 0 3px #FFFFFF'
+            left: -10,
+            top: 0,
+            bottom: 0,
+            width: 2,
+            bgcolor: SELECT_MAIN
           }
         })
       }}
     >
-      <ListItemIcon className="nav-icon" sx={{ ...iconBoxSx, ...(nested && { width: 26, height: 26, fontSize: 14, mr: 1 }) }}>
+      <ListItemIcon className="nav-icon" sx={iconBoxSx}>
         {item.icon}
       </ListItemIcon>
       <ListItemText primary={item.label} primaryTypographyProps={textProps} />
@@ -195,16 +186,9 @@ export default function ThorsLayout() {
 
           const activeTo = activeChildTo(item.children);
           const isOpen = openSubmenus[item.label] ?? Boolean(activeTo);
-          const highlight = isOpen || Boolean(activeTo);
           return (
             <Box key={item.label}>
-              <ListItemButton
-                onClick={() => setOpenSubmenus((prev) => ({ ...prev, [item.label]: !isOpen }))}
-                sx={{
-                  ...itemSx,
-                  ...(highlight && { color: brand.ink, fontWeight: 700, '& .nav-icon': { bgcolor: '#FFFFFF', boxShadow: `0 0 0 1px ${brand.cardLine}` } })
-                }}
-              >
+              <ListItemButton onClick={() => setOpenSubmenus((prev) => ({ ...prev, [item.label]: !isOpen }))} sx={itemSx}>
                 <ListItemIcon className="nav-icon" sx={iconBoxSx}>
                   {item.icon}
                 </ListItemIcon>
@@ -226,7 +210,7 @@ export default function ThorsLayout() {
         })}
       </List>
 
-      {/* Thẻ người dùng: nền kem vàng như ô ghi chú, bấm để mở hồ sơ */}
+      {/* Thẻ người dùng: nền trong suốt theo nền sidebar, bấm để mở hồ sơ */}
       <Stack
         component={Link}
         to="/profile"
@@ -236,11 +220,11 @@ export default function ThorsLayout() {
         spacing={1.25}
         sx={{
           position: 'relative',
-          m: 1.5,
-          p: 1.25,
-          borderRadius: '18px',
-          bgcolor: brand.yellowSoft,
-          border: `1px solid ${brand.yellowLine}`,
+          // Thẻ người dùng: hình chữ nhật khớp đáy sidebar
+          px: 2,
+          py: 1.5,
+          bgcolor: 'transparent',
+          borderTop: `1px solid ${brand.yellowLine}`,
           textDecoration: 'none',
           transition: 'box-shadow .2s',
           '&:hover': { boxShadow: '0 10px 22px -16px rgba(31, 41, 55, 0.5)' },
@@ -276,14 +260,11 @@ export default function ThorsLayout() {
             flexShrink: 0,
             alignSelf: 'flex-start',
             position: 'sticky',
-            top: SIDEBAR_GAP,
-            height: `calc(100vh - ${SIDEBAR_GAP * 2}px)`,
-            ml: `${SIDEBAR_GAP}px`,
-            my: `${SIDEBAR_GAP}px`,
-            borderRadius: '26px',
+            top: 0,
+            height: '100vh',
             overflow: 'hidden',
-            // Khung nổi giống thẻ form Đăng nhập
-            boxShadow: `0 24px 50px -30px rgba(31, 41, 55, 0.3), 0 0 0 1px ${brand.cardLine}`
+            // Sidebar chiếm hết chiều dọc, không bo góc
+            borderRight: `1px solid ${brand.cardLine}`
           }}
         >
           {sidebar}
@@ -292,7 +273,7 @@ export default function ThorsLayout() {
           variant="temporary"
           open={mobile}
           onClose={() => setMobile(false)}
-          sx={{ display: { md: 'none' }, '& .MuiDrawer-paper': { width: SIDEBAR_WIDTH, borderRadius: '0 26px 26px 0', border: 0 } }}
+          sx={{ display: { md: 'none' }, '& .MuiDrawer-paper': { width: SIDEBAR_WIDTH, borderRadius: 0, border: 0 } }}
         >
           {sidebar}
         </Drawer>
