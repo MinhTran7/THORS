@@ -235,11 +235,14 @@ class AccountIntegrationTest {
     }
 
     @Test
-    @DisplayName("IT-PRF-003 - Reject an avatar URL that is not https")
-    void rejectsNonHttpsAvatar() throws Exception {
-        var r = doPatch("/api/accounts/profile", Map.of("fullName", "Changed Name", "avatarUrl", "http://cdn.test/a.png"), sessionFor(owner));
-        expectError(r, 400, "AVATAR_URL");
-        assertEquals("Owner One", dbName(owner.id()));
+    @DisplayName("IT-PRF-003 - PATCH profile ignores avatarUrl: the avatar can only change via /profile/avatar")
+    void patchCannotSetAvatar() throws Exception {
+        var r = doPatch("/api/accounts/profile",
+                Map.of("fullName", "Changed Name", "avatarUrl", "https://res.cloudinary.com/x/image/upload/thors/products/p.jpg"),
+                sessionFor(owner));
+        assertEquals(200, status(r));
+        assertEquals("Changed Name", dbName(owner.id()));
+        assertNull(db.queryForObject("SELECT avatar_url FROM `user` WHERE user_id=?", String.class, owner.id()));
     }
 
     @Test
@@ -833,15 +836,23 @@ class AccountIntegrationTest {
     }
 
     @Test
-    @DisplayName("IT-LOG-010 - Daily statistics count events, successes and failures")
+    @DisplayName("IT-LOG-010 - Statistics count events, successes and failures in the filtered date range")
     void dailySummary() throws Exception {
         seedLogs();
-        var s = body(doGet("/api/audit-logs/summary", sessionFor(admin), "offset", "0"));
-        assertTrue(s.get("eventsToday").asLong() >= 7);
-        assertEquals(s.get("eventsToday").asLong(), s.get("successfulToday").asLong());
-        assertEquals(0, s.get("failedToday").asLong());
-        assertEquals(0, s.get("failedSignInsToday").asLong());
-        assertEquals(0, s.get("pausedSignInsToday").asLong());
+        String today = java.time.LocalDate.now(java.time.ZoneOffset.UTC).toString();
+        var s = body(doGet("/api/audit-logs/summary", sessionFor(admin), "from", today, "to", today, "offset", "0"));
+        assertTrue(s.get("events").asLong() >= 7);
+        assertEquals(s.get("events").asLong(), s.get("successful").asLong());
+        assertEquals(0, s.get("failed").asLong());
+        assertEquals(0, s.get("failedSignIns").asLong());
+        assertEquals(0, s.get("pausedSignIns").asLong());
+        // Không có from/to là toàn bộ lịch sử: ít nhất bằng số của hôm nay.
+        var all = body(doGet("/api/audit-logs/summary", sessionFor(admin), "offset", "0"));
+        assertTrue(all.get("events").asLong() >= s.get("events").asLong());
+        // Khoảng ngày trong quá khứ không chứa sự kiện vừa tạo.
+        var past = body(doGet("/api/audit-logs/summary", sessionFor(admin), "from", "2000-01-01", "to", "2000-01-31", "offset", "0"));
+        assertEquals(0, past.get("events").asLong());
+        expectError(doGet("/api/audit-logs/summary", sessionFor(admin), "from", today, "to", "2000-01-01"), 400, "DATE_RANGE");
     }
 
     @Test
@@ -875,8 +886,8 @@ class AccountIntegrationTest {
         assertTrue(body(doGet("/api/audit-logs", s, "status", "FAILED")).get("total").asInt() >= 1,
                 "a failed sign-in must be listed with status FAILED");
         var summary = body(doGet("/api/audit-logs/summary", s, "offset", "0"));
-        assertTrue(summary.get("failedToday").asLong() >= 1);
-        assertEquals(1, summary.get("failedSignInsToday").asLong());
+        assertTrue(summary.get("failed").asLong() >= 1);
+        assertEquals(1, summary.get("failedSignIns").asLong());
     }
 
 

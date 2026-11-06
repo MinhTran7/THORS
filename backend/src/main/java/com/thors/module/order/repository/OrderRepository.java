@@ -4,8 +4,10 @@ import com.thors.module.order.dto.OrderViews.*;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.sql.Timestamp;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -32,9 +34,20 @@ public class OrderRepository {
     /** Đơn kèm chủ đơn và loại đơn để Service kiểm tra quyền xem. */
     public record Found(int userId, String orderType, Detail detail) {}
 
+    /** Giờ Việt Nam: khách lọc theo ngày VN, còn DB lưu giờ UTC. */
+    private static final ZoneId VN = ZoneId.of("Asia/Ho_Chi_Minh");
+
+    /**
+     * Đọc nguyên giá trị UTC trong DB. Không dùng getTimestamp().toLocalDateTime() vì nó đổi sang múi giờ
+     * của máy chạy backend (máy dev ở VN sẽ lệch 7 tiếng khi frontend coi giá trị là UTC).
+     */
     private static LocalDateTime time(ResultSet rs, String column) throws SQLException {
-        Timestamp t = rs.getTimestamp(column);
-        return t == null ? null : t.toLocalDateTime();
+        return rs.getObject(column, LocalDateTime.class);
+    }
+
+    /** 0h của ngày {@code day} theo giờ VN, đổi ra giờ UTC để so với cột trong DB. */
+    private static LocalDateTime vnStartOfDayUtc(LocalDate day) {
+        return day.atStartOfDay(VN).withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
     }
 
     private final RowMapper<ListItem> listMapper =
@@ -53,14 +66,26 @@ public class OrderRepository {
                             rs.getString("delivery_address"),
                             rs.getLong("item_count"),
                             rs.getString("first_item"),
+                            rs.getString("shipping_carrier"),
                             List.of());
 
     /**
      * Danh sách đơn online. customerId != null thì chỉ lấy đơn của khách đó (Customer xem đơn của mình);
      * null thì lấy mọi đơn online (Owner, Family Member, Staff).
+     *
+     * <p>dateFrom / dateTo (có thể null): lọc theo ngày đặt, gồm cả hai ngày đầu cuối. paymentFilter
+     * (có thể null): lọc đúng giá trị cột payment_method (COD, ONLINE, CASH).
      */
     public Slice search(
-            Integer customerId, String orderType, List<String> statuses, String q, int page, int size) {
+            Integer customerId,
+            String orderType,
+            List<String> statuses,
+            String q,
+            LocalDate dateFrom,
+            LocalDate dateTo,
+            String paymentFilter,
+            int page,
+            int size) {
         var where = new StringBuilder(" WHERE o.order_type = ?");
         List<Object> args = new ArrayList<>();
         args.add(orderType);
@@ -73,6 +98,19 @@ public class OrderRepository {
                     .append(String.join(",", Collections.nCopies(statuses.size(), "?")))
                     .append(")");
             args.addAll(statuses);
+        }
+        if (dateFrom != null) {
+            where.append(" AND o.order_date >= ?");
+            args.add(vnStartOfDayUtc(dateFrom));
+        }
+        if (dateTo != null) {
+            // Nhỏ hơn 0h của ngày kế tiếp để lấy trọn cả ngày dateTo
+            where.append(" AND o.order_date < ?");
+            args.add(vnStartOfDayUtc(dateTo.plusDays(1)));
+        }
+        if (paymentFilter != null) {
+            where.append(" AND o.payment_method = ?");
+            args.add(paymentFilter);
         }
         if (q != null) {
             String like =
@@ -104,7 +142,7 @@ public class OrderRepository {
                         """
                         SELECT o.order_id, o.order_number, o.order_date, o.order_status, o.preparation_status,
                                o.payment_method, o.payment_status, o.total_amount,
-                               o.delivery_name, o.delivery_phone, o.delivery_address,
+                               o.delivery_name, o.delivery_phone, o.delivery_address, o.shipping_carrier,
                                (SELECT COALESCE(SUM(oi.quantity), 0) FROM order_item oi
                                  WHERE oi.order_id = o.order_id) AS item_count,
                                (SELECT oi.product_name_snapshot FROM order_item oi
@@ -324,6 +362,237 @@ public class OrderRepository {
                 quantity,
                 unitPrice);
         return Optional.of(orderId);
+    }
+
+    // ------------------------------------------------------------------
+    // Gửi vận đơn qua đơn vị vận chuyển (GHN)
+    // ------------------------------------------------------------------
+
+    /** Thông tin đơn cần để tạo vận đơn. */
+    public record ShipInput(
+            String orderNumber,
+            String name,
+            String phone,
+            String address,
+            Integer districtId,
+            String wardCode,
+            String paymentMethod,
+            String paymentStatus,
+            long totalAmount,
+            Integer weightG) {}
+
+    /** Một dòng hàng gửi kèm vận đơn. */
+    public record ShipItem(String name, String code, int quantity, long price) {}
+
+    public Optional<ShipInput> findShipInput(int orderId) {
+        List<ShipInput> rows =
+                db.query(
+                        """
+                        SELECT order_number, delivery_name, delivery_phone, delivery_address,
+                               delivery_district_id, delivery_ward_code, payment_method, payment_status,
+                               total_amount, package_weight_g
+                        FROM orders WHERE order_id = ?
+                        """,
+                        (rs, i) ->
+                                new ShipInput(
+                                        rs.getString("order_number"),
+                                        rs.getString("delivery_name"),
+                                        rs.getString("delivery_phone"),
+                                        rs.getString("delivery_address"),
+                                        rs.getObject("delivery_district_id", Integer.class),
+                                        rs.getString("delivery_ward_code"),
+                                        rs.getString("payment_method"),
+                                        rs.getString("payment_status"),
+                                        rs.getLong("total_amount"),
+                                        rs.getObject("package_weight_g", Integer.class)),
+                        orderId);
+        return rows.stream().findFirst();
+    }
+
+    public List<ShipItem> shipItems(int orderId) {
+        return db.query(
+                """
+                SELECT oi.product_name_snapshot, oi.size_snapshot, oi.color_snapshot, oi.detail_id,
+                       oi.quantity, oi.unit_price
+                FROM order_item oi WHERE oi.order_id = ? ORDER BY oi.order_item_id
+                """,
+                (rs, i) -> {
+                    StringBuilder name = new StringBuilder(rs.getString("product_name_snapshot"));
+                    String size = rs.getString("size_snapshot");
+                    String color = rs.getString("color_snapshot");
+                    if (size != null && !size.isBlank()) name.append(" - ").append(size);
+                    if (color != null && !color.isBlank()) name.append(" - ").append(color);
+                    return new ShipItem(
+                            name.toString(),
+                            String.valueOf(rs.getInt("detail_id")),
+                            rs.getInt("quantity"),
+                            rs.getLong("unit_price"));
+                },
+                orderId);
+    }
+
+    /**
+     * Lưu vận đơn thật của đơn vị vận chuyển. Đơn vẫn giữ trạng thái {@code from} (Chờ lấy hàng) cho tới
+     * khi bên vận chuyển báo đã lấy hàng. Điều kiện order_status = from và chưa có mã vận đơn chống hai
+     * người cùng gửi một đơn. Trả về false nếu không lưu được.
+     */
+    public boolean shipWithCarrier(
+            int orderId,
+            String from,
+            String carrier,
+            String trackingNumber,
+            String serviceCode,
+            long carrierFee,
+            long codAmount,
+            int weightG,
+            int districtId,
+            String wardCode) {
+        return db.update(
+                        """
+                        UPDATE orders SET shipping_carrier = ?,
+                               tracking_number = ?, provider_shipment_id = ?, shipping_service_code = ?,
+                               carrier_shipping_fee = ?, cod_amount = ?, package_weight_g = ?,
+                               delivery_district_id = ?, delivery_ward_code = ?,
+                               shipment_status = 'CREATED', shipment_created_at = NOW(),
+                               shipment_picked_up_at = NULL, shipment_updated_at = NOW()
+                        WHERE order_id = ? AND order_status = ? AND tracking_number IS NULL
+                        """,
+                        carrier,
+                        trackingNumber,
+                        trackingNumber,
+                        serviceCode,
+                        carrierFee,
+                        codAmount,
+                        weightG,
+                        districtId,
+                        wardCode,
+                        orderId,
+                        from)
+                > 0;
+    }
+
+    /** Đơn đã gửi đơn vị vận chuyển, dùng khi nhận cập nhật trạng thái giao từ bên đó. */
+    public record Tracked(
+            int orderId,
+            int userId,
+            String orderNumber,
+            String orderStatus,
+            String shipmentStatus,
+            String lastEventId,
+            LocalDateTime shipmentUpdatedAt) {}
+
+    private final RowMapper<Tracked> trackedMapper =
+            (rs, i) ->
+                    new Tracked(
+                            rs.getInt("order_id"),
+                            rs.getInt("user_id"),
+                            rs.getString("order_number"),
+                            rs.getString("order_status"),
+                            rs.getString("shipment_status"),
+                            rs.getString("shipment_last_event_id"),
+                            time(rs, "shipment_updated_at"));
+
+    private static final String TRACKED_COLUMNS =
+            "order_id, user_id, order_number, order_status, shipment_status, shipment_last_event_id,"
+                    + " shipment_updated_at";
+
+    /** Khóa dòng (FOR UPDATE) để hai cập nhật cùng lúc của một vận đơn không ghi đè nhau. */
+    public Optional<Tracked> findByTrackingForUpdate(String carrier, String trackingNumber) {
+        return db.query(
+                        "SELECT " + TRACKED_COLUMNS
+                                + " FROM orders WHERE shipping_carrier = ? AND tracking_number = ? FOR UPDATE",
+                        trackedMapper,
+                        carrier,
+                        trackingNumber)
+                .stream()
+                .findFirst();
+    }
+
+    /** Mã vận đơn của các đơn đang giao qua carrier mà trạng thái giao chưa kết thúc. */
+    public List<String> activeTrackingNumbers(String carrier) {
+        return db.queryForList(
+                """
+                SELECT tracking_number FROM orders
+                WHERE shipping_carrier = ? AND tracking_number IS NOT NULL
+                  AND order_status IN ('AWAITING_PICKUP', 'SHIPPING', 'DELIVERED')
+                  AND (shipment_status IS NULL OR shipment_status NOT IN ('DELIVERED', 'RETURNED', 'CANCELLED'))
+                ORDER BY shipment_updated_at
+                """,
+                String.class,
+                carrier);
+    }
+
+    /**
+     * Ghi trạng thái giao mới. pickedUp / delivered = true thì ghi mốc lấy hàng / giao thành công (chỉ
+     * ghi lần đầu).
+     */
+    public void applyShipmentEvent(
+            int orderId,
+            String shipmentStatus,
+            String eventId,
+            LocalDateTime eventTime,
+            boolean pickedUp,
+            boolean delivered) {
+        // eventTime là giờ UTC; truyền LocalDateTime để driver ghi nguyên giá trị, không đổi theo múi giờ máy
+        LocalDateTime at = eventTime;
+        db.update(
+                """
+                UPDATE orders SET shipment_status = ?, shipment_last_event_id = ?, shipment_updated_at = ?,
+                       shipment_picked_up_at = IF(? AND shipment_picked_up_at IS NULL, ?, shipment_picked_up_at),
+                       shipment_delivered_at = IF(? AND shipment_delivered_at IS NULL, ?, shipment_delivered_at)
+                WHERE order_id = ?
+                """,
+                shipmentStatus,
+                eventId,
+                at,
+                pickedUp,
+                at,
+                delivered,
+                at,
+                orderId);
+    }
+
+    /** Đơn vị vận chuyển báo đã lấy hàng: AWAITING_PICKUP -> SHIPPING. */
+    public boolean markShippingByCarrier(int orderId) {
+        return db.update(
+                        "UPDATE orders SET order_status = 'SHIPPING' WHERE order_id = ? AND order_status = 'AWAITING_PICKUP'",
+                        orderId)
+                > 0;
+    }
+
+    /**
+     * Đơn vị vận chuyển báo đã giao: AWAITING_PICKUP / SHIPPING -> DELIVERED (có thể lỡ sự kiện lấy
+     * hàng), đơn COD coi như đã thu tiền.
+     */
+    public boolean markDeliveredByCarrier(int orderId) {
+        return db.update(
+                        """
+                        UPDATE orders SET order_status = 'DELIVERED',
+                               payment_status = IF(payment_method = 'COD', 'PAID', payment_status)
+                        WHERE order_id = ? AND order_status IN ('AWAITING_PICKUP', 'SHIPPING')
+                        """,
+                        orderId)
+                > 0;
+    }
+
+    /** Đơn vị vận chuyển hủy vận đơn: đơn đang chờ lấy / đang giao chuyển sang CANCELLED. */
+    public boolean markCancelledByCarrier(int orderId, String reason) {
+        return db.update(
+                        """
+                        UPDATE orders SET order_status = 'CANCELLED', cancel_reason = ?, cancelled_at = NOW()
+                        WHERE order_id = ? AND order_status IN ('AWAITING_PICKUP', 'SHIPPING')
+                        """,
+                        reason,
+                        orderId)
+                > 0;
+    }
+
+    /** Đơn vị vận chuyển của đơn (null nếu chưa gửi). */
+    public Optional<String> carrierOf(int orderId) {
+        return db.queryForList("SELECT shipping_carrier FROM orders WHERE order_id = ?", String.class, orderId)
+                .stream()
+                .filter(java.util.Objects::nonNull)
+                .findFirst();
     }
 
     // ------------------------------------------------------------------

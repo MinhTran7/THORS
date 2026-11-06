@@ -28,11 +28,11 @@ function Row({ label, children }) {
   );
 }
 
-export default function StaffDetailPage() {
+export default function FamilyDetailPage() {
   const { id } = useParams();
   const location = useLocation();
   const { data, error, mutate } = useSWR(['account', id], () => accountsApi.detail(id), { revalidateOnFocus: false });
-  useCrumbs(['Family', data?.fullName ?? '…']);
+  useCrumbs(['Gia đình', data?.fullName ?? '…']);
   const [toast, showToast] = useToast();
   const [busy, setBusy] = useState(false);
 
@@ -43,13 +43,18 @@ export default function StaffDetailPage() {
     }
   }, [location.state, showToast]);
 
+  const locked = data?.status === 'LOCKED';
+  const pending = data?.status === 'PENDING_VERIFICATION';
+
   async function toggle() {
+    // Chỉ cho bật/tắt khi tài khoản đang ACTIVE hoặc DISABLED.
+    if (data.status !== 'ACTIVE' && data.status !== 'DISABLED') return;
     const next = data.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE';
     setBusy(true);
     try {
       await accountsApi.setStatus(id, next);
       await mutate();
-      showToast(next === 'ACTIVE' ? 'Account activated.' : 'Account deactivated.');
+      showToast(next === 'ACTIVE' ? 'Đã kích hoạt tài khoản.' : 'Đã vô hiệu hóa tài khoản.');
     } catch (e) {
       showToast(e.message, 'error');
     } finally {
@@ -57,17 +62,15 @@ export default function StaffDetailPage() {
     }
   }
 
-  const locked = data?.status === 'LOCKED';
-
   return (
     <Box>
       <PageHeader
-        back={{ to: '/family', label: 'Family List' }}
-        title="Family Member Detail"
-        subtitle="Account information, assigned role and access status."
+        back={{ to: '/family', label: 'Danh sách gia đình' }}
+        title="Chi tiết thành viên gia đình"
+        subtitle="Thông tin tài khoản, vai trò được gán và trạng thái truy cập."
         action={
           <OutlineButton component={RouterLink} to={`/family/${id}/edit`} startIcon={<EditOutlined />} disabled={!data}>
-            Edit account
+            Chỉnh sửa tài khoản
           </OutlineButton>
         }
       />
@@ -90,58 +93,66 @@ export default function StaffDetailPage() {
               </Typography>
               {data && <RoleChip role={data.role} />}
               <Typography variant="caption" sx={{ color: brand.muted }}>
-                {data ? `Joined ${formatDate(data.createdAt)}` : ' '}
+                {data ? `Tham gia ${formatDate(data.createdAt)}` : ' '}
               </Typography>
               <Typography variant="caption" sx={{ color: brand.muted }}>
-                {data ? `Account ID: #${data.id}` : ' '}
+                {data ? `Mã tài khoản: #${data.id}` : ' '}
               </Typography>
             </Stack>
           </Box>
 
           <Box sx={{ ...cardSx, p: 3 }}>
             <Typography variant="h5" sx={{ color: brand.ink, mb: 1.5 }}>
-              Account access
+              Quyền truy cập tài khoản
             </Typography>
             <Stack direction="row" justifyContent="space-between" alignItems="center">
               <Typography variant="subtitle2" sx={{ color: brand.ink }}>
-                Activate / Deactivate
+                Kích hoạt / Vô hiệu hóa
               </Typography>
               <Stack direction="row" alignItems="center" spacing={0.5}>
-                <BrandSwitch
-                  checked={data?.status === 'ACTIVE'}
-                  disabled={!data || locked || busy}
-                  onChange={toggle}
-                  slotProps={{ input: { 'aria-label': 'Activate or deactivate this account' } }}
-                />
-                <Typography variant="caption" sx={{ color: brand.ink, fontWeight: 600 }}>
+                {/* Tài khoản chờ xác minh chưa thể khóa/mở khóa: ẩn công tắc nhưng vẫn giữ chỗ để khung không bị nhảy. */}
+                <Box component="span" sx={{ display: 'inline-flex', visibility: pending ? 'hidden' : 'visible' }} aria-hidden={pending || undefined}>
+                  <BrandSwitch
+                    checked={data?.status === 'ACTIVE'}
+                    disabled={!data || locked || pending || busy}
+                    onChange={toggle}
+                    slotProps={{ input: { 'aria-label': 'Kích hoạt hoặc vô hiệu hóa tài khoản này' } }}
+                  />
+                </Box>
+                <Typography
+                  variant="caption"
+                  sx={{ color: brand.ink, fontWeight: 600, whiteSpace: 'nowrap', display: 'inline-block', minWidth: 96 }}
+                >
                   {!data
                     ? ''
                     : locked
-                      ? 'Locked'
+                      ? 'Đã khóa'
                       : data.status === 'ACTIVE'
-                        ? 'Active'
+                        ? 'Đã kích hoạt'
                         : data.status === 'DISABLED'
-                          ? 'Inactive'
-                          : 'Pending'}
+                          ? 'Đã vô hiệu hóa'
+                          : 'Chờ xác minh'}
                 </Typography>
               </Stack>
             </Stack>
-            <Typography variant="caption" sx={{ color: brand.muted, display: 'block', mt: 1.5 }}>
+            <Typography variant="caption" sx={{ color: brand.muted, display: 'block', mt: 1.5, minHeight: '5em' }}>
               {locked
-                ? 'This account was locked by an administrator. Only an admin can unlock it.'
-                : "Deactivating blocks sign-in immediately. This account's activity history will be kept."}
+                ? 'Tài khoản này đã bị quản trị viên khóa. Chỉ quản trị viên mới có thể mở khóa.'
+                : pending
+                  ? 'Tài khoản đang chờ xác minh email. Sau khi xác minh, bạn mới có thể kích hoạt hoặc vô hiệu hóa.'
+                  : 'Vô hiệu hóa sẽ chặn đăng nhập ngay lập tức. Lịch sử hoạt động của tài khoản này vẫn được giữ lại.'}
             </Typography>
           </Box>
         </Stack>
 
         <Box sx={{ ...cardSx, p: 3 }}>
           <Typography variant="h5" sx={{ color: brand.ink, mb: 1 }}>
-            Contact &amp; assigned role
+            Liên hệ &amp; vai trò được gán
           </Typography>
           <Row label="Email">{data?.email}</Row>
-          <Row label="Phone">{data?.phone}</Row>
-          <Row label="Assigned role">{data && <RoleChip role={data.role} />}</Row>
-          <Row label="Store">{data && STORE_NAME}</Row>
+          <Row label="Số điện thoại">{data?.phone}</Row>
+          <Row label="Vai trò được gán">{data && <RoleChip role={data.role} />}</Row>
+          <Row label="Cửa hàng">{data && STORE_NAME}</Row>
         </Box>
       </Box>
       {toast}

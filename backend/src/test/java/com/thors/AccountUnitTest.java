@@ -122,7 +122,7 @@ class AccountUnitTest {
     }
 
     private void verifyNoProfileWrite() {
-        verify(users, never()).updateProfile(anyInt(), any(), any(), any(), any());
+        verify(users, never()).updateProfile(anyInt(), any(), any(), any());
     }
 
 
@@ -171,73 +171,54 @@ class AccountUnitTest {
     // ================================================================== updateProfile()
 
     @Test
-    @DisplayName("UTC005 - Updates name, phone, address, avatar and writes audit log")
+    @DisplayName("UTC005 - Updates name, phone, address and writes audit log")
     void updateProfile_updatesAllFieldsAndAudits() {
         stub(owner);
-        service.updateProfile(owner, new UpdateProfile("  Nguyen Van A  ", "0912345678", "12 Hang Bai", "https://cdn.test/a.png"));
+        service.updateProfile(owner, new UpdateProfile("  Nguyen Van A  ", "0912345678", "12 Hang Bai"));
         verify(users).lockIdentityRegistry();
-        verify(users).updateProfile(10, "Nguyen Van A", "+84912345678", "12 Hang Bai", "https://cdn.test/a.png");
+        verify(users).updateProfile(10, "Nguyen Van A", "+84912345678", "12 Hang Bai");
         verify(users).audit(10, "PROFILE_UPDATE", 10, "Profile information updated");
     }
 
     @Test
-    @DisplayName("UTC006 - null phone/address/avatar keep the current values")
+    @DisplayName("UTC006 - null phone/address keep the current values")
     void updateProfile_nullFieldsKeepCurrentValues() {
         stub(owner);
-        service.updateProfile(owner, new UpdateProfile("New Name", null, null, null));
+        service.updateProfile(owner, new UpdateProfile("New Name", null, null));
         verify(users, never()).lockIdentityRegistry();
-        verify(users).updateProfile(10, "New Name", owner.phone(), owner.address(), owner.avatarUrl());
+        verify(users).updateProfile(10, "New Name", owner.phone(), owner.address());
     }
 
     @Test
     @DisplayName("UTC007 - Blank phone keeps the current phone")
     void updateProfile_blankPhoneKeepsCurrentPhone() {
         stub(owner);
-        service.updateProfile(owner, new UpdateProfile("New Name", "   ", null, null));
+        service.updateProfile(owner, new UpdateProfile("New Name", "   ", null));
         verify(users, never()).lockIdentityRegistry();
-        verify(users).updateProfile(10, "New Name", owner.phone(), owner.address(), owner.avatarUrl());
+        verify(users).updateProfile(10, "New Name", owner.phone(), owner.address());
     }
 
     @Test
-    @DisplayName("UTC008 - Empty address/avatar clear the stored values")
-    void updateProfile_emptyAddressAndAvatarClearValues() {
+    @DisplayName("UTC008 - Empty address clears the stored value")
+    void updateProfile_emptyAddressClearsValue() {
         stub(owner);
-        service.updateProfile(owner, new UpdateProfile("New Name", null, "", ""));
-        verify(users).updateProfile(10, "New Name", owner.phone(), null, null);
+        service.updateProfile(owner, new UpdateProfile("New Name", null, ""));
+        verify(users).updateProfile(10, "New Name", owner.phone(), null);
     }
 
     @Test
-    @DisplayName("UTC009 - Rejects an avatar URL that is not https")
-    void updateProfile_rejectsNonHttpsAvatar() {
+    @DisplayName("UTC009 - Updating the profile never touches the avatar")
+    void updateProfile_neverTouchesAvatar() {
         stub(owner);
-        fail(400, "AVATAR_URL", () -> service.updateProfile(owner, new UpdateProfile("New Name", null, null, "http://cdn.test/a.png")));
-        verifyNoProfileWrite();
-    }
-
-    @Test
-    @DisplayName("UTC010 - Avatar URL of exactly 500 characters is accepted")
-    void updateProfile_avatarUrlLength500Accepted() {
-        stub(owner);
-        String url = "https://" + "a".repeat(492);
-        assertEquals(500, url.length());
-        service.updateProfile(owner, new UpdateProfile("New Name", null, null, url));
-        verify(users).updateProfile(10, "New Name", owner.phone(), owner.address(), url);
-    }
-
-    @Test
-    @DisplayName("UTC011 - Avatar URL of 501 characters is rejected")
-    void updateProfile_avatarUrlLength501Rejected() {
-        stub(owner);
-        String url = "https://" + "a".repeat(493);
-        fail(400, "AVATAR_URL", () -> service.updateProfile(owner, new UpdateProfile("New Name", null, null, url)));
-        verifyNoProfileWrite();
+        service.updateProfile(owner, new UpdateProfile("New Name", null, null));
+        verify(users, never()).avatar(anyInt(), any());
     }
 
     @Test
     @DisplayName("UTC012 - Rejects a blank full name")
     void updateProfile_blankNameRejected() {
         stub(owner);
-        fail(400, "NAME", () -> service.updateProfile(owner, new UpdateProfile("   ", null, null, null)));
+        fail(400, "NAME", () -> service.updateProfile(owner, new UpdateProfile("   ", null, null)));
         verifyNoProfileWrite();
     }
 
@@ -246,16 +227,16 @@ class AccountUnitTest {
     void updateProfile_nameLengthBoundary() {
         stub(owner);
         String ok = "a".repeat(100);
-        service.updateProfile(owner, new UpdateProfile(ok, null, null, null));
-        verify(users).updateProfile(10, ok, owner.phone(), owner.address(), owner.avatarUrl());
-        fail(400, "NAME", () -> service.updateProfile(owner, new UpdateProfile("a".repeat(101), null, null, null)));
+        service.updateProfile(owner, new UpdateProfile(ok, null, null));
+        verify(users).updateProfile(10, ok, owner.phone(), owner.address());
+        fail(400, "NAME", () -> service.updateProfile(owner, new UpdateProfile("a".repeat(101), null, null)));
     }
 
     @Test
     @DisplayName("UTC014 - Rejects a malformed phone number")
     void updateProfile_rejectsInvalidPhone() {
         stub(owner);
-        fail(400, "PHONE", () -> service.updateProfile(owner, new UpdateProfile("New Name", "abc123", null, null)));
+        fail(400, "PHONE", () -> service.updateProfile(owner, new UpdateProfile("New Name", "abc123", null)));
         verifyNoProfileWrite();
     }
 

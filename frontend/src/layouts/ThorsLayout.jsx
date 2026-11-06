@@ -23,6 +23,7 @@ import AppFooter from './AppFooter';
 import AppHeader from './AppHeader';
 import { CrumbsContext } from './crumbs';
 import { navFor } from './navigation';
+import { crumbsForPath } from './routeCrumbs';
 import ThorsMark from './ThorsMark';
 
 const SIDEBAR_WIDTH = 248;
@@ -208,7 +209,7 @@ export default function ThorsLayout() {
           {sidebar}
         </Drawer>
         <Box sx={{ flexGrow: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-          <AppHeader crumbs={crumbs} onOpenMenu={() => setMobile(true)} onSignOut={signOut} />
+          <AppHeader crumbs={crumbs.length > 0 ? crumbs : crumbsForPath(location.pathname)}onOpenMenu={() => setMobile(true)} onSignOut={signOut} />
           <Box component="main" sx={{ px: { xs: 2, md: 4 }, py: 3, maxWidth: 1920, mx: 'auto', width: '100%', flexGrow: 1 }}>
             {error && (
               <Alert severity="error" sx={{ mb: 2 }}>

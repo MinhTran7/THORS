@@ -79,7 +79,10 @@ public class SecurityConfig {
                                                 .ignoringRequestMatchers("/api/payment/payos/webhook",
                                                                 "/api/facebook/webhook/**",
                                                                 "/api/returns/public",
-                                                                "/api/returns/upload-evidence"));
+                                                                "/api/returns/upload-evidence",
+                                                                // GHN gọi webhook từ máy chủ của họ, không có cookie/CSRF; được bảo vệ
+                                                                // bằng chuỗi bí mật trong đường dẫn (thors.ghn.webhook-secret)
+                                                                "/api/ghn/webhook/**"));
                 http.authorizeHttpRequests(
                                 a -> a.requestMatchers(
                                                 "/api/auth/csrf",
@@ -103,6 +106,7 @@ public class SecurityConfig {
                                                 "/api/returns/track/**",
                                                 "/api/returns/public",
                                                 "/api/returns/upload-evidence",
+                                                "/api/ghn/webhook/**",
                                                 "/error")
                                                 .permitAll()
                                                 .requestMatchers("/api/warehouse", "/api/warehouse/**")

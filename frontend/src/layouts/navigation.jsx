@@ -74,7 +74,7 @@ export const NAVIGATION = {
     { to: '/categories', label: 'Categories', icon: <AppstoreOutlined /> },
     orders,
     { to: '/returns', label: 'Hoàn hàng / Đổi trả', icon: <RollbackOutlined /> },
-    { to: '/staff', label: 'Family', icon: <TeamOutlined /> },
+    { to: '/family', label: 'Family', icon: <TeamOutlined /> },
     inStoreSales,
     facebookSales,
     { to: '/promotions', label: 'Khuyến mãi', icon: <TagsOutlined /> },
