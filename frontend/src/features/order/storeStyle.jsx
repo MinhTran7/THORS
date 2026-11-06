@@ -1,5 +1,5 @@
 import { Box } from '@mui/material';
-import { C, SANS, SERIF, btnSx, focusRing } from 'features/shop/storefront';
+import { C, SANS, SERIF, btnSx, focusRing } from 'features/shop/storeTheme';
 
 /**
  * Style cho các trang đơn hàng của khách, theo giao diện cửa hàng (trang chủ shop):

@@ -1683,11 +1683,15 @@ CREATE TABLE IF NOT EXISTS `shipping_address` (
   `is_deleted` tinyint(1) NOT NULL DEFAULT '0',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `default_user_id` int GENERATED ALWAYS AS (if(((`is_default` = 1) and (`is_deleted` = 0)),`user_id`,NULL)) VIRTUAL,
   PRIMARY KEY (`address_id`),
+  UNIQUE KEY `uq_shipping_address_default` (`default_user_id`),
   KEY `idx_shipping_address_user` (`user_id`,`is_deleted`),
   CONSTRAINT `fk_shipping_address_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`user_id`),
   CONSTRAINT `chk_shipping_address_default` CHECK ((`is_default` in (0,1))),
-  CONSTRAINT `chk_shipping_address_deleted` CHECK ((`is_deleted` in (0,1)))
+  CONSTRAINT `chk_shipping_address_deleted` CHECK ((`is_deleted` in (0,1))),
+  CONSTRAINT `chk_shipping_address_default_active` CHECK ((not((`is_default` = 1) and (`is_deleted` = 1)))),
+  CONSTRAINT `chk_shipping_address_coordinates` CHECK ((((`latitude` is null) and (`longitude` is null)) or ((`latitude` is not null) and (`longitude` is not null) and (`latitude` between -90 and 90) and (`longitude` between -180 and 180))))
 ) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Dumping data for table thors_restore.shipping_address: ~6 rows (approximately)

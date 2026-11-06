@@ -527,26 +527,6 @@ export default function EditPromotionPage() {
 
   return (
     <Box sx={{ maxWidth: 1000, mx: 'auto', color: C.text, pb: 6 }}>
-      {/* ─── ĐIỀU HƯỚNG QUAY LẠI ─── */}
-      <Box
-        onClick={() => navigate(`/promotions/${promotionId}`)}
-        sx={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 1,
-          color: C.muted,
-          fontSize: 13,
-          fontWeight: 600,
-          cursor: 'pointer',
-          mb: 2,
-          transition: 'color 0.15s ease',
-          '&:hover': { color: C.text }
-        }}
-      >
-        <ArrowLeftOutlined style={{ fontSize: 13 }} />
-        <span>Chi tiết khuyến mãi</span>
-      </Box>
-
       {/* ─── TIÊU ĐỀ ─── */}
       <Box sx={{ mb: 3 }}>
         <Typography variant="h3" sx={{ fontWeight: 800, color: C.text, fontSize: { xs: 22, sm: 28 } }}>

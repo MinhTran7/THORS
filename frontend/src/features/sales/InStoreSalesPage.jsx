@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Button, CircularProgress, Dialog, IconButton, InputAdornment, MenuItem, TextField, Typography } from '@mui/material';
+import { Alert, Box, Button, CircularProgress, ClickAwayListener, Dialog, IconButton, InputAdornment, MenuItem, Snackbar, TextField, Typography, useMediaQuery } from '@mui/material';
 import {
   SearchOutlined,
   ScanOutlined,
@@ -33,9 +33,22 @@ export default function InStoreSalesPage() {
   const { account } = useAuth();
   useCrumbs(['Bán hàng tại quầy', 'Bán hàng']);
 
+  const isDesktop = useMediaQuery((theme) => theme.breakpoints.up('lg'));
+
+  useEffect(() => {
+    if (!isDesktop) return undefined;
+    const html = document.documentElement;
+    const prev = html.style.overflow;
+    html.style.overflow = 'hidden';
+    return () => {
+      html.style.overflow = prev;
+    };
+  }, [isDesktop]);
+
   const [products, setProducts] = useState([]);
   const [category, setCategory] = useState('Tất cả danh mục');
   const [search, setSearch] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [addingId, setAddingId] = useState(null);
 
@@ -46,9 +59,8 @@ export default function InStoreSalesPage() {
       label: 'Hóa đơn 1',
       cart: [],
       payment: 'Cash',
-      received: '',
       discount: '',
-      isEditingDiscount: false
+      discountType: 'amount'
     }
   ]);
   const [activeOrderId, setActiveOrderId] = useState(1);
@@ -68,9 +80,8 @@ export default function InStoreSalesPage() {
 
   const cart = activeOrder.cart || [];
   const payment = activeOrder.payment || 'Cash';
-  const received = activeOrder.received || '';
   const discount = activeOrder.discount || '';
-  const isEditingDiscount = Boolean(activeOrder.isEditingDiscount);
+  const discountType = activeOrder.discountType || 'amount';
 
   const setCart = (action) => {
     updateActiveOrder((ord) => ({
@@ -80,14 +91,28 @@ export default function InStoreSalesPage() {
   };
 
   const setPayment = (val) => updateActiveOrder({ payment: val });
-  const setReceived = (val) => updateActiveOrder({ received: val });
-  const setDiscount = (val) => updateActiveOrder({ discount: val });
-  const setIsEditingDiscount = (action) => {
-    updateActiveOrder((ord) => ({
-      ...ord,
-      isEditingDiscount: typeof action === 'function' ? action(Boolean(ord.isEditingDiscount)) : action
-    }));
-  };
+
+  // Popup giảm giá (VNĐ hoặc %)
+  const [discountOpen, setDiscountOpen] = useState(false);
+  const [draftType, setDraftType] = useState('amount');
+  const [draftValue, setDraftValue] = useState('');
+  const [draftError, setDraftError] = useState('');
+
+  function openDiscount() {
+    setDraftType(discountType);
+    setDraftValue(discount);
+    setDraftError('');
+    setDiscountOpen(true);
+  }
+
+  function applyDiscount() {
+    const value = Number(draftValue) || 0;
+    if (value < 0) return setDraftError('Giá trị giảm không hợp lệ.');
+    if (draftType === 'percent' && value > 100) return setDraftError('Phần trăm giảm tối đa là 100%.');
+    if (draftType === 'amount' && value > subtotal) return setDraftError('Giảm giá không được vượt quá tổng tiền hàng.');
+    updateActiveOrder({ discount: draftValue, discountType: draftType });
+    setDiscountOpen(false);
+  }
 
   function addOrderTab() {
     if (orders.length >= 8) {
@@ -107,9 +132,8 @@ export default function InStoreSalesPage() {
       label: `Hóa đơn ${nextNum}`,
       cart: [],
       payment: 'Cash',
-      received: '',
       discount: '',
-      isEditingDiscount: false
+      discountType: 'amount'
     };
     setOrders((prev) => [...prev, newOrder]);
     setActiveOrderId(newId);
@@ -145,6 +169,7 @@ export default function InStoreSalesPage() {
   const [loadingVariants, setLoadingVariants] = useState(false);
 
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
 
@@ -152,8 +177,6 @@ export default function InStoreSalesPage() {
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [completedSale, setCompletedSale] = useState(null);
   const [completedCart, setCompletedCart] = useState([]);
-  const [completedReceived, setCompletedReceived] = useState(0);
-  const [completedChange, setCompletedChange] = useState(0);
   const [completedAt, setCompletedAt] = useState(null);
 
   useEffect(() => {
@@ -319,33 +342,18 @@ export default function InStoreSalesPage() {
   }
 
   const subtotal = cart.reduce((sum, line) => sum + line.price * line.quantity, 0);
-  const discountValue = Math.min(subtotal, Math.max(0, Number(discount) || 0));
+  const discountNumber = Math.max(0, Number(discount) || 0);
+  const discountValue =
+    discountType === 'percent'
+      ? Math.round((subtotal * Math.min(100, discountNumber)) / 100)
+      : Math.min(subtotal, Math.round(discountNumber));
   const total = subtotal - discountValue;
-  const receivedValue = Math.max(0, Number(received) || 0);
-  const change = Math.max(0, receivedValue - total);
 
   async function completeSale() {
     setError('');
 
     if (!cart.length) {
-      setError('Vui lòng thêm ít nhất một sản phẩm vào hóa đơn.');
-      return;
-    }
-
-    const discountNum = Math.round(Number(discount) || 0);
-
-    if (discountNum < 0 || !Number.isInteger(discountNum)) {
-      setError('Giảm giá phải là số nguyên dương hợp lệ.');
-      return;
-    }
-
-    if (discountNum > subtotal) {
-      setError('Giảm giá không được vượt quá tổng tiền hàng.');
-      return;
-    }
-
-    if (payment === 'Cash' && receivedValue < total) {
-      setError('Số tiền khách đưa chưa đủ để thanh toán.');
+      setError('Vui lòng thêm sản phẩm vào hóa đơn.');
       return;
     }
 
@@ -361,15 +369,13 @@ export default function InStoreSalesPage() {
             detailId: line.variantId,
             quantity: line.quantity
           })),
-          discountAmount: discountNum,
+          discountAmount: discountValue,
           paymentMethod: payment === 'Cash' ? 'CASH' : 'BANK_TRANSFER'
         }
       });
 
       setCompletedSale(result);
       setCompletedCart([...cart]);
-      setCompletedReceived(receivedValue);
-      setCompletedChange(payment === 'Cash' ? Math.max(0, receivedValue - total) : 0);
       setCompletedAt(new Date());
       setReceiptOpen(true);
 
@@ -385,9 +391,8 @@ export default function InStoreSalesPage() {
             label: 'Hóa đơn 1',
             cart: [],
             payment: 'Cash',
-            received: '',
             discount: '',
-            isEditingDiscount: false
+            discountType: 'amount'
           }
         ];
       });
@@ -406,81 +411,202 @@ export default function InStoreSalesPage() {
   }
 
   function clearInvoice() {
+    if (!cart.length) {
+      setError('Hóa đơn đang trống, không có gì để xóa.');
+      return;
+    }
     updateActiveOrder({
       cart: [],
       discount: '',
-      received: '',
-      isEditingDiscount: false
+      discountType: 'amount'
     });
     setError('');
+    setSuccess('Đã xóa hóa đơn.');
   }
 
   function handleReceiptClose() {
     setReceiptOpen(false);
     setCompletedSale(null);
     setCompletedCart([]);
-    setCompletedReceived(0);
-    setCompletedChange(0);
     setCompletedAt(null);
   }
 
   return (
-    <Box sx={{ maxWidth: 1600, mx: 'auto', color: '#0F172A', pb: 4 }}>
-      {/* ─── TIÊU ĐỀ TRÊN CÙNG ─── */}
-      <Box sx={{ mb: 2.5 }}>
-        <Typography variant="h3" sx={{ fontWeight: 800, color: '#0F172A', fontSize: { xs: 22, sm: 26 } }}>
-          Bán hàng tại quầy
-        </Typography>
-      </Box>
-
+    <Box
+      sx={{
+        maxWidth: 1600,
+        mx: 'auto',
+        color: '#0F172A',
+        display: { lg: 'flex' },
+        flexDirection: 'column',
+        height: { lg: 'calc(100vh - 128px)' }
+      }}
+    >
       {/* ─── BỐ CỤC CHÍNH (2 CỘT) ─── */}
       <Box
         sx={{
           display: 'grid',
           gridTemplateColumns: { xs: '1fr', lg: '1fr 390px' },
           gap: 2.5,
-          alignItems: 'start'
+          gridTemplateRows: { lg: 'minmax(0, 1fr)' },
+          flex: 1,
+          minHeight: 0
         }}
       >
-        {/* CỘT TRÁI: TÌM KIẾM, BỘ LỌC & DANH SÁCH SẢN PHẨM */}
-        <Box>
-          {/* Thanh tìm kiếm & Dropdown danh mục */}
-          <Box sx={{ display: 'flex', gap: 1.5, mb: 2.5 }}>
-            <TextField
-              fullWidth
-              size="small"
-              placeholder="Tìm theo tên sản phẩm hoặc mã SKU"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchOutlined style={{ color: '#94A3B8', fontSize: 16 }} />
-                  </InputAdornment>
-                ),
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <ScanOutlined style={{ color: '#64748B', fontSize: 18, cursor: 'pointer' }} />
-                  </InputAdornment>
-                )
-              }}
-              sx={{
-                bgcolor: '#FFFFFF',
-                '& .MuiOutlinedInput-root': {
-                  borderRadius: 2.5,
-                  height: 42,
-                  '& fieldset': { borderColor: '#E2E8F0' },
-                  '&:hover fieldset': { borderColor: '#8EECF5' },
-                  '&.Mui-focused fieldset': { borderColor: '#8EECF5' }
-                }
-              }}
-            />
+        {/* CỘT TRÁI: TÌM KIẾM & SẢN PHẨM ĐÃ CHỌN */}
+        <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          <Box sx={{ display: 'flex', gap: 1.5, mb: 2 }}>
+            <ClickAwayListener onClickAway={() => setSearchOpen(false)}>
+              <Box sx={{ position: 'relative', flex: 1 }}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  placeholder="Tìm theo tên sản phẩm hoặc mã SKU"
+                  value={search}
+                  onFocus={() => setSearchOpen(true)}
+                  onChange={(e) => {
+                    setSearch(e.target.value);
+                    setSearchOpen(true);
+                  }}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchOutlined style={{ color: '#94A3B8', fontSize: 16 }} />
+                      </InputAdornment>
+                    ),
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <ScanOutlined style={{ color: '#64748B', fontSize: 18, cursor: 'pointer' }} />
+                      </InputAdornment>
+                    )
+                  }}
+                  sx={{
+                    bgcolor: '#FFFFFF',
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: 2.5,
+                      height: 42,
+                      '& fieldset': { borderColor: '#E2E8F0' },
+                      '&:hover fieldset': { borderColor: '#8EECF5' },
+                      '&.Mui-focused fieldset': { borderColor: '#8EECF5' }
+                    }
+                  }}
+                />
+
+                {searchOpen && (
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      top: 48,
+                      left: 0,
+                      right: 0,
+                      zIndex: 20,
+                      bgcolor: '#FFFFFF',
+                      border: '1px solid #E2E8F0',
+                      borderRadius: 2.5,
+                      boxShadow: '0 10px 24px rgba(15, 23, 42, 0.12)',
+                      maxHeight: 380,
+                      overflowY: 'auto',
+                      py: 0.5
+                    }}
+                  >
+                    {loading ? (
+                      <Box sx={{ py: 3, textAlign: 'center' }}>
+                        <CircularProgress size={24} sx={{ color: '#8EECF5' }} />
+                      </Box>
+                    ) : !visibleProducts.length ? (
+                      <Typography sx={{ py: 3, textAlign: 'center', color: '#64748B', fontSize: 13 }}>
+                        Không tìm thấy sản phẩm phù hợp.
+                      </Typography>
+                    ) : (
+                      visibleProducts.map((product) => {
+                        const id = getId(product);
+                        const stock = getProductStock(product);
+                        const isOut = stock <= 0;
+                        const min = product.minPrice;
+                        const max = product.maxPrice;
+                        const priceText =
+                          min == null
+                            ? 'Liên hệ'
+                            : max == null || Number(min) === Number(max)
+                              ? money(min)
+                              : `${Number(min).toLocaleString('vi-VN')}–${Number(max).toLocaleString('vi-VN')} đ`;
+                        const image =
+                          product.primaryImageUrl ||
+                          product.imageUrl ||
+                          product.thumbnailUrl ||
+                          product.mainImageUrl ||
+                          product.images?.[0]?.imageUrl ||
+                          '';
+
+                        return (
+                          <Box
+                            key={id}
+                            onClick={() => {
+                              setSearchOpen(false);
+                              addProduct(product);
+                            }}
+                            sx={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 1.25,
+                              px: 1.5,
+                              py: 1,
+                              cursor: 'pointer',
+                              opacity: isOut ? 0.55 : 1,
+                              '&:hover': { bgcolor: '#F0FDFF' }
+                            }}
+                          >
+                            <Box
+                              sx={{
+                                width: 40,
+                                height: 40,
+                                borderRadius: 1.5,
+                                bgcolor: '#F8FAFC',
+                                border: '1px solid #E2E8F0',
+                                flexShrink: 0,
+                                overflow: 'hidden',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}
+                            >
+                              {image ? (
+                                <Box component="img" src={image} alt={product.productName} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              ) : (
+                                <ShoppingCartOutlined style={{ fontSize: 16, color: '#CBD5E1' }} />
+                              )}
+                            </Box>
+                            <Box sx={{ flex: 1, minWidth: 0 }}>
+                              <Typography
+                                sx={{ fontSize: 13, fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                              >
+                                {product.productName}
+                              </Typography>
+                              <Typography sx={{ fontSize: 11.5, color: '#94A3B8' }}>{product.sku || '—'}</Typography>
+                            </Box>
+                            <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
+                              <Typography sx={{ fontSize: 13, fontWeight: 800, color: '#0F172A' }}>{priceText}</Typography>
+                              <Typography sx={{ fontSize: 11.5, color: isOut ? '#EF4444' : '#64748B' }}>
+                                {isOut ? 'Hết hàng' : `Tồn: ${stock}`}
+                              </Typography>
+                            </Box>
+                          </Box>
+                        );
+                      })
+                    )}
+                  </Box>
+                )}
+              </Box>
+            </ClickAwayListener>
 
             <TextField
               select
               size="small"
               value={category}
-              onChange={(e) => setCategory(e.target.value)}
+              onChange={(e) => {
+                setCategory(e.target.value);
+                setSearchOpen(true);
+              }}
               sx={{
                 minWidth: { xs: 150, sm: 200 },
                 bgcolor: '#FFFFFF',
@@ -501,282 +627,28 @@ export default function InStoreSalesPage() {
             </TextField>
           </Box>
 
-          {/* Lưới sản phẩm */}
-          {loading ? (
-            <Box sx={{ py: 10, textAlign: 'center' }}>
-              <CircularProgress size={36} sx={{ color: '#8EECF5' }} />
-            </Box>
-          ) : !visibleProducts.length ? (
-            <Box sx={{ py: 10, textAlign: 'center', bgcolor: '#FFFFFF', borderRadius: 3, border: '1px solid #E2E8F0' }}>
-              <Typography sx={{ color: '#64748B', fontSize: 14 }}>Không tìm thấy sản phẩm phù hợp.</Typography>
-            </Box>
-          ) : (
-            <Box
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: {
-                  xs: '1fr',
-                  sm: 'repeat(2, 1fr)',
-                  md: 'repeat(3, 1fr)',
-                  lg: 'repeat(4, 1fr)'
-                },
-                gap: 2
-              }}
-            >
-              {visibleProducts.map((product) => {
-                const id = getId(product);
-                const stock = getProductStock(product);
-                const isOut = stock <= 0;
-                const min = product.minPrice;
-                const max = product.maxPrice;
-                const priceText =
-                  min == null
-                    ? 'Liên hệ'
-                    : max == null || Number(min) === Number(max)
-                      ? money(min)
-                      : `${Number(min).toLocaleString('vi-VN')}–${Number(max).toLocaleString('vi-VN')} đ`;
-
-                const image =
-                  product.primaryImageUrl ||
-                  product.imageUrl ||
-                  product.thumbnailUrl ||
-                  product.mainImageUrl ||
-                  product.images?.[0]?.imageUrl ||
-                  '';
-
-                return (
-                  <Box
-                    key={id}
-                    onClick={() => addProduct(product)}
-                    sx={{
-                      bgcolor: '#FFFFFF',
-                      borderRadius: 2,
-                      border: '1px solid #E2E8F0',
-                      overflow: 'hidden',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      transition: 'all 0.15s ease',
-                      '&:hover': {
-                        borderColor: '#8EECF5',
-                        boxShadow: '0 2px 8px rgba(142, 236, 245, 0.25)',
-                        transform: 'translateY(-1px)'
-                      }
-                    }}
-                  >
-                    {/* Hình ảnh sản phẩm */}
-                    <Box
-                      sx={{
-                        width: '100%',
-                        height: 100,
-                        bgcolor: '#F8FAFC',
-                        position: 'relative',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        overflow: 'hidden'
-                      }}
-                    >
-                      {/* Badge Tồn kho góc trên bên trái */}
-                      <Box
-                        sx={{
-                          position: 'absolute',
-                          top: 5,
-                          left: 5,
-                          zIndex: 2,
-                          bgcolor: isOut ? '#F1F5F9' : '#FFFFFF',
-                          color: isOut ? '#94A3B8' : '#334155',
-                          border: '1px solid #E2E8F0',
-                          borderRadius: 99,
-                          px: 0.85,
-                          py: 0.15,
-                          fontSize: 9.5,
-                          fontWeight: 700,
-                          boxShadow: isOut ? 'none' : '0 1px 2px rgba(0,0,0,0.05)'
-                        }}
-                      >
-                        {isOut ? 'Hết hàng' : `Tồn: ${stock}`}
-                      </Box>
-
-                      {image ? (
-                        <Box
-                          component="img"
-                          src={image}
-                          alt={product.productName}
-                          sx={{
-                            width: '100%',
-                            height: '100%',
-                            objectFit: 'cover'
-                          }}
-                        />
-                      ) : (
-                        <ShoppingCartOutlined style={{ fontSize: 24, color: '#CBD5E1' }} />
-                      )}
-                    </Box>
-
-                    {/* Tên & Giá sản phẩm */}
-                    <Box sx={{ px: 1, py: 0.75, display: 'flex', flexDirection: 'column', flex: 1, justifyContent: 'space-between' }}>
-                      <Typography
-                        sx={{
-                          fontSize: 10.5,
-                          fontWeight: 700,
-                          color: '#0F172A',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          lineHeight: 1.25,
-                          mb: 0.25,
-                          letterSpacing: '-0.15px'
-                        }}
-                        title={product.productName}
-                      >
-                        {product.productName}
-                      </Typography>
-
-                      <Typography sx={{ fontSize: 11, fontWeight: 800, color: '#0F172A' }}>{priceText}</Typography>
-                    </Box>
-                  </Box>
-                );
-              })}
-            </Box>
-          )}
-        </Box>
-
-        {/* CỘT PHẢI: HÓA ĐƠN HIỆN TẠI & TABS HÓA ĐƠN KIỂU SAPO */}
-        <Box
-          sx={{
-            bgcolor: '#FFFFFF',
-            borderRadius: 3.5,
-            border: '1px solid #E2E8F0',
-            p: { xs: 2, sm: 2.5 },
-            boxShadow: '0 1px 4px rgba(0,0,0,0.03)',
-            position: 'sticky',
-            top: 20
-          }}
-        >
-          {/* Thanh danh sách tab hóa đơn chờ kiểu Sapo */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 2, overflowX: 'auto', pb: 0.5 }}>
-            {orders.map((ord) => {
-              const isActiveTab = ord.id === activeOrderId;
-
-              return (
-                <Box
-                  key={ord.id}
-                  onClick={() => switchOrderTab(ord.id)}
-                  sx={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 0.75,
-                    px: 1.25,
-                    py: 0.5,
-                    borderRadius: 2,
-                    cursor: 'pointer',
-                    bgcolor: isActiveTab ? '#FEF9C3' : '#F1F5F9',
-                    border: '1.5px solid',
-                    borderColor: isActiveTab ? '#FDE047' : '#E2E8F0',
-                    color: isActiveTab ? '#854D0E' : '#64748B',
-                    fontWeight: 600,
-                    fontSize: 12,
-                    whiteSpace: 'nowrap',
-                    userSelect: 'none',
-                    boxSizing: 'border-box',
-                    transition: 'background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease',
-                    '&:hover': {
-                      bgcolor: isActiveTab ? '#FEF9C3' : '#E2E8F0',
-                      color: '#0F172A'
-                    }
-                  }}
-                >
-                  <span>{ord.label}</span>
-                  {orders.length > 1 && (
-                    <Box
-                      component="span"
-                      onClick={(e) => closeOrderTab(ord.id, e)}
-                      sx={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        width: 15,
-                        height: 15,
-                        borderRadius: 99,
-                        fontSize: 11,
-                        color: '#94A3B8',
-                        ml: 0.25,
-                        '&:hover': { bgcolor: '#FEE2E2', color: '#EF4444' }
-                      }}
-                      title="Đóng hóa đơn này"
-                    >
-                      ×
-                    </Box>
-                  )}
-                </Box>
-              );
-            })}
-
-            {/* Nút thêm tab hóa đơn mới (+) */}
-            <Box
-              component="button"
-              type="button"
-              onClick={addOrderTab}
-              title="Mở thêm hóa đơn cho khách tiếp theo"
-              sx={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: 28,
-                height: 28,
-                borderRadius: 1.75,
-                bgcolor: '#FFFFFF',
-                border: '1.5px dashed #CBD5E1',
-                color: '#475569',
-                cursor: 'pointer',
-                fontSize: 15,
-                fontWeight: 700,
-                flexShrink: 0,
-                outline: 'none',
-                transition: 'all 0.15s ease',
-                '&:hover': {
-                  borderColor: '#0F172A',
-                  color: '#0F172A',
-                  bgcolor: '#F8FAFC'
-                }
-              }}
-            >
-              +
-            </Box>
-          </Box>
-
-          {/* Header hóa đơn */}
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <FileTextOutlined style={{ fontSize: 18, color: '#0F172A' }} />
-              <Typography sx={{ fontSize: 16.5, fontWeight: 800, color: '#0F172A' }}>{activeOrder?.label || 'Hóa đơn hiện tại'}</Typography>
-            </Box>
-            <Box
-              sx={{
-                bgcolor: '#FEF9C3',
-                color: '#854D0E',
-                border: '1px solid #FDE047',
-                borderRadius: 99,
-                px: 1.25,
-                py: 0.35,
-                fontSize: 11.5,
-                fontWeight: 700
-              }}
-            >
-              Đang tạo
-            </Box>
-          </Box>
-
+          <Box
+            sx={{
+              bgcolor: '#FFFFFF',
+              borderRadius: 3.5,
+              border: '1px solid #E2E8F0',
+              p: { xs: 2, sm: 2.5 },
+              boxShadow: '0 1px 4px rgba(0,0,0,0.03)',
+              flex: 1,
+              minHeight: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              overflowY: 'auto',
+              scrollbarWidth: 'none',
+              msOverflowStyle: 'none',
+              '&::-webkit-scrollbar': { display: 'none' }
+            }}
+          >
           {/* Danh sách món hàng trong giỏ */}
           <Box
             sx={{
-              minHeight: 180,
-              maxHeight: 280,
-              overflowY: 'auto',
-              scrollbarGutter: 'stable',
-              pr: 0.5,
-              mb: 2,
+              flex: '1 0 auto',
+              minHeight: { xs: 240, lg: 0 },
               display: 'flex',
               flexDirection: 'column'
             }}
@@ -785,7 +657,7 @@ export default function InStoreSalesPage() {
               <Box
                 sx={{
                   flex: 1,
-                  minHeight: 180,
+                  minHeight: { xs: 240, lg: 0 },
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
@@ -798,7 +670,7 @@ export default function InStoreSalesPage() {
               >
                 <ShoppingCartOutlined style={{ fontSize: 30, color: '#CBD5E1', marginBottom: 8 }} />
                 <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#475569' }}>Chưa có sản phẩm nào</Typography>
-                <Typography sx={{ fontSize: 11.5, color: '#94A3B8', mt: 0.25 }}>Chọn sản phẩm bên trái để thêm vào hóa đơn</Typography>
+                <Typography sx={{ fontSize: 11.5, color: '#94A3B8', mt: 0.25 }}>Tìm và chọn sản phẩm ở thanh tìm kiếm để thêm vào hóa đơn</Typography>
               </Box>
             ) : (
               cart.map((line) => (
@@ -893,9 +765,151 @@ export default function InStoreSalesPage() {
               ))
             )}
           </Box>
+          </Box>
+        </Box>
 
+        {/* CỘT PHẢI: TỔNG TIỀN & THANH TOÁN */}
+        <Box
+          sx={{
+            bgcolor: '#FFFFFF',
+            borderRadius: 3.5,
+            border: '1px solid #E2E8F0',
+            px: { xs: 2, sm: 2.5 },
+            py: 2,
+            boxShadow: '0 1px 4px rgba(0,0,0,0.03)',
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            '& > *': { flexShrink: 0 }
+          }}
+        >
+          {/* Thanh danh sách tab hóa đơn chờ kiểu Sapo */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1, overflowX: 'auto', pb: 0.25 }}>
+            {orders.map((ord) => {
+              const isActiveTab = ord.id === activeOrderId;
+
+              return (
+                <Box
+                  key={ord.id}
+                  onClick={() => switchOrderTab(ord.id)}
+                  sx={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 0.75,
+                    px: 1.25,
+                    py: 0.5,
+                    borderRadius: 2,
+                    cursor: 'pointer',
+                    bgcolor: isActiveTab ? '#FEF9C3' : '#F1F5F9',
+                    border: '1.5px solid',
+                    borderColor: isActiveTab ? '#FDE047' : '#E2E8F0',
+                    color: isActiveTab ? '#854D0E' : '#64748B',
+                    fontWeight: 600,
+                    fontSize: 12,
+                    whiteSpace: 'nowrap',
+                    userSelect: 'none',
+                    boxSizing: 'border-box',
+                    transition: 'background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease',
+                    '&:hover': {
+                      bgcolor: isActiveTab ? '#FEF9C3' : '#E2E8F0',
+                      color: '#0F172A'
+                    }
+                  }}
+                >
+                  <span>{ord.label}</span>
+                  {orders.length > 1 && (
+                    <Box
+                      component="span"
+                      onClick={(e) => closeOrderTab(ord.id, e)}
+                      sx={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: 15,
+                        height: 15,
+                        borderRadius: 99,
+                        fontSize: 11,
+                        color: '#94A3B8',
+                        ml: 0.25,
+                        '&:hover': { bgcolor: '#FEE2E2', color: '#EF4444' }
+                      }}
+                      title="Đóng hóa đơn này"
+                    >
+                      ×
+                    </Box>
+                  )}
+                </Box>
+              );
+            })}
+
+            {/* Nút thêm tab hóa đơn mới (+) */}
+            <Box
+              component="button"
+              type="button"
+              onClick={addOrderTab}
+              title="Mở thêm hóa đơn cho khách tiếp theo"
+              sx={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 28,
+                height: 28,
+                borderRadius: 1.75,
+                bgcolor: '#FFFFFF',
+                border: '1.5px dashed #CBD5E1',
+                color: '#475569',
+                cursor: 'pointer',
+                fontSize: 15,
+                fontWeight: 700,
+                flexShrink: 0,
+                outline: 'none',
+                transition: 'all 0.15s ease',
+                '&:hover': {
+                  borderColor: '#0F172A',
+                  color: '#0F172A',
+                  bgcolor: '#F8FAFC'
+                }
+              }}
+            >
+              +
+            </Box>
+          </Box>
+
+          {/* Header hóa đơn */}
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <FileTextOutlined style={{ fontSize: 18, color: '#0F172A' }} />
+              <Typography sx={{ fontSize: 16.5, fontWeight: 800, color: '#0F172A' }}>{activeOrder?.label || 'Hóa đơn hiện tại'}</Typography>
+            </Box>
+            <Box
+              sx={{
+                bgcolor: '#FEF9C3',
+                color: '#854D0E',
+                border: '1px solid #FDE047',
+                borderRadius: 99,
+                px: 1.25,
+                py: 0.35,
+                fontSize: 11.5,
+                fontWeight: 700
+              }}
+            >
+              Đang tạo
+            </Box>
+          </Box>
+
+          <Box
+            sx={{
+              flex: '1 1 auto',
+              flexShrink: '1 !important',
+              minHeight: 0,
+              overflowY: 'auto',
+              scrollbarWidth: 'none',
+              msOverflowStyle: 'none',
+              '&::-webkit-scrollbar': { display: 'none' }
+            }}
+          >
           {/* Tổng tiền hàng & Giảm giá */}
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, py: 1.5, borderTop: '1px solid #F1F5F9' }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, py: 1, borderTop: '1px solid #F1F5F9' }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <Typography sx={{ fontSize: 13, color: '#64748B' }}>Tổng tiền hàng</Typography>
               <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: '#0F172A' }}>{money(subtotal)}</Typography>
@@ -903,10 +917,12 @@ export default function InStoreSalesPage() {
 
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                <Typography sx={{ fontSize: 13, color: '#64748B' }}>Giảm giá</Typography>
+                <Typography sx={{ fontSize: 13, color: '#64748B' }}>
+                  Giảm giá{discountType === 'percent' && discountNumber > 0 ? ` (${discountNumber}%)` : ''}
+                </Typography>
                 <IconButton
                   size="small"
-                  onClick={() => setIsEditingDiscount((prev) => !prev)}
+                  onClick={openDiscount}
                   sx={{ p: 0.25, color: '#64748B', '&:hover': { color: '#0F172A' } }}
                 >
                   <EditOutlined style={{ fontSize: 12 }} />
@@ -917,62 +933,24 @@ export default function InStoreSalesPage() {
               </Typography>
             </Box>
 
-            {isEditingDiscount && (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-                <TextField
-                  size="small"
-                  type="number"
-                  placeholder="Số tiền giảm (₫)"
-                  value={discount}
-                  onChange={(e) => setDiscount(e.target.value)}
-                  inputProps={{ min: 0, max: subtotal }}
-                  sx={{
-                    flex: 1,
-                    '& .MuiOutlinedInput-root': {
-                      borderRadius: 2,
-                      height: 36,
-                      fontSize: 12.5
-                    }
-                  }}
-                />
-                <Button
-                  size="small"
-                  variant="contained"
-                  onClick={() => setIsEditingDiscount(false)}
-                  sx={{
-                    bgcolor: '#8EECF5',
-                    color: '#0F172A',
-                    fontWeight: 700,
-                    height: 36,
-                    borderRadius: 2,
-                    boxShadow: 'none',
-                    textTransform: 'none',
-                    '&:hover': { bgcolor: '#76DCED' }
-                  }}
-                >
-                  Xong
-                </Button>
-              </Box>
-            )}
-
             {/* Tổng phải trả */}
             <Box
               sx={{
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
-                pt: 1,
-                mt: 0.5,
+                pt: 0.75,
+                mt: 0.25,
                 borderTop: '1px dashed #E2E8F0'
               }}
             >
               <Typography sx={{ fontSize: 14.5, fontWeight: 800, color: '#0F172A' }}>Tổng phải trả</Typography>
-              <Typography sx={{ fontSize: 24, fontWeight: 800, color: '#0F172A' }}>{money(total)}</Typography>
+              <Typography sx={{ fontSize: 22, fontWeight: 800, color: '#0F172A' }}>{money(total)}</Typography>
             </Box>
           </Box>
 
           {/* Phương thức thanh toán */}
-          <Box sx={{ mt: 2 }}>
+          <Box sx={{ mt: 1 }}>
             <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: '#334155', mb: 1 }}>Phương thức thanh toán</Typography>
             <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
               <Box
@@ -990,7 +968,7 @@ export default function InStoreSalesPage() {
                   color: payment === 'Cash' ? '#854D0E' : '#475569',
                   fontWeight: 700,
                   fontSize: 13,
-                  height: 40,
+                  height: 36,
                   borderRadius: 2.5,
                   cursor: 'pointer',
                   boxShadow: 'none',
@@ -1022,7 +1000,7 @@ export default function InStoreSalesPage() {
                   color: payment === 'Bank transfer' ? '#854D0E' : '#475569',
                   fontWeight: 700,
                   fontSize: 13,
-                  height: 40,
+                  height: 36,
                   borderRadius: 2.5,
                   cursor: 'pointer',
                   boxShadow: 'none',
@@ -1041,81 +1019,22 @@ export default function InStoreSalesPage() {
             </Box>
           </Box>
 
-          {/* Tiền khách đưa & Tiền thừa trả khách (khi chọn Tiền mặt) */}
-          {payment === 'Cash' && (
-            <Box
-              sx={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 1.25,
-                mt: 2,
-                p: 1.5,
-                bgcolor: '#F8FAFC',
-                borderRadius: 2.5,
-                border: '1px solid #E2E8F0'
-              }}
-            >
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Typography sx={{ fontSize: 13, color: '#475569' }}>Tiền khách đưa</Typography>
-                <TextField
-                  size="small"
-                  type="number"
-                  placeholder="0"
-                  value={received}
-                  onChange={(e) => setReceived(e.target.value)}
-                  inputProps={{ min: 0, style: { textAlign: 'right', fontWeight: 700, fontSize: 13.5 } }}
-                  sx={{
-                    width: 140,
-                    bgcolor: '#FFFFFF',
-                    '& .MuiOutlinedInput-root': {
-                      borderRadius: 2,
-                      height: 34
-                    }
-                  }}
-                />
-              </Box>
-
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Typography sx={{ fontSize: 13, color: '#475569' }}>Tiền thừa trả khách</Typography>
-                <Typography sx={{ fontSize: 14, fontWeight: 800, color: '#0F172A' }}>{money(change)}</Typography>
-              </Box>
-            </Box>
-          )}
-
-          {/* Thông báo lỗi nếu có */}
-          {error && (
-            <Typography
-              sx={{
-                color: '#DC2626',
-                fontSize: 12,
-                fontWeight: 600,
-                textAlign: 'center',
-                mt: 1.5,
-                bgcolor: '#FEF2F2',
-                py: 0.75,
-                px: 1.5,
-                borderRadius: 2,
-                border: '1px solid #FEE2E2'
-              }}
-            >
-              {error}
-            </Typography>
-          )}
+          </Box>
 
           {/* Nút Hoàn tất thanh toán */}
           <Button
             fullWidth
             variant="contained"
             onClick={completeSale}
-            disabled={!cart.length || submitting}
+            disabled={submitting}
             startIcon={!submitting && <CheckOutlined />}
             sx={{
-              mt: error ? 1.5 : 2.5,
+              mt: 1,
               bgcolor: '#8EECF5',
               color: '#0F172A',
               fontWeight: 800,
               fontSize: 14,
-              height: 44,
+              height: 40,
               borderRadius: 2.5,
               textTransform: 'none',
               boxShadow: 'none',
@@ -1133,24 +1052,22 @@ export default function InStoreSalesPage() {
           </Button>
 
           {/* Nút Xóa hóa đơn */}
-          {cart.length > 0 && (
-            <Box sx={{ textAlign: 'center', mt: 1.5 }}>
-              <Button
-                size="small"
-                onClick={clearInvoice}
-                startIcon={<DeleteOutlined style={{ fontSize: 12 }} />}
-                sx={{
-                  color: '#64748B',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  textTransform: 'none',
-                  '&:hover': { color: '#EF4444', bgcolor: 'transparent' }
-                }}
-              >
-                Xóa hóa đơn
-              </Button>
-            </Box>
-          )}
+          <Box sx={{ textAlign: 'center', mt: 0.75 }}>
+            <Button
+              size="small"
+              onClick={clearInvoice}
+              startIcon={<DeleteOutlined style={{ fontSize: 12 }} />}
+              sx={{
+                color: '#64748B',
+                fontSize: 12,
+                fontWeight: 600,
+                textTransform: 'none',
+                '&:hover': { color: '#EF4444', bgcolor: 'transparent' }
+              }}
+            >
+              Xóa hóa đơn
+            </Button>
+          </Box>
         </Box>
       </Box>
 
@@ -1402,6 +1319,140 @@ export default function InStoreSalesPage() {
         </Box>
       </Dialog>
 
+      {/* ─── POPUP GIẢM GIÁ ─── */}
+      <Dialog
+        open={discountOpen}
+        onClose={() => setDiscountOpen(false)}
+        fullWidth
+        slotProps={{ paper: { sx: { maxWidth: 380, borderRadius: 3.5, m: 2 } } }}
+      >
+        <Box sx={{ p: 2.5 }}>
+          <Typography sx={{ fontSize: 16.5, fontWeight: 800, color: '#0F172A', mb: 2 }}>Giảm giá</Typography>
+
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, mb: 2 }}>
+            {[
+              { value: 'amount', label: 'VNĐ' },
+              { value: 'percent', label: '%' }
+            ].map((opt) => {
+              const selected = draftType === opt.value;
+              return (
+                <Box
+                  key={opt.value}
+                  component="button"
+                  type="button"
+                  onClick={() => {
+                    setDraftType(opt.value);
+                    setDraftValue('');
+                    setDraftError('');
+                  }}
+                  sx={{
+                    fontFamily: 'inherit',
+                    fontWeight: 700,
+                    fontSize: 13,
+                    height: 36,
+                    borderRadius: 2.5,
+                    cursor: 'pointer',
+                    outline: 'none',
+                    bgcolor: selected ? '#FEF9C3' : '#FFFFFF',
+                    border: `1.5px solid ${selected ? '#FDE047' : '#E2E8F0'}`,
+                    color: selected ? '#854D0E' : '#475569'
+                  }}
+                >
+                  {opt.label}
+                </Box>
+              );
+            })}
+          </Box>
+
+          <TextField
+            fullWidth
+            autoFocus
+            size="small"
+            type="number"
+            placeholder={draftType === 'percent' ? 'Nhập % giảm' : 'Nhập số tiền giảm'}
+            value={draftValue}
+            onChange={(e) => {
+              setDraftValue(e.target.value);
+              setDraftError('');
+            }}
+            onKeyDown={(e) => e.key === 'Enter' && applyDiscount()}
+            error={Boolean(draftError)}
+            helperText={
+              draftError ||
+              (draftType === 'percent' && Number(draftValue) > 0
+                ? `= ${money(Math.round((subtotal * Math.min(100, Number(draftValue))) / 100))}`
+                : `Tổng tiền hàng: ${money(subtotal)}`)
+            }
+            inputProps={{ min: 0, max: draftType === 'percent' ? 100 : subtotal }}
+            InputProps={{ endAdornment: <InputAdornment position="end">{draftType === 'percent' ? '%' : 'đ'}</InputAdornment> }}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, height: 40 } }}
+          />
+
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 2.5 }}>
+            <Button
+              type="button"
+              onClick={() => setDiscountOpen(false)}
+              sx={{
+                border: '1px solid #E2E8F0',
+                color: '#334155',
+                fontWeight: 600,
+                fontSize: 12.5,
+                height: 34,
+                px: 2,
+                borderRadius: 1.5,
+                textTransform: 'none',
+                '&:hover': { bgcolor: '#F8FAFC' }
+              }}
+            >
+              Hủy
+            </Button>
+            <Button
+              type="button"
+              variant="contained"
+              onClick={applyDiscount}
+              sx={{
+                bgcolor: '#8EECF5',
+                color: '#0F172A',
+                fontWeight: 700,
+                fontSize: 12.5,
+                height: 34,
+                px: 2,
+                borderRadius: 1.5,
+                textTransform: 'none',
+                boxShadow: 'none',
+                '&:hover': { bgcolor: '#76DCED', boxShadow: 'none' }
+              }}
+            >
+              Áp dụng
+            </Button>
+          </Box>
+        </Box>
+      </Dialog>
+
+      <Snackbar
+        open={Boolean(error || success)}
+        autoHideDuration={5000}
+        onClose={(e, reason) => {
+          if (reason === 'clickaway') return;
+          setError('');
+          setSuccess('');
+        }}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+        sx={{ top: { xs: 64, sm: 72 } }}
+      >
+        <Alert
+          severity={error ? 'error' : 'success'}
+          variant="filled"
+          onClose={() => {
+            setError('');
+            setSuccess('');
+          }}
+          sx={{ width: '100%' }}
+        >
+          {error || success}
+        </Alert>
+      </Snackbar>
+
       {/* Modal Hóa đơn sau thanh toán */}
       <ReceiptDialog
         open={receiptOpen}
@@ -1409,8 +1460,6 @@ export default function InStoreSalesPage() {
         saleData={completedSale}
         cartItems={completedCart}
         sellerName={account?.fullName ?? ''}
-        amountReceived={completedReceived}
-        changeDue={completedChange}
         completedAt={completedAt}
       />
     </Box>

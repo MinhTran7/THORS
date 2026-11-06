@@ -5,16 +5,14 @@ import {
   Box,
   Collapse,
   Drawer,
-  IconButton,
   List,
   ListItemButton,
   ListItemIcon,
   ListItemText,
-  Tooltip,
   Typography
 } from '@mui/material';
 import { Stack } from 'features/account/components/Flex';
-import { LogoutOutlined, DownOutlined, UpOutlined } from '@ant-design/icons';
+import { DownOutlined } from '@ant-design/icons';
 import { useAuth } from 'features/auth/AuthProvider';
 import { ROLE_LABEL, STORE_NAME } from 'features/account/constants';
 import { brand } from 'features/account/tokens';
@@ -27,6 +25,68 @@ import { crumbsForPath } from './routeCrumbs';
 import ThorsMark from './ThorsMark';
 
 const SIDEBAR_WIDTH = 248;
+
+const ACCENT = '#8EECF5';
+const ACCENT_SOFT = '#D9F8FB';
+const HOVER_BG = '#F2FCFD';
+
+const textProps = { fontSize: 14, fontWeight: 'inherit', noWrap: true };
+const itemSx = {
+  minHeight: 42,
+  px: 1.5,
+  mb: 0.5,
+  borderRadius: '12px',
+  color: brand.muted,
+  fontWeight: 500,
+  '&:hover': { bgcolor: HOVER_BG, color: brand.ink }
+};
+const selectedSx = {
+  '&.Mui-selected, &.Mui-selected:hover': { bgcolor: ACCENT_SOFT, color: brand.ink, fontWeight: 600 }
+};
+
+const navListSx = {
+  px: 1.5,
+  flexGrow: 1,
+  overflowY: 'auto',
+  scrollbarWidth: 'none',
+  msOverflowStyle: 'none',
+  '&::-webkit-scrollbar': { display: 'none' }
+};
+
+const childListSx = { ml: 2.75, pl: 1.25, mb: 0.5, borderLeft: `1.5px solid ${brand.line}` };
+
+function NavLink({ item, selected, nested = false, onClick }) {
+  return (
+    <ListItemButton
+      component={Link}
+      to={item.to}
+      selected={selected}
+      onClick={onClick}
+      sx={{
+        ...itemSx,
+        ...selectedSx,
+        ...(nested && {
+          minHeight: 38,
+          position: 'relative',
+          // Vạch nhấn đè lên đường kẻ dọc ở mục con đang chọn
+          '&.Mui-selected::before': {
+            content: '""',
+            position: 'absolute',
+            left: -12,
+            top: 9,
+            bottom: 9,
+            width: 3,
+            borderRadius: 3,
+            bgcolor: ACCENT
+          }
+        })
+      }}
+    >
+      <ListItemIcon sx={{ color: 'inherit', minWidth: nested ? 30 : 34, fontSize: nested ? 15 : 17 }}>{item.icon}</ListItemIcon>
+      <ListItemText primary={item.label} primaryTypographyProps={textProps} />
+    </ListItemButton>
+  );
+}
 
 export default function ThorsLayout() {
   const { account, logout } = useAuth();
@@ -52,6 +112,10 @@ export default function ThorsLayout() {
 
   const isSelected = (to) => location.pathname === to || location.pathname.startsWith(`${to}/`);
 
+  const activeChildTo = (children) =>
+    children.reduce((best, c) => (isSelected(c.to) && c.to.length > (best?.length ?? 0) ? c.to : best), null);
+  const closeMobile = () => setMobile(false);
+
   const sidebar = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: brand.surface }}>
       <Stack direction="row" alignItems="center" spacing={1.25} sx={{ px: 3, py: 2.5 }}>
@@ -66,97 +130,36 @@ export default function ThorsLayout() {
         </Box>
       </Stack>
 
-      <List component="nav" aria-label="Menu chính" sx={{ px: 1.5, flexGrow: 1, overflowY: 'auto' }}>
+      <List component="nav" aria-label="Menu chính" sx={navListSx}>
         {items.map((item) => {
-          if (item.children) {
-            const isChildActive = item.children.some(
-              (c) => location.pathname === c.to || location.pathname.startsWith(`${c.to}/`)
-            );
-            const isOpen = openSubmenus[item.label] ?? isChildActive;
-
-            return (
-              <Box key={item.label}>
-                <ListItemButton
-                  onClick={() => setOpenSubmenus((prev) => ({ ...prev, [item.label]: !isOpen }))}
-                  sx={{
-                    borderRadius: '10px',
-                    mb: 0.5,
-                    color: isChildActive ? brand.ink : brand.muted,
-                    bgcolor: 'transparent',
-                    fontWeight: isChildActive ? 600 : 400,
-                    '&:hover': { bgcolor: '#F6F8FA' }
-                  }}
-                >
-                  <ListItemIcon sx={{ color: 'inherit', minWidth: 36 }}>{item.icon}</ListItemIcon>
-                  <ListItemText primary={item.label} primaryTypographyProps={{ fontSize: 14, fontWeight: 'inherit' }} />
-                  {isOpen ? (
-                    <UpOutlined style={{ fontSize: 10, color: brand.muted }} />
-                  ) : (
-                    <DownOutlined style={{ fontSize: 10, color: brand.muted }} />
-                  )}
-                </ListItemButton>
-
-                <Collapse in={isOpen} timeout="auto" unmountOnExit>
-                  <List component="div" disablePadding sx={{ pl: 1.5, mb: 0.5 }}>
-                    {item.children.map((child) => {
-                      const selected = child.to === '/in-store-sales'
-                        ? location.pathname === '/in-store-sales'
-                        : (location.pathname === child.to || location.pathname.startsWith(`${child.to}/`));
-                      return (
-                        <ListItemButton
-                          key={child.to}
-                          component={Link}
-                          to={child.to}
-                          selected={selected}
-                          onClick={() => setMobile(false)}
-                          sx={{
-                            borderRadius: '10px',
-                            mb: 0.5,
-                            pl: 2,
-                            color: brand.muted,
-                            '&.Mui-selected, &.Mui-selected:hover': {
-                              bgcolor: '#E8F8FA',
-                              color: brand.ink,
-                              fontWeight: 600,
-                              '& .MuiListItemIcon-root': {
-                                color: '#1677FF'
-                              }
-                            }
-                          }}
-                        >
-                          {child.icon && (
-                            <ListItemIcon sx={{ color: 'inherit', minWidth: 32 }}>
-                              {child.icon}
-                            </ListItemIcon>
-                          )}
-                          <ListItemText primary={child.label} primaryTypographyProps={{ fontSize: 14, fontWeight: 'inherit' }} />
-                        </ListItemButton>
-                      );
-                    })}
-                  </List>
-                </Collapse>
-              </Box>
-            );
+          if (!item.children) {
+            return <NavLink key={item.to} item={item} selected={isSelected(item.to)} onClick={closeMobile} />;
           }
 
-          const { to, label, icon } = item;
+          const activeTo = activeChildTo(item.children);
+          const isOpen = openSubmenus[item.label] ?? Boolean(activeTo);
+          const highlight = isOpen || Boolean(activeTo);
           return (
-            <ListItemButton
-              key={to}
-              component={Link}
-              to={to}
-              selected={isSelected(to)}
-              onClick={() => setMobile(false)}
-              sx={{
-                borderRadius: '10px',
-                mb: 0.5,
-                color: brand.muted,
-                '&.Mui-selected, &.Mui-selected:hover': { bgcolor: '#E8F8FA', color: brand.ink, fontWeight: 600 }
-              }}
-            >
-              <ListItemIcon sx={{ color: 'inherit', minWidth: 36 }}>{icon}</ListItemIcon>
-              <ListItemText primary={label} primaryTypographyProps={{ fontSize: 14, fontWeight: 'inherit' }} />
-            </ListItemButton>
+            <Box key={item.label}>
+              <ListItemButton
+                onClick={() => setOpenSubmenus((prev) => ({ ...prev, [item.label]: !isOpen }))}
+                sx={{ ...itemSx, ...(highlight && { color: brand.ink, fontWeight: 600 }) }}
+              >
+                <ListItemIcon sx={{ color: 'inherit', minWidth: 34, fontSize: 17 }}>{item.icon}</ListItemIcon>
+                <ListItemText primary={item.label} primaryTypographyProps={textProps} />
+                <DownOutlined
+                  style={{ fontSize: 10, color: brand.muted, transition: 'transform .2s', transform: isOpen ? 'rotate(180deg)' : 'none' }}
+                />
+              </ListItemButton>
+
+              <Collapse in={isOpen} timeout="auto" unmountOnExit>
+                <List component="div" disablePadding sx={childListSx}>
+                  {item.children.map((child) => (
+                    <NavLink key={child.to} item={child} nested selected={child.to === activeTo} onClick={closeMobile} />
+                  ))}
+                </List>
+              </Collapse>
+            </Box>
           );
         })}
       </List>
@@ -167,18 +170,13 @@ export default function ThorsLayout() {
           <Typography variant="subtitle2" noWrap sx={{ color: brand.ink }}>
             {account.fullName}
           </Typography>
-          {/* Khách hàng chỉ có một vai trò nên không cần hiện nhãn; các vai trò khác thì có phân biệt. */}
+
           {account.role !== 'CUSTOMER' && (
             <Typography variant="caption" noWrap sx={{ color: brand.muted, display: 'block' }}>
               {ROLE_LABEL[account.role] ?? account.role}
             </Typography>
           )}
         </Box>
-        <Tooltip title="Đăng xuất">
-          <IconButton aria-label="Đăng xuất" onClick={signOut}>
-            <LogoutOutlined />
-          </IconButton>
-        </Tooltip>
       </Stack>
     </Box>
   );
