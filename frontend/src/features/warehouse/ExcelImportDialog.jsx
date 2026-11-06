@@ -15,11 +15,11 @@ import {
   TableBody,
   TableCell,
   TableHead,
-  TablePagination,
   TableRow,
   TextField,
   Typography
 } from '@mui/material';
+import { Pager } from 'features/account/components/Blocks';
 
 import { Choice } from './components';
 import { number, variantLabel } from './model';
@@ -629,17 +629,7 @@ export default function ExcelImportDialog({
                     </Table>
                   </Box>
 
-                  <TablePagination
-                    component="div"
-                    count={listed.length}
-                    page={currentPage}
-                    onPageChange={(_, next) => setPage(next)}
-                    rowsPerPage={20}
-                    rowsPerPageOptions={[20]}
-                    labelDisplayedRows={({ from, to, count }) =>
-                      `${from}–${to} / ${count}`
-                    }
-                  />
+                  <Pager page={currentPage} total={listed.length} size={20} noun="dòng" onPage={setPage} />
 
                   <Alert severity="info">
                     Dòng mới trong file được thêm vào phiếu; các dòng đang

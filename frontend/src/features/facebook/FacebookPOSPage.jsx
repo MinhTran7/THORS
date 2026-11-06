@@ -473,7 +473,7 @@ export default function FacebookPOSPage() {
       const localMsg = {
         mid: 'local_' + Date.now(),
         senderPsid: targetPsid,
-        senderName: 'THORS Studio',
+        senderName: 'THORS',
         text: text.trim(),
         rawTime: now.toISOString(),
         timestamp: now.toLocaleTimeString('vi-VN') + ' ' + now.toLocaleDateString('vi-VN'),
@@ -559,7 +559,7 @@ export default function FacebookPOSPage() {
           bankInfo = {
             bin: payRes.bin,
             accountNumber: payRes.accountNumber,
-            accountName: payRes.accountName || 'THORS Studio'
+            accountName: payRes.accountName || 'THORS'
           };
         }
       } catch (ignored) {
@@ -569,7 +569,7 @@ export default function FacebookPOSPage() {
 
       // Bước C: Tạo tin nhắn xác nhận kèm thông tin thanh toán VietQR / PayOS và link theo dõi
       const paymentMsg =
-        `🎉 Cảm ơn bạn đã đặt hàng tại THORS Studio!\n\n` +
+        `🎉 Cảm ơn bạn đã đặt hàng tại THORS!\n\n` +
         `📦 THÔNG TIN ĐƠN HÀNG ${orderNumber}:\n` +
         cart.map((c) => ` • ${c.productName} (${c.size}/${c.color}) x${c.quantity} : ${money(c.price * c.quantity)}`).join('\n') +
         `\n\n💵 TỔNG CỘNG: ${money(totalAmount)}\n` +
@@ -623,7 +623,7 @@ export default function FacebookPOSPage() {
         payUrl,
         bankName: bankInfo ? `Ngân hàng (BIN: ${bankInfo.bin})` : 'VietQR / PayOS',
         accountNumber: bankInfo?.accountNumber || '',
-        accountName: bankInfo?.accountName || 'THORS Studio',
+        accountName: bankInfo?.accountName || 'THORS',
         copied: false
       });
 

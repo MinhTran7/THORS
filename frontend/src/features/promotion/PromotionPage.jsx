@@ -12,7 +12,6 @@ import {
   IconButton,
   InputAdornment,
   MenuItem,
-  Pagination,
   Select,
   Snackbar,
   Stack,
@@ -27,6 +26,7 @@ import {
   Tooltip,
   Typography
 } from '@mui/material';
+import { Pager } from 'features/account/components/Blocks';
 import {
   EditOutlined,
   EyeOutlined,
@@ -713,46 +713,15 @@ function OwnerPromotionView() {
             </TableContainer>
 
             {/* Phân trang phía dưới */}
-            <Box
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: { xs: '1fr', sm: '1fr auto 1fr' },
-                alignItems: 'center',
-                gap: 1.5,
-                px: 3,
-                py: 2,
-                borderTop: `1px solid ${C.borderLight}`
-              }}
-            >
-              <Typography sx={{ fontSize: 13, color: C.muted, textAlign: { xs: 'center', sm: 'left' } }}>
-                Hiển thị {filteredPromotions.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0}–
-                {Math.min(currentPage * PAGE_SIZE, filteredPromotions.length)} / {filteredPromotions.length} khuyến mãi
-              </Typography>
-              <Pagination
-                count={pageCount}
-                page={currentPage}
-                onChange={(_, value) => setPage(value)}
-                size="small"
-                shape="rounded"
-                sx={{
-                  justifySelf: 'center',
-                  '& .MuiPaginationItem-root': {
-                    minWidth: 26,
-                    height: 26,
-                    fontSize: 12.5,
-                    borderRadius: 1.5,
-                    transition: 'none',
-                    '&:hover': { bgcolor: '#F1F5F9' }
-                  },
-                  '& .MuiTouchRipple-root': { display: 'none' },
-                  '& .MuiPaginationItem-root.Mui-selected': {
-                    bgcolor: `${C.cyan} !important`,
-                    color: `${C.text} !important`,
-                    fontWeight: 700
-                  }
-                }}
-              />
-            </Box>
+            <Pager
+              page={currentPage - 1}
+              totalPages={pageCount}
+              total={filteredPromotions.length}
+              size={PAGE_SIZE}
+              noun="khuyến mãi"
+              onPage={(p) => setPage(p + 1)}
+              sx={{ borderTop: `1px solid ${C.borderLight}` }}
+            />
           </>
         )}
       </Box>

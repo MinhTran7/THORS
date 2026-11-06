@@ -1,4 +1,4 @@
-export const STORE_NAME = 'THORS Studio'; // chưa có bảng cửa hàng trong DB nên dùng hằng số
+export const STORE_NAME = 'THORS'; // chưa có bảng cửa hàng trong DB nên dùng hằng số
 export const PROFILE_TAGLINE = 'THOUGHTFUL RETAIL, EVERY DAY.';
 
 export const ROLE_LABEL = {

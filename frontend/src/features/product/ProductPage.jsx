@@ -23,7 +23,6 @@ import {
   Divider,
   IconButton,
   InputAdornment,
-  Pagination,
   Select,
   Stack,
   Switch,
@@ -38,6 +37,7 @@ import {
   Typography,
   MenuItem
 } from '@mui/material';
+import { Pager } from 'features/account/components/Blocks';
 
 import {
   CameraOutlined,
@@ -333,8 +333,6 @@ export default function ProductPage() {
     return filteredProducts.slice(start, start + PAGE_SIZE);
   }, [filteredProducts, currentPage]);
 
-  const showingFrom = filteredProducts.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0;
-  const showingTo = Math.min(currentPage * PAGE_SIZE, filteredProducts.length);
 
   function resetPage() {
     setPage(1);
@@ -1262,32 +1260,14 @@ export default function ProductPage() {
 
         <Divider />
 
-        <Stack
-          direction={{ xs: 'column', sm: 'row' }}
-          justifyContent="space-between"
-          alignItems="center"
-          spacing={2}
-          sx={{ px: 2, py: 1.5 }}
-        >
-          <Typography fontSize={11} color={COLORS.muted}>
-            Showing {showingFrom}–{showingTo} of {filteredProducts.length} products
-          </Typography>
-
-          <Pagination
-            count={pageCount}
-            page={currentPage}
-            disabled={busy}
-            onChange={(_, value) => setPage(value)}
-            size="small"
-            shape="rounded"
-            sx={{
-              '& .Mui-selected': {
-                bgcolor: `${COLORS.cyan} !important`,
-                color: COLORS.text
-              }
-            }}
-          />
-        </Stack>
+        <Pager
+          page={currentPage - 1}
+          totalPages={pageCount}
+          total={filteredProducts.length}
+          size={PAGE_SIZE}
+          noun="sản phẩm"
+          onPage={(p) => !busy && setPage(p + 1)}
+        />
       </Card>
 
       <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" spacing={1} sx={{ mt: 2.5 }}>

@@ -3,17 +3,31 @@
  * Viết bằng object sx của MUI, không dùng file CSS.
  */
 
-export const C = { ink: '#111111', accent: '#8A2B2B', line: '#E6E3DE', sand: '#EFEBE5', muted: '#5C5650', photo: '#EEEAE4' };
-export const SANS = "'Be Vietnam Pro', system-ui, sans-serif";
-export const SERIF = "'Playfair Display', Georgia, serif";
-export const FONT_URL =
-  'https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Be+Vietnam+Pro:wght@400;500;600&display=swap';
+// Đồng bộ với trang Đăng nhập / Đăng ký (ShopAuthShell.css): nền kem, chữ xám đậm, hồng nhấn, xanh ngọc cho nút và link
+export const C = {
+  ink: '#1F2937',
+  accent: '#E0559A',
+  line: '#E7EBEE',
+  sand: '#FFF6DA',
+  muted: '#6B7280',
+  photo: '#F3EFE8',
+  teal: '#1BA3B3',
+  cyan: '#A8F1F8',
+  cyanInk: '#0E3A41',
+  cream: '#FFFCF0'
+};
+export const RADIUS = { card: '24px', box: '14px' };
+export const CARD_SHADOW = '0 24px 50px -30px rgba(31, 41, 55, 0.25), 0 0 0 1px #F2EBD3';
+export const SANS = "'Public Sans', system-ui, sans-serif";
+// Tiêu đề dùng cùng font với trang đăng nhập (đậm 800), không còn chữ có chân
+export const SERIF = SANS;
+export const FONT_URL = 'https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&display=swap';
 
-export const focusRing = { '&:focus-visible': { outline: `2px solid ${C.accent}`, outlineOffset: '2px' } };
+export const focusRing = { '&:focus-visible': { outline: `2px solid ${C.teal}`, outlineOffset: '2px' } };
 export const container = { maxWidth: 1320, mx: 'auto', px: { xs: '16px', sm: '40px' }, boxSizing: 'border-box' };
 export const section = { ...container, pt: { xs: '64px', sm: '96px' } };
-export const linkSx = { color: C.ink, textDecoration: 'none', cursor: 'pointer', '&:hover': { color: C.accent }, ...focusRing };
-export const h2Sx = { m: 0, fontFamily: SERIF, fontWeight: 400, fontSize: { xs: 32, sm: 40 } };
+export const linkSx = { color: C.ink, textDecoration: 'none', cursor: 'pointer', '&:hover': { color: C.teal }, ...focusRing };
+export const h2Sx = { m: 0, fontFamily: SERIF, fontWeight: 800, letterSpacing: '-0.5px', fontSize: { xs: 30, sm: 38 } };
 export const eyebrowSx = { m: 0, fontSize: 13, letterSpacing: '0.2em', textTransform: 'uppercase' };
 export const srOnly = {
   position: 'absolute',
@@ -39,10 +53,11 @@ export const iconBtnSx = {
   justifyContent: 'center',
   textDecoration: 'none',
   fontFamily: 'inherit',
-  '&:hover': { color: C.accent },
+  '&:hover': { color: C.teal },
   ...focusRing
 };
 
+// 'dark' = nút chính (xanh ngọc nhạt như nút Đăng nhập), 'outline' / 'light' = nút phụ viền nhạt
 export const btnSx = (variant) => ({
   display: 'inline-block',
   boxSizing: 'border-box',
@@ -50,17 +65,18 @@ export const btnSx = (variant) => ({
   px: '32px',
   py: '16px',
   fontFamily: 'inherit',
-  fontSize: 14,
-  fontWeight: 500,
-  letterSpacing: '0.06em',
+  fontSize: 15,
+  fontWeight: variant === 'dark' ? 800 : 700,
+  letterSpacing: 0,
   lineHeight: 1,
   textDecoration: 'none',
   cursor: 'pointer',
-  border: `1px solid ${variant === 'light' ? '#FFFFFF' : C.ink}`,
-  bgcolor: variant === 'dark' ? C.ink : '#FFFFFF',
-  color: variant === 'dark' ? '#FFFFFF' : C.ink,
-  transition: 'opacity .2s',
-  '&:hover': { opacity: 0.85, color: variant === 'dark' ? '#FFFFFF' : C.ink },
+  borderRadius: RADIUS.box,
+  border: variant === 'dark' ? `1.5px solid ${C.cyan}` : `1.5px solid ${variant === 'light' ? '#FFFFFF' : C.line}`,
+  bgcolor: variant === 'dark' ? C.cyan : '#FFFFFF',
+  color: variant === 'dark' ? C.cyanInk : '#374151',
+  transition: 'opacity .2s, border-color .2s',
+  '&:hover': { opacity: 0.85, color: variant === 'dark' ? C.cyanInk : '#374151' },
   '&:disabled': { opacity: 0.6, cursor: 'default' },
   ...focusRing
 });
