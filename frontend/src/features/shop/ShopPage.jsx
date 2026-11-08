@@ -3,7 +3,7 @@ import { Link as RouterLink, useLocation, useNavigate, useOutletContext, useSear
 import { Box } from '@mui/material';
 import { useAuth } from 'features/auth/AuthProvider';
 import { api } from 'services/http';
-import { money, priceText } from './ShopCommon';
+import { ColorSwatches, isNewProduct, money, priceText, useProductColors } from './ShopCommon';
 import PendingCartHandler from './PendingCartHandler';
 import ShopBanner from './ShopBanner';
 import { C, SERIF, Icon, btnSx, container, eyebrowSx, focusRing, h2Sx, linkSx, scrollToId, section, srOnly } from './storeTheme';
@@ -22,16 +22,6 @@ const SORTS = [
   ['price_desc', 'Giá cao đến thấp']
 ];
 const PAGE_SIZE = 20;
-const NEW_DAYS = 7; // sản phẩm thêm trong vòng 7 ngày được gắn nhãn "MỚI"
-
-// Cần API /shop/products trả về createdAt (thời điểm tạo sản phẩm). Không có thì không gắn nhãn.
-function isNewProduct(createdAt) {
-  if (!createdAt) return false;
-  const created = new Date(createdAt).getTime();
-  if (Number.isNaN(created)) return false;
-  return Date.now() - created < NEW_DAYS * 24 * 60 * 60 * 1000;
-}
-
 /* ---------- Ảnh ---------- */
 
 // Có ảnh thì hiện ảnh, không thì hiện chữ cái đầu
@@ -310,9 +300,11 @@ const badgeSx = (bg, color = C.ink) => ({
   py: '5px'
 });
 
-function ProductCard({ product, promo, sx }) {
+// Dùng lại ở trang chi tiết sản phẩm (mục "Có thể bạn sẽ thích")
+export function ProductCard({ product, promo, sx }) {
   const outOfStock = Number(product.totalStock) === 0;
-  const isNew = isNewProduct(product.createdAt);
+  const isNew = isNewProduct(product);
+  const colors = useProductColors(product);
   return (
     <Box
       component={RouterLink}
@@ -331,23 +323,26 @@ function ProductCard({ product, promo, sx }) {
     >
       <Box sx={{ position: 'relative', aspectRatio: '4 / 5', overflow: 'hidden' }}>
         <ProductPhoto src={product.imageUrl} name={product.productName} zoomOnHover />
+        {/* Góc trái: "MỚI" cho sản phẩm mới; góc phải: hết hàng hoặc % giảm giá */}
+        {isNew && (
+          <Box component="span" sx={badgeSx('#FFFFFF')}>
+            MỚI
+          </Box>
+        )}
         {outOfStock ? (
-          <Box component="span" sx={badgeSx('#6B655D', '#FFFFFF')}>
+          <Box component="span" sx={{ ...badgeSx('#6B655D', '#FFFFFF'), left: 'auto', right: 12 }}>
             HẾT HÀNG
           </Box>
-        ) : promo ? (
-          <Box component="span" sx={badgeSx(C.accent, '#FFFFFF')}>
-            {promo.discountLabel}
-          </Box>
         ) : (
-          isNew && (
-            <Box component="span" sx={badgeSx('#FFFFFF')}>
-              MỚI
+          promo && (
+            <Box component="span" sx={{ ...badgeSx(C.accent, '#FFFFFF'), left: 'auto', right: 12 }}>
+              {promo.discountLabel}
             </Box>
           )
         )}
       </Box>
-      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', gap: { xs: 0.5, sm: 1.5 }, fontSize: 15 }}>
+      {/* Tên -> giá -> các màu có sẵn, xếp dọc */}
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, fontSize: 15 }}>
         <Box
           component="span"
           className="name"
@@ -356,20 +351,23 @@ function ProductCard({ product, promo, sx }) {
           {product.productName}
         </Box>
         {promo ? (
-          <Box component="span" sx={{ display: 'flex', gap: 1, whiteSpace: 'nowrap' }}>
+          <Box component="span" sx={{ display: 'flex', flexWrap: 'wrap', columnGap: 1 }}>
+            <Box component="span" sx={{ color: '#8C857B', textDecoration: 'line-through' }}>
+              {money(product.minPrice)}
+            </Box>
             <Box component="span" sx={{ fontWeight: 600, color: C.accent }}>
               {Number(product.maxPrice) > Number(product.minPrice) ? 'Từ ' : ''}
               {money(promo.salePrice)}
             </Box>
-            <Box component="span" sx={{ color: '#6B655D', textDecoration: 'line-through' }}>
-              {money(product.minPrice)}
-            </Box>
           </Box>
         ) : (
-          <Box component="span" sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
+          <Box component="span" sx={{ fontWeight: 600 }}>
             {priceText(product.minPrice, product.maxPrice)}
           </Box>
         )}
+        <Box sx={{ mt: 0.5 }}>
+          <ColorSwatches colors={colors} />
+        </Box>
       </Box>
     </Box>
   );

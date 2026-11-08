@@ -59,7 +59,7 @@ function useCartCount(enabled) {
   return enabled ? count : 0;
 }
 
-function StoreHeader({ categories }) {
+function StoreHeader() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [params] = useSearchParams();
@@ -130,11 +130,6 @@ function StoreHeader({ categories }) {
           <Box component={RouterLink} to="/#tat-ca" sx={linkSx}>
             Hàng mới
           </Box>
-          {categories.slice(0, 4).map((c) => (
-            <Box key={c.categoryId} component={RouterLink} to={`/?category=${c.categoryId}#tat-ca`} sx={linkSx}>
-              {c.categoryName}
-            </Box>
-          ))}
           <Box component={RouterLink} to="/#uu-dai" sx={{ ...linkSx, color: C.accent }}>
             Sale
           </Box>
@@ -312,7 +307,7 @@ export default function StorefrontLayout() {
       <Box sx={{ bgcolor: C.ink, color: '#FFFFFF', fontSize: 13, letterSpacing: '0.04em', textAlign: 'center', py: '11px', px: 2 }}>
         Giao hàng toàn quốc — Thanh toán khi nhận hàng hoặc chuyển khoản
       </Box>
-      <StoreHeader categories={categories} />
+      <StoreHeader />
 
       <Box component="main" sx={{ flex: 1, bgcolor: fullBleed ? '#FFFFFF' : '#F7F5F2' }}>
         <ThemeProvider theme={storeTheme}>
