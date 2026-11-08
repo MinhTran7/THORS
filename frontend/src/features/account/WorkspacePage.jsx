@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 import {
   Alert,
@@ -20,28 +20,13 @@ import {
   PlusOutlined,
   ShoppingOutlined,
   TeamOutlined,
-  WarningOutlined
+  WarningOutlined,
+  ArrowRightOutlined
 } from '@ant-design/icons';
 
 import { useAuth } from 'features/auth/AuthProvider';
 import { getProductStatistics } from '../../services/productService';
-
-const COLORS = {
-  text: '#202D42',
-  muted: '#75869F',
-  border: '#E5EBF2',
-  cyan: '#8DE9F2',
-  cyanLight: '#EAFBFD',
-  yellowLight: '#FFFBE7'
-};
-
-const cardSx = {
-  height: '100%',
-  border: `1px solid ${COLORS.border}`,
-  borderRadius: 2,
-  boxShadow: 'none',
-  bgcolor: '#FFFFFF'
-};
+import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../customer/theme';
 
 // ==========================================
 // DASHBOARD CARD
@@ -49,26 +34,30 @@ const cardSx = {
 
 function DashboardCard({ title, subtitle, children }) {
   return (
-    <Card sx={cardSx}>
+    <Card sx={{ ...cardSx, height: '100%' }}>
       <CardContent
         sx={{
-          p: 2.5,
-          '&:last-child': { pb: 2.5 }
+          p: { xs: 2.5, sm: 3.5 },
+          '&:last-child': { pb: { xs: 2.5, sm: 3.5 } }
         }}
       >
-        <Stack spacing={0.5} sx={{ mb: 2 }}>
+        <Stack spacing={0.5} sx={{ mb: 2.5 }}>
           <Typography
-            fontSize={15}
-            fontWeight={700}
-            color={COLORS.text}
+            sx={{
+              fontWeight: 800,
+              fontSize: 16,
+              color: '#0F172A'
+            }}
           >
             {title}
           </Typography>
 
           {subtitle && (
             <Typography
-              fontSize={11}
-              color={COLORS.muted}
+              sx={{
+                fontSize: 13,
+                color: C.muted
+              }}
             >
               {subtitle}
             </Typography>
@@ -94,15 +83,20 @@ function EmptyState({ message }) {
         alignItems: 'center',
         justifyContent: 'center',
         textAlign: 'center',
-        bgcolor: '#FAFCFE',
-        border: `1px dashed ${COLORS.border}`,
-        borderRadius: 2,
+        bgcolor: '#F8FAFC',
+        border: `1.5px dashed ${C.border}`,
+        borderRadius: 3,
         p: 3
       }}
     >
       <Typography
-        fontSize={12}
-        color={COLORS.muted}
+        sx={{
+          fontSize: 13.5,
+          color: C.muted,
+          maxWidth: 420,
+          mx: 'auto',
+          lineHeight: 1.6
+        }}
       >
         {message}
       </Typography>
@@ -126,15 +120,19 @@ function SummaryCard({
     <Card
       sx={{
         ...cardSx,
-        bgcolor: highlight
-          ? COLORS.yellowLight
-          : '#FFFFFF'
+        bgcolor: highlight ? '#F0FCFE' : C.surface,
+        border: `1.5px solid ${highlight ? C.cyan : C.border}`,
+        transition: 'all 0.2s ease',
+        '&:hover': {
+          boxShadow: '0 4px 12px rgba(0,0,0,0.04)',
+          borderColor: highlight ? C.cyanHover : '#CBD5E1'
+        }
       }}
     >
       <CardContent
         sx={{
-          p: 2.5,
-          '&:last-child': { pb: 2.5 }
+          p: { xs: 2.5, sm: 3 },
+          '&:last-child': { pb: { xs: 2.5, sm: 3 } }
         }}
       >
         <Stack
@@ -143,16 +141,26 @@ function SummaryCard({
           alignItems="center"
         >
           <Typography
-            fontSize={12}
-            color={COLORS.muted}
+            sx={{
+              fontSize: 13,
+              fontWeight: 700,
+              color: C.muted
+            }}
           >
             {label}
           </Typography>
 
           <Box
             sx={{
-              fontSize: 18,
-              color: COLORS.text
+              width: 40,
+              height: 40,
+              borderRadius: 2.5,
+              bgcolor: highlight ? C.cyan : C.borderLight,
+              color: '#0F172A',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 18
             }}
           >
             {icon}
@@ -161,20 +169,21 @@ function SummaryCard({
 
         <Box
           sx={{
-            mt: 1,
-            minHeight: 42,
+            mt: 1.5,
+            minHeight: 44,
             display: 'flex',
             alignItems: 'center'
           }}
         >
           {loading ? (
-            <CircularProgress size={24} />
+            <CircularProgress size={24} sx={{ color: C.cyan }} />
           ) : (
             <Typography
               sx={{
                 fontSize: 28,
-                fontWeight: 500,
-                color: COLORS.text
+                fontWeight: 800,
+                color: '#0F172A',
+                letterSpacing: -0.5
               }}
             >
               {value ?? '—'}
@@ -183,9 +192,12 @@ function SummaryCard({
         </Box>
 
         <Typography
-          fontSize={11}
-          color={COLORS.muted}
-          sx={{ mt: 1 }}
+          sx={{
+            fontSize: 12.5,
+            color: C.muted,
+            mt: 1,
+            lineHeight: 1.5
+          }}
         >
           {note}
         </Typography>
@@ -199,6 +211,7 @@ function SummaryCard({
 // ==========================================
 
 function OwnerDashboard({ account }) {
+  const navigate = useNavigate();
   const [statistics, setStatistics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -223,8 +236,7 @@ function OwnerDashboard({ account }) {
       } catch (err) {
         if (active) {
           setError(
-            err?.message ||
-              'Unable to load product statistics.'
+            err?.message || 'Không thể tải số liệu thống kê sản phẩm.'
           );
         }
       } finally {
@@ -242,8 +254,8 @@ function OwnerDashboard({ account }) {
   }, []);
 
   const firstName =
-    account?.fullName?.trim().split(/\s+/)[0] ||
-    'there';
+    account?.fullName?.trim().split(/\s+/).slice(-1)[0] ||
+    'bạn';
 
   // ==========================================
   // SUMMARY STATISTICS
@@ -251,110 +263,99 @@ function OwnerDashboard({ account }) {
 
   const summaryStats = [
     {
-      label: 'Total sales',
+      label: 'Doanh thu bán hàng',
       value: null,
-      note: 'Sales reporting is not available yet',
+      note: 'Báo cáo doanh thu đang được tích hợp',
       icon: <DollarOutlined />,
       highlight: true,
       loading: false
     },
     {
-      label: 'Orders',
+      label: 'Đơn hàng mới',
       value: null,
-      note: 'Order reporting is not available yet',
+      note: 'Báo cáo đơn hàng đang được tích hợp',
       icon: <ShoppingOutlined />,
       loading: false
     },
     {
-      label: 'Active products',
+      label: 'Sản phẩm hoạt động',
       value: statistics?.activeProducts,
-      note: 'Products currently active in your store',
+      note: 'Số lượng sản phẩm sẵn sàng mở bán',
       icon: <AppstoreOutlined />,
       loading
     },
     {
-      label: 'Low-stock products',
+      label: 'Sản phẩm sắp hết hàng',
       value: statistics?.lowStockProducts,
-      note: 'Products with fewer than 5 units',
-      icon: <WarningOutlined />,
+      note: 'Sản phẩm có tồn kho dưới 5 cái',
+      icon: <WarningOutlined style={{ color: '#D97706' }} />,
       loading
     }
   ];
 
   return (
-    <Box sx={{ maxWidth: 1440, mx: 'auto' }}>
-
-      {/* ======================================
-          PAGE HEADER
-      ====================================== */}
-
-      <Stack
-        direction={{ xs: 'column', sm: 'row' }}
-        alignItems={{
-          xs: 'flex-start',
-          sm: 'center'
+    <Box sx={{ maxWidth: 1440, mx: 'auto', pb: 6, color: C.text }}>
+      {/* PAGE HEADER */}
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          flexWrap: 'wrap',
+          gap: 2,
+          mb: 3.5
         }}
-        justifyContent="space-between"
-        spacing={2}
-        sx={{ mb: 3 }}
       >
         <Box>
           <Typography
-            fontSize={10}
-            color={COLORS.muted}
             sx={{
-              letterSpacing: 0.8,
-              mb: 0.5
+              fontSize: 11.5,
+              fontWeight: 800,
+              color: '#0D9488',
+              letterSpacing: 1,
+              mb: 0.5,
+              textTransform: 'uppercase'
             }}
           >
-            THORS STUDIO
+            HỆ THỐNG QUẢN LÝ THORS
           </Typography>
 
           <Typography
             variant="h3"
             sx={{
-              fontSize: {
-                xs: 24,
-                md: 29
-              },
-              fontWeight: 500,
-              color: COLORS.text
+              fontSize: { xs: 22, sm: 26 },
+              fontWeight: 800,
+              color: '#0F172A'
             }}
           >
-            Shop Owner Dashboard
+            Bảng điều khiển tổng quan
           </Typography>
 
           <Typography
-            fontSize={12}
-            color={COLORS.muted}
-            sx={{ mt: 0.5 }}
+            sx={{
+              fontSize: 13.5,
+              color: C.muted,
+              mt: 0.5,
+              lineHeight: 1.6
+            }}
           >
-            Good morning, {firstName}. A clear
-            view of your store, all in one place.
+            Xin chào, <strong>{firstName}</strong>! Dưới đây là tổng hợp nhanh các chỉ số hoạt động của cửa hàng.
           </Typography>
         </Box>
-      </Stack>
+      </Box>
 
-      {/* ======================================
-          API ERROR MESSAGE
-      ====================================== */}
-
+      {/* API ERROR MESSAGE */}
       {error && (
         <Alert
           severity="error"
-          sx={{ mb: 2.5 }}
+          sx={{ mb: 2.5, borderRadius: 2.5, fontSize: 13.5, fontWeight: 600 }}
         >
-          Failed to load product statistics:
-          {' '}
-          {error}
+          Không thể tải số liệu thống kê: {error}
         </Alert>
       )}
 
-      {/* ======================================
-          SUMMARY CARDS
-      ====================================== */}
-
-      <Grid container spacing={2}>
+      {/* SUMMARY CARDS */}
+      <Grid container spacing={2.5}>
         {summaryStats.map((stat) => (
           <Grid
             key={stat.label}
@@ -369,10 +370,7 @@ function OwnerDashboard({ account }) {
         ))}
       </Grid>
 
-      {/* ======================================
-          SALES PERFORMANCE + QUICK ACTIONS
-      ====================================== */}
-
+      {/* SALES PERFORMANCE + QUICK ACTIONS */}
       <Grid
         container
         spacing={2.5}
@@ -380,140 +378,133 @@ function OwnerDashboard({ account }) {
       >
         <Grid size={{ xs: 12, lg: 8 }}>
           <DashboardCard
-            title="Sales performance"
-            subtitle="Daily revenue"
+            title="Hiệu suất bán hàng"
+            subtitle="Biểu đồ doanh thu theo thời gian thực"
           >
             <EmptyState
-              message="Sales data is not available yet. The chart will appear when sales reporting is connected."
+              message="Dữ liệu bán hàng đang được kết nối. Biểu đồ doanh thu sẽ tự động hiển thị ngay khi phát sinh giao dịch."
             />
           </DashboardCard>
         </Grid>
 
         <Grid size={{ xs: 12, lg: 4 }}>
           <Stack spacing={2.5}>
-
             {/* QUICK ACTIONS */}
-
-            <DashboardCard title="Quick actions">
+            <DashboardCard title="Thao tác nhanh">
               <Stack spacing={1.5}>
                 <Button
                   component={Link}
                   to="/products/add"
                   fullWidth
                   startIcon={<PlusOutlined />}
-                  sx={{
-                    bgcolor: COLORS.cyan,
-                    color: COLORS.text,
-                    textTransform: 'none',
-                    fontWeight: 600,
-                    '&:hover': {
-                      bgcolor: '#6DDDE9'
-                    }
-                  }}
+                  sx={primaryButtonSx}
                 >
-                  Add Product
+                  Thêm sản phẩm mới
                 </Button>
 
                 <Stack
                   direction="row"
-                  spacing={1}
+                  spacing={1.5}
                 >
                   <Button
                     component={Link}
                     to="/categories"
-                    variant="outlined"
                     fullWidth
                     sx={{
-                      color: COLORS.text,
-                      borderColor: COLORS.border,
-                      textTransform: 'none',
-                      fontSize: 12
+                      ...outlineButtonSx,
+                      fontSize: 13,
+                      height: 42
                     }}
                   >
-                    Add Category
+                    Danh mục
                   </Button>
 
-                  {/* ĐỔI: /accounts -> /family, "Manage Staff" -> "Manage Family" */}
                   <Button
                     component={Link}
                     to="/family"
-                    variant="outlined"
                     fullWidth
                     startIcon={<TeamOutlined />}
                     sx={{
-                      color: COLORS.text,
-                      borderColor: COLORS.border,
-                      textTransform: 'none',
-                      fontSize: 12
+                      ...outlineButtonSx,
+                      fontSize: 13,
+                      height: 42
                     }}
                   >
-                    Manage Family
+                    Thành viên
                   </Button>
                 </Stack>
 
                 <Typography
-                  fontSize={11}
-                  color={COLORS.muted}
+                  sx={{
+                    fontSize: 12.5,
+                    color: C.muted,
+                    mt: 0.5,
+                    lineHeight: 1.5
+                  }}
                 >
-                  Keep your store ready for
-                  what's next.
+                  Truy cập nhanh các nghiệp vụ quản lý quan trọng của cửa hàng.
                 </Typography>
               </Stack>
             </DashboardCard>
 
-            {/* LOW STOCK NOTIFICATION */}
-
+            {/* LOW STOCK NOTIFICATION (PHUOC'S NOTE STYLE) */}
             <Box
               sx={{
-                bgcolor: COLORS.yellowLight,
-                borderRadius: 2,
-                p: 2
+                bgcolor: '#FFFDE7',
+                border: '1.5px solid #FDE047',
+                borderRadius: 3,
+                p: 2.5
               }}
             >
               <Typography
-                fontSize={12}
-                fontWeight={700}
-                color={COLORS.text}
+                sx={{
+                  fontWeight: 800,
+                  fontSize: 14,
+                  color: '#854D0E'
+                }}
               >
                 {loading
-                  ? 'Checking inventory...'
+                  ? 'Đang kiểm tra tồn kho...'
                   : statistics
-                    ? `${statistics.lowStockProducts} products need attention`
-                    : 'Inventory status unavailable'}
+                    ? `${statistics.lowStockProducts} sản phẩm sắp hết hàng`
+                    : 'Chưa có thông tin tồn kho'}
               </Typography>
 
               <Typography
-                fontSize={11}
-                color={COLORS.muted}
-                sx={{ mt: 1 }}
+                sx={{
+                  fontSize: 12.5,
+                  color: '#713F12',
+                  mt: 0.5,
+                  lineHeight: 1.6
+                }}
               >
                 {statistics
-                  ? 'Review products with low stock before they sell out.'
-                  : 'Inventory statistics could not be loaded.'}
+                  ? 'Kiểm tra và lên kế hoạch nhập hàng trước khi sản phẩm bị gián đoạn bán ra.'
+                  : 'Không thể tải dữ liệu kiểm kho tại thời điểm này.'}
               </Typography>
 
               <Button
                 component={Link}
                 to="/products"
-                size="small"
+                endIcon={<ArrowRightOutlined />}
                 sx={{
-                  mt: 1,
-                  px: 0,
+                  mt: 1.5,
+                  p: 0,
                   textTransform: 'none',
-                  color: COLORS.text
+                  color: '#854D0E',
+                  fontWeight: 700,
+                  fontSize: 13,
+                  '&:hover': { bgcolor: 'transparent', textDecoration: 'underline' }
                 }}
               >
-                View Products
+                Xem danh sách sản phẩm
               </Button>
             </Box>
           </Stack>
         </Grid>
       </Grid>
 
-      {/* ======================================
-          TOP PRODUCTS + INVENTORY
-      ====================================== */}
-
+      {/* TOP PRODUCTS + INVENTORY */}
       <Grid
         container
         spacing={2.5}
@@ -521,106 +512,112 @@ function OwnerDashboard({ account }) {
       >
         <Grid size={{ xs: 12, lg: 8 }}>
           <DashboardCard
-            title="Top products"
-            subtitle="Best-selling products"
+            title="Sản phẩm bán chạy"
+            subtitle="Top các mặt hàng có sản lượng xuất kho cao nhất"
           >
             <EmptyState
-              message="Top-selling products will be displayed when sales data is available."
+              message="Danh sách sản phẩm bán chạy nhất sẽ được xếp hạng tự động tại đây khi có dữ liệu bán lẻ."
             />
           </DashboardCard>
         </Grid>
 
         <Grid size={{ xs: 12, lg: 4 }}>
           <DashboardCard
-            title="Inventory snapshot"
-            subtitle="Current inventory overview"
+            title="Tóm tắt kho hàng"
+            subtitle="Tổng quan kiểm kê tồn kho thời gian thực"
           >
             <Stack spacing={2}>
-
               {/* AVAILABLE UNITS */}
-
               <Stack
                 direction="row"
                 justifyContent="space-between"
                 alignItems="center"
               >
                 <Typography
-                  fontSize={12}
-                  color={COLORS.muted}
+                  sx={{
+                    fontSize: 13.5,
+                    color: C.muted
+                  }}
                 >
-                  Available units
+                  Tổng tồn khả dụng
                 </Typography>
 
                 {loading ? (
-                  <CircularProgress size={18} />
+                  <CircularProgress size={18} sx={{ color: C.cyan }} />
                 ) : (
                   <Typography
-                    fontSize={13}
-                    fontWeight={700}
-                    color={COLORS.text}
+                    sx={{
+                      fontSize: 14.5,
+                      fontWeight: 800,
+                      color: '#0F172A'
+                    }}
                   >
-                    {statistics?.availableUnits ?? '—'}
+                    {statistics?.availableUnits ? `${statistics.availableUnits} cái` : '—'}
                   </Typography>
                 )}
               </Stack>
 
               {/* ACTIVE PRODUCTS */}
-
               <Stack
                 direction="row"
                 justifyContent="space-between"
                 alignItems="center"
               >
                 <Typography
-                  fontSize={12}
-                  color={COLORS.muted}
+                  sx={{
+                    fontSize: 13.5,
+                    color: C.muted
+                  }}
                 >
-                  Active products
+                  Sản phẩm đang bán
                 </Typography>
 
                 {loading ? (
-                  <CircularProgress size={18} />
+                  <CircularProgress size={18} sx={{ color: C.cyan }} />
                 ) : (
                   <Typography
-                    fontSize={13}
-                    fontWeight={700}
-                    color={COLORS.text}
+                    sx={{
+                      fontSize: 14.5,
+                      fontWeight: 800,
+                      color: '#0F172A'
+                    }}
                   >
-                    {statistics?.activeProducts ?? '—'}
+                    {statistics?.activeProducts ? `${statistics.activeProducts} mặt hàng` : '—'}
                   </Typography>
                 )}
               </Stack>
 
               {/* LOW STOCK PRODUCTS */}
-
               <Stack
                 direction="row"
                 justifyContent="space-between"
                 alignItems="center"
               >
                 <Typography
-                  fontSize={12}
-                  color={COLORS.muted}
+                  sx={{
+                    fontSize: 13.5,
+                    color: C.muted
+                  }}
                 >
-                  Low-stock products
+                  Sắp hết hàng
                 </Typography>
 
                 {loading ? (
-                  <CircularProgress size={18} />
+                  <CircularProgress size={18} sx={{ color: C.cyan }} />
                 ) : (
                   <Typography
-                    fontSize={13}
-                    fontWeight={700}
-                    color={COLORS.text}
+                    sx={{
+                      fontSize: 14.5,
+                      fontWeight: 800,
+                      color: statistics?.lowStockProducts > 0 ? '#D97706' : '#0F172A'
+                    }}
                   >
-                    {statistics?.lowStockProducts ?? '—'}
+                    {statistics?.lowStockProducts ? `${statistics.lowStockProducts} mặt hàng` : '0'}
                   </Typography>
                 )}
               </Stack>
 
-              {/* OTHER STATISTICS */}
-
-              <Divider />
+              <Divider sx={{ borderColor: C.borderLight }} />
 
               <Stack
                 direction="row"
@@ -628,68 +625,80 @@ function OwnerDashboard({ account }) {
                 alignItems="center"
               >
                 <Typography
-                  fontSize={12}
-                  color={COLORS.muted}
+                  sx={{
+                    fontSize: 13.5,
+                    color: C.muted
+                  }}
                 >
-                  Active categories
+                  Danh mục sản phẩm
                 </Typography>
 
                 <Typography
-                  fontSize={12}
-                  color={COLORS.muted}
+                  sx={{
+                    fontSize: 13,
+                    color: C.muted
+                  }}
                 >
-                  Not available
+                  Đang hoạt động
                 </Typography>
               </Stack>
 
-              {/* ĐỔI: "Staff & family" -> "Family members" */}
               <Stack
                 direction="row"
                 justifyContent="space-between"
                 alignItems="center"
               >
                 <Typography
-                  fontSize={12}
-                  color={COLORS.muted}
+                  sx={{
+                    fontSize: 13.5,
+                    color: C.muted
+                  }}
                 >
-                  Family members
+                  Thành viên quản lý
                 </Typography>
 
                 <Typography
-                  fontSize={12}
-                  color={COLORS.muted}
+                  sx={{
+                    fontSize: 13,
+                    color: C.muted
+                  }}
                 >
-                  Not available
+                  Đang hoạt động
                 </Typography>
               </Stack>
 
-              <Divider />
+              <Divider sx={{ borderColor: C.borderLight }} />
 
+              {/* ONLINE STOREFRONT NOTE (PHUOC'S TEAL BOX) */}
               <Box
                 sx={{
-                  bgcolor: COLORS.cyanLight,
-                  borderRadius: 1.5,
-                  px: 1.5,
-                  py: 1
+                  bgcolor: '#F0FDFA',
+                  borderRadius: 2.5,
+                  p: 2,
+                  border: '1px solid #99F6E4'
                 }}
               >
                 <Typography
-                  fontSize={11}
-                  fontWeight={600}
-                  color={COLORS.text}
+                  sx={{
+                    fontSize: 13,
+                    fontWeight: 800,
+                    color: '#0F766E'
+                  }}
                 >
-                  Online storefront
+                  Kênh bán lẻ Online (Website)
                 </Typography>
 
                 <Typography
-                  fontSize={11}
-                  color={COLORS.muted}
-                  sx={{ mt: 0.5 }}
+                  sx={{
+                    fontSize: 12,
+                    color: '#115E59',
+                    mt: 0.5,
+                    lineHeight: 1.5
+                  }}
                 >
-                  Status not available
+                  Đang kết nối đồng bộ kho trực tiếp với THORS Studio.
                 </Typography>
               </Box>
-
             </Stack>
           </DashboardCard>
         </Grid>
@@ -710,19 +719,26 @@ export default function WorkspacePage() {
   }
 
   return (
-    <Box sx={{ maxWidth: 1000, mx: 'auto' }}>
+    <Box sx={{ maxWidth: 1000, mx: 'auto', py: 4, color: C.text }}>
       <Typography
-        variant="h4"
-        sx={{ mb: 2 }}
+        variant="h3"
+        sx={{
+          fontWeight: 800,
+          color: '#0F172A',
+          fontSize: { xs: 22, sm: 26 },
+          mb: 1
+        }}
       >
-        Welcome, {account?.fullName || 'User'}
+        Xin chào, {account?.fullName || 'Người dùng'}
+      </Typography>
+      <Typography sx={{ fontSize: 13.5, color: C.muted, mb: 3 }}>
+        Bạn đã đăng nhập thành công vào hệ thống quản lý THORS.
       </Typography>
 
       <Card sx={cardSx}>
-        <CardContent>
-          <Typography sx={{ mb: 2 }}>
-            You have successfully signed in
-            to THORS.
+        <CardContent sx={{ p: { xs: 2.5, sm: 4 } }}>
+          <Typography sx={{ fontSize: 14.5, color: '#334155', fontWeight: 500, mb: 3 }}>
+            Lựa chọn nghiệp vụ quản trị phù hợp với vai trò của bạn bên dưới:
           </Typography>
 
           <Stack
@@ -730,23 +746,22 @@ export default function WorkspacePage() {
               xs: 'column',
               sm: 'row'
             }}
-            spacing={2}
+            spacing={1.5}
           >
             <Button
               component={Link}
               to="/profile"
-              variant="contained"
+              sx={primaryButtonSx}
             >
-              View Profile
+              Hồ sơ cá nhân
             </Button>
-            {account.role === 'ADMIN' && (
-              <Button component={Link} to="/accounts" variant="outlined">
+            {account?.role === 'ADMIN' && (
+              <Button component={Link} to="/accounts" sx={outlineButtonSx}>
                 Quản lý tài khoản
               </Button>
             )}
-            {/* ĐỔI: /staff -> /family */}
-            {account.role === 'OWNER' && (
-              <Button component={Link} to="/family" variant="outlined">
+            {account?.role === 'OWNER' && (
+              <Button component={Link} to="/family" sx={outlineButtonSx}>
                 Quản lý thành viên gia đình
               </Button>
             )}

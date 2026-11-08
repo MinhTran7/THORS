@@ -77,7 +77,9 @@ public class SecurityConfig {
                                 c -> c.csrfTokenRepository(new HttpSessionCsrfTokenRepository())
                                                 .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
                                                 .ignoringRequestMatchers("/api/payment/payos/webhook",
-                                                                "/api/facebook/webhook/**",
+                                                                // Chỉ endpoint gốc do Meta gọi (không có cookie/CSRF); các
+                                                                // endpoint con của màn hình POS vẫn phải gửi CSRF
+                                                                "/api/facebook/webhook",
                                                                 "/api/returns/public",
                                                                 "/api/returns/upload-evidence",
                                                                 // GHN gọi webhook từ máy chủ của họ, không có cookie/CSRF; được bảo vệ
@@ -102,7 +104,8 @@ public class SecurityConfig {
                                                 "/oauth2/**",
                                                 "/login/oauth2/**",
                                                 "/api/payment/payos/webhook",
-                                                "/api/facebook/webhook/**",
+                                                // Meta xác thực (GET) và đẩy sự kiện (POST) vào đúng đường dẫn gốc này
+                                                "/api/facebook/webhook",
                                                 "/api/returns/track/**",
                                                 "/api/returns/public",
                                                 "/api/returns/upload-evidence",
@@ -110,6 +113,9 @@ public class SecurityConfig {
                                                 "/error")
                                                 .permitAll()
                                                 .requestMatchers("/api/warehouse", "/api/warehouse/**")
+                                                .hasAnyRole("OWNER", "FAMILY_MEMBER")
+                                                // Màn hình Social POS: đọc chat, gửi tin, tạo đơn — cùng quyền với route /facebook
+                                                .requestMatchers("/api/facebook/webhook/**")
                                                 .hasAnyRole("OWNER", "FAMILY_MEMBER")
                                                 .anyRequest()
                                                 .authenticated());

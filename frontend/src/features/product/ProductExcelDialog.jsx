@@ -35,16 +35,17 @@ import {
   WarningOutlined
 } from '@ant-design/icons';
 import { createProductsBatch } from '../../services/productService';
+import { C, outlineButtonSx, primaryButtonSx } from '../customer/theme';
 
 const COLORS = {
-  text: '#202D42',
-  muted: '#75869F',
-  border: '#E5EBF2',
-  cyan: '#8DE9F2',
+  text: '#1E293B',
+  muted: '#64748B',
+  border: '#E2E8F0',
+  cyan: '#8EECF5',
   cyanLight: '#EAFBFD',
-  green: '#25856A',
-  red: '#D04D4D',
-  yellow: '#E6A23C'
+  green: '#059669',
+  red: '#EF4444',
+  yellow: '#D97706'
 };
 
 export default function ProductExcelDialog({ open, onClose, categories = [], onSuccess }) {
@@ -387,36 +388,35 @@ export default function ProductExcelDialog({ open, onClose, categories = [], onS
   const totalVariantsCount = groupedProducts.reduce((sum, p) => sum + p.variants.length, 0);
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
-      <DialogTitle sx={{ fontWeight: 700, color: COLORS.text, pb: 1 }}>
-        <Stack direction="row" alignItems="center" spacing={1}>
-          <FileExcelOutlined style={{ color: COLORS.green, fontSize: 22 }} />
+    <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth PaperProps={{ sx: { borderRadius: 3.5, p: 0.5 } }}>
+      <DialogTitle sx={{ fontWeight: 800, color: '#0F172A', fontSize: 18, pb: 1 }}>
+        <Stack direction="row" alignItems="center" spacing={1.5}>
+          <FileExcelOutlined style={{ color: COLORS.green, fontSize: 24 }} />
           <span>Nhập sản phẩm hàng loạt từ Excel</span>
         </Stack>
       </DialogTitle>
 
-      <Divider />
+      <Divider sx={{ borderColor: C.borderLight }} />
 
       <DialogContent sx={{ pt: 2.5 }}>
         {/* Nút tải mẫu & chọn file */}
         <Paper
           variant="outlined"
           sx={{
-            p: 2.5,
+            p: 3,
             mb: 2.5,
-            bgcolor: '#F9FAFC',
-            borderRadius: 2,
-            border: `1px dashed ${COLORS.border}`,
+            bgcolor: '#F8FAFC',
+            borderRadius: 3,
+            border: `1.5px dashed ${C.border}`,
             textAlign: 'center'
           }}
         >
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="center" alignItems="center">
             <Button
               variant="outlined"
-              color="primary"
               startIcon={<DownloadOutlined />}
               onClick={handleDownloadTemplate}
-              sx={{ textTransform: 'none' }}
+              sx={{ ...outlineButtonSx, height: 40, fontSize: 13 }}
             >
               Tải file mẫu Excel (.xlsx)
             </Button>
@@ -427,9 +427,12 @@ export default function ProductExcelDialog({ open, onClose, categories = [], onS
               startIcon={<UploadOutlined />}
               disabled={parsing || importing}
               sx={{
-                textTransform: 'none',
+                ...primaryButtonSx,
+                height: 40,
+                fontSize: 13,
                 bgcolor: COLORS.green,
-                '&:hover': { bgcolor: '#1e6b55' }
+                color: '#FFFFFF',
+                '&:hover': { bgcolor: '#047857' }
               }}
             >
               {fileName ? 'Chọn file khác' : 'Chọn file Excel để tải lên'}
@@ -647,10 +650,10 @@ export default function ProductExcelDialog({ open, onClose, categories = [], onS
         )}
       </DialogContent>
 
-      <Divider />
+      <Divider sx={{ borderColor: C.borderLight }} />
 
-      <DialogActions sx={{ px: 3, py: 2 }}>
-        <Button onClick={handleClose} disabled={importing} sx={{ textTransform: 'none', color: COLORS.muted }}>
+      <DialogActions sx={{ px: 3, py: 2.5, gap: 1 }}>
+        <Button onClick={handleClose} disabled={importing} sx={outlineButtonSx}>
           Hủy bỏ
         </Button>
 
@@ -660,9 +663,10 @@ export default function ProductExcelDialog({ open, onClose, categories = [], onS
           disabled={importing || groupedProducts.length === 0}
           startIcon={importing ? <CircularProgress size={16} color="inherit" /> : <CheckCircleOutlined />}
           sx={{
-            textTransform: 'none',
+            ...primaryButtonSx,
             bgcolor: COLORS.green,
-            '&:hover': { bgcolor: '#1e6b55' }
+            color: '#FFFFFF',
+            '&:hover': { bgcolor: '#047857' }
           }}
         >
           {importing

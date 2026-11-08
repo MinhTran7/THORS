@@ -549,16 +549,15 @@ public class FacebookService {
             throw new ApiException(500, "DB_ERROR", "Dịch vụ cơ sở dữ liệu chưa sẵn sàng.");
         }
 
-        Integer actorId = 1;
-        if (sessionAccess != null) {
-            try {
-                Account actor = sessionAccess.current();
-                if (actor != null) {
-                    actorId = actor.id();
-                }
-            } catch (Exception ignored) {
-            }
+        // Bắt buộc có người bán đăng nhập; không tự gán user #1 khi thiếu phiên
+        if (sessionAccess == null) {
+            throw new ApiException(401, "UNAUTHENTICATED", "Vui lòng đăng nhập.");
         }
+        Account actor = sessionAccess.current();
+        if (!"OWNER".equals(actor.role()) && !"FAMILY_MEMBER".equals(actor.role())) {
+            throw new ApiException(403, "FORBIDDEN", "Chỉ OWNER hoặc FAMILY_MEMBER được tạo đơn Facebook.");
+        }
+        int actorId = actor.id();
 
         String customerName = req.get("customerName") != null ? String.valueOf(req.get("customerName")).trim() : "";
         String customerPhone = req.get("customerPhone") != null ? String.valueOf(req.get("customerPhone")).trim() : "";

@@ -5,7 +5,7 @@ import { warehouseMenu } from 'features/warehouse/model';
 // Trang nào gọi useCrumbs thì giá trị của trang đó được ưu tiên.
 // Đặt pattern cụ thể trước pattern chung.
 const ROUTE_CRUMBS = [
-  ['/workspace', ['Dashboard']],
+  ['/workspace', ['Bảng điều khiển']],
   ['/profile', ['Hồ sơ']],
   ['/notifications', ['Thông báo']],
   ['/cart', ['Giỏ hàng']],
