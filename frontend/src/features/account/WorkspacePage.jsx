@@ -31,6 +31,7 @@ import {
   DatabaseOutlined,
   DollarOutlined,
   FacebookOutlined,
+  GlobalOutlined,
   PlusOutlined,
   ReloadOutlined,
   ShopOutlined,
@@ -53,10 +54,11 @@ const T = {
 };
 
 // Màu 3 kênh bán trên biểu đồ / thanh tỷ trọng
+// color: cột biểu đồ / thanh tỷ trọng; tint + iconColor: ô icon và nhãn % trong khung "Tỷ trọng theo kênh"
 const CHANNELS = [
-  { key: 'IN_STORE', label: 'Tại quầy', color: '#8EECF5' },
-  { key: 'WEB', label: 'Website', color: '#0E7490' },
-  { key: 'FACEBOOK', label: 'Facebook', color: '#FCD34D' }
+  { key: 'IN_STORE', label: 'Tại quầy', color: '#8EECF5', tint: '#E6FAFC', iconColor: '#0E7490', icon: <ShopOutlined /> },
+  { key: 'WEB', label: 'Website', color: '#0E7490', tint: '#E0F2F7', iconColor: '#0E7490', icon: <GlobalOutlined /> },
+  { key: 'FACEBOOK', label: 'Facebook', color: '#FCD34D', tint: '#FFF7AE', iconColor: '#713F12', icon: <FacebookOutlined /> }
 ];
 
 const RANGES = [
@@ -107,7 +109,7 @@ function DashboardCard({ title, subtitle, action, children }) {
   return (
     <Card sx={{ ...cardSx, height: '100%' }}>
       <CardContent sx={{ p: { xs: 2.5, sm: 3.5 }, '&:last-child': { pb: { xs: 2.5, sm: 3.5 } } }}>
-        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={2} sx={{ mb: 2.5 }}>
+        <Stack direction="row" spacing={2} sx={{ mb: 2.5, justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <Box>
             <Typography sx={{ fontWeight: 800, fontSize: 16, color: T.title }}>{title}</Typography>
             {subtitle && <Typography sx={{ fontSize: 13, color: C.muted, mt: 0.5 }}>{subtitle}</Typography>}
@@ -158,7 +160,7 @@ function SummaryCard({ label, value, note, icon, highlight, warn, loading, to })
       }}
     >
       <CardContent sx={{ p: { xs: 2.5, sm: 3 }, '&:last-child': { pb: { xs: 2.5, sm: 3 } } }}>
-        <Stack direction="row" justifyContent="space-between" alignItems="center">
+        <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
           <Typography sx={{ fontSize: 13, fontWeight: 700, color: C.muted }}>{label}</Typography>
           <Box
             sx={{
@@ -193,7 +195,7 @@ function SummaryCard({ label, value, note, icon, highlight, warn, loading, to })
 
 function InfoRow({ label, value, loading }) {
   return (
-    <Stack direction="row" justifyContent="space-between" alignItems="center">
+    <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
       <Typography sx={{ fontSize: 13.5, color: C.muted }}>{label}</Typography>
       {loading ? (
         <CircularProgress size={16} sx={{ color: C.cyan }} />
@@ -381,7 +383,7 @@ function StoreDashboard({ account }) {
           </Typography>
         </Box>
 
-        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+        <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
           {RANGES.map((r) => {
             const active = r.key === rangeKey;
             return (
@@ -475,27 +477,110 @@ function StoreDashboard({ account }) {
 
         <Grid size={{ xs: 12, lg: 4 }}>
           <DashboardCard title="Tỷ trọng theo kênh" subtitle="Doanh thu thuần và số đơn mới của từng kênh">
-            <Stack spacing={2.25}>
-              {channelRows.map((c) => (
-                <Box key={c.key}>
-                  <Stack direction="row" justifyContent="space-between" alignItems="baseline">
-                    <Stack direction="row" spacing={1} alignItems="center">
-                      <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: c.color }} />
-                      <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: C.text }}>{c.label}</Typography>
-                    </Stack>
-                    <Typography sx={{ fontSize: 14, fontWeight: 800, color: T.title }}>{sales ? money(c.net) : '—'}</Typography>
-                  </Stack>
-                  <LinearProgress
-                    variant="determinate"
-                    value={c.share}
-                    sx={{ mt: 1, height: 6, borderRadius: 3, bgcolor: C.borderLight, '& .MuiLinearProgress-bar': { bgcolor: c.color } }}
-                  />
-                  <Typography sx={{ fontSize: 12, color: C.muted, mt: 0.5 }}>
-                    {sales ? `${c.share}% doanh thu · ${count(c.orders)} đơn mới` : ''}
-                  </Typography>
-                </Box>
-              ))}
-            </Stack>
+            {/* Tổng + thanh tỷ trọng ghép 3 kênh */}
+            <Box sx={{ mb: 2.5 }}>
+              <Typography sx={{ fontSize: 12, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                Tổng doanh thu thuần
+              </Typography>
+              <Typography sx={{ fontSize: 24, fontWeight: 800, color: T.title, letterSpacing: -0.5, mt: 0.25 }}>
+                {sales ? money(sales.netRevenue) : '—'}
+              </Typography>
+
+              <Box
+                sx={{
+                  display: 'flex',
+                  gap: '3px',
+                  height: 10,
+                  mt: 1.5,
+                  borderRadius: 5,
+                  overflow: 'hidden',
+                  bgcolor: C.borderLight
+                }}
+              >
+                {channelRows
+                  .filter((c) => c.share > 0)
+                  .map((c) => (
+                    <Tooltip key={c.key} title={`${c.label}: ${c.share}%`}>
+                      <Box sx={{ width: `${c.share}%`, minWidth: 6, bgcolor: c.color, transition: 'width 0.4s ease' }} />
+                    </Tooltip>
+                  ))}
+              </Box>
+            </Box>
+
+            {/* Từng kênh */}
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+              {channelRows.map((c) => {
+                const empty = c.net === 0;
+                return (
+                  <Box
+                    key={c.key}
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1.5,
+                      p: 1.5,
+                      borderRadius: 2.5,
+                      border: `1px solid ${C.borderLight}`,
+                      bgcolor: empty ? C.surface : '#FAFCFE',
+                      transition: 'border-color 0.2s ease',
+                      '&:hover': { borderColor: C.border }
+                    }}
+                  >
+                    {/* Icon kênh trên nền màu nhạt */}
+                    <Box
+                      sx={{
+                        width: 38,
+                        height: 38,
+                        flexShrink: 0,
+                        borderRadius: 2.5,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 17,
+                        bgcolor: c.tint,
+                        color: c.iconColor
+                      }}
+                    >
+                      {c.icon}
+                    </Box>
+
+                    {/* Tên kênh + số đơn */}
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: C.text, lineHeight: 1.3 }} noWrap>
+                        {c.label}
+                      </Typography>
+                      <Typography sx={{ fontSize: 12, color: C.muted, mt: 0.25 }} noWrap>
+                        {sales ? `${count(c.orders)} đơn mới` : '—'}
+                      </Typography>
+                    </Box>
+
+                    {/* Doanh thu + % */}
+                    <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
+                      <Typography
+                        sx={{ fontSize: 14, fontWeight: 800, color: empty ? T.subtle : T.title, lineHeight: 1.3, whiteSpace: 'nowrap' }}
+                      >
+                        {sales ? money(c.net) : '—'}
+                      </Typography>
+                      <Box
+                        sx={{
+                          display: 'inline-block',
+                          mt: 0.4,
+                          px: 0.9,
+                          py: 0.1,
+                          borderRadius: 1.5,
+                          fontSize: 11.5,
+                          fontWeight: 700,
+                          bgcolor: empty ? C.borderLight : c.tint,
+                          color: empty ? T.subtle : c.iconColor
+                        }}
+                      >
+                        {sales ? `${c.share}%` : '—'}
+                      </Box>
+                    </Box>
+                  </Box>
+                );
+              })}
+            </Box>
           </DashboardCard>
         </Grid>
       </Grid>
@@ -631,7 +716,7 @@ function StoreDashboard({ account }) {
                   {stock.alerts.map((a) => {
                     const out = a.state === 'OUT';
                     return (
-                      <Stack key={a.detailId} direction="row" justifyContent="space-between" alignItems="center" spacing={1.5}>
+                      <Stack key={a.detailId} direction="row" spacing={1.5} sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
                         <Box sx={{ minWidth: 0 }}>
                           <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: C.text }} noWrap>
                             {a.productName}

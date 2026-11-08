@@ -75,6 +75,47 @@ public class ReturnService {
     // ==========================================
 
     @Transactional(readOnly = true)
+    /**
+     * Xác thực người xem trang tra cứu đơn: nhập ít nhất 4 số cuối SĐT người nhận (hoặc cả số, nhận cả dạng
+     * +84). Trước đây so "endsWith" hai chiều nên nhập 1 chữ số trùng số cuối, hoặc đơn không có SĐT, cũng
+     * được xác thực và xem được SĐT, địa chỉ đầy đủ.
+     */
+    static boolean phoneMatches(String orderPhone, String input) {
+        String expected = orderPhone == null ? "" : orderPhone.replaceAll("[^0-9]", "");
+        String entered = input == null ? "" : input.replaceAll("[^0-9]", "");
+        if (entered.startsWith("84") && entered.length() == 11) entered = "0" + entered.substring(2);
+        if (expected.startsWith("84") && expected.length() == 11) expected = "0" + expected.substring(2);
+        return expected.length() >= 4 && entered.length() >= 4 && expected.endsWith(entered);
+    }
+
+    /**
+     * Khách xác nhận "Đã nhận được hàng" trên trang tra cứu công khai (khách mua qua Facebook không có tài
+     * khoản nên không có nút này ở trang đơn của khách). Bắt buộc xác thực SĐT; chỉ đơn đang "Đã giao"
+     * mới chuyển sang "Hoàn tất" (không thì hệ thống tự hoàn tất sau 7 ngày).
+     */
+    @Transactional
+    public ReturnableOrderResponse confirmReceived(String orderNumber, String phone) {
+        if (orderNumber == null || orderNumber.isBlank()) {
+            throw new ApiException(400, "INVALID_ORDER_NUMBER", "Mã đơn hàng không được để trống.");
+        }
+        ReturnableOrderResponse order = returnRepository.findOrderByNumber(orderNumber.trim())
+                .orElseThrow(() -> new ApiException(404, "ORDER_NOT_FOUND", "Không tìm thấy đơn hàng với mã: " + orderNumber));
+
+        if (!phoneMatches(order.getCustomerPhone(), phone)) {
+            throw new ApiException(403, "PHONE_NOT_VERIFIED", "Vui lòng xác thực đúng 4 số cuối số điện thoại người nhận.");
+        }
+        if ("COMPLETED".equals(order.getOrderStatus())) {
+            return trackOrder(orderNumber, phone);
+        }
+        if (!"DELIVERED".equals(order.getOrderStatus())) {
+            throw new ApiException(409, "ORDER_NOT_DELIVERED", "Đơn hàng chưa được giao nên chưa thể xác nhận đã nhận hàng.");
+        }
+        if (!returnRepository.markOrderReceived(order.getOrderId())) {
+            throw new ApiException(409, "ORDER_STATE", "Trạng thái đơn vừa thay đổi, vui lòng tải lại trang.");
+        }
+        return trackOrder(orderNumber, phone);
+    }
+
     public ReturnableOrderResponse trackOrder(String orderNumber, String phone) {
         if (orderNumber == null || orderNumber.isBlank()) {
             throw new ApiException(400, "INVALID_ORDER_NUMBER", "Mã đơn hàng không được để trống.");
@@ -84,14 +125,7 @@ public class ReturnService {
                 .orElseThrow(() -> new ApiException(404, "ORDER_NOT_FOUND", "Không tìm thấy đơn hàng với mã: " + orderNumber));
 
         String rawPhone = order.getCustomerPhone() != null ? order.getCustomerPhone().replaceAll("[^0-9]", "") : "";
-        String inputPhone = phone != null ? phone.replaceAll("[^0-9]", "") : "";
-
-        boolean isVerified = false;
-        if (!inputPhone.isBlank()) {
-            if (rawPhone.endsWith(inputPhone) || inputPhone.endsWith(rawPhone) || rawPhone.equals(inputPhone)) {
-                isVerified = true;
-            }
-        }
+        boolean isVerified = phoneMatches(order.getCustomerPhone(), phone);
 
         order.setVerified(isVerified);
 
@@ -137,7 +171,8 @@ public class ReturnService {
         String reqPhone = request.getCustomerPhone() != null ? request.getCustomerPhone().replaceAll("[^0-9]", "") : "";
         String orderPhone = order.getCustomerPhone() != null ? order.getCustomerPhone().replaceAll("[^0-9]", "") : "";
 
-        if (reqPhone.isBlank() || (!orderPhone.endsWith(reqPhone) && !reqPhone.endsWith(orderPhone))) {
+        // Cùng quy tắc trang tra cứu: tối thiểu 4 số cuối SĐT người nhận (trước đây 1 chữ số cũng qua)
+        if (!phoneMatches(orderPhone, reqPhone)) {
             throw new ApiException(400, "PHONE_MISMATCH", "Số điện thoại xác thực không khớp với đơn hàng.");
         }
 

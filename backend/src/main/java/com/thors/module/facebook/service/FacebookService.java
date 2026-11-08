@@ -14,6 +14,7 @@ import java.io.FileWriter;
 import java.io.PrintWriter;
 import com.thors.common.ApiException;
 import com.thors.module.account.entity.Account;
+import com.thors.module.order.delivery.GeoClient;
 import com.thors.security.SessionAccess;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -51,11 +52,59 @@ public class FacebookService {
     private final RestTemplate restTemplate = new RestTemplate();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    // Dịch vụ bản đồ (Goong / OpenStreetMap) dùng chung với luồng xác nhận đơn online
+    private final GeoClient geo;
+
     public FacebookService(
             @Autowired(required = false) JdbcTemplate jdbc,
-            @Autowired(required = false) SessionAccess sessionAccess) {
+            @Autowired(required = false) SessionAccess sessionAccess,
+            @Autowired(required = false) GeoClient geo) {
         this.jdbc = jdbc;
         this.sessionAccess = sessionAccess;
+        this.geo = geo;
+    }
+
+    // ==========================================
+    // SỐ ĐIỆN THOẠI & ĐỊA CHỈ GIAO HÀNG
+    // ==========================================
+
+    /**
+     * Chuẩn hóa SĐT di động Việt Nam về dạng 10 số bắt đầu bằng 0: chấp nhận "+84 566 238 971",
+     * "84566238971", "0566.238.971"... Trả về null nếu không phải SĐT di động hợp lệ (đầu 03/05/07/08/09).
+     */
+    public static String normalizeVnPhone(String value) {
+        if (value == null) return null;
+        String digits = value.replaceAll("[^0-9]", "");
+        if (digits.startsWith("84") && digits.length() == 11) digits = "0" + digits.substring(2);
+        return digits.matches("0[35789][0-9]{8}") ? digits : null;
+    }
+
+    /**
+     * Kiểm tra địa chỉ giao trên bản đồ (cùng dịch vụ mà bước Owner xác nhận đơn dùng để chặn địa chỉ không
+     * có thật). Địa chỉ nên theo dạng "Số nhà/đường, Phường/Xã, Tỉnh/Thành phố" để tìm theo từng phần.
+     */
+    public Map<String, Object> checkAddress(String address) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        if (address == null || address.isBlank()) {
+            throw new ApiException(400, "ADDRESS_REQUIRED", "Vui lòng nhập địa chỉ giao hàng.");
+        }
+        if (geo == null) {
+            result.put("status", "UNAVAILABLE");
+            return result;
+        }
+        GeoClient.Lookup lookup = geo.lookup(address.trim());
+        if (lookup.place().isPresent()) {
+            GeoClient.Place place = lookup.place().get();
+            result.put("status", "FOUND");
+            // HOUSE: khớp số nhà; STREET: khớp tên đường; AREA: chỉ khớp phường/xã
+            result.put("precision", place.precision().name());
+            result.put("matchedAddress", place.address());
+            result.put("lat", place.lat());
+            result.put("lng", place.lng());
+        } else {
+            result.put("status", lookup.unavailable() ? "UNAVAILABLE" : "NOT_FOUND");
+        }
+        return result;
     }
 
     // Lưu danh sách tin nhắn nhận được gần đây (in-memory)
@@ -572,6 +621,40 @@ public class FacebookService {
             customerName = "Khách Facebook"
                     + (psid.length() > 6 ? " (#" + psid.substring(psid.length() - 6) + ")" : "");
         }
+        if (customerName.length() > 100) {
+            throw new ApiException(400, "CUSTOMER_NAME", "Họ tên người nhận tối đa 100 ký tự.");
+        }
+
+        // SĐT lưu thống nhất dạng 0xxxxxxxxx (trang tra cứu đơn so 4 số cuối với số này)
+        String normalizedPhone = normalizeVnPhone(customerPhone);
+        if (normalizedPhone == null) {
+            throw new ApiException(400, "CUSTOMER_PHONE",
+                    "Số điện thoại không hợp lệ. Cần 10 số di động, ví dụ 0912345678 hoặc +84 912 345 678.");
+        }
+        customerPhone = normalizedPhone;
+
+        if (customerAddress.isBlank()) {
+            throw new ApiException(400, "CUSTOMER_ADDRESS", "Vui lòng nhập địa chỉ giao hàng.");
+        }
+        if (customerAddress.length() > 255) {
+            throw new ApiException(400, "CUSTOMER_ADDRESS", "Địa chỉ giao hàng tối đa 255 ký tự.");
+        }
+
+        // Lưu tọa độ nếu tìm thấy trên bản đồ: bước Owner xác nhận đơn sẽ không phải tìm lại.
+        // Không tìm thấy / dịch vụ bản đồ lỗi thì vẫn tạo đơn (màn hình POS đã cảnh báo trước khi chốt).
+        Double deliveryLat = null;
+        Double deliveryLng = null;
+        if (geo != null) {
+            try {
+                Optional<GeoClient.Place> place = geo.geocode(customerAddress);
+                if (place.isPresent()) {
+                    deliveryLat = place.get().lat();
+                    deliveryLng = place.get().lng();
+                }
+            } catch (Exception e) {
+                log.warn("Không tìm được tọa độ cho địa chỉ đơn Facebook: {}", e.getMessage());
+            }
+        }
 
         List<Map<String, Object>> items = (List<Map<String, Object>>) req.get("items");
         if (items == null || items.isEmpty()) {
@@ -587,11 +670,14 @@ public class FacebookService {
             if (quantity <= 0)
                 continue;
 
+            // Khóa dòng biến thể (FOR UPDATE) để hai đơn chốt cùng lúc không giữ quá số hàng có thể bán
             List<Map<String, Object>> rows = jdbc.queryForList("""
-                    SELECT pd.detail_id, pd.product_id, p.product_name, pd.size, pd.color, pd.price, pd.stock_quantity
+                    SELECT pd.detail_id, pd.product_id, p.product_name, pd.size, pd.color, pd.price, pd.stock_quantity,
+                           pd.status AS variant_status, p.status AS product_status
                     FROM product_detail pd
                     JOIN product p ON p.product_id = pd.product_id
                     WHERE pd.detail_id = ?
+                    FOR UPDATE
                     """, detailId);
 
             if (rows.isEmpty()) {
@@ -604,11 +690,27 @@ public class FacebookService {
             String pName = String.valueOf(row.get("product_name"));
             String size = String.valueOf(row.get("size"));
             String color = String.valueOf(row.get("color"));
+            if (row.get("price") == null) {
+                throw new ApiException(400, "NO_PRICE",
+                        "Sản phẩm \"" + pName + "\" (" + size + "/" + color + ") chưa có giá bán.");
+            }
             long price = ((Number) row.get("price")).longValue();
 
-            if (quantity > stock) {
+            if (!"ACTIVE".equals(row.get("variant_status")) || !"ACTIVE".equals(row.get("product_status"))) {
+                throw new ApiException(400, "PRODUCT_INACTIVE",
+                        "Sản phẩm \"" + pName + "\" (" + size + "/" + color + ") đang ngừng bán.");
+            }
+
+            // Có thể bán = tồn − hàng đang giữ cho các đơn khác chưa xác nhận (cùng công thức màn hình Tồn kho)
+            Integer held = jdbc.queryForObject(
+                    "SELECT COALESCE(SUM(reserved_quantity), 0) FROM order_item WHERE detail_id = ? AND reserved_quantity > 0",
+                    Integer.class, detailId);
+            int sellable = Math.max(0, stock - (held == null ? 0 : held));
+
+            if (quantity > sellable) {
                 throw new ApiException(400, "OUT_OF_STOCK",
-                        "Sản phẩm \"" + pName + "\" (" + size + "/" + color + ") chỉ còn " + stock + " cái trong kho.");
+                        "Sản phẩm \"" + pName + "\" (" + size + "/" + color + ") chỉ còn " + sellable
+                                + " cái có thể bán" + (sellable < stock ? " (" + (stock - sellable) + " cái đang giữ cho đơn khác)" : "") + ".");
             }
 
             long lineTotal = price * quantity;
@@ -635,6 +737,8 @@ public class FacebookService {
         final long finalItemsAmount = itemsAmount;
         final long finalTotalAmount = totalAmount;
         final int finalActorId = actorId;
+        final Double finalLat = deliveryLat;
+        final Double finalLng = deliveryLng;
 
         jdbc.update(con -> {
             PreparedStatement ps = con.prepareStatement("""
@@ -643,13 +747,15 @@ public class FacebookService {
                         order_status, preparation_status, payment_method, payment_status,
                         items_amount, promotion_discount_amount, coupon_discount_amount,
                         shipping_fee, total_amount,
-                        delivery_name, delivery_phone, delivery_address
+                        delivery_name, delivery_phone, delivery_address,
+                        delivery_lat, delivery_lng
                     ) VALUES (
                         ?, ?, ?, 'Online', NOW(),
                         ?, 'NOT_STARTED', ?, 'UNPAID',
                         ?, 0, 0,
                         0, ?,
-                        ?, ?, ?
+                        ?, ?, ?,
+                        ?, ?
                     )
                     """, Statement.RETURN_GENERATED_KEYS);
             ps.setInt(1, finalActorId);
@@ -661,7 +767,9 @@ public class FacebookService {
             ps.setLong(7, finalTotalAmount);
             ps.setString(8, finalCustomerName);
             ps.setString(9, finalCustomerPhone);
-            ps.setString(10, finalCustomerAddress.isBlank() ? "Giao hàng qua Facebook" : finalCustomerAddress);
+            ps.setString(10, finalCustomerAddress);
+            ps.setObject(11, finalLat);
+            ps.setObject(12, finalLng);
             return ps;
         }, keyHolder);
 
@@ -672,10 +780,13 @@ public class FacebookService {
             int qty = ((Number) line.get("buyQuantity")).intValue();
             long unitPrice = ((Number) line.get("unitPrice")).longValue();
 
+            // KHÔNG trừ tồn kho khi chốt đơn: chỉ GIỮ hàng (reserved_quantity) cho đơn chờ xác nhận.
+            // Owner xác nhận đơn (OrderService.changeStatus -> AWAITING_PICKUP) mới trừ kho + ghi thẻ kho
+            // "Xuất bán", dùng đúng phần đã giữ này; hủy / từ chối / hết hạn thì trả lại phần giữ.
             jdbc.update("""
                     INSERT INTO order_item (order_id, detail_id, product_name_snapshot, size_snapshot,
-                                            color_snapshot, quantity, unit_price)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                                            color_snapshot, quantity, unit_price, reserved_quantity)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     orderId,
                     detailId,
@@ -683,12 +794,8 @@ public class FacebookService {
                     line.get("size"),
                     line.get("color"),
                     qty,
-                    unitPrice);
-
-            // Trừ tồn kho thực tế ngay lập tức
-            jdbc.update(
-                    "UPDATE product_detail SET stock_quantity = stock_quantity - ? WHERE detail_id = ? AND stock_quantity >= ?",
-                    qty, detailId, qty);
+                    unitPrice,
+                    qty);
         }
 
         log.info("==> Đã tạo đơn hàng Facebook #{} ({}) cho khách: {} - Tổng tiền: {}",

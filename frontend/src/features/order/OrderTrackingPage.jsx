@@ -40,7 +40,7 @@ import {
   UnlockOutlined,
   ArrowLeftOutlined
 } from '@ant-design/icons';
-import { trackOrderPublic } from '../../services/returnService';
+import { confirmReceivedPublic, trackOrderPublic } from '../../services/returnService';
 import CustomerReturnDialog from '../returns/CustomerReturnDialog';
 import { orderStatusMeta, shipmentStatusLabel, formatVnd } from './constants';
 
@@ -60,7 +60,8 @@ const STEP_LABELS = ['Đặt hàng', 'Xác nhận đơn', 'Đang vận chuyển'
 function getActiveStepIndex(orderStatus, shipmentStatus) {
   if (!orderStatus) return 0;
   if (['CANCELLED', 'REJECTED', 'EXPIRED'].includes(orderStatus)) return -1;
-  if (orderStatus === 'COMPLETED') return 4;
+  // Hoàn tất: mọi bước (kể cả bước cuối) đều đã xong
+  if (orderStatus === 'COMPLETED') return STEP_LABELS.length;
   if (orderStatus === 'DELIVERED' || shipmentStatus === 'DELIVERED') return 3;
   if (['SHIPPING', 'AWAITING_PICKUP'].includes(orderStatus) || ['IN_TRANSIT', 'AWAITING_PICKUP'].includes(shipmentStatus)) {
     return 2;
@@ -133,6 +134,25 @@ export default function OrderTrackingPage() {
     }
   };
 
+  // Khách xác nhận đã nhận hàng (đơn "Đã giao" => "Hoàn tất"); dùng lại 4 số cuối SĐT vừa xác thực
+  const [confirmingReceived, setConfirmingReceived] = useState(false);
+  const [receivedError, setReceivedError] = useState('');
+
+  const handleConfirmReceived = async () => {
+    if (!window.confirm('Xác nhận bạn đã nhận đủ hàng và hoàn tất đơn hàng này?')) return;
+    setConfirmingReceived(true);
+    setReceivedError('');
+    try {
+      const data = await confirmReceivedPublic(orderNumber, phonePin.trim());
+      setOrder(data);
+      setSuccessBanner('Cảm ơn bạn! Đơn hàng đã được xác nhận hoàn tất.');
+    } catch (err) {
+      setReceivedError(err?.message || 'Không xác nhận được, vui lòng thử lại.');
+    } finally {
+      setConfirmingReceived(false);
+    }
+  };
+
   const handleCopyTrackingNumber = () => {
     if (!order?.trackingNumber) return;
     navigator.clipboard?.writeText(order.trackingNumber);
@@ -144,8 +164,7 @@ export default function OrderTrackingPage() {
   const isCanceled = ['CANCELLED', 'REJECTED', 'EXPIRED'].includes(order?.orderStatus);
 
   // Can request return if delivered/completed and not having active return
-  const canRequestReturn =
-    ['DELIVERED', 'COMPLETED'].includes(order?.orderStatus) && !order?.activeReturnId;
+  const canRequestReturn = ['DELIVERED', 'COMPLETED'].includes(order?.orderStatus) && !order?.activeReturnId;
 
   if (loading) {
     return (
@@ -186,7 +205,7 @@ export default function OrderTrackingPage() {
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
       {/* TOP BAR / BACK NAVIGATION */}
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2.5 }}>
+      <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', mb: 2.5 }}>
         <Button
           startIcon={<ArrowLeftOutlined />}
           component={RouterLink}
@@ -217,7 +236,7 @@ export default function OrderTrackingPage() {
           background: 'linear-gradient(135deg, #F0F9FF 0%, #FFFFFF 100%)'
         }}
       >
-        <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} spacing={2}>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ justifyContent: 'space-between', alignItems: { sm: 'center' } }}>
           <Box>
             <Typography fontSize={12} fontWeight={700} color={COLORS.primary} sx={{ textTransform: 'uppercase', letterSpacing: 0.8 }}>
               Mã đơn hàng
@@ -226,7 +245,9 @@ export default function OrderTrackingPage() {
               {order.orderNumber}
             </Typography>
             <Typography fontSize={12} color={COLORS.muted} sx={{ mt: 0.5 }}>
-              Thời gian đặt: {order.createdAt ? new Date(order.createdAt).toLocaleString('vi-VN') : '—'}
+              {/* API trả về orderDate (trước đây đọc nhầm createdAt nên luôn hiện "—") */}
+              Thời gian đặt:{' '}
+              {order.orderDate || order.createdAt ? new Date(order.orderDate || order.createdAt).toLocaleString('vi-VN') : '—'}
             </Typography>
           </Box>
           <Box sx={{ textAlign: { sm: 'right' } }}>
@@ -270,6 +291,62 @@ export default function OrderTrackingPage() {
             </Stepper>
           )}
         </Box>
+
+        {/* XÁC NHẬN ĐÃ NHẬN HÀNG: đơn "Đã giao" => khách bấm để hoàn tất ngay (không bấm thì tự hoàn tất sau 7 ngày) */}
+        {order.orderStatus === 'DELIVERED' && (
+          <Box
+            sx={{
+              mt: 2.5,
+              p: 2,
+              borderRadius: 2.5,
+              bgcolor: order.verified ? '#F0FCFE' : '#F8FAFC',
+              border: `1px solid ${order.verified ? '#8EECF5' : COLORS.border}`,
+              display: 'flex',
+              flexDirection: { xs: 'column', sm: 'row' },
+              alignItems: { sm: 'center' },
+              justifyContent: 'space-between',
+              gap: 1.5
+            }}
+          >
+            <Box>
+              <Typography fontSize={14} fontWeight={800} color={COLORS.text}>
+                Bạn đã nhận được hàng?
+              </Typography>
+              <Typography fontSize={12.5} color={COLORS.muted} sx={{ mt: 0.25 }}>
+                {order.verified
+                  ? 'Bấm xác nhận để hoàn tất đơn hàng. Nếu không xác nhận, đơn sẽ tự hoàn tất sau 7 ngày kể từ khi giao.'
+                  : 'Nhập 4 số cuối số điện thoại người nhận ở mục "Người nhận hàng" bên dưới để xác nhận đã nhận hàng.'}
+              </Typography>
+              {receivedError && (
+                <Typography fontSize={12.5} color="#B91C1C" fontWeight={600} sx={{ mt: 0.5 }}>
+                  {receivedError}
+                </Typography>
+              )}
+            </Box>
+            <Button
+              variant="contained"
+              disabled={!order.verified || confirmingReceived}
+              onClick={handleConfirmReceived}
+              startIcon={confirmingReceived ? <CircularProgress size={14} color="inherit" /> : null}
+              sx={{
+                flexShrink: 0,
+                height: 42,
+                px: 2.5,
+                borderRadius: 2.5,
+                bgcolor: '#8EECF5',
+                color: '#0F172A',
+                fontWeight: 700,
+                fontSize: 13.5,
+                textTransform: 'none',
+                boxShadow: 'none',
+                '&:hover': { bgcolor: '#76E5EF', boxShadow: 'none' },
+                '&.Mui-disabled': { bgcolor: '#E2E8F0', color: '#94A3B8' }
+              }}
+            >
+              {confirmingReceived ? 'Đang xác nhận...' : 'Tôi đã nhận được hàng'}
+            </Button>
+          </Box>
+        )}
       </Paper>
 
       {/* ACTIVE RETURN BANNER (IF ALREADY REQUESTED) */}
@@ -279,25 +356,20 @@ export default function OrderTrackingPage() {
           sx={{
             p: 2.5,
             mb: 3,
-            bgcolor:
-              order.activeReturnStatus === 'COMPLETED'
-                ? '#F6FFED'
-                : order.activeReturnStatus === 'REJECTED'
-                ? '#FFF1F0'
-                : '#FFFBE6',
+            bgcolor: order.activeReturnStatus === 'COMPLETED' ? '#F6FFED' : order.activeReturnStatus === 'REJECTED' ? '#FFF1F0' : '#FFFBE6',
             border: `1px solid ${
-              order.activeReturnStatus === 'COMPLETED'
-                ? '#B7EB8F'
-                : order.activeReturnStatus === 'REJECTED'
-                ? '#FFA39E'
-                : '#FFE58F'
+              order.activeReturnStatus === 'COMPLETED' ? '#B7EB8F' : order.activeReturnStatus === 'REJECTED' ? '#FFA39E' : '#FFE58F'
             }`,
             borderRadius: 3
           }}
         >
-          <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} spacing={1.5}>
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            spacing={1.5}
+            sx={{ justifyContent: 'space-between', alignItems: { sm: 'center' } }}
+          >
             <Box>
-              <Stack direction="row" alignItems="center" spacing={1}>
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                 <RollbackOutlined style={{ fontSize: 18, color: '#D48806' }} />
                 <Typography fontSize={14} fontWeight={700} color={COLORS.text}>
                   Yêu cầu Trả hàng / Hoàn tiền: {order.activeReturnStatus}
@@ -326,7 +398,8 @@ export default function OrderTrackingPage() {
                     📞 Người nhận: Bộ phận Đổi trả THORS — SĐT: 038.686.8686
                   </Typography>
                   <Typography fontSize={11} color={COLORS.muted} sx={{ mt: 0.5 }}>
-                    * Quý khách thanh toán cước trực tiếp cho bên vận chuyển. Shop sẽ kiểm nhận kiện hàng và chuyển khoản hoàn tiền ngay vào tài khoản ngân hàng của quý khách.
+                    * Quý khách thanh toán cước trực tiếp cho bên vận chuyển. Shop sẽ kiểm nhận kiện hàng và chuyển khoản hoàn tiền ngay vào
+                    tài khoản ngân hàng của quý khách.
                   </Typography>
                 </Box>
               )}
@@ -346,11 +419,7 @@ export default function OrderTrackingPage() {
                 </Typography>
               )}
             </Box>
-            <Chip
-              label={`Mã phiếu: #${order.activeReturnId}`}
-              size="small"
-              sx={{ bgcolor: '#FFF', fontWeight: 600 }}
-            />
+            <Chip label={`Mã phiếu: #${order.activeReturnId}`} size="small" sx={{ bgcolor: '#FFF', fontWeight: 600 }} />
           </Stack>
         </Paper>
       )}
@@ -360,7 +429,7 @@ export default function OrderTrackingPage() {
         {/* SHIPPING / CARRIER CARD */}
         <Grid item xs={12} sm={6}>
           <Paper elevation={0} sx={{ p: 2.5, height: '100%', border: `1px solid ${COLORS.border}`, borderRadius: 3 }}>
-            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 1.5 }}>
               <CarOutlined style={{ fontSize: 18, color: COLORS.primary }} />
               <Typography fontSize={14} fontWeight={700} color={COLORS.text}>
                 Thông tin Vận chuyển
@@ -382,7 +451,7 @@ export default function OrderTrackingPage() {
                   Mã vận đơn tra cứu:
                 </Typography>
                 {order.trackingNumber ? (
-                  <Stack direction="row" alignItems="center" spacing={1}>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                     <Typography fontSize={13} fontWeight={700} color={COLORS.primary}>
                       {order.trackingNumber}
                     </Typography>
@@ -414,8 +483,8 @@ export default function OrderTrackingPage() {
         {/* RECIPIENT & PRIVACY CARD */}
         <Grid item xs={12} sm={6}>
           <Paper elevation={0} sx={{ p: 2.5, height: '100%', border: `1px solid ${COLORS.border}`, borderRadius: 3 }}>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
-              <Stack direction="row" alignItems="center" spacing={1}>
+            <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                 {order.verified ? (
                   <SafetyCertificateOutlined style={{ fontSize: 18, color: COLORS.success }} />
                 ) : (
@@ -511,9 +580,15 @@ export default function OrderTrackingPage() {
             <TableHead sx={{ bgcolor: '#F8FAFC' }}>
               <TableRow>
                 <TableCell sx={{ fontSize: 12, fontWeight: 700, color: COLORS.muted }}>SẢN PHẨM</TableCell>
-                <TableCell align="right" sx={{ fontSize: 12, fontWeight: 700, color: COLORS.muted }}>ĐƠN GIÁ</TableCell>
-                <TableCell align="center" sx={{ fontSize: 12, fontWeight: 700, color: COLORS.muted }}>SỐ LƯỢNG</TableCell>
-                <TableCell align="right" sx={{ fontSize: 12, fontWeight: 700, color: COLORS.muted }}>THÀNH TIỀN</TableCell>
+                <TableCell align="right" sx={{ fontSize: 12, fontWeight: 700, color: COLORS.muted }}>
+                  ĐƠN GIÁ
+                </TableCell>
+                <TableCell align="center" sx={{ fontSize: 12, fontWeight: 700, color: COLORS.muted }}>
+                  SỐ LƯỢNG
+                </TableCell>
+                <TableCell align="right" sx={{ fontSize: 12, fontWeight: 700, color: COLORS.muted }}>
+                  THÀNH TIỀN
+                </TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -612,4 +687,3 @@ export default function OrderTrackingPage() {
     </Container>
   );
 }
-

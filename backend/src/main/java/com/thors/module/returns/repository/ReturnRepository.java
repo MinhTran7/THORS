@@ -31,6 +31,13 @@ public class ReturnRepository {
     // ORDER LOOKUP
     // ==========================================
 
+    /** Khách xác nhận đã nhận hàng: "Đã giao" => "Hoàn tất". Trả về false nếu đơn không còn ở "Đã giao". */
+    public boolean markOrderReceived(int orderId) {
+        return jdbcTemplate.update(
+                "UPDATE orders SET order_status = 'COMPLETED' WHERE order_id = ? AND order_status = 'DELIVERED'",
+                orderId) > 0;
+    }
+
     public Optional<ReturnableOrderResponse> findOrderByNumber(String orderNumber) {
         String sql = """
             SELECT 

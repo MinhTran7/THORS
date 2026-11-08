@@ -42,6 +42,19 @@ public class ReturnController {
     }
 
     /**
+     * Khách xác nhận "Đã nhận được hàng" trên trang tra cứu công khai (body: { "phone": "4 số cuối SĐT" }).
+     * Đơn "Đã giao" chuyển sang "Hoàn tất"; trả về thông tin đơn mới nhất.
+     */
+    @PostMapping("/track/{orderNumber}/received")
+    public ResponseEntity<ReturnableOrderResponse> confirmReceived(
+            @PathVariable String orderNumber,
+            @RequestBody(required = false) Map<String, String> body
+    ) {
+        String phone = body == null ? null : body.get("phone");
+        return ResponseEntity.ok(returnService.confirmReceived(orderNumber, phone));
+    }
+
+    /**
      * Khách hàng gửi yêu cầu đổi trả online công khai (xác thực qua số điện thoại nhận hàng)
      */
     @PostMapping("/public")
