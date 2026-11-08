@@ -202,6 +202,43 @@ public class ProductController {
     }
 
     // ==========================================
+    // PRODUCT IMAGES (màn hình chỉnh sửa)
+    // ==========================================
+
+    @PostMapping(
+            value = "/{productId}/images",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
+    )
+    public ResponseEntity<Map<String, Object>> addProductImages(
+            @PathVariable int productId,
+            @RequestPart("images") List<MultipartFile> images
+    ) throws IOException {
+        return ResponseEntity.ok(
+                Map.of("images", productService.addProductImages(productId, images))
+        );
+    }
+
+    @DeleteMapping("/{productId}/images/{imageId}")
+    public ResponseEntity<Map<String, Object>> deleteProductImage(
+            @PathVariable int productId,
+            @PathVariable int imageId
+    ) {
+        return ResponseEntity.ok(
+                Map.of("images", productService.deleteProductImage(productId, imageId))
+        );
+    }
+
+    @PatchMapping("/{productId}/images/{imageId}/primary")
+    public ResponseEntity<Map<String, Object>> setPrimaryProductImage(
+            @PathVariable int productId,
+            @PathVariable int imageId
+    ) {
+        return ResponseEntity.ok(
+                Map.of("images", productService.setPrimaryProductImage(productId, imageId))
+        );
+    }
+
+    // ==========================================
     // DELETE PRODUCT (SAFE DELETE)
     // ==========================================
 

@@ -11,6 +11,18 @@ public class UpdateProductRequest {
     private String description;
     private List<VariantRequest> variants;
 
+    // Phiên bản dữ liệu lúc mở form (lấy từ GET /api/products/{id}).
+    // Khác phiên bản hiện tại => người khác đã sửa trong lúc này => từ chối (409). null = không kiểm tra.
+    private String version;
+
+    public String getVersion() {
+        return version;
+    }
+
+    public void setVersion(String version) {
+        this.version = version;
+    }
+
     public Integer getCategoryId() {
         return categoryId;
     }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import {
@@ -8,22 +8,36 @@ import {
   Card,
   CircularProgress,
   Grid,
+  IconButton,
   MenuItem,
   Stack,
   TextField,
+  Tooltip,
   Typography
 } from '@mui/material';
 
 import {
   ArrowLeftOutlined,
+  DeleteOutlined,
+  LockOutlined,
   PlusOutlined,
-  SaveOutlined
+  SaveOutlined,
+  StarOutlined,
+  UploadOutlined
 } from '@ant-design/icons';
 
 import {
+  addProductImages,
+  deleteProductImage,
   getProductById,
+  setPrimaryProductImage,
   updateProduct
 } from '../../services/productService';
+
+// Giới hạn khớp với backend (ProductService.MAX_IMAGES, ProductImageService)
+const MAX_IMAGES = 10;
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 import { getCategories } from '../../services/categoryService';
 import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../customer/theme';
@@ -67,6 +81,16 @@ export default function EditProductPage() {
   const [categories, setCategories] = useState([]);
   const [images, setImages] = useState([]);
 
+  // Phiên bản dữ liệu lúc mở form: gửi kèm khi lưu để phát hiện người khác đã sửa (409)
+  const [version, setVersion] = useState(null);
+  const [conflict, setConflict] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  // Quản lý ảnh: thay đổi ảnh được lưu ngay, không cần bấm "Lưu thay đổi"
+  const [imageBusy, setImageBusy] = useState(false);
+  const [imageError, setImageError] = useState('');
+  const fileInputRef = useRef(null);
+
   const [form, setForm] = useState({
     productName: '',
     categoryId: '',
@@ -107,11 +131,16 @@ export default function EditProductPage() {
             detailId: Number(variant.detailId),
             size: variant.size || '',
             color: variant.color || '',
-            price: String(variant.price ?? '')
+            price: String(variant.price ?? ''),
+            // Đã có tồn kho / lịch sử bán, nhập kho: chỉ được sửa giá
+            locked: Boolean(Number(variant.locked ?? 0)),
+            stockQuantity: Number(variant.stockQuantity ?? 0)
           }))
         });
 
         setImages(productImages || []);
+        setVersion(productData.version ?? null);
+        setConflict(false);
 
         const categoryList = Array.isArray(categoryData)
           ? categoryData
@@ -138,7 +167,7 @@ export default function EditProductPage() {
     return () => {
       active = false;
     };
-  }, [productId]);
+  }, [productId, reloadKey]);
 
   // ==========================================
   // UPDATE FORM
@@ -220,6 +249,11 @@ export default function EditProductPage() {
         return;
       }
 
+      if (size.startsWith('~')) {
+        setError('Kích thước không được bắt đầu bằng ký tự "~".');
+        return;
+      }
+
       if (!color || color.length > 30) {
         setError('Màu sắc là bắt buộc và không quá 30 ký tự.');
         return;
@@ -247,6 +281,7 @@ export default function EditProductPage() {
       categoryId: Number(form.categoryId),
       productName,
       description: form.description.trim(),
+      version,
       variants: form.variants.map((variant) => ({
         detailId: variant.detailId,
         size: variant.size.trim(),
@@ -260,12 +295,71 @@ export default function EditProductPage() {
       await updateProduct(productId, payload);
       navigate(`/products/${productId}`);
     } catch (err) {
+      // 409: người khác vừa sửa sản phẩm này => mời tải lại thay vì ghi đè
+      setConflict(err?.status === 409);
       setError(
         err?.message || 'Không thể lưu thay đổi sản phẩm. Vui lòng thử lại.'
       );
     } finally {
       setSaving(false);
     }
+  };
+
+  const reloadProduct = () => {
+    setError('');
+    setReloadKey((key) => key + 1);
+  };
+
+  // ==========================================
+  // IMAGES (lưu ngay khi thao tác)
+  // ==========================================
+
+  const runImageAction = async (action) => {
+    setImageError('');
+    setImageBusy(true);
+    try {
+      const result = await action();
+      setImages(result?.images || []);
+    } catch (err) {
+      setImageError(err?.message || 'Không thể cập nhật ảnh. Vui lòng thử lại.');
+    } finally {
+      setImageBusy(false);
+    }
+  };
+
+  const handlePickImages = (event) => {
+    const files = Array.from(event.target.files || []);
+    // Cho phép chọn lại cùng một file ở lần sau
+    event.target.value = '';
+    if (!files.length) return;
+
+    if (images.length + files.length > MAX_IMAGES) {
+      setImageError(`Mỗi sản phẩm tối đa ${MAX_IMAGES} ảnh (hiện có ${images.length} ảnh).`);
+      return;
+    }
+
+    const invalidType = files.find((file) => !IMAGE_TYPES.includes(file.type));
+    if (invalidType) {
+      setImageError(`Ảnh "${invalidType.name}" không hợp lệ. Chỉ chấp nhận JPG, PNG hoặc WebP.`);
+      return;
+    }
+
+    const tooLarge = files.find((file) => file.size > MAX_IMAGE_SIZE);
+    if (tooLarge) {
+      setImageError(`Ảnh "${tooLarge.name}" vượt quá 5MB.`);
+      return;
+    }
+
+    runImageAction(() => addProductImages(productId, files));
+  };
+
+  const handleDeleteImage = (imageId) => {
+    if (!window.confirm('Xóa ảnh này khỏi sản phẩm?')) return;
+    runImageAction(() => deleteProductImage(productId, imageId));
+  };
+
+  const handleSetPrimaryImage = (imageId) => {
+    runImageAction(() => setPrimaryProductImage(productId, imageId));
   };
 
   // ==========================================
@@ -354,6 +448,13 @@ export default function EditProductPage() {
           severity="error"
           sx={{ mb: 2.5, borderRadius: 2.5, fontSize: 13.5, fontWeight: 600 }}
           onClose={() => setError('')}
+          action={
+            conflict ? (
+              <Button color="inherit" size="small" onClick={reloadProduct} sx={{ textTransform: 'none', fontWeight: 700 }}>
+                Tải lại dữ liệu
+              </Button>
+            ) : undefined
+          }
         >
           {error}
         </Alert>
@@ -480,6 +581,7 @@ export default function EditProductPage() {
                     }}
                   >
                     Chỉnh sửa kích thước, màu sắc và giá bán. Tồn kho được quản lý qua phiếu kho.
+                    Biến thể đã lưu không xóa được tại đây; chỉ biến thể mới thêm (chưa lưu) mới có nút Xóa.
                   </Typography>
                 </Box>
 
@@ -523,6 +625,30 @@ export default function EditProductPage() {
                           : `Biến thể mới ${index + 1}`}
                       </Typography>
 
+                      {variant.locked && (
+                        <Tooltip title="Biến thể đã có tồn kho hoặc lịch sử bán/nhập kho. Đổi size/màu sẽ làm lệch hàng thật trên kệ và mã vạch đã in, nên chỉ được sửa giá. Cần size/màu khác hãy thêm biến thể mới.">
+                          <Box
+                            sx={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 0.75,
+                              ml: 'auto',
+                              mr: variant.detailId == null ? 1 : 0,
+                              px: 1.25,
+                              py: 0.35,
+                              borderRadius: 1.75,
+                              bgcolor: '#FFF7AE',
+                              color: '#713F12',
+                              fontSize: 12,
+                              fontWeight: 600
+                            }}
+                          >
+                            <LockOutlined style={{ fontSize: 12 }} />
+                            Chỉ sửa được giá · Tồn {variant.stockQuantity}
+                          </Box>
+                        </Tooltip>
+                      )}
+
                       {variant.detailId == null && (
                         <Button
                           size="small"
@@ -543,6 +669,7 @@ export default function EditProductPage() {
                           fullWidth
                           required
                           size="small"
+                          disabled={variant.locked}
                           value={variant.size}
                           onChange={(event) =>
                             updateVariantField(
@@ -563,6 +690,7 @@ export default function EditProductPage() {
                           fullWidth
                           required
                           size="small"
+                          disabled={variant.locked}
                           value={variant.color}
                           onChange={(event) =>
                             updateVariantField(
@@ -632,30 +760,119 @@ export default function EditProductPage() {
                   mb: 2
                 }}
               >
-                Danh sách hình ảnh hiện tại của sản phẩm.
+                {images.length}/{MAX_IMAGES} ảnh · JPG, PNG, WebP tối đa 5MB. Thay đổi ảnh được lưu ngay.
               </Typography>
+
+              {imageError && (
+                <Alert
+                  severity="error"
+                  sx={{ mb: 1.5, borderRadius: 2.5, fontSize: 12.5 }}
+                  onClose={() => setImageError('')}
+                >
+                  {imageError}
+                </Alert>
+              )}
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={IMAGE_TYPES.join(',')}
+                multiple
+                hidden
+                onChange={handlePickImages}
+              />
+
+              <Button
+                fullWidth
+                startIcon={imageBusy ? <CircularProgress size={14} color="inherit" /> : <UploadOutlined />}
+                disabled={imageBusy || images.length >= MAX_IMAGES}
+                onClick={() => fileInputRef.current?.click()}
+                sx={{ ...outlineButtonSx, height: 38, fontSize: 13, mb: 2 }}
+              >
+                {imageBusy ? 'Đang cập nhật ảnh...' : 'Thêm ảnh'}
+              </Button>
 
               {images.length > 0 ? (
                 <Grid container spacing={1.5}>
-                  {images.map((image) => (
-                    <Grid
-                      key={image.imageId}
-                      size={{ xs: 6 }}
-                    >
-                      <Box
-                        component="img"
-                        src={image.imageUrl}
-                        alt="Ảnh sản phẩm"
-                        sx={{
-                          width: '100%',
-                          aspectRatio: '1 / 1',
-                          objectFit: 'cover',
-                          borderRadius: 2.5,
-                          border: `1px solid ${C.borderLight}`
-                        }}
-                      />
-                    </Grid>
-                  ))}
+                  {images.map((image) => {
+                    const isPrimary = Boolean(Number(image.isPrimary));
+
+                    return (
+                      <Grid
+                        key={image.imageId}
+                        size={{ xs: 6 }}
+                      >
+                        <Box sx={{ position: 'relative' }}>
+                          <Box
+                            component="img"
+                            src={image.imageUrl}
+                            alt="Ảnh sản phẩm"
+                            sx={{
+                              width: '100%',
+                              aspectRatio: '1 / 1',
+                              objectFit: 'cover',
+                              borderRadius: 2.5,
+                              display: 'block',
+                              border: `${isPrimary ? 2 : 1}px solid ${isPrimary ? C.cyan : C.borderLight}`
+                            }}
+                          />
+
+                          {isPrimary && (
+                            <Box
+                              sx={{
+                                position: 'absolute',
+                                left: 6,
+                                top: 6,
+                                px: 1,
+                                py: 0.25,
+                                borderRadius: 1.5,
+                                bgcolor: C.cyan,
+                                color: '#0F172A',
+                                fontSize: 11,
+                                fontWeight: 700
+                              }}
+                            >
+                              Ảnh chính
+                            </Box>
+                          )}
+
+                          <Stack
+                            direction="row"
+                            spacing={0.5}
+                            sx={{ position: 'absolute', right: 6, top: 6 }}
+                          >
+                            {!isPrimary && (
+                              <Tooltip title="Đặt làm ảnh chính">
+                                <span>
+                                  <IconButton
+                                    size="small"
+                                    disabled={imageBusy}
+                                    onClick={() => handleSetPrimaryImage(image.imageId)}
+                                    sx={{ bgcolor: 'rgba(255,255,255,0.9)', color: '#64748B', '&:hover': { bgcolor: '#fff', color: '#0F172A' } }}
+                                  >
+                                    <StarOutlined style={{ fontSize: 15 }} />
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+                            )}
+
+                            <Tooltip title={images.length <= 1 ? 'Sản phẩm phải còn ít nhất một ảnh' : 'Xóa ảnh'}>
+                              <span>
+                                <IconButton
+                                  size="small"
+                                  disabled={imageBusy || images.length <= 1}
+                                  onClick={() => handleDeleteImage(image.imageId)}
+                                  sx={{ bgcolor: 'rgba(255,255,255,0.9)', color: '#64748B', '&:hover': { bgcolor: '#fff', color: C.error } }}
+                                >
+                                  <DeleteOutlined style={{ fontSize: 15 }} />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                          </Stack>
+                        </Box>
+                      </Grid>
+                    );
+                  })}
                 </Grid>
               ) : (
                 <Typography
@@ -697,6 +914,7 @@ export default function EditProductPage() {
                 }}
               >
                 Các biến thể sẵn có sẽ giữ nguyên mã định danh, số lượng tồn kho và thiết lập bán online. Các biến thể mới thêm sẽ có số lượng tồn kho khởi tạo là 0.
+                Biến thể đã có tồn kho hoặc lịch sử bán/nhập kho chỉ được sửa giá. Nếu người khác vừa sửa sản phẩm này, hệ thống sẽ yêu cầu tải lại trước khi lưu.
               </Typography>
             </Box>
           </Stack>

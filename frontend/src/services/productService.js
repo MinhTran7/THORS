@@ -80,53 +80,39 @@ export function getProductStatistics() {
 
 
 
+// Dùng api() chung: tự gửi CSRF (lấy một lần, dùng lại) và trả lỗi tiếng Việt kèm status/code
+// (status 409 = sản phẩm vừa được người khác cập nhật).
 export async function updateProduct(productId, productData) {
-  // Step 1: Get CSRF token from current session
-  const csrfResponse = await fetch('/api/auth/csrf', {
-    credentials: 'same-origin'
+  return api(`/products/${productId}`, {
+    method: 'PUT',
+    body: productData
   });
+}
 
-  if (!csrfResponse.ok) {
-    throw new Error(
-      `Unable to obtain CSRF token (HTTP ${csrfResponse.status}).`
-    );
-  }
+// ==========================================
+// ẢNH SẢN PHẨM (màn hình chỉnh sửa) — mỗi hàm trả về { images } mới nhất
+// ==========================================
 
-  const csrf = await csrfResponse.json();
+export async function addProductImages(productId, files) {
+  const formData = new FormData();
+  files.forEach((file) => formData.append('images', file));
 
-  const headerName = csrf.headerName;
-  const token = csrf.token;
+  return api(`/products/${productId}/images`, {
+    method: 'POST',
+    form: formData
+  });
+}
 
-  if (!headerName || !token) {
-    throw new Error('Invalid CSRF response.');
-  }
+export async function deleteProductImage(productId, imageId) {
+  return api(`/products/${productId}/images/${imageId}`, {
+    method: 'DELETE'
+  });
+}
 
-  // Step 2: Send update request with CSRF token
-  const response = await fetch(
-    `/api/products/${productId}`,
-    {
-      method: 'PUT',
-      credentials: 'same-origin',
-      headers: {
-        'Content-Type': 'application/json',
-        [headerName]: token
-      },
-      body: JSON.stringify(productData)
-    }
-  );
-
-  // Step 3: Handle response
-  const result = await response.json().catch(() => null);
-
-  if (!response.ok) {
-    throw new Error(
-      result?.message ||
-      result?.error ||
-      `Unable to update product (HTTP ${response.status}).`
-    );
-  }
-
-  return result;
+export async function setPrimaryProductImage(productId, imageId) {
+  return api(`/products/${productId}/images/${imageId}/primary`, {
+    method: 'PATCH'
+  });
 }
 
 export async function changeProductStatus(productId, status) {

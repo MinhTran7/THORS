@@ -8,6 +8,7 @@ import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import java.util.ArrayList;
 import com.thors.security.*;
 import org.springframework.context.annotation.*;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.*;
@@ -117,6 +118,23 @@ public class SecurityConfig {
                                                 // Màn hình Social POS: đọc chat, gửi tin, tạo đơn — cùng quyền với route /facebook
                                                 .requestMatchers("/api/facebook/webhook/**")
                                                 .hasAnyRole("OWNER", "FAMILY_MEMBER")
+                                                // Thêm/sửa/xóa sản phẩm và danh mục: chỉ Owner (cùng quyền với route
+                                                // /products, /categories). Đọc (GET) vẫn mở cho POS, Facebook, kho...
+                                                // Bảng điều khiển: Owner (toàn cửa hàng), Family Member (doanh số của mình)
+                                                .requestMatchers("/api/dashboard/**")
+                                                .hasAnyRole("OWNER", "FAMILY_MEMBER")
+                                                // Tạo danh mục: cả Family Member (hộp thoại tạo nhanh khi lập phiếu kho)
+                                                .requestMatchers(HttpMethod.POST, "/api/categories")
+                                                .hasAnyRole("OWNER", "FAMILY_MEMBER")
+                                                .requestMatchers(HttpMethod.POST, "/api/products", "/api/products/**",
+                                                                "/api/categories/**")
+                                                .hasRole("OWNER")
+                                                .requestMatchers(HttpMethod.PUT, "/api/products/**", "/api/categories/**")
+                                                .hasRole("OWNER")
+                                                .requestMatchers(HttpMethod.PATCH, "/api/products/**", "/api/categories/**")
+                                                .hasRole("OWNER")
+                                                .requestMatchers(HttpMethod.DELETE, "/api/products/**", "/api/categories/**")
+                                                .hasRole("OWNER")
                                                 .anyRequest()
                                                 .authenticated());
                 http.requestCache(c -> c.disable())

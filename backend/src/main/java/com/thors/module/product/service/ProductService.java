@@ -20,8 +20,14 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 import com.thors.module.product.dto.UpdateProductRequest;
 
+import com.thors.common.ApiException;
+
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -39,6 +45,12 @@ public class ProductService {
 
     private static final BigDecimal MAX_PRICE =
             new BigDecimal("999999999999");
+
+    // Tối đa số ảnh đang dùng của một sản phẩm
+    private static final int MAX_IMAGES = 10;
+
+    // Tiền tố size tạm khi đổi size/màu biến thể (xem updateProduct bước 9a)
+    private static final String TEMP_SIZE_PREFIX = "~";
 
     private final ProductRepository productRepository;
     private final JdbcTemplate jdbcTemplate;
@@ -85,10 +97,7 @@ public class ProductService {
 
         // Check whether product exists
         if (product == null) {
-            throw new ResponseStatusException(
-                    HttpStatus.NOT_FOUND,
-                    "Product not found."
-            );
+            throw new ApiException(404, "PRODUCT_NOT_FOUND", "Không tìm thấy sản phẩm.");
         }
 
         // Get product variants
@@ -105,6 +114,8 @@ public class ProductService {
         result.put("product", product);
         result.put("variants", variants);
         result.put("images", images);
+        // Gửi lại khi lưu chỉnh sửa để phát hiện người khác đã sửa trong lúc đó
+        result.put("version", computeVersion(product, variants));
 
         return result;
     }
@@ -487,9 +498,7 @@ public class ProductService {
 
         // 1. Validate product ID
         if (productId <= 0) {
-            throw new IllegalArgumentException(
-                    "Invalid product ID."
-            );
+            throw badRequest("PRODUCT_ID", "Mã sản phẩm không hợp lệ.");
         }
 
         // 2. Check product existence
@@ -497,61 +506,78 @@ public class ProductService {
                 productRepository.findById(productId);
 
         if (existingProduct == null) {
-            throw new ResponseStatusException(
-                    HttpStatus.NOT_FOUND,
-                    "Product not found."
-            );
+            throw new ApiException(404, "PRODUCT_NOT_FOUND", "Không tìm thấy sản phẩm.");
         }
 
         // 3. Validate request
         if (request == null) {
-            throw new IllegalArgumentException(
-                    "Product information is required."
-            );
+            throw badRequest("PRODUCT_REQUIRED", "Thiếu thông tin sản phẩm.");
+        }
+
+        // Existing variants in database
+        List<Map<String, Object>> existingVariants =
+                productRepository.findVariantsByProductId(productId);
+
+        // 3b. Chống ghi đè: dữ liệu đã đổi kể từ lúc mở form => từ chối, yêu cầu tải lại
+        String expectedVersion = request.getVersion();
+
+        if (expectedVersion != null && !expectedVersion.isBlank()) {
+            String currentVersion = computeVersion(existingProduct, existingVariants);
+
+            if (!currentVersion.equals(expectedVersion)) {
+                throw new ApiException(
+                        409,
+                        "PRODUCT_VERSION_CONFLICT",
+                        "Sản phẩm vừa được người khác cập nhật. "
+                                + "Vui lòng tải lại trang để xem dữ liệu mới nhất trước khi lưu."
+                );
+            }
         }
 
         String productName = request.getProductName();
 
         if (productName == null || productName.isBlank()) {
-            throw new IllegalArgumentException(
-                    "Product name is required."
-            );
+            throw badRequest("PRODUCT_NAME", "Vui lòng nhập tên sản phẩm.");
         }
 
         productName = productName.trim();
 
         if (productName.length() > 200) {
-            throw new IllegalArgumentException(
-                    "Product name must not exceed 200 characters."
-            );
+            throw badRequest("PRODUCT_NAME", "Tên sản phẩm không được vượt quá 200 ký tự.");
         }
 
         // 4. Validate category
         Integer categoryId = request.getCategoryId();
 
         if (categoryId == null) {
-            throw new IllegalArgumentException(
-                    "Category is required."
-            );
+            throw badRequest("CATEGORY_REQUIRED", "Vui lòng chọn danh mục cho sản phẩm.");
         }
 
-        Integer activeCategoryCount =
-                jdbcTemplate.queryForObject(
-                        """
-                        SELECT COUNT(*)
-                        FROM category
-                        WHERE category_id = ?
-                          AND status = 'ACTIVE'
-                        """,
-                        Integer.class,
-                        categoryId
-                );
+        // Giữ nguyên danh mục cũ thì luôn cho lưu (kể cả khi danh mục đó đã ngưng hoạt động),
+        // để Owner vẫn sửa được giá/tên. Chỉ khi chuyển SANG danh mục khác mới yêu cầu danh mục đó đang hoạt động.
+        boolean categoryChanged =
+                !categoryId.equals(existingProduct.getCategoryId());
 
-        if (activeCategoryCount == null
-                || activeCategoryCount == 0) {
-            throw new IllegalArgumentException(
-                    "Please select an active category."
-            );
+        if (categoryChanged) {
+            Integer activeCategoryCount =
+                    jdbcTemplate.queryForObject(
+                            """
+                            SELECT COUNT(*)
+                            FROM category
+                            WHERE category_id = ?
+                              AND status = 'ACTIVE'
+                            """,
+                            Integer.class,
+                            categoryId
+                    );
+
+            if (activeCategoryCount == null
+                    || activeCategoryCount == 0) {
+                throw badRequest(
+                        "CATEGORY_INACTIVE",
+                        "Danh mục được chọn không tồn tại hoặc đã ngưng hoạt động."
+                );
+            }
         }
 
         // 5. Validate variants
@@ -559,20 +585,15 @@ public class ProductService {
                 request.getVariants();
 
         if (variants == null || variants.isEmpty()) {
-            throw new IllegalArgumentException(
-                    "At least one product variant is required."
-            );
+            throw badRequest("VARIANT_REQUIRED", "Sản phẩm phải có ít nhất một biến thể.");
         }
 
-        // Existing variants in database
-        List<Map<String, Object>> existingVariants =
-                productRepository.findVariantsByProductId(productId);
-
-        Set<Integer> existingVariantIds = new HashSet<>();
+        Map<Integer, Map<String, Object>> existingById = new LinkedHashMap<>();
 
         for (Map<String, Object> existing : existingVariants) {
-            existingVariantIds.add(
-                    ((Number) existing.get("detailId")).intValue()
+            existingById.put(
+                    ((Number) existing.get("detailId")).intValue(),
+                    existing
             );
         }
 
@@ -583,9 +604,7 @@ public class ProductService {
         for (UpdateProductRequest.VariantRequest variant : variants) {
 
             if (variant == null) {
-                throw new IllegalArgumentException(
-                        "Invalid product variant."
-                );
+                throw badRequest("VARIANT_INVALID", "Biến thể sản phẩm không hợp lệ.");
             }
 
             Integer detailId = variant.getDetailId();
@@ -593,16 +612,12 @@ public class ProductService {
             // Existing variant must belong to this product
             if (detailId != null) {
 
-                if (!existingVariantIds.contains(detailId)) {
-                    throw new IllegalArgumentException(
-                            "Variant does not belong to this product."
-                    );
+                if (!existingById.containsKey(detailId)) {
+                    throw badRequest("VARIANT_NOT_IN_PRODUCT", "Biến thể #" + detailId + " không thuộc sản phẩm này.");
                 }
 
                 if (!submittedVariantIds.add(detailId)) {
-                    throw new IllegalArgumentException(
-                            "Duplicate variant ID."
-                    );
+                    throw badRequest("VARIANT_DUPLICATE_ID", "Biến thể #" + detailId + " bị gửi trùng.");
                 }
             }
 
@@ -614,28 +629,27 @@ public class ProductService {
             if (size == null
                     || size.isBlank()
                     || size.trim().length() > 10) {
-                throw new IllegalArgumentException(
-                        "Size is required and must not exceed 10 characters."
-                );
+                throw badRequest("VARIANT_SIZE", "Kích thước (size) là bắt buộc và không quá 10 ký tự.");
+            }
+
+            // Ký tự "~" dành cho bước đổi tên tạm thời bên dưới
+            if (size.trim().startsWith(TEMP_SIZE_PREFIX)) {
+                throw badRequest("VARIANT_SIZE", "Kích thước không được bắt đầu bằng ký tự \"~\".");
             }
 
             // Validate color
             if (color == null
                     || color.isBlank()
                     || color.trim().length() > 30) {
-                throw new IllegalArgumentException(
-                        "Color is required and must not exceed 30 characters."
-                );
+                throw badRequest("VARIANT_COLOR", "Màu sắc là bắt buộc và không quá 30 ký tự.");
             }
 
             // Validate price
             if (price == null
                     || price.compareTo(BigDecimal.ZERO) < 0
-                    || price.scale() > 0
+                    || price.stripTrailingZeros().scale() > 0
                     || price.compareTo(MAX_PRICE) > 0) {
-                throw new IllegalArgumentException(
-                        "Price must be a valid non-negative VND amount."
-                );
+                throw badRequest("VARIANT_PRICE", "Giá bán phải là số nguyên không âm hợp lệ (VNĐ).");
             }
 
             size = size.trim();
@@ -644,14 +658,34 @@ public class ProductService {
             variant.setSize(size);
             variant.setColor(color);
 
+            // Biến thể đã có tồn kho / lịch sử bán, nhập, xếp kệ: không cho đổi size, màu
+            // (hàng thật trên kệ, mã vạch đã in và lịch sử sẽ bị lệch). Chỉ được sửa giá.
+            if (detailId != null) {
+                Map<String, Object> existing = existingById.get(detailId);
+
+                boolean renamed =
+                        !size.equals(String.valueOf(existing.get("size")).trim())
+                                || !color.equals(String.valueOf(existing.get("color")).trim());
+
+                if (renamed && isTrue(existing.get("locked"))) {
+                    throw badRequest(
+                            "VARIANT_LOCKED",
+                            "Biến thể #" + detailId + " (" + existing.get("size") + " / " + existing.get("color")
+                                    + ") đã có tồn kho hoặc lịch sử bán/nhập kho nên không thể đổi kích thước "
+                                    + "hoặc màu sắc. Chỉ được sửa giá; hãy thêm biến thể mới nếu cần."
+                    );
+                }
+            }
+
             String combination =
                     size.toLowerCase(Locale.ROOT)
                             + "\u0000"
                             + color.toLowerCase(Locale.ROOT);
 
             if (!combinations.add(combination)) {
-                throw new IllegalArgumentException(
-                        "Duplicate size and color combination."
+                throw badRequest(
+                        "VARIANT_DUPLICATE",
+                        "Biến thể size \"" + size + "\" và màu \"" + color + "\" bị trùng lặp."
                 );
             }
         }
@@ -681,8 +715,10 @@ public class ProductService {
                     existingSize + "\u0000" + existingColor;
 
             if (!combinations.add(combination)) {
-                throw new IllegalArgumentException(
-                        "Duplicate size and color combination."
+                throw badRequest(
+                        "VARIANT_DUPLICATE",
+                        "Biến thể size \"" + existing.get("size") + "\" và màu \""
+                                + existing.get("color") + "\" đã tồn tại trong sản phẩm."
                 );
             }
         }
@@ -702,31 +738,51 @@ public class ProductService {
         );
 
         if (updatedRows != 1) {
-            throw new IllegalStateException(
-                    "Unable to update product."
-            );
+            throw new ApiException(500, "PRODUCT_UPDATE_FAILED", "Không cập nhật được sản phẩm. Vui lòng thử lại.");
         }
 
-        // 9. Update existing variants or insert new ones
+        // 9a. Biến thể đổi size/màu: chuyển sang tên tạm trước (size = "~<detailId>", luôn duy nhất)
+        // để hoán đổi size/màu giữa hai biến thể (M <-> L) không vướng UNIQUE (product_id, size, color)
+        // giữa chừng. Cả hai bước chạy trong cùng transaction.
+        for (UpdateProductRequest.VariantRequest variant : variants) {
+
+            Integer detailId = variant.getDetailId();
+
+            if (detailId == null) {
+                continue;
+            }
+
+            Map<String, Object> existing = existingById.get(detailId);
+
+            boolean renamed =
+                    !variant.getSize().equals(String.valueOf(existing.get("size")).trim())
+                            || !variant.getColor().equals(String.valueOf(existing.get("color")).trim());
+
+            if (renamed) {
+                updateVariantOrFail(
+                        productId,
+                        detailId,
+                        TEMP_SIZE_PREFIX + detailId,
+                        variant.getColor(),
+                        variant.getPrice()
+                );
+            }
+        }
+
+        // 9b. Update existing variants or insert new ones
         for (UpdateProductRequest.VariantRequest variant : variants) {
 
             Integer detailId = variant.getDetailId();
 
             if (detailId != null) {
 
-                int rows = productRepository.updateVariant(
+                updateVariantOrFail(
                         productId,
                         detailId,
                         variant.getSize(),
                         variant.getColor(),
                         variant.getPrice()
                 );
-
-                if (rows != 1) {
-                    throw new IllegalStateException(
-                            "Unable to update variant: " + detailId
-                    );
-                }
 
             } else {
 
@@ -743,6 +799,184 @@ public class ProductService {
                 "Product {} updated successfully",
                 productId
         );
+    }
+
+    private void updateVariantOrFail(
+            int productId,
+            int detailId,
+            String size,
+            String color,
+            BigDecimal price
+    ) {
+        int rows = productRepository.updateVariant(
+                productId,
+                detailId,
+                size,
+                color,
+                price
+        );
+
+        if (rows != 1) {
+            throw new ApiException(
+                    500,
+                    "VARIANT_UPDATE_FAILED",
+                    "Không cập nhật được biến thể #" + detailId + ". Vui lòng thử lại."
+            );
+        }
+    }
+
+    private static ApiException badRequest(String code, String message) {
+        return new ApiException(400, code, message);
+    }
+
+    private static boolean isTrue(Object value) {
+        if (value instanceof Boolean b) {
+            return b;
+        }
+        if (value instanceof Number n) {
+            return n.intValue() != 0;
+        }
+        return false;
+    }
+
+    /**
+     * Phiên bản nội dung sửa được của sản phẩm (tên, danh mục, mô tả, size/màu/giá từng biến thể).
+     * Không tính tồn kho để bán hàng/nhập kho trong lúc Owner đang sửa không làm hỏng việc lưu.
+     */
+    String computeVersion(
+            Product product,
+            List<Map<String, Object>> variants
+    ) {
+        StringBuilder raw = new StringBuilder()
+                .append(product.getCategoryId()).append('|')
+                .append(product.getProductName()).append('|')
+                .append(product.getDescription());
+
+        for (Map<String, Object> v : variants) {
+            Object price = v.get("price");
+            String priceText = price instanceof BigDecimal p
+                    ? p.stripTrailingZeros().toPlainString()
+                    : String.valueOf(price);
+
+            raw.append('#').append(v.get("detailId"))
+                    .append('|').append(v.get("size"))
+                    .append('|').append(v.get("color"))
+                    .append('|').append(priceText);
+        }
+
+        try {
+            byte[] hash = MessageDigest.getInstance("SHA-256")
+                    .digest(raw.toString().getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(hash, 0, 16);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    // ==========================================
+    // PRODUCT IMAGES (thêm / xóa / chọn ảnh chính khi chỉnh sửa)
+    // ==========================================
+
+    private Product requireProduct(int productId) {
+        Product product = productId > 0 ? productRepository.findById(productId) : null;
+
+        if (product == null) {
+            throw new ApiException(404, "PRODUCT_NOT_FOUND", "Không tìm thấy sản phẩm.");
+        }
+
+        return product;
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public List<Map<String, Object>> addProductImages(
+            int productId,
+            List<MultipartFile> images
+    ) throws IOException {
+
+        requireProduct(productId);
+
+        if (images == null || images.isEmpty()) {
+            throw badRequest("IMAGE_REQUIRED", "Vui lòng chọn ít nhất một ảnh.");
+        }
+
+        int current = productImageRepository.countActiveImages(productId);
+
+        if (current + images.size() > MAX_IMAGES) {
+            throw badRequest(
+                    "IMAGE_LIMIT",
+                    "Mỗi sản phẩm tối đa " + MAX_IMAGES + " ảnh (hiện có " + current + " ảnh)."
+            );
+        }
+
+        List<String> uploadedPublicIds = new ArrayList<>();
+
+        // Lưu DB thất bại thì xóa các ảnh vừa tải lên Cloudinary
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(
+                    new TransactionSynchronization() {
+                        @Override
+                        public void afterCompletion(int status) {
+                            if (status != STATUS_COMMITTED) {
+                                cleanupImages(uploadedPublicIds);
+                            }
+                        }
+                    }
+            );
+        }
+
+        for (int i = 0; i < images.size(); i++) {
+            Map<String, String> uploaded = productImageService.uploadImage(images.get(i));
+            uploadedPublicIds.add(uploaded.get("publicId"));
+
+            productImageRepository.insertImage(
+                    productId,
+                    uploaded.get("imageUrl"),
+                    uploaded.get("publicId"),
+                    current == 0 && i == 0
+            );
+        }
+
+        productImageRepository.ensurePrimaryImage(productId);
+
+        return productRepository.findImagesByProductId(productId);
+    }
+
+    @Transactional
+    public List<Map<String, Object>> deleteProductImage(
+            int productId,
+            int imageId
+    ) {
+        requireProduct(productId);
+
+        if (!productImageRepository.existsActiveImage(productId, imageId)) {
+            throw new ApiException(404, "IMAGE_NOT_FOUND", "Không tìm thấy ảnh của sản phẩm.");
+        }
+
+        if (productImageRepository.countActiveImages(productId) <= 1) {
+            throw badRequest("IMAGE_LAST", "Sản phẩm phải còn ít nhất một ảnh.");
+        }
+
+        // Xóa mềm (giữ lịch sử, không xóa file trên Cloudinary)
+        productImageRepository.softDeleteImage(productId, imageId);
+        productImageRepository.ensurePrimaryImage(productId);
+
+        return productRepository.findImagesByProductId(productId);
+    }
+
+    @Transactional
+    public List<Map<String, Object>> setPrimaryProductImage(
+            int productId,
+            int imageId
+    ) {
+        requireProduct(productId);
+
+        if (!productImageRepository.existsActiveImage(productId, imageId)) {
+            throw new ApiException(404, "IMAGE_NOT_FOUND", "Không tìm thấy ảnh của sản phẩm.");
+        }
+
+        productImageRepository.setPrimaryImage(productId, imageId);
+
+        return productRepository.findImagesByProductId(productId);
     }
 
     @Transactional

@@ -27,14 +27,14 @@ public class ProductImageService {
         // Validate empty file
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException(
-                    "Please select an image."
+                    "Vui lòng chọn ảnh."
             );
         }
 
         // Validate file size (maximum 5MB)
         if (file.getSize() > 5 * 1024 * 1024) {
             throw new IllegalArgumentException(
-                    "Image size must not exceed 5MB."
+                    "Mỗi ảnh không được vượt quá 5MB."
             );
         }
 
@@ -46,7 +46,7 @@ public class ProductImageService {
                 && !"image/webp".equals(contentType)) {
 
             throw new IllegalArgumentException(
-                    "Only JPG, PNG and WebP images are allowed."
+                    "Chỉ chấp nhận ảnh JPG, PNG hoặc WebP."
             );
         }
 

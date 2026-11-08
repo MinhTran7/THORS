@@ -177,10 +177,19 @@ public class ProductRepository {
                 price,
                 stock_quantity AS stockQuantity,
                 online_sales_enabled AS onlineSalesEnabled,
-                status
-            FROM product_detail
-            WHERE product_id = ?
-            ORDER BY detail_id ASC
+                status,
+                -- locked = 1: biến thể đã có tồn hoặc lịch sử bán/kho, không được đổi size/màu
+                -- (đổi sẽ làm hàng thật trên kệ, mã vạch và lịch sử bị lệch tên)
+                (
+                    pd.stock_quantity > 0
+                    OR EXISTS (SELECT 1 FROM order_item oi WHERE oi.detail_id = pd.detail_id)
+                    OR EXISTS (SELECT 1 FROM stock_adjustment sa WHERE sa.detail_id = pd.detail_id)
+                    OR EXISTS (SELECT 1 FROM stock_receipt_item sri WHERE sri.detail_id = pd.detail_id)
+                    OR EXISTS (SELECT 1 FROM product_location pl WHERE pl.detail_id = pd.detail_id)
+                ) AS locked
+            FROM product_detail pd
+            WHERE pd.product_id = ?
+            ORDER BY pd.detail_id ASC
             """;
 
         return jdbcTemplate.queryForList(
