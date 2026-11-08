@@ -2,6 +2,7 @@ package com.thors.module.account.repository;
 
 import com.thors.common.ApiException;
 import com.thors.common.ContactNormalizer;
+import com.thors.module.account.dto.AccountRequests.BodyMeasurements;
 import com.thors.module.account.entity.Account;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -282,6 +283,28 @@ public class AccountRepository {
     public void updateProfile(int id, String name, String phone, String address) {
         ensurePhoneAvailable(phone, id);
         db.update("UPDATE `user` SET full_name=?,phone=?,address=? WHERE user_id=?", name, phone, address, id);
+    }
+
+    /** Chiều cao/cân nặng của người dùng (null nếu chưa nhập). Đọc riêng để SELECT chung không phụ thuộc 2 cột này. */
+    public BodyMeasurements bodyMeasurements(int id) {
+        return db.queryForObject(
+                "SELECT height_cm, weight_kg, foot_length_mm, fit_preference FROM `user` WHERE user_id=?",
+                (rs, i) -> {
+                    Integer footMm = rs.getObject("foot_length_mm", Integer.class);
+                    return new BodyMeasurements(
+                            rs.getObject("height_cm", Integer.class),
+                            rs.getObject("weight_kg", Integer.class),
+                            footMm == null ? null : footMm / 10.0,
+                            rs.getString("fit_preference"));
+                },
+                id);
+    }
+
+    public void updateBodyMeasurements(int id, BodyMeasurements m) {
+        Integer footMm = m.footLengthCm() == null ? null : (int) Math.round(m.footLengthCm() * 10);
+        db.update(
+                "UPDATE `user` SET height_cm=?,weight_kg=?,foot_length_mm=?,fit_preference=? WHERE user_id=?",
+                m.heightCm(), m.weightKg(), footMm, m.fitPreference(), id);
     }
 
     /** Chỉ AccountService.setAvatar gọi, với link do backend nhận từ Cloudinary (hoặc null để gỡ). */

@@ -70,7 +70,7 @@ export default function OrdersPage() {
         }
       />
       <MainCard>
-        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 2 }}>
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} useFlexGap flexWrap="wrap" sx={{ mb: 2 }}>
           <TextField
             size="small"
             placeholder="Tìm mã phiếu, nhà cung cấp, người lập"

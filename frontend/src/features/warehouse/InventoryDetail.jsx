@@ -225,7 +225,7 @@ export default function InventoryDetail({ id, onClose, onChanged }) {
             </Tabs>
             {tab === 0 && (
               <Stack spacing={2}>
-                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(6,1fr)' }, gap: 1 }}>
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', sm: 'repeat(3, minmax(0, 1fr))', lg: 'repeat(6, minmax(0, 1fr))' }, gap: 1 }}>
                   <Figure label="Tổng tồn" value={number(v.stock_quantity)} />
                   <Figure label="Đã xếp vị trí" value={number(v.assigned_quantity)} />
                   <Figure label="Chưa xếp vị trí" value={number(v.unassigned_quantity)} />

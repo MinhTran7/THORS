@@ -73,7 +73,7 @@ export function StatCard({ label, value, caption, icon, warning = false, loading
 }
 
 export function StatRow({ children }) {
-  return <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' }, gap: 2, mb: 2 }}>{children}</Box>;
+  return <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(220px, 100%), 1fr))', gap: 2, mb: 2 }}>{children}</Box>;
 }
 
 export function SearchField({ placeholder, value, onChange }) {

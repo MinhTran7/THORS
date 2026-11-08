@@ -154,7 +154,7 @@ export default function InStoreSaleDetailModal({ open, onClose, orderId }) {
                 p: 2,
                 mb: 3,
                 display: 'grid',
-                gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' },
+                gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', md: 'repeat(4, minmax(0, 1fr))' },
                 gap: 2
               }}
             >

@@ -13,3 +13,7 @@ export function useDebounced(value, delay = 300) {
 export function useProfile() {
   return useSWR('account-profile', accountsApi.profile, { revalidateOnFocus: false });
 }
+
+export function useBodyMeasurements() {
+  return useSWR('account-body-measurements', accountsApi.bodyMeasurements, { revalidateOnFocus: false });
+}

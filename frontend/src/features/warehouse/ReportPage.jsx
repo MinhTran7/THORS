@@ -111,7 +111,7 @@ export default function ReportPage() {
         }
       />
       <MainCard sx={{ mb: 2 }}>
-        <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} sx={{ alignItems: { md: 'center' } }}>
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} useFlexGap flexWrap="wrap" sx={{ alignItems: { md: 'center' } }}>
           <TextField
             size="small"
             type="date"
@@ -135,7 +135,7 @@ export default function ReportPage() {
             onChange={(e) => setQ(e.target.value)}
             onBlur={() => set({ q: q.trim() })}
             onKeyDown={(e) => e.key === 'Enter' && set({ q: q.trim() })}
-            sx={{ flex: 1 }}
+            sx={{ flex: { xs: 1, md: '1 1 220px' } }}
             slotProps={{ htmlInput: { 'aria-label': 'Tìm trong báo cáo' } }}
           />
           <TextField

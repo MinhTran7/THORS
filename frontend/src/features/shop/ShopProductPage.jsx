@@ -9,6 +9,7 @@ import { api, post } from 'services/http';
 import { Photo, money, priceText } from './ShopCommon';
 import PendingCartHandler from './PendingCartHandler';
 import { savePending } from './pendingCart';
+import ProductSizeAdvice from 'features/sizeAdvice/ProductSizeAdvice';
 
 /** Trang chi tiết sản phẩm công khai: /shop/products/:productId */
 export default function ShopProductPage() {
@@ -222,6 +223,9 @@ export default function ShopProductPage() {
                   <Chip key={s} label={s} clickable disabled={sizeDisabled(s)} onClick={() => pick(size, setSize, s)} sx={chipSx(s === size)} />
                 ))}
               </Box>
+
+              {/* Gợi ý size theo số đo + lịch sử mua (features/sizeAdvice); tự ẩn với túi xách, khách chưa đăng nhập */}
+              <ProductSizeAdvice productId={productId} onSelectSize={(s) => pick('', setSize, s)} sx={{ mb: 2, maxWidth: 520 }} />
 
               <Typography variant="subtitle2" sx={{ mb: 1 }}>
                 Màu sắc

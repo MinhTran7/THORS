@@ -319,7 +319,7 @@ export default function SettlementPanel({ doc, readOnly = false }) {
         <Typography variant="subtitle2">{isReturn ? 'Xử lý tiền / đổi hàng' : 'Công nợ nhà cung cấp'}</Typography>
         {isReturn && <SettlementStatus value={doc.settlement_status} />}
       </Stack>
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(3, 1fr)' }, gap: 1 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', md: 'repeat(3, minmax(0, 1fr))' }, gap: 1 }}>
         {figures.map(([label, v]) => (
           <Typography key={label} variant="body2">
             {label}: <b>{v}</b>

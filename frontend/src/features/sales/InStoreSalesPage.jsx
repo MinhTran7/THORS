@@ -446,7 +446,7 @@ export default function InStoreSalesPage() {
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr', lg: '1fr 390px' },
+          gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 1fr) 390px' },
           gap: 2.5,
           gridTemplateRows: { lg: 'minmax(0, 1fr)' },
           flex: 1,

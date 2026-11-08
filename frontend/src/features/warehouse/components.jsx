@@ -61,7 +61,7 @@ export function Title({ title, subtitle, action }) {
 export function Metrics({ items, columns }) {
   return (
     <Box
-      sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', lg: `repeat(${columns || items.length},1fr)` }, gap: 2, mb: 3 }}
+      sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', lg: `repeat(${columns || items.length}, minmax(0, 1fr))` }, gap: 2, mb: 3 }}
     >
       {items.map(([title, val, hint, onClick, activeCard, display]) => (
         <MainCard

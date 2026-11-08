@@ -48,7 +48,7 @@ export default function SuppliersPage() {
           placeholder="Tìm nhà sản xuất / nhà cung cấp"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          sx={{ mb: 2, minWidth: 280 }}
+          sx={{ mb: 2, minWidth: 280, maxWidth: '100%' }}
           slotProps={{ htmlInput: { 'aria-label': 'Tìm nhà cung cấp' } }}
         />
         <DataTable

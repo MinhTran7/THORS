@@ -326,8 +326,9 @@ function OwnerPromotionView() {
           display: 'grid',
           gridTemplateColumns: {
             xs: '1fr',
-            sm: 'repeat(2, 1fr)',
-            md: 'minmax(200px, 1.8fr) 180px 180px auto'
+            sm: 'repeat(2, minmax(0, 1fr))',
+            // Chỉ dàn 1 hàng khi đủ chỗ (lg) để không tràn ngang
+            lg: 'minmax(200px, 1.8fr) minmax(150px, 180px) minmax(150px, 180px) auto'
           },
           gap: { xs: 1.5, lg: 2 },
           alignItems: 'flex-end'

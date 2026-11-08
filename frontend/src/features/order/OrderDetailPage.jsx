@@ -39,6 +39,8 @@ import { ghnReady } from './GhnAddressFields';
 import { formatVnd, orderStatusMeta, paymentMethodLabel, paymentStatusMeta, preparationMeta, shipmentStatusLabel } from './constants';
 import PayOSPaymentModal from './components/PayOSPaymentModal';
 import CustomerReturnDialog from '../returns/CustomerReturnDialog';
+import FitFeedback from '../sizeAdvice/FitFeedback';
+import { sizeAdviceApi } from '../sizeAdvice/api';
 import {
   C,
   SANS,
@@ -180,6 +182,14 @@ function CustomerView({ order, status, actions, busy, onAction, actionError, onP
   const canReturn = ['DELIVERED', 'COMPLETED'].includes(order.orderStatus);
   const canPay = order.paymentMethod === 'ONLINE' && order.paymentStatus !== 'PAID' && !closed;
 
+  // Đánh giá Chật / Vừa / Rộng cho từng món đã nhận (dữ liệu để gợi ý size). Lỗi thì ẩn, không ảnh hưởng trang đơn.
+  const { data: fitLines, mutate: mutateFit } = useSWR(canReturn ? ['order-fit-feedback', order.id] : null, () => sizeAdviceApi.orderFeedback(order.id), {
+    revalidateOnFocus: false
+  });
+  const fitByItem = Object.fromEntries((fitLines || []).filter((f) => f.rateable).map((f) => [f.orderItemId, f.fit]));
+  const onFitSaved = (orderItemId, fit) =>
+    mutateFit((lines) => lines?.map((f) => (f.orderItemId === orderItemId ? { ...f, fit } : f)), { revalidate: false });
+
   return (
     <Box>
       {/* Đầu trang: quay lại, mã đơn, trạng thái */}
@@ -263,6 +273,7 @@ function CustomerView({ order, status, actions, busy, onAction, actionError, onP
                 <Box sx={{ fontSize: 15, fontWeight: 500, lineHeight: 1.4 }}>{line.productName}</Box>
                 <Box sx={{ fontSize: 13, color: C.muted, mt: 0.75 }}>{[line.size, line.color].filter(Boolean).join(' · ') || '—'}</Box>
                 <Box sx={{ fontSize: 13, color: C.muted, mt: 0.5 }}>Số lượng: {line.quantity}</Box>
+                {line.orderItemId in fitByItem && <FitFeedback orderItemId={line.orderItemId} value={fitByItem[line.orderItemId]} onSaved={onFitSaved} />}
               </Box>
               <Box sx={{ fontSize: 15, fontWeight: 600, whiteSpace: 'nowrap' }}>{formatVnd(line.lineTotal)}</Box>
             </Box>

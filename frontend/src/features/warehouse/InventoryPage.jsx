@@ -313,7 +313,7 @@ export default function InventoryPage() {
             {exportError}
           </Alert>
         )}
-        <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} sx={{ mb: 2, flexWrap: 'wrap', gap: 1.5 }}>
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} useFlexGap sx={{ mb: 2, flexWrap: 'wrap' }}>
           <TextField
             size="small"
             placeholder="Tìm tên sản phẩm, mã SP, mã biến thể hoặc mã vạch"

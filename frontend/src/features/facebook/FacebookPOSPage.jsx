@@ -705,7 +705,12 @@ export default function FacebookPOSPage() {
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr', md: '300px 1fr 380px' },
+          // Cột hai bên co lại trên màn hẹp; cột giữa minmax(0) để không đẩy trang tràn ngang
+          gridTemplateColumns: {
+            xs: '1fr',
+            md: 'minmax(200px, 260px) minmax(0, 1fr) minmax(240px, 320px)',
+            xl: '300px minmax(0, 1fr) 380px'
+          },
           gap: 2,
           height: 'calc(100vh - 180px)',
           minHeight: 640

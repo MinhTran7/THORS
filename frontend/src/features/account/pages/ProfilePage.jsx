@@ -27,6 +27,7 @@ import { BrandButton, OutlineButton } from '../components/Brand';
 import { RoleChip } from '../components/Chips';
 import { PageHeader } from '../components/Blocks';
 import UserAvatar from '../components/UserAvatar';
+import SizeAdvisor from '../components/SizeAdvisor';
 
 const CRUMBS = ['Hồ sơ'];
 
@@ -249,6 +250,8 @@ function CustomerProfile({ data, loading, fullName, passwordEnabled, googleLinke
             <StoreInfoRow label="Số điện thoại">{loading ? <Skeleton width={110} /> : data?.phone}</StoreInfoRow>
           </Box>
 
+          <SizeAdvisor />
+
           <Box component="section" sx={{ ...storePanelSx, p: { xs: 3, sm: 4 } }}>
             <Box component="h2" sx={{ ...storePanelTitleSx, mb: 1 }}>
               Bảo mật & đăng nhập
@@ -369,7 +372,7 @@ export default function ProfilePage() {
         sx={{
           display: 'grid',
           gridTemplateColumns: { xs: '1fr', md: '320px minmax(0, 1fr)', lg: '350px minmax(0, 1fr)' },
-          gap: 3,
+          gap: 2.5,
           alignItems: 'start'
         }}
       >
@@ -378,11 +381,11 @@ export default function ProfilePage() {
           <Box
             sx={{
               background: `linear-gradient(135deg, ${brand.cyanSoft} 0%, #D2F4F7 45%, ${brand.yellowSoft} 100%)`,
-              height: 96
+              height: 72
             }}
           />
 
-          <Box sx={{ px: 3, pb: 3, pt: 0, textAlign: 'center' }}>
+          <Box sx={{ px: 3, pb: 2.5, pt: 0, textAlign: 'center' }}>
             <Box sx={{ mt: '-48px', display: 'inline-flex', position: 'relative', zIndex: 2 }}>
               {loading ? (
                 <Skeleton variant="circular" width={96} height={96} />
@@ -406,7 +409,7 @@ export default function ProfilePage() {
 
             <Box sx={{ mt: 0.75, display: 'flex', justifyContent: 'center' }}>{role !== 'CUSTOMER' && <RoleChip role={role} />}</Box>
 
-            <Stack spacing={0.75} sx={{ mt: 2, color: brand.muted, fontSize: fs.caption }}>
+            <Stack spacing={0.75} sx={{ mt: 1.5, color: brand.muted, fontSize: fs.caption }}>
               {data?.email && (
                 <Stack direction="row" spacing={0.75} alignItems="center" justifyContent="center">
                   <MailOutlined style={{ fontSize: 13 }} />
@@ -421,7 +424,7 @@ export default function ProfilePage() {
               )}
             </Stack>
 
-            <Divider sx={{ my: 2.25, borderColor: brand.line }} />
+            <Divider sx={{ my: 1.75, borderColor: brand.line }} />
 
             <Stack spacing={1.25}>
               <BrandButton
@@ -448,7 +451,7 @@ export default function ProfilePage() {
 
             <Box
               sx={{
-                mt: 2,
+                mt: 1.5,
                 py: 0.85,
                 px: 1.5,
                 bgcolor: brand.successBg,
@@ -469,16 +472,17 @@ export default function ProfilePage() {
         </Box>
 
         {/* Cột phải: thông tin chi tiết và bảo mật */}
-        <Stack spacing={3}>
+        <Stack spacing={2.5}>
           {/* Thông tin cá nhân */}
-          <Box sx={{ ...cardSx, p: 3 }}>
+          <Box sx={{ ...cardSx, p: 2.5 }}>
             <SectionHeader
               icon={<UserOutlined />}
               title="Thông tin cá nhân"
               subtitle="Thông tin liên hệ chính thức dùng cho tài khoản của bạn."
             />
 
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, minmax(0, 1fr))' }, gap: 2 }}>
+            {/* auto-fit: tự chia 3/2/1 cột theo chỗ trống thực tế của khung, không theo độ rộng cửa sổ */}
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(240px, 100%), 1fr))', gap: 2 }}>
               <InfoItem
                 label="Họ và tên"
                 value={loading ? <Skeleton width="70%" /> : data?.fullName}
@@ -501,7 +505,7 @@ export default function ProfilePage() {
           </Box>
 
           {/* Bảo mật tài khoản */}
-          <Box sx={{ ...cardSx, p: 3 }}>
+          <Box sx={{ ...cardSx, p: 2.5 }}>
             <SectionHeader
               icon={<SafetyCertificateOutlined />}
               title="Bảo mật & Xác thực"

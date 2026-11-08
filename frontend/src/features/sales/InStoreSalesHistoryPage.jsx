@@ -176,8 +176,9 @@ export default function InStoreSalesHistoryPage() {
           display: 'grid',
           gridTemplateColumns: {
             xs: '1fr',
-            sm: 'repeat(2, 1fr)',
-            md: 'minmax(150px, 1.8fr) 140px 140px 130px 130px auto'
+            sm: 'repeat(2, minmax(0, 1fr))',
+            // Chỉ dàn 1 hàng khi đủ chỗ (lg); cột co giãn để không tràn ngang
+            lg: 'minmax(150px, 1.8fr) minmax(120px, 140px) minmax(120px, 140px) 130px 130px auto'
           },
           gap: { xs: 1.5, lg: 2 },
           alignItems: 'flex-end'
