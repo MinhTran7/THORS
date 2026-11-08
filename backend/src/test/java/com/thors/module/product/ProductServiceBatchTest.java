@@ -173,7 +173,7 @@ class ProductServiceBatchTest {
         Product mockProduct = new Product();
         mockProduct.setProductId(10);
         when(productRepository.findById(10)).thenReturn(mockProduct);
-        when(productRepository.countTransactionsByProductId(10)).thenReturn(0);
+        when(productRepository.findDeleteBlockers(10)).thenReturn(List.of());
         when(productRepository.findCloudinaryPublicIds(10)).thenReturn(List.of("cloud-id-1"));
 
         productService.deleteProduct(10);
@@ -186,13 +186,15 @@ class ProductServiceBatchTest {
         Product mockProduct = new Product();
         mockProduct.setProductId(10);
         when(productRepository.findById(10)).thenReturn(mockProduct);
-        when(productRepository.countTransactionsByProductId(10)).thenReturn(2);
+        // Đã có đơn hàng / phiếu kho => chặn xóa, trả 409 kèm lý do tiếng Việt
+        when(productRepository.findDeleteBlockers(10)).thenReturn(List.of("đơn hàng", "phiếu nhập / đặt hàng nhập"));
 
-        IllegalArgumentException ex = assertThrows(
-                IllegalArgumentException.class,
+        com.thors.common.ApiException ex = assertThrows(
+                com.thors.common.ApiException.class,
                 () -> productService.deleteProduct(10)
         );
-        assertTrue(ex.getMessage().contains("lịch sử giao dịch"));
+        assertEquals(409, ex.status);
+        assertTrue(ex.getMessage().contains("không thể xóa vĩnh viễn"));
         verify(productRepository, never()).deleteProductCascaded(anyInt());
     }
 }

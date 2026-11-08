@@ -15,6 +15,8 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Switch,
+  Tooltip,
   Typography
 } from '@mui/material';
 
@@ -25,10 +27,25 @@ import {
   PictureOutlined
 } from '@ant-design/icons';
 
-import { getProductById } from '../../services/productService';
+import { getProductById, setVariantOnline } from '../../services/productService';
 import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../customer/theme';
 
-const LOW_STOCK_THRESHOLD = 5;
+// Switch thu nhỏ theo Design System
+const switchSx = {
+  width: 34,
+  height: 18,
+  p: 0,
+  '& .MuiSwitch-switchBase': {
+    p: '2px',
+    '&.Mui-checked': {
+      transform: 'translateX(16px)',
+      color: '#67E8F9',
+      '& + .MuiSwitch-track': { bgcolor: '#BAF2F8', opacity: 1, border: 0 }
+    }
+  },
+  '& .MuiSwitch-thumb': { boxShadow: '0 1px 2px rgba(0,0,0,0.15)', width: 14, height: 14 },
+  '& .MuiSwitch-track': { borderRadius: 9, bgcolor: '#CBD5E1', opacity: 1 }
+};
 
 const badgeSx = (bg, color, border) => ({
   display: 'inline-flex',
@@ -97,6 +114,35 @@ export default function ProductDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedImage, setSelectedImage] = useState(0);
+
+  // Bật/tắt bán online từng biến thể
+  const [togglingVariantId, setTogglingVariantId] = useState(null);
+  const [variantError, setVariantError] = useState('');
+
+  async function toggleVariantOnline(variant) {
+    if (togglingVariantId) return;
+    const enable = !Number(variant.onlineSalesEnabled);
+    try {
+      setVariantError('');
+      setTogglingVariantId(variant.detailId);
+      const result = await setVariantOnline(productId, variant.detailId, enable);
+      setData((previous) =>
+        previous
+          ? {
+              ...previous,
+              product: { ...previous.product, onlineVariantCount: result?.onlineVariantCount ?? previous.product.onlineVariantCount },
+              variants: previous.variants.map((v) =>
+                v.detailId === variant.detailId ? { ...v, onlineSalesEnabled: enable ? 1 : 0 } : v
+              )
+            }
+          : previous
+      );
+    } catch (err) {
+      setVariantError(err?.message || 'Không thể đổi trạng thái bán online của biến thể.');
+    } finally {
+      setTogglingVariantId(null);
+    }
+  }
 
   // ==========================================
   // LOAD PRODUCT DETAIL
@@ -496,6 +542,16 @@ export default function ProductDetailPage() {
               overflow: 'hidden'
             }}
           >
+            {variantError && (
+              <Alert
+                severity="error"
+                onClose={() => setVariantError('')}
+                sx={{ mx: 3, mt: 2, borderRadius: 2.5, fontSize: 13, fontWeight: 600 }}
+              >
+                {variantError}
+              </Alert>
+            )}
+
             <TableContainer>
               <Table
                 sx={{
@@ -525,14 +581,20 @@ export default function ProductDetailPage() {
                     <TableCell>MÃ BIẾN THỂ</TableCell>
                     <TableCell>GIÁ BÁN</TableCell>
                     <TableCell>TỒN KHO</TableCell>
-                    <TableCell align="center" sx={{ pr: 3 }}>TRẠNG THÁI</TableCell>
+                    <TableCell align="center">TRẠNG THÁI</TableCell>
+                    <TableCell align="center" sx={{ pr: 3 }}>BÁN ONLINE</TableCell>
                   </TableRow>
                 </TableHead>
 
                 <TableBody>
                   {variants.map((variant) => {
                     const stock = Number(variant.stockQuantity ?? 0);
+                    const sellable = Number(variant.sellableQuantity ?? stock);
+                    // Ngưỡng tối thiểu đặt ở màn hình Tồn kho (null = chưa đặt => không báo "sắp hết")
+                    const minStock = variant.minStockQuantity == null ? null : Number(variant.minStockQuantity);
                     const activeVariant = variant.status === 'ACTIVE';
+                    const online = Boolean(Number(variant.onlineSalesEnabled));
+                    const canEnableOnline = activeVariant && product.status === 'ACTIVE' && variant.price != null;
 
                     let availability = 'Còn hàng';
                     let badgeProps = { bg: '#E7F6F1', color: '#168B70' };
@@ -543,7 +605,7 @@ export default function ProductDetailPage() {
                     } else if (stock <= 0) {
                       availability = 'Hết hàng';
                       badgeProps = { bg: '#FEE2E2', color: '#DC2626' };
-                    } else if (stock < LOW_STOCK_THRESHOLD) {
+                    } else if (minStock != null && sellable <= minStock) {
                       availability = 'Sắp hết';
                       badgeProps = { bg: C.cream, color: C.creamText };
                     }
@@ -577,9 +639,19 @@ export default function ProductDetailPage() {
 
                         <TableCell sx={{ fontSize: 13.5, fontWeight: 800, color: stock <= 0 ? '#DC2626' : '#0F172A' }}>
                           {stock}
+                          {sellable !== stock && (
+                            <Box component="span" sx={{ fontSize: 12, fontWeight: 600, color: C.muted, ml: 0.75 }}>
+                              (bán được {sellable})
+                            </Box>
+                          )}
+                          {minStock != null && (
+                            <Typography sx={{ fontSize: 11.5, color: C.muted, fontWeight: 500 }}>
+                              Ngưỡng tối thiểu: {minStock}
+                            </Typography>
+                          )}
                         </TableCell>
 
-                        <TableCell align="center" sx={{ pr: 3 }}>
+                        <TableCell align="center">
                           <Box
                             sx={{
                               display: 'inline-flex',
@@ -596,6 +668,36 @@ export default function ProductDetailPage() {
                             {availability}
                           </Box>
                         </TableCell>
+
+                        <TableCell align="center" sx={{ pr: 3 }}>
+                          <Tooltip
+                            title={
+                              online
+                                ? 'Đang bán trên website · Nhấn để tắt'
+                                : canEnableOnline
+                                  ? 'Nhấn để bật bán trên website'
+                                  : product.status !== 'ACTIVE'
+                                    ? 'Sản phẩm đang ẩn'
+                                    : !activeVariant
+                                      ? 'Biến thể đang ngưng'
+                                      : 'Biến thể chưa có giá bán'
+                            }
+                          >
+                            <span>
+                              {togglingVariantId === variant.detailId ? (
+                                <CircularProgress size={16} sx={{ color: C.cyan }} />
+                              ) : (
+                                <Switch
+                                  checked={online}
+                                  size="small"
+                                  disabled={Boolean(togglingVariantId) || (!online && !canEnableOnline)}
+                                  onChange={() => toggleVariantOnline(variant)}
+                                  sx={switchSx}
+                                />
+                              )}
+                            </span>
+                          </Tooltip>
+                        </TableCell>
                       </TableRow>
                     );
                   })}
@@ -603,7 +705,7 @@ export default function ProductDetailPage() {
                   {variants.length === 0 && (
                     <TableRow>
                       <TableCell
-                        colSpan={6}
+                        colSpan={7}
                         align="center"
                         sx={{ py: 5 }}
                       >

@@ -116,54 +116,31 @@ export async function setPrimaryProductImage(productId, imageId) {
 }
 
 export async function changeProductStatus(productId, status) {
-  // 1. Validate input
   if (!['ACTIVE', 'INACTIVE'].includes(status)) {
-    throw new Error('Invalid product status.');
+    throw new Error('Trạng thái sản phẩm không hợp lệ.');
   }
 
-  // 2. Get CSRF token
-  const csrfResponse = await fetch('/api/auth/csrf', {
-    credentials: 'same-origin'
+  return api(`/products/${productId}/status`, {
+    method: 'PATCH',
+    body: { status }
   });
+}
 
-  if (!csrfResponse.ok) {
-    throw new Error(
-      `Unable to obtain CSRF token (HTTP ${csrfResponse.status}).`
-    );
-  }
+// Bật/tắt bán online cho cả sản phẩm (mọi biến thể đang hoạt động, có giá).
+// Trả về { productId, onlineVariantCount, variantCount }.
+export async function setProductOnline(productId, enabled) {
+  return api(`/products/${productId}/online`, {
+    method: 'PATCH',
+    body: { enabled }
+  });
+}
 
-  const csrf = await csrfResponse.json();
-
-  if (!csrf.headerName || !csrf.token) {
-    throw new Error('Invalid CSRF response.');
-  }
-
-  // 3. Call Backend API
-  const response = await fetch(
-    `/api/products/${productId}/status`,
-    {
-      method: 'PATCH',
-      credentials: 'same-origin',
-      headers: {
-        'Content-Type': 'application/json',
-        [csrf.headerName]: csrf.token
-      },
-      body: JSON.stringify({ status })
-    }
-  );
-
-  // 4. Read response
-  const result = await response.json().catch(() => null);
-
-  if (!response.ok) {
-    throw new Error(
-      result?.message ||
-      result?.error ||
-      `Unable to change product status (HTTP ${response.status}).`
-    );
-  }
-
-  return result;
+// Bật/tắt bán online một biến thể (trang chi tiết sản phẩm).
+export async function setVariantOnline(productId, detailId, enabled) {
+  return api(`/products/${productId}/variants/${detailId}/online`, {
+    method: 'PATCH',
+    body: { enabled }
+  });
 }
 
 export async function deleteProduct(productId) {

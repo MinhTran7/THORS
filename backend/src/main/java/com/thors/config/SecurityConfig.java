@@ -123,6 +123,10 @@ public class SecurityConfig {
                                                 // Bảng điều khiển: Owner (toàn cửa hàng), Family Member (doanh số của mình)
                                                 .requestMatchers("/api/dashboard/**")
                                                 .hasAnyRole("OWNER", "FAMILY_MEMBER")
+                                                // Xem danh sách/chi tiết sản phẩm quản trị (gồm sản phẩm ẩn, tồn thật):
+                                                // Owner, Family Member (POS, Facebook, khuyến mãi). Khách dùng /api/shop/**
+                                                .requestMatchers(HttpMethod.GET, "/api/products", "/api/products/**")
+                                                .hasAnyRole("OWNER", "FAMILY_MEMBER")
                                                 // Tạo danh mục: cả Family Member (hộp thoại tạo nhanh khi lập phiếu kho)
                                                 .requestMatchers(HttpMethod.POST, "/api/categories")
                                                 .hasAnyRole("OWNER", "FAMILY_MEMBER")

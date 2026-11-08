@@ -111,4 +111,55 @@ public class Product {
     public void setOnlineVariantCount(Integer onlineVariantCount) {
         this.onlineVariantCount = onlineVariantCount;
     }
+
+    // ==========================================
+    // Số liệu cho danh sách sản phẩm (chỉ có ở GET /api/products),
+    // tính theo biến thể đang hoạt động, cùng công thức màn hình Tồn kho
+    // ==========================================
+
+    private Integer activeVariantCount;     // số biến thể đang hoạt động
+    private Integer sellableStock;          // Σ (tồn − đang giữ cho đơn), không âm
+    private Integer outOfStockVariantCount; // biến thể tồn = 0
+    private Integer lowStockVariantCount;   // biến thể có thể bán ≤ ngưỡng tối thiểu
+    private String searchText;              // mã vạch, size, màu của các biến thể (phục vụ tìm kiếm)
+
+    public Integer getActiveVariantCount() {
+        return activeVariantCount;
+    }
+
+    public void setActiveVariantCount(Integer activeVariantCount) {
+        this.activeVariantCount = activeVariantCount;
+    }
+
+    public Integer getSellableStock() {
+        return sellableStock;
+    }
+
+    public void setSellableStock(Integer sellableStock) {
+        this.sellableStock = sellableStock;
+    }
+
+    public Integer getOutOfStockVariantCount() {
+        return outOfStockVariantCount;
+    }
+
+    public void setOutOfStockVariantCount(Integer outOfStockVariantCount) {
+        this.outOfStockVariantCount = outOfStockVariantCount;
+    }
+
+    public Integer getLowStockVariantCount() {
+        return lowStockVariantCount;
+    }
+
+    public void setLowStockVariantCount(Integer lowStockVariantCount) {
+        this.lowStockVariantCount = lowStockVariantCount;
+    }
+
+    public String getSearchText() {
+        return searchText;
+    }
+
+    public void setSearchText(String searchText) {
+        this.searchText = searchText;
+    }
 }

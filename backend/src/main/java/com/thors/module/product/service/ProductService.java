@@ -104,6 +104,14 @@ public class ProductService {
         List<Map<String, Object>> variants =
                 productRepository.findVariantsByProductId(productId);
 
+        // Ngưỡng tồn tối thiểu từng biến thể (null = chưa đặt) để trang chi tiết báo "sắp hết"
+        // đúng như màn hình Tồn kho
+        Map<Integer, Integer> minStock = productRepository.findMinStockByProductId(productId);
+        for (Map<String, Object> variant : variants) {
+            Object id = variant.get("detailId");
+            variant.put("minStockQuantity", id instanceof Number n ? minStock.get(n.intValue()) : null);
+        }
+
         // Get product images
         List<Map<String, Object>> images =
                 productRepository.findImagesByProductId(productId);
@@ -979,66 +987,100 @@ public class ProductService {
         return productRepository.findImagesByProductId(productId);
     }
 
+    // ==========================================
+    // CHANGE PRODUCT STATUS
+    // ==========================================
+
     @Transactional
     public void changeProductStatus(int productId, String newStatus) {
 
-        // 1. Validate product ID
-        if (productId <= 0) {
-            throw new IllegalArgumentException(
-                    "Invalid product ID."
-            );
-        }
-
-        // 2. Validate requested status
+        // 1. Validate requested status
         if (newStatus == null ||
                 (!newStatus.equals("ACTIVE") &&
                         !newStatus.equals("INACTIVE"))) {
-
-            throw new IllegalArgumentException(
-                    "Product status must be ACTIVE or INACTIVE."
-            );
+            throw badRequest("PRODUCT_STATUS", "Trạng thái sản phẩm chỉ được là Hoạt động hoặc Đã ẩn.");
         }
 
-        // 3. Check whether product exists
-        Map<String, Object> productDetail =
-                getProductById(productId);
+        // 2. Check whether product exists
+        Product product = requireProduct(productId);
 
-        if (productDetail == null ||
-                productDetail.get("product") == null) {
-
-            throw new IllegalArgumentException(
-                    "Product not found."
-            );
+        // 3. Đã đúng trạng thái yêu cầu (vd. bấm 2 lần, hoặc người khác vừa đổi) => coi như xong
+        if (newStatus.equals(product.getStatus())) {
+            return;
         }
 
-        // 4. Check current status
-        Object productObject = productDetail.get("product");
-
-        if (!(productObject instanceof Product product)) {
-            throw new IllegalStateException(
-                    "Invalid product data."
-            );
-        }
-
-        String currentStatus = product.getStatus();
-
-        if (newStatus.equals(currentStatus)) {
-            throw new IllegalArgumentException(
-                    "Product already has the requested status."
-            );
-        }
-
-        // 5. Update product status
+        // 4. Update product status
         int updatedRows = productRepository.updateProductStatus(
                 productId,
                 newStatus
         );
 
         if (updatedRows != 1) {
-            throw new IllegalStateException(
-                    "Unable to update product status."
-            );
+            throw new ApiException(500, "PRODUCT_STATUS_FAILED", "Không đổi được trạng thái sản phẩm. Vui lòng thử lại.");
         }
+    }
+
+    // ==========================================
+    // BÁN ONLINE (bật/tắt nhanh trên danh sách và từng biến thể ở trang chi tiết)
+    // ==========================================
+
+    /** Bật/tắt bán online cho cả sản phẩm (mọi biến thể đang hoạt động). Trả về số biến thể đang bật. */
+    @Transactional
+    public Map<String, Object> setProductOnline(int productId, boolean enabled) {
+        Product product = requireProduct(productId);
+
+        if (enabled) {
+            if (!"ACTIVE".equals(product.getStatus())) {
+                throw badRequest(
+                        "PRODUCT_INACTIVE",
+                        "Sản phẩm đang ẩn. Hãy kích hoạt sản phẩm trước khi bật bán online."
+                );
+            }
+            if (productRepository.countSellableVariants(productId) == 0) {
+                throw badRequest(
+                        "NO_SELLABLE_VARIANT",
+                        "Sản phẩm chưa có biến thể đang hoạt động và có giá bán để bật bán online."
+                );
+            }
+        }
+
+        productRepository.updateProductOnline(productId, enabled);
+        return onlineSummary(productId);
+    }
+
+    /** Bật/tắt bán online một biến thể. */
+    @Transactional
+    public Map<String, Object> setVariantOnline(int productId, int detailId, boolean enabled) {
+        Product product = requireProduct(productId);
+
+        Map<String, Object> variant = productRepository.findVariantsByProductId(productId).stream()
+                .filter(v -> v.get("detailId") instanceof Number n && n.intValue() == detailId)
+                .findFirst()
+                .orElseThrow(() -> new ApiException(404, "VARIANT_NOT_FOUND", "Không tìm thấy biến thể #" + detailId + " của sản phẩm."));
+
+        if (enabled) {
+            if (!"ACTIVE".equals(product.getStatus())) {
+                throw badRequest("PRODUCT_INACTIVE", "Sản phẩm đang ẩn. Hãy kích hoạt sản phẩm trước khi bật bán online.");
+            }
+            if (!"ACTIVE".equals(variant.get("status"))) {
+                throw badRequest("VARIANT_INACTIVE", "Biến thể #" + detailId + " đang ngưng, không bật bán online được.");
+            }
+            if (variant.get("price") == null) {
+                throw badRequest("VARIANT_NO_PRICE", "Biến thể #" + detailId + " chưa có giá bán.");
+            }
+        }
+
+        productRepository.updateVariantOnline(productId, detailId, enabled);
+        return onlineSummary(productId);
+    }
+
+    private Map<String, Object> onlineSummary(int productId) {
+        Product updated = productRepository.findById(productId);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("productId", productId);
+        result.put("onlineVariantCount", updated != null ? updated.getOnlineVariantCount() : 0);
+        result.put("variantCount", updated != null ? updated.getVariantCount() : 0);
+        return result;
     }
 
     // ==========================================
@@ -1048,49 +1090,50 @@ public class ProductService {
     @Transactional
     public void deleteProduct(int productId) {
 
-        // 1. Validate product ID
-        if (productId <= 0) {
-            throw new IllegalArgumentException(
-                    "Invalid product ID."
+        // 1. Check whether product exists
+        requireProduct(productId);
+
+        // 2. Đã phát sinh dữ liệu khác (đơn, phiếu kho, vị trí, kiểm kê...) => không xóa, gợi ý ẩn
+        List<String> blockers = productRepository.findDeleteBlockers(productId);
+        if (!blockers.isEmpty()) {
+            throw new ApiException(
+                    409,
+                    "PRODUCT_IN_USE",
+                    "Sản phẩm đã có " + String.join(", ", blockers)
+                            + " nên không thể xóa vĩnh viễn. Hãy chuyển sang Ẩn để ngừng bán và giữ lịch sử."
             );
         }
 
-        // 2. Check whether product exists
-        Product product = productRepository.findById(productId);
-        if (product == null) {
-            throw new ResponseStatusException(
-                    HttpStatus.NOT_FOUND,
-                    "Product not found."
-            );
-        }
+        // 3. Lấy danh sách ảnh trước khi xóa dữ liệu
+        List<String> publicIds = productRepository.findCloudinaryPublicIds(productId);
 
-        // 3. Check for transaction constraints (orders, receipts, shelves, adjustments)
-        int transactionCount = productRepository.countTransactionsByProductId(productId);
-        if (transactionCount > 0) {
-            throw new IllegalArgumentException(
-                    "Sản phẩm đã có lịch sử giao dịch (đơn hàng, nhập kho hoặc vị trí kệ), không thể xóa vĩnh viễn. Vui lòng chuyển trạng thái sang Ẩn (INACTIVE)."
-            );
-        }
+        // 4. Cascade delete all product data
+        productRepository.deleteProductCascaded(productId);
 
-        // 4. Clean up Cloudinary images if any
-        try {
-            List<String> publicIds = productRepository.findCloudinaryPublicIds(productId);
+        // 5. Chỉ xóa ảnh trên Cloudinary SAU KHI database đã lưu thành công: nếu xóa DB thất bại
+        // (transaction rollback) thì ảnh vẫn còn, sản phẩm không bị mất ảnh
+        Runnable cleanup = () -> {
             for (String pid : publicIds) {
-                if (pid != null && !pid.isBlank()) {
-                    try {
-                        productImageService.deleteImage(pid);
-                    } catch (Exception e) {
-                        logger.warn("Failed to delete Cloudinary image {}: {}", pid, e.getMessage());
-                    }
+                if (pid == null || pid.isBlank()) continue;
+                try {
+                    productImageService.deleteImage(pid);
+                } catch (Exception e) {
+                    logger.warn("Failed to delete Cloudinary image {}: {}", pid, e.getMessage());
                 }
             }
-        } catch (Exception e) {
-            logger.warn("Failed to clean up Cloudinary images for product {}: {}", productId, e.getMessage());
+        };
+
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    cleanup.run();
+                }
+            });
+        } else {
+            cleanup.run();
         }
 
-        // 5. Cascade delete all product data
-        productRepository.deleteProductCascaded(productId);
         logger.info("Product {} deleted successfully", productId);
     }
-
 }

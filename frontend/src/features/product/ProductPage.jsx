@@ -1,9 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState
-} from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useNavigate } from 'react-router-dom';
 
@@ -12,14 +7,12 @@ import {
   Avatar,
   Box,
   Button,
-  Card,
   CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
   DialogContentText,
   DialogTitle,
-  Divider,
   IconButton,
   InputAdornment,
   Pagination,
@@ -39,26 +32,15 @@ import {
 } from '@mui/material';
 
 import {
-  CameraOutlined,
-  CheckOutlined,
-  CloseOutlined,
-  DeleteOutlined,
   EditOutlined,
   EyeOutlined,
   FileExcelOutlined,
-  PictureOutlined,
   PlusOutlined,
-  SearchOutlined,
-  UploadOutlined
+  ReloadOutlined,
+  SearchOutlined
 } from '@ant-design/icons';
 
-import {
-  getProducts,
-  getProductById,
-  updateProduct,
-  changeProductStatus,
-  deleteProduct
-} from '../../services/productService';
+import { getProducts, changeProductStatus, setProductOnline } from '../../services/productService';
 
 import { getCategories } from '../../services/categoryService';
 import { primaryButtonSx, outlineButtonSx } from '../customer/theme';
@@ -82,43 +64,58 @@ const C = {
 };
 
 const PAGE_SIZE = 8;
-const LOW_STOCK_THRESHOLD = 5;
 
-const inputSx = (hasError) => ({
-  '& .MuiOutlinedInput-root': {
-    borderRadius: 2.5,
-    minHeight: 44,
-    fontSize: 13.5,
-    '& fieldset': { borderColor: hasError ? C.error : C.border },
-    '&:hover fieldset, &.Mui-focused fieldset': { borderColor: hasError ? C.error : C.cyan }
+// Switch thu nhỏ theo Design System (34x18, track #BAF2F8 khi bật, #CBD5E1 khi tắt)
+const switchSx = {
+  width: 34,
+  height: 18,
+  p: 0,
+  '& .MuiSwitch-switchBase': {
+    p: '2px',
+    transitionDuration: '200ms',
+    '&.Mui-checked': {
+      transform: 'translateX(16px)',
+      color: '#67E8F9',
+      '& + .MuiSwitch-track': {
+        bgcolor: '#BAF2F8',
+        opacity: 1,
+        border: 0
+      }
+    }
+  },
+  '& .MuiSwitch-thumb': {
+    boxShadow: '0 1px 2px rgba(0,0,0,0.15)',
+    width: 14,
+    height: 14
+  },
+  '& .MuiSwitch-track': {
+    borderRadius: 9,
+    bgcolor: '#CBD5E1',
+    opacity: 1
   }
-});
+};
 
-const linkButtonSx = (color, hoverBg) => ({
-  textTransform: 'none',
-  fontSize: 13,
-  fontWeight: 600,
-  color,
-  borderRadius: 1.5,
-  px: 1.25,
-  py: 0.5,
-  '&:hover': { bgcolor: hoverBg }
-});
-
-const badgeSx = (bg, color, border) => ({
+const chipSx = (bg, color) => ({
   display: 'inline-flex',
   alignItems: 'center',
-  gap: 0.6,
-  bgcolor: bg,
-  color: color,
-  border: `1px solid ${border}`,
-  borderRadius: 99,
-  px: 1.4,
+  px: 1.5,
   py: 0.35,
-  fontSize: 12,
-  fontWeight: 700,
-  flexShrink: 0
+  borderRadius: 1.75,
+  fontSize: 13,
+  fontWeight: 600,
+  bgcolor: bg,
+  color
 });
+
+const filterSelectSx = {
+  bgcolor: C.surface,
+  borderRadius: 2.5,
+  height: 44,
+  fontSize: 13.5,
+  '& .MuiOutlinedInput-notchedOutline': { borderColor: C.border },
+  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: C.cyan },
+  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: C.cyan }
+};
 
 function formatPrice(price) {
   if (price === null || price === undefined) {
@@ -141,10 +138,7 @@ function displayPrice(product) {
     return '—';
   }
 
-  if (
-    maxPrice == null ||
-    Number(minPrice) === Number(maxPrice)
-  ) {
+  if (maxPrice == null || Number(minPrice) === Number(maxPrice)) {
     return formatPrice(minPrice);
   }
 
@@ -152,17 +146,36 @@ function displayPrice(product) {
 }
 
 function isOnlineProduct(product) {
-  return (
-    product.status === 'ACTIVE' &&
-    Number(product.onlineVariantCount || 0) > 0
-  );
+  return product.status === 'ACTIVE' && Number(product.onlineVariantCount || 0) > 0;
 }
 
-function isLowStockProduct(product) {
-  return (
-    product.status === 'ACTIVE' &&
-    Number(product.totalStock || 0) < LOW_STOCK_THRESHOLD
-  );
+// Cảnh báo tồn theo từng biến thể, cùng công thức màn hình Tồn kho:
+// hết hàng = tồn 0; sắp hết = có thể bán (tồn − đang giữ) ≤ ngưỡng tối thiểu của biến thể
+function stockAlert(product) {
+  const active = Number(product.activeVariantCount || 0);
+  const out = Number(product.outOfStockVariantCount || 0);
+  const low = Number(product.lowStockVariantCount || 0);
+
+  if (product.status !== 'ACTIVE' || active === 0) return null;
+  if (out === active) return { level: 'OUT', label: 'Hết hàng' };
+  if (out > 0 || low > 0) {
+    const parts = [];
+    if (out > 0) parts.push(`${out} hết`);
+    if (low > 0) parts.push(`${low} sắp hết`);
+    return { level: 'LOW', label: parts.join(' · ') };
+  }
+  return null;
+}
+
+// Bỏ dấu tiếng Việt để tìm "ao thun" ra "Áo thun"
+function normalizeText(value) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase()
+    .trim();
 }
 
 function normalizeCategories(response) {
@@ -194,6 +207,7 @@ export default function ProductPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [loadedAt, setLoadedAt] = useState(null);
 
   // ==========================================
   // STATES - SEARCH AND FILTER
@@ -202,7 +216,6 @@ export default function ProductPage() {
   const [activeTab, setActiveTab] = useState('ACTIVE');
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
-  const [statusFilter, setStatusFilter] = useState('ALL');
 
   // ==========================================
   // STATES - PAGINATION
@@ -211,42 +224,25 @@ export default function ProductPage() {
   const [page, setPage] = useState(1);
 
   // ==========================================
-  // STATES - INLINE EDIT
-  // ==========================================
-
-  const [editingProductId, setEditingProductId] = useState(null);
-
-  const [editForm, setEditForm] = useState({
-    productName: '',
-    categoryId: ''
-  });
-
-  const [saving, setSaving] = useState(false);
-
-  // ==========================================
-  // STATES - CHANGE PRODUCT STATUS
+  // STATES - CHANGE PRODUCT STATUS / ONLINE
   // ==========================================
 
   const [statusDialogProduct, setStatusDialogProduct] = useState(null);
   const [statusSaving, setStatusSaving] = useState(false);
+  const [onlineDialogProduct, setOnlineDialogProduct] = useState(null);
+  const [onlineSaving, setOnlineSaving] = useState(false);
   const [excelDialogOpen, setExcelDialogOpen] = useState(false);
 
-  // ==========================================
-  // STATES - DELETE PRODUCT
-  // ==========================================
-
-  const [deleteDialogProduct, setDeleteDialogProduct] = useState(null);
-  const [deleteSaving, setDeleteSaving] = useState(false);
-
-  const busy = editingProductId !== null || saving || statusSaving || deleteSaving;
+  // Không xóa sản phẩm từ danh sách: sản phẩm ngừng bán thì chuyển sang "Đã ẩn" để giữ lịch sử
+  const busy = statusSaving || onlineSaving;
 
   // ==========================================
   // LOAD PRODUCTS
   // ==========================================
 
-  const loadProducts = useCallback(async () => {
+  const loadProducts = useCallback(async ({ silent = false } = {}) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       setError('');
 
       const data = await getProducts();
@@ -256,11 +252,11 @@ export default function ProductPage() {
       }
 
       setProducts(data);
+      setLoadedAt(new Date());
     } catch (err) {
-      console.error('Không thể tải sản phẩm:', err);
       setError(err?.message || 'Không thể tải danh sách sản phẩm. Vui lòng thử lại.');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
@@ -273,7 +269,6 @@ export default function ProductPage() {
       const response = await getCategories();
       setCategories(normalizeCategories(response));
     } catch (err) {
-      console.error('Không thể tải danh mục:', err);
       setError(err?.message || 'Không thể tải danh mục sản phẩm.');
     }
   }, []);
@@ -287,60 +282,47 @@ export default function ProductPage() {
   // STATISTICS
   // ==========================================
 
-  const activeProducts = useMemo(
-    () => products.filter((product) => product.status === 'ACTIVE'),
-    [products]
+  const tabMatchers = useMemo(
+    () => ({
+      ACTIVE: (product) => product.status === 'ACTIVE',
+      INACTIVE: (product) => product.status === 'INACTIVE',
+      ONLINE: isOnlineProduct,
+      LOW_STOCK: (product) => stockAlert(product) !== null,
+      ALL: () => true
+    }),
+    []
   );
 
-  const inactiveProducts = useMemo(
-    () => products.filter((product) => product.status === 'INACTIVE'),
-    [products]
-  );
-
-  const onlineProducts = useMemo(
-    () => products.filter(isOnlineProduct),
-    [products]
-  );
-
-  const lowStockProducts = useMemo(
-    () => products.filter(isLowStockProduct),
-    [products]
-  );
+  const tabCounts = useMemo(() => {
+    const counts = {};
+    Object.entries(tabMatchers).forEach(([key, match]) => {
+      counts[key] = products.filter(match).length;
+    });
+    return counts;
+  }, [products, tabMatchers]);
 
   // ==========================================
   // SEARCH AND FILTER
   // ==========================================
 
   const filteredProducts = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
+    const keyword = normalizeText(search);
+    // "#12" hoặc "12": khớp đúng mã sản phẩm (không khớp 112, 120...)
+    const idMatch = keyword.match(/^#?(\d+)$/);
+    const matchTab = tabMatchers[activeTab] ?? tabMatchers.ALL;
 
     return products.filter((product) => {
       const matchesSearch =
-        String(product.productName || '').toLowerCase().includes(keyword) ||
-        String(product.productId).toLowerCase().includes(keyword);
+        !keyword ||
+        (idMatch && String(product.productId) === idMatch[1]) ||
+        normalizeText(product.productName).includes(keyword) ||
+        normalizeText(product.searchText).includes(keyword);
 
-      const matchesCategory =
-        categoryFilter === 'ALL' ||
-        String(product.categoryId) === categoryFilter;
+      const matchesCategory = categoryFilter === 'ALL' || String(product.categoryId) === categoryFilter;
 
-      const matchesStatus =
-        statusFilter === 'ALL' || product.status === statusFilter;
-
-      let matchesTab = true;
-
-      if (activeTab === 'ACTIVE') {
-        matchesTab = product.status === 'ACTIVE';
-      } else if (activeTab === 'INACTIVE') {
-        matchesTab = product.status === 'INACTIVE';
-      } else if (activeTab === 'ONLINE') {
-        matchesTab = isOnlineProduct(product);
-      } else if (activeTab === 'LOW_STOCK') {
-        matchesTab = isLowStockProduct(product);
-      }
-
-      return matchesSearch && matchesCategory && matchesStatus && matchesTab;
+      return matchesSearch && matchesCategory && matchTab(product);
     });
-  }, [products, search, categoryFilter, statusFilter, activeTab]);
+  }, [products, search, categoryFilter, activeTab, tabMatchers]);
 
   // ==========================================
   // PAGINATION
@@ -354,9 +336,6 @@ export default function ProductPage() {
     return filteredProducts.slice(start, start + PAGE_SIZE);
   }, [filteredProducts, currentPage]);
 
-  const showingFrom = filteredProducts.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0;
-  const showingTo = Math.min(currentPage * PAGE_SIZE, filteredProducts.length);
-
   function resetPage() {
     setPage(1);
   }
@@ -367,6 +346,14 @@ export default function ProductPage() {
     resetPage();
   }
 
+  function clearFilters() {
+    // Về đúng trạng thái mặc định khi mở trang
+    setSearch('');
+    setCategoryFilter('ALL');
+    setActiveTab('ACTIVE');
+    resetPage();
+  }
+
   // ==========================================
   // NAVIGATION
   // ==========================================
@@ -374,123 +361,6 @@ export default function ProductPage() {
   function viewProduct(productId) {
     if (busy) return;
     navigate(`/products/${productId}`);
-  }
-
-  // ==========================================
-  // INLINE EDIT - START
-  // ==========================================
-
-  function startInlineEdit(product) {
-    if (busy) return;
-
-    setError('');
-    setSuccess('');
-    setEditingProductId(product.productId);
-    setEditForm({
-      productName: product.productName || '',
-      categoryId: String(product.categoryId ?? '')
-    });
-  }
-
-  // ==========================================
-  // INLINE EDIT - CANCEL
-  // ==========================================
-
-  function cancelInlineEdit() {
-    if (saving) return;
-
-    setEditingProductId(null);
-    setEditForm({ productName: '', categoryId: '' });
-    setError('');
-  }
-
-  // ==========================================
-  // INLINE EDIT - SAVE
-  // ==========================================
-
-  async function saveInlineEdit(productId) {
-    if (saving || statusSaving) return;
-
-    setError('');
-    setSuccess('');
-
-    const productName = editForm.productName.trim();
-    const categoryId = Number(editForm.categoryId);
-
-    if (!productName) {
-      setError('Vui lòng nhập tên sản phẩm.');
-      return;
-    }
-
-    if (productName.length > 200) {
-      setError('Tên sản phẩm không được vượt quá 200 ký tự.');
-      return;
-    }
-
-    if (!Number.isInteger(categoryId) || categoryId <= 0) {
-      setError('Vui lòng chọn danh mục hợp lệ.');
-      return;
-    }
-
-    const selectedCategory = categories.find(
-      (category) => Number(category.categoryId) === categoryId
-    );
-
-    if (!selectedCategory) {
-      setError('Danh mục đã chọn không tồn tại.');
-      return;
-    }
-
-    if (selectedCategory.status !== 'ACTIVE') {
-      setError('Vui lòng chọn danh mục đang hoạt động.');
-      return;
-    }
-
-    try {
-      setSaving(true);
-
-      const productDetail = await getProductById(productId);
-
-      if (!productDetail?.product || !Array.isArray(productDetail.variants)) {
-        throw new Error('Không thể tải chi tiết sản phẩm.');
-      }
-
-      const { product, variants } = productDetail;
-
-      if (variants.length === 0) {
-        throw new Error('Sản phẩm phải có ít nhất một biến thể.');
-      }
-
-      const payload = {
-        categoryId,
-        productName,
-        description: product.description ?? '',
-        variants: variants.map((variant) => ({
-          detailId: Number(variant.detailId),
-          size: variant.size,
-          color: variant.color,
-          price: Number(variant.price)
-        }))
-      };
-
-      await updateProduct(productId, payload);
-
-      const updatedProducts = await getProducts();
-
-      if (!Array.isArray(updatedProducts)) {
-        throw new Error('Đã cập nhật sản phẩm nhưng không thể làm mới danh sách.');
-      }
-
-      setProducts(updatedProducts);
-      setEditingProductId(null);
-      setEditForm({ productName: '', categoryId: '' });
-      setSuccess('Cập nhật sản phẩm thành công.');
-    } catch (err) {
-      console.error('Lỗi cập nhật nhanh:', err);
-      setError(err?.message || 'Không thể cập nhật sản phẩm. Vui lòng thử lại.');
-    } finally {
-      setSaving(false);
-    }
   }
 
   // ==========================================
@@ -524,97 +394,76 @@ export default function ProductPage() {
 
       await changeProductStatus(productId, newStatus);
 
-      setProducts((previous) =>
-        previous.map((product) =>
-          product.productId === productId
-            ? { ...product, status: newStatus }
-            : product
-        )
-      );
+      setProducts((previous) => previous.map((product) => (product.productId === productId ? { ...product, status: newStatus } : product)));
 
       setStatusDialogProduct(null);
-      setSuccess(
-        newStatus === 'ACTIVE'
-          ? 'Đã kích hoạt sản phẩm thành công.'
-          : 'Đã ẩn sản phẩm thành công.'
-      );
+      setSuccess(newStatus === 'ACTIVE' ? 'Đã kích hoạt sản phẩm thành công.' : 'Đã ẩn sản phẩm thành công.');
 
-      try {
-        const updatedProducts = await getProducts();
-        if (Array.isArray(updatedProducts)) {
-          setProducts(updatedProducts);
-        }
-      } catch (refreshError) {
-        console.error('Lỗi làm mới danh sách sản phẩm:', refreshError);
-      }
+      await loadProducts({ silent: true });
     } catch (err) {
-      console.error('Lỗi đổi trạng thái sản phẩm:', err);
       setError(err?.message || 'Không thể đổi trạng thái sản phẩm. Vui lòng thử lại.');
+      setStatusDialogProduct(null);
     } finally {
       setStatusSaving(false);
     }
   }
 
   // ==========================================
-  // DELETE PRODUCT (SAFE DELETE)
+  // BÁN ONLINE (bật/tắt cho mọi biến thể đang hoạt động)
   // ==========================================
 
-  function openDeleteDialog(product) {
+  function openOnlineDialog(product) {
     if (busy || !product) return;
 
     setError('');
     setSuccess('');
-    setDeleteDialogProduct(product);
+    setOnlineDialogProduct(product);
   }
 
-  function closeDeleteDialog() {
-    if (deleteSaving) return;
-    setDeleteDialogProduct(null);
+  function closeOnlineDialog() {
+    if (onlineSaving) return;
+    setOnlineDialogProduct(null);
   }
 
-  async function confirmDeleteProduct() {
-    if (!deleteDialogProduct || deleteSaving) return;
+  async function confirmToggleOnline() {
+    if (!onlineDialogProduct || onlineSaving) return;
 
-    const productId = deleteDialogProduct.productId;
-    const productName = deleteDialogProduct.productName;
+    const product = onlineDialogProduct;
+    const enable = !isOnlineProduct(product);
 
     try {
-      setDeleteSaving(true);
+      setOnlineSaving(true);
       setError('');
       setSuccess('');
 
-      await deleteProduct(productId);
+      const result = await setProductOnline(product.productId, enable);
 
       setProducts((previous) =>
-        previous.filter((product) => product.productId !== productId)
+        previous.map((item) =>
+          item.productId === product.productId ? { ...item, onlineVariantCount: Number(result?.onlineVariantCount ?? 0) } : item
+        )
       );
 
-      setDeleteDialogProduct(null);
-      setSuccess(`Đã xóa vĩnh viễn sản phẩm "${productName}" (Mã: #${productId}).`);
-
-      try {
-        const updatedProducts = await getProducts();
-        if (Array.isArray(updatedProducts)) {
-          setProducts(updatedProducts);
-        }
-      } catch (refreshError) {
-        console.error('Lỗi làm mới sau khi xóa:', refreshError);
-      }
+      setOnlineDialogProduct(null);
+      setSuccess(
+        enable
+          ? `Đã bật bán online cho "${product.productName}" (${result?.onlineVariantCount ?? 0}/${result?.variantCount ?? 0} biến thể).`
+          : `Đã tắt bán online cho "${product.productName}".`
+      );
     } catch (err) {
-      console.error('Lỗi xóa sản phẩm:', err);
-      setError(
-        err?.message ||
-        'Không thể xóa sản phẩm. Sản phẩm có thể đã có lịch sử giao dịch trong hệ thống.'
-      );
-      setDeleteDialogProduct(null);
+      setError(err?.message || 'Không thể đổi trạng thái bán online. Vui lòng thử lại.');
+      setOnlineDialogProduct(null);
     } finally {
-      setDeleteSaving(false);
+      setOnlineSaving(false);
     }
   }
 
   // ==========================================
   // RENDER
   // ==========================================
+
+  const onlineTarget = onlineDialogProduct;
+  const enablingOnline = onlineTarget ? !isOnlineProduct(onlineTarget) : false;
 
   return (
     <Box sx={{ maxWidth: 1440, mx: 'auto', pb: 6, color: C.text }}>
@@ -641,36 +490,28 @@ export default function ProductPage() {
             Danh sách sản phẩm
           </Typography>
           <Typography sx={{ fontSize: 13.5, color: C.muted, mt: 0.5, lineHeight: 1.6 }}>
-            Quản lý kho hàng, định giá bán và trạng thái mở bán online cho các sản phẩm
+            Quản lý tồn kho, giá bán và trạng thái mở bán online cho các sản phẩm
           </Typography>
         </Box>
 
         <Stack direction="row" spacing={1.5} alignItems="center">
-          <Button
-            startIcon={<FileExcelOutlined />}
-            disabled={busy}
-            onClick={() => setExcelDialogOpen(true)}
-            sx={{
-              ...outlineButtonSx,
-              color: '#0D9488',
-              borderColor: '#99F6E4',
-              bgcolor: '#F0FDFA',
-              fontWeight: 700,
-              '&:hover': {
-                bgcolor: '#CCFBF1',
-                borderColor: '#5EEAD4'
-              }
-            }}
-          >
+          <Tooltip title={loadedAt ? `Tải lúc ${loadedAt.toLocaleTimeString('vi-VN')} · Nhấn để làm mới` : 'Làm mới'}>
+            <span>
+              <IconButton
+                disabled={busy || loading}
+                onClick={() => loadProducts()}
+                sx={{ width: 44, height: 44, border: `1px solid ${C.border}`, borderRadius: 2.5, color: C.muted }}
+              >
+                <ReloadOutlined spin={loading} style={{ fontSize: 16 }} />
+              </IconButton>
+            </span>
+          </Tooltip>
+
+          <Button startIcon={<FileExcelOutlined />} disabled={busy} onClick={() => setExcelDialogOpen(true)} sx={outlineButtonSx}>
             Nhập từ Excel
           </Button>
 
-          <Button
-            startIcon={<PlusOutlined />}
-            disabled={busy}
-            onClick={() => navigate('/products/add')}
-            sx={primaryButtonSx}
-          >
+          <Button startIcon={<PlusOutlined />} disabled={busy} onClick={() => navigate('/products/add')} sx={primaryButtonSx}>
             Thêm sản phẩm
           </Button>
         </Stack>
@@ -691,19 +532,13 @@ export default function ProductPage() {
       )}
 
       {/* QUICK FILTER TABS */}
-      <Stack
-        direction="row"
-        spacing={1}
-        flexWrap="wrap"
-        useFlexGap
-        sx={{ mb: 3 }}
-      >
+      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 3 }}>
         {[
-          { key: 'ACTIVE', label: 'Đang hoạt động', count: activeProducts.length },
-          { key: 'INACTIVE', label: 'Đã ẩn', count: inactiveProducts.length },
-          { key: 'ONLINE', label: 'Bán online', count: onlineProducts.length },
-          { key: 'LOW_STOCK', label: 'Sắp hết hàng', count: lowStockProducts.length },
-          { key: 'ALL', label: 'Tất cả sản phẩm', count: products.length }
+          { key: 'ACTIVE', label: 'Đang hoạt động' },
+          { key: 'INACTIVE', label: 'Đã ẩn' },
+          { key: 'ONLINE', label: 'Bán online' },
+          { key: 'LOW_STOCK', label: 'Hết / sắp hết hàng' },
+          { key: 'ALL', label: 'Tất cả sản phẩm' }
         ].map((tab) => {
           const selected = activeTab === tab.key;
 
@@ -729,93 +564,21 @@ export default function ProductPage() {
                 }
               }}
             >
-              {tab.label} ({loading ? '—' : tab.count})
+              {tab.label} ({loading ? '—' : tabCounts[tab.key]})
             </Button>
           );
         })}
       </Stack>
 
-      {/* AI IMAGE SEARCH BANNER (PHUOC'S TEAL BOX) */}
-      <Box
-        sx={{
-          bgcolor: '#F0FDFA',
-          borderRadius: 3.5,
-          border: '1px solid #99F6E4',
-          p: { xs: 2.5, sm: 3 },
-          mb: 3
-        }}
-      >
-        <Stack
-          direction={{ xs: 'column', md: 'row' }}
-          alignItems={{ xs: 'flex-start', md: 'center' }}
-          justifyContent="space-between"
-          spacing={2}
-        >
-          <Stack direction="row" spacing={2} alignItems="center">
-            <Box
-              sx={{
-                width: 48,
-                height: 48,
-                bgcolor: C.surface,
-                borderRadius: 2.5,
-                border: '1px solid #99F6E4',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#0F766E',
-                fontSize: 22
-              }}
-            >
-              <PictureOutlined />
-            </Box>
-
-            <Box>
-              <Typography sx={{ fontSize: 15, fontWeight: 800, color: '#0F766E' }}>
-                Tìm kiếm bằng hình ảnh (AI Visual Search)
-              </Typography>
-              <Typography sx={{ fontSize: 13, color: '#115E59', mt: 0.25 }}>
-                Tìm nhanh sản phẩm trong kho bằng hình ảnh chụp hoặc ảnh tải lên từ thiết bị của bạn.
-              </Typography>
-            </Box>
-          </Stack>
-
-          <Stack direction="row" spacing={1.5}>
-            <Tooltip title="Tính năng AI đang hoàn thiện tích hợp">
-              <span>
-                <Button
-                  disabled
-                  startIcon={<UploadOutlined />}
-                  sx={{ ...outlineButtonSx, height: 40, fontSize: 13 }}
-                >
-                  Tải ảnh lên
-                </Button>
-              </span>
-            </Tooltip>
-
-            <Tooltip title="Tính năng Camera đang hoàn thiện tích hợp">
-              <span>
-                <Button
-                  disabled
-                  startIcon={<CameraOutlined />}
-                  sx={{ ...outlineButtonSx, height: 40, fontSize: 13 }}
-                >
-                  Mở camera
-                </Button>
-              </span>
-            </Tooltip>
-          </Stack>
-        </Stack>
-      </Box>
-
-      {/* SEARCH AND FILTER */}
+      {/* SEARCH AND FILTER — trạng thái lọc bằng các tab phía trên */}
       <Box
         sx={{
           mb: 3,
           display: 'grid',
           gridTemplateColumns: {
             xs: '1fr',
-            sm: 'repeat(2, 1fr)',
-            md: 'minmax(200px, 1.8fr) 180px 180px auto'
+            sm: '1fr 1fr',
+            md: 'minmax(200px, 1.8fr) 220px auto'
           },
           gap: { xs: 1.5, lg: 2 },
           alignItems: 'flex-end'
@@ -823,14 +586,12 @@ export default function ProductPage() {
       >
         {/* SEARCH */}
         <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>
-            Tìm kiếm sản phẩm
-          </Typography>
+          <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>Tìm kiếm sản phẩm</Typography>
           <TextField
             fullWidth
             size="small"
             disabled={busy}
-            placeholder="Tìm theo tên sản phẩm hoặc mã ID..."
+            placeholder="Tên sản phẩm, mã #ID, mã vạch, size hoặc màu..."
             value={search}
             onChange={(event) => {
               setSearch(event.target.value);
@@ -859,9 +620,7 @@ export default function ProductPage() {
 
         {/* CATEGORY FILTER */}
         <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>
-            Danh mục
-          </Typography>
+          <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>Danh mục</Typography>
           <Select
             fullWidth
             size="small"
@@ -871,85 +630,24 @@ export default function ProductPage() {
               setCategoryFilter(event.target.value);
               resetPage();
             }}
-            sx={{
-              bgcolor: C.surface,
-              borderRadius: 2.5,
-              height: 44,
-              fontSize: 13.5,
-              '& .MuiOutlinedInput-notchedOutline': { borderColor: C.border },
-              '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: C.cyan },
-              '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: C.cyan }
-            }}
+            sx={filterSelectSx}
           >
             <MenuItem value="ALL">Tất cả danh mục</MenuItem>
             {categories.map((category) => (
               <MenuItem key={category.categoryId} value={String(category.categoryId)}>
                 {category.categoryName}
+                {category.status !== 'ACTIVE' ? ' (Đã ngưng)' : ''}
               </MenuItem>
             ))}
-          </Select>
-        </Box>
-
-        {/* STATUS FILTER */}
-        <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>
-            Trạng thái
-          </Typography>
-          <Select
-            fullWidth
-            size="small"
-            disabled={busy}
-            value={statusFilter}
-            onChange={(event) => {
-              setStatusFilter(event.target.value);
-              resetPage();
-            }}
-            sx={{
-              bgcolor: C.surface,
-              borderRadius: 2.5,
-              height: 44,
-              fontSize: 13.5,
-              '& .MuiOutlinedInput-notchedOutline': { borderColor: C.border },
-              '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: C.cyan },
-              '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: C.cyan }
-            }}
-          >
-            <MenuItem value="ALL">Tất cả trạng thái</MenuItem>
-            <MenuItem value="ACTIVE">Đang hoạt động</MenuItem>
-            <MenuItem value="INACTIVE">Đã ẩn</MenuItem>
           </Select>
         </Box>
 
         {/* Nút Bỏ lọc */}
         <Box sx={{ minWidth: 0, display: 'flex' }}>
           <Button
-            variant="outlined"
-            onClick={() => {
-              setSearch('');
-              setCategoryFilter('ALL');
-              setStatusFilter('ALL');
-              setActiveTab('ALL');
-              resetPage();
-            }}
-            disableRipple
-            sx={{
-              height: 44,
-              px: 2,
-              minWidth: 'unset',
-              borderRadius: 2.5,
-              textTransform: 'none',
-              fontSize: 13,
-              fontWeight: 600,
-              borderColor: C.border,
-              bgcolor: C.surface,
-              color: C.text,
-              whiteSpace: 'nowrap',
-              '&:hover': {
-                bgcolor: '#F8FAFC',
-                borderColor: C.border,
-                color: C.text
-              }
-            }}
+            onClick={clearFilters}
+            disabled={busy}
+            sx={{ ...outlineButtonSx, height: 44, px: 2, fontSize: 13, whiteSpace: 'nowrap', bgcolor: C.surface }}
           >
             Bỏ lọc
           </Button>
@@ -997,7 +695,9 @@ export default function ProductPage() {
                 <TableCell>TỒN KHO</TableCell>
                 <TableCell>TRẠNG THÁI</TableCell>
                 <TableCell>BÁN ONLINE</TableCell>
-                <TableCell align="center" sx={{ pr: 3 }}>THAO TÁC</TableCell>
+                <TableCell align="center" sx={{ pr: 3 }}>
+                  THAO TÁC
+                </TableCell>
               </TableRow>
             </TableHead>
 
@@ -1020,8 +720,11 @@ export default function ProductPage() {
                 paginatedProducts.map((product) => {
                   const isActive = product.status === 'ACTIVE';
                   const isOnline = isOnlineProduct(product);
-                  const lowStock = isLowStockProduct(product);
-                  const isEditing = editingProductId === product.productId;
+                  const alert = stockAlert(product);
+                  const totalStock = Number(product.totalStock ?? 0);
+                  const sellable = Number(product.sellableStock ?? totalStock);
+                  const onlineCount = Number(product.onlineVariantCount ?? 0);
+                  const activeVariants = Number(product.activeVariantCount ?? product.variantCount ?? 0);
 
                   return (
                     <TableRow
@@ -1032,8 +735,8 @@ export default function ProductPage() {
                       }}
                       sx={{
                         cursor: busy ? 'default' : 'pointer',
-                        bgcolor: isEditing ? '#F0FCFE' : C.surface,
-                        '&:hover': { bgcolor: isEditing ? '#F0FCFE' : '#FAFCFE' }
+                        bgcolor: C.surface,
+                        '&:hover': { bgcolor: '#FAFCFE' }
                       }}
                     >
                       {/* PRODUCT NAME */}
@@ -1057,39 +760,11 @@ export default function ProductPage() {
                           </Avatar>
 
                           <Box sx={{ minWidth: 0 }}>
-                            {isEditing ? (
-                              <TextField
-                                autoFocus
-                                size="small"
-                                value={editForm.productName}
-                                disabled={saving}
-                                onClick={(event) => event.stopPropagation()}
-                                onChange={(event) =>
-                                  setEditForm((previous) => ({
-                                    ...previous,
-                                    productName: event.target.value
-                                  }))
-                                }
-                                onKeyDown={(event) => {
-                                  event.stopPropagation();
-                                  if (event.key === 'Enter') {
-                                    event.preventDefault();
-                                    saveInlineEdit(product.productId);
-                                  }
-                                  if (event.key === 'Escape') {
-                                    cancelInlineEdit();
-                                  }
-                                }}
-                                slotProps={{ htmlInput: { maxLength: 200 } }}
-                                sx={{ minWidth: 200, bgcolor: C.surface, ...inputSx(false) }}
-                              />
-                            ) : (
-                              <Typography sx={{ fontSize: 13.5, fontWeight: 800, color: '#0F172A' }} noWrap>
-                                {product.productName}
-                              </Typography>
-                            )}
+                            <Typography sx={{ fontSize: 13.5, fontWeight: 800, color: '#0F172A' }} noWrap>
+                              {product.productName}
+                            </Typography>
                             <Typography sx={{ fontSize: 12, color: '#94A3B8', mt: 0.25 }}>
-                              Mã ID: #{product.productId}
+                              Mã ID: #{product.productId} · {activeVariants} biến thể
                             </Typography>
                           </Box>
                         </Stack>
@@ -1097,76 +772,50 @@ export default function ProductPage() {
 
                       {/* CATEGORY */}
                       <TableCell>
-                        {isEditing ? (
-                          <Select
-                            size="small"
-                            fullWidth
-                            disabled={saving}
-                            value={editForm.categoryId}
-                            onClick={(event) => event.stopPropagation()}
-                            onChange={(event) =>
-                              setEditForm((previous) => ({
-                                ...previous,
-                                categoryId: event.target.value
-                              }))
-                            }
-                            sx={{
-                              minWidth: 150,
-                              bgcolor: C.surface,
-                              fontSize: 13,
-                              borderRadius: 2
-                            }}
-                          >
-                            {categories.map((category) => {
-                              const isCurrent = String(category.categoryId) === editForm.categoryId;
-                              return (
-                                <MenuItem
-                                  key={category.categoryId}
-                                  value={String(category.categoryId)}
-                                  disabled={category.status !== 'ACTIVE' && !isCurrent}
-                                >
-                                  {category.categoryName}
-                                  {category.status !== 'ACTIVE' ? ' (Đã ngưng)' : ''}
-                                </MenuItem>
-                              );
-                            })}
-                          </Select>
-                        ) : (
-                          <Typography sx={{ fontSize: 13.5, color: '#334155', fontWeight: 500 }}>
-                            {product.categoryName || '—'}
-                          </Typography>
-                        )}
+                        <Typography sx={{ fontSize: 13.5, color: '#334155', fontWeight: 500 }}>{product.categoryName || '—'}</Typography>
                       </TableCell>
 
                       {/* SELLING PRICE */}
                       <TableCell>
-                        <Typography sx={{ fontSize: 13.5, fontWeight: 800, color: '#0F172A' }}>
-                          {displayPrice(product)}
-                        </Typography>
+                        <Typography sx={{ fontSize: 13.5, fontWeight: 800, color: '#0F172A' }}>{displayPrice(product)}</Typography>
                       </TableCell>
 
-                      {/* STOCK */}
+                      {/* STOCK — tồn của biến thể đang hoạt động; có thể bán = tồn − đang giữ cho đơn */}
                       <TableCell>
-                        <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: C.text }}>
-                          {product.totalStock ?? 0}
-                        </Typography>
-                        {lowStock && (
+                        <Tooltip
+                          title={
+                            sellable !== totalStock
+                              ? `Tồn ${totalStock}, đang giữ cho đơn ${totalStock - sellable}, có thể bán ${sellable}`
+                              : 'Tổng tồn của các biến thể đang hoạt động'
+                          }
+                        >
+                          <Typography component="span" sx={{ fontSize: 13.5, fontWeight: 700, color: C.text }}>
+                            {totalStock}
+                            {sellable !== totalStock && (
+                              <Box component="span" sx={{ fontSize: 12, fontWeight: 600, color: C.muted, ml: 0.75 }}>
+                                (bán được {sellable})
+                              </Box>
+                            )}
+                          </Typography>
+                        </Tooltip>
+                        {alert && (
                           <Box
                             sx={{
-                              display: 'inline-flex',
+                              display: 'flex',
+                              width: 'fit-content',
                               alignItems: 'center',
                               px: 1.25,
                               py: 0.3,
                               borderRadius: 4,
-                              bgcolor: C.cream,
-                              color: C.creamText,
+                              bgcolor: alert.level === 'OUT' ? '#FEE2E2' : C.cream,
+                              color: alert.level === 'OUT' ? '#B91C1C' : C.creamText,
                               fontSize: 11,
                               fontWeight: 700,
                               letterSpacing: '0.01em',
                               mt: 0.5
                             }}
                           >
-                            Sắp hết
+                            {alert.label}
                           </Box>
                         )}
                       </TableCell>
@@ -1185,51 +834,12 @@ export default function ProductPage() {
                                   event.stopPropagation();
                                   openStatusDialog(product);
                                 }}
-                                sx={{
-                                  width: 34,
-                                  height: 18,
-                                  p: 0,
-                                  '& .MuiSwitch-switchBase': {
-                                    p: '2px',
-                                    transitionDuration: '200ms',
-                                    '&.Mui-checked': {
-                                      transform: 'translateX(16px)',
-                                      color: '#67E8F9',
-                                      '& + .MuiSwitch-track': {
-                                        bgcolor: '#BAF2F8',
-                                        opacity: 1,
-                                        border: 0
-                                      }
-                                    }
-                                  },
-                                  '& .MuiSwitch-thumb': {
-                                    boxShadow: '0 1px 2px rgba(0,0,0,0.15)',
-                                    width: 14,
-                                    height: 14
-                                  },
-                                  '& .MuiSwitch-track': {
-                                    borderRadius: 9,
-                                    bgcolor: '#CBD5E1',
-                                    opacity: 1
-                                  }
-                                }}
+                                sx={switchSx}
                               />
                             </span>
                           </Tooltip>
 
-                          <Box
-                            sx={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              px: 1.5,
-                              py: 0.35,
-                              borderRadius: 1.75,
-                              fontSize: 13,
-                              fontWeight: 600,
-                              bgcolor: isActive ? '#E7F6F1' : '#F0F2F4',
-                              color: isActive ? '#168B70' : '#75869F'
-                            }}
-                          >
+                          <Box sx={chipSx(isActive ? '#E7F6F1' : '#F0F2F4', isActive ? '#168B70' : '#75869F')}>
                             {isActive ? 'Hoạt động' : 'Đã ẩn'}
                           </Box>
                         </Stack>
@@ -1238,171 +848,84 @@ export default function ProductPage() {
                       {/* ONLINE SALE */}
                       <TableCell>
                         <Stack direction="row" alignItems="center" spacing={1.25} sx={{ pt: 0.5 }}>
-                          <Tooltip title={`${product.onlineVariantCount ?? 0}/${product.variantCount ?? 0} biến thể được bật bán online`}>
+                          <Tooltip
+                            title={
+                              !isActive
+                                ? 'Sản phẩm đang ẩn — kích hoạt trước khi bật bán online'
+                                : isOnline
+                                  ? `${onlineCount}/${activeVariants} biến thể đang bán online · Nhấn để tắt`
+                                  : 'Nhấn để bật bán online cho mọi biến thể đang hoạt động'
+                            }
+                          >
                             <span>
                               <Switch
                                 checked={isOnline}
-                                disabled
                                 size="small"
-                                sx={{
-                                  width: 34,
-                                  height: 18,
-                                  p: 0,
-                                  '& .MuiSwitch-switchBase': {
-                                    p: '2px',
-                                    transitionDuration: '200ms',
-                                    '&.Mui-checked': {
-                                      transform: 'translateX(16px)',
-                                      color: '#67E8F9',
-                                      '& + .MuiSwitch-track': {
-                                        bgcolor: '#BAF2F8',
-                                        opacity: 1,
-                                        border: 0
-                                      }
-                                    }
-                                  },
-                                  '& .MuiSwitch-thumb': {
-                                    boxShadow: '0 1px 2px rgba(0,0,0,0.15)',
-                                    width: 14,
-                                    height: 14
-                                  },
-                                  '& .MuiSwitch-track': {
-                                    borderRadius: 9,
-                                    bgcolor: '#CBD5E1',
-                                    opacity: 1
-                                  }
+                                disabled={busy || !isActive}
+                                onClick={(event) => event.stopPropagation()}
+                                onChange={(event) => {
+                                  event.stopPropagation();
+                                  openOnlineDialog(product);
                                 }}
+                                sx={switchSx}
                               />
                             </span>
                           </Tooltip>
-                          <Box
-                            sx={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              px: 1.5,
-                              py: 0.35,
-                              borderRadius: 1.75,
-                              fontSize: 13,
-                              fontWeight: 600,
-                              bgcolor: isOnline ? '#E7F6F1' : '#F0F2F4',
-                              color: isOnline ? '#168B70' : '#75869F'
-                            }}
-                          >
-                            {isOnline ? 'Đang bật' : 'Đang tắt'}
+                          <Box sx={chipSx(isOnline ? '#E7F6F1' : '#F0F2F4', isOnline ? '#168B70' : '#75869F')}>
+                            {isOnline
+                              ? onlineCount < activeVariants
+                                ? `${onlineCount}/${activeVariants} biến thể`
+                                : 'Đang bật'
+                              : 'Đang tắt'}
                           </Box>
                         </Stack>
                       </TableCell>
 
                       {/* ACTIONS */}
                       <TableCell align="center" sx={{ pr: 3 }}>
-                        {isEditing ? (
-                          <Stack direction="row" alignItems="center" justifyContent="center" spacing={1}>
-                            <Tooltip title="Lưu thay đổi">
-                              <span>
-                                <IconButton
-                                  size="small"
-                                  disabled={saving}
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    saveInlineEdit(product.productId);
-                                  }}
-                                  sx={{
-                                    color: '#059669',
-                                    bgcolor: '#E8F6F0',
-                                    '&:hover': { bgcolor: '#D1FAE5' }
-                                  }}
-                                >
-                                  {saving ? <CircularProgress size={16} /> : <CheckOutlined />}
-                                </IconButton>
-                              </span>
-                            </Tooltip>
+                        <Stack direction="row" alignItems="center" justifyContent="center" spacing={0.5}>
+                          <Tooltip title="Xem chi tiết">
+                            <IconButton
+                              size="small"
+                              disabled={busy}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                viewProduct(product.productId);
+                              }}
+                              sx={{
+                                color: '#64748B',
+                                p: 0.75,
+                                '&:hover': {
+                                  color: '#0F172A',
+                                  bgcolor: 'transparent'
+                                }
+                              }}
+                            >
+                              <EyeOutlined style={{ fontSize: 17 }} />
+                            </IconButton>
+                          </Tooltip>
 
-                            <Tooltip title="Hủy bỏ">
-                              <span>
-                                <IconButton
-                                  size="small"
-                                  disabled={saving}
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    cancelInlineEdit();
-                                  }}
-                                  sx={{
-                                    color: C.error,
-                                    bgcolor: '#FEE2E2',
-                                    '&:hover': { bgcolor: '#FECACA' }
-                                  }}
-                                >
-                                  <CloseOutlined />
-                                </IconButton>
-                              </span>
-                            </Tooltip>
-                          </Stack>
-                        ) : (
-                          <Stack direction="row" alignItems="center" justifyContent="center" spacing={0.5}>
-                            <Tooltip title="Xem chi tiết">
-                              <IconButton
-                                size="small"
-                                disabled={busy}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  viewProduct(product.productId);
-                                }}
-                                sx={{
-                                  color: '#64748B',
-                                  p: 0.75,
-                                  '&:hover': {
-                                    color: '#0F172A',
-                                    bgcolor: 'transparent'
-                                  }
-                                }}
-                              >
-                                <EyeOutlined style={{ fontSize: 17 }} />
-                              </IconButton>
-                            </Tooltip>
-
-                            <Tooltip title="Chỉnh sửa sản phẩm">
-                              <IconButton
-                                size="small"
-                                disabled={busy}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  navigate(`/products/${product.productId}/edit`);
-                                }}
-                                sx={{
-                                  color: '#64748B',
-                                  p: 0.75,
-                                  '&:hover': {
-                                    color: '#0F172A',
-                                    bgcolor: 'transparent'
-                                  }
-                                }}
-                              >
-                                <EditOutlined style={{ fontSize: 17 }} />
-                              </IconButton>
-                            </Tooltip>
-
-                            <Tooltip title="Xóa vĩnh viễn sản phẩm">
-                              <IconButton
-                                size="small"
-                                disabled={busy}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  openDeleteDialog(product);
-                                }}
-                                sx={{
-                                  color: '#64748B',
-                                  p: 0.75,
-                                  '&:hover': {
-                                    color: '#EF4444',
-                                    bgcolor: 'transparent'
-                                  }
-                                }}
-                              >
-                                <DeleteOutlined style={{ fontSize: 17 }} />
-                              </IconButton>
-                            </Tooltip>
-                          </Stack>
-                        )}
+                          <Tooltip title="Chỉnh sửa sản phẩm">
+                            <IconButton
+                              size="small"
+                              disabled={busy}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                navigate(`/products/${product.productId}/edit`);
+                              }}
+                              sx={{
+                                color: '#64748B',
+                                p: 0.75,
+                                '&:hover': {
+                                  color: '#0F172A',
+                                  bgcolor: 'transparent'
+                                }
+                              }}
+                            >
+                              <EditOutlined style={{ fontSize: 17 }} />
+                            </IconButton>
+                          </Tooltip>
+                        </Stack>
                       </TableCell>
                     </TableRow>
                   );
@@ -1412,14 +935,12 @@ export default function ProductPage() {
                 <TableRow>
                   <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
                     <Typography sx={{ fontSize: 14, fontWeight: 800, color: '#0F172A' }}>
-                      {products.length === 0
-                        ? 'Chưa có sản phẩm nào trong kho'
-                        : 'Không tìm thấy sản phẩm phù hợp'}
+                      {products.length === 0 ? 'Chưa có sản phẩm nào trong kho' : 'Không tìm thấy sản phẩm phù hợp'}
                     </Typography>
                     <Typography sx={{ fontSize: 13, color: C.muted, mt: 0.5 }}>
                       {products.length === 0
                         ? 'Hãy thêm sản phẩm mới hoặc nhập tệp danh sách từ file Excel.'
-                        : 'Hãy thử thay đổi từ khóa tìm kiếm hoặc bỏ bớt bộ lọc.'}
+                        : 'Hãy thử thay đổi từ khóa tìm kiếm, chọn tab khác hoặc bấm "Bỏ lọc".'}
                     </Typography>
                   </TableCell>
                 </TableRow>
@@ -1474,10 +995,10 @@ export default function ProductPage() {
 
       <Box sx={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, mt: 2.5 }}>
         <Typography sx={{ fontSize: 12.5, color: C.muted }}>
-          Số lượng sản phẩm online phản ánh các biến thể đã được kích hoạt bán trên hệ thống web.
+          Tồn kho và giá chỉ tính biến thể đang hoạt động. "Hết / sắp hết" dùng ngưỡng tối thiểu đặt ở màn hình Tồn kho.
         </Typography>
         <Typography sx={{ fontSize: 12.5, color: C.muted }}>
-          Dữ liệu kiểm kho được đồng bộ thời gian thực từ THORS Inventory.
+          {loadedAt ? `Dữ liệu tải lúc ${loadedAt.toLocaleTimeString('vi-VN')}` : ''}
         </Typography>
       </Box>
 
@@ -1500,33 +1021,18 @@ export default function ProductPage() {
           </DialogContentText>
 
           {statusDialogProduct?.status === 'ACTIVE' && (
-            <Box
-              sx={{
-                bgcolor: '#FFFDE7',
-                border: '1.5px solid #FDE047',
-                borderRadius: 2.5,
-                p: 2,
-                mt: 2
-              }}
-            >
-              <Typography sx={{ fontSize: 12.5, color: '#713F12', lineHeight: 1.6 }}>
+            <Box sx={{ bgcolor: C.cream, borderRadius: 2.5, p: 2, mt: 2 }}>
+              <Typography sx={{ fontSize: 12.5, color: C.creamText, lineHeight: 1.6 }}>
                 Sản phẩm này sẽ không còn hiển thị để khách hàng mua online. Dữ liệu kho và thông tin sản phẩm vẫn được bảo lưu an toàn.
               </Typography>
             </Box>
           )}
 
           {statusDialogProduct?.status === 'INACTIVE' && (
-            <Box
-              sx={{
-                bgcolor: '#F0FDFA',
-                border: '1px solid #99F6E4',
-                borderRadius: 2.5,
-                p: 2,
-                mt: 2
-              }}
-            >
-              <Typography sx={{ fontSize: 12.5, color: '#115E59', lineHeight: 1.6 }}>
-                Sản phẩm sẽ hoạt động trở lại trong hệ thống quản lý. Trạng thái bán online vẫn phụ thuộc vào cấu hình biến thể của sản phẩm.
+            <Box sx={{ bgcolor: '#F0FCFE', border: `1px solid ${C.cyan}`, borderRadius: 2.5, p: 2, mt: 2 }}>
+              <Typography sx={{ fontSize: 12.5, color: C.cyanText, lineHeight: 1.6 }}>
+                Sản phẩm sẽ hoạt động trở lại trong hệ thống quản lý. Trạng thái bán online vẫn phụ thuộc vào cấu hình biến thể của sản
+                phẩm.
               </Typography>
             </Box>
           )}
@@ -1543,11 +1049,11 @@ export default function ProductPage() {
             sx={{
               ...outlineButtonSx,
               border: 'none',
-              bgcolor: statusDialogProduct?.status === 'ACTIVE' ? '#FEF3C7' : C.cyan,
-              color: statusDialogProduct?.status === 'ACTIVE' ? '#92400E' : '#0F172A',
+              bgcolor: statusDialogProduct?.status === 'ACTIVE' ? C.cream : C.cyan,
+              color: statusDialogProduct?.status === 'ACTIVE' ? C.creamText : '#0F172A',
               fontWeight: 800,
               '&:hover': {
-                bgcolor: statusDialogProduct?.status === 'ACTIVE' ? '#FDE68A' : C.cyanHover
+                bgcolor: statusDialogProduct?.status === 'ACTIVE' ? C.creamHover : C.cyanHover
               }
             }}
           >
@@ -1556,59 +1062,58 @@ export default function ProductPage() {
         </DialogActions>
       </Dialog>
 
-      {/* DELETE PRODUCT DIALOG */}
+      {/* ONLINE SALE DIALOG */}
       <Dialog
-        open={Boolean(deleteDialogProduct)}
-        onClose={closeDeleteDialog}
+        open={Boolean(onlineTarget)}
+        onClose={closeOnlineDialog}
         maxWidth="xs"
         fullWidth
         PaperProps={{ sx: { borderRadius: 3.5, p: 1 } }}
       >
-        <DialogTitle sx={{ fontWeight: 800, color: '#DC2626', fontSize: 18 }}>
-          Xác nhận xóa vĩnh viễn sản phẩm
+        <DialogTitle sx={{ fontWeight: 800, color: '#0F172A', fontSize: 18 }}>
+          {enablingOnline ? 'Bật bán online' : 'Tắt bán online'}
         </DialogTitle>
 
         <DialogContent>
           <DialogContentText sx={{ fontSize: 14, color: C.text, lineHeight: 1.6 }}>
-            Bạn có chắc chắn muốn xóa sản phẩm{' '}
-            <strong>{deleteDialogProduct?.productName}</strong> (Mã ID: #{deleteDialogProduct?.productId})?
+            {enablingOnline ? 'Mở bán' : 'Ngừng bán'} <strong>{onlineTarget?.productName}</strong> trên website?
           </DialogContentText>
 
           <Box
             sx={{
-              bgcolor: '#FFFDE7',
-              border: '1.5px solid #FDE047',
+              bgcolor: enablingOnline ? '#F0FCFE' : C.cream,
+              border: enablingOnline ? `1px solid ${C.cyan}` : 'none',
               borderRadius: 2.5,
               p: 2,
               mt: 2
             }}
           >
-            <Typography sx={{ fontSize: 12.5, color: '#713F12', lineHeight: 1.6 }}>
-              Hành động này sẽ xóa hoàn toàn sản phẩm, các biến thể và hình ảnh liên quan khỏi hệ thống nếu sản phẩm chưa phát sinh lịch sử giao dịch. Nếu sản phẩm đã từng có đơn hàng hoặc phiếu kho, hệ thống sẽ ngăn chặn việc xóa để đảm bảo toàn vẹn dữ liệu.
+            <Typography sx={{ fontSize: 12.5, color: enablingOnline ? C.cyanText : C.creamText, lineHeight: 1.6 }}>
+              {enablingOnline
+                ? 'Mọi biến thể đang hoạt động và đã có giá sẽ hiển thị trên cửa hàng online. Muốn bật/tắt từng size, màu hãy vào trang chi tiết sản phẩm.'
+                : 'Mọi biến thể sẽ bị ẩn khỏi cửa hàng online; khách không thể thêm vào giỏ hay đặt mới. Bán tại quầy và Facebook không bị ảnh hưởng.'}
             </Typography>
           </Box>
         </DialogContent>
 
         <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
-          <Button onClick={closeDeleteDialog} disabled={deleteSaving} sx={outlineButtonSx}>
+          <Button onClick={closeOnlineDialog} disabled={onlineSaving} sx={outlineButtonSx}>
             Hủy
           </Button>
 
           <Button
-            disabled={deleteSaving}
-            onClick={confirmDeleteProduct}
+            disabled={onlineSaving}
+            onClick={confirmToggleOnline}
             sx={{
               ...outlineButtonSx,
               border: 'none',
-              bgcolor: '#FEE2E2',
-              color: '#DC2626',
+              bgcolor: enablingOnline ? C.cyan : C.cream,
+              color: enablingOnline ? '#0F172A' : C.creamText,
               fontWeight: 800,
-              '&:hover': {
-                bgcolor: '#FCA5A5'
-              }
+              '&:hover': { bgcolor: enablingOnline ? C.cyanHover : C.creamHover }
             }}
           >
-            {deleteSaving ? 'Đang xóa...' : 'Xác nhận xóa'}
+            {onlineSaving ? 'Đang lưu...' : enablingOnline ? 'Bật bán online' : 'Tắt bán online'}
           </Button>
         </DialogActions>
       </Dialog>

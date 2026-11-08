@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -48,6 +49,20 @@ class ProductEndpointSecurityTest {
         mvc.perform(post("/api/categories").with(customer).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content(BODY))
                 .andExpect(status().isForbidden());
+        mvc.perform(patch("/api/products/1/online").with(customer).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"enabled\":true}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void customerCannotReadAdminProductList() throws Exception {
+        var customer = user("khach").roles("CUSTOMER");
+
+        // Khách xem sản phẩm qua /api/shop/**; danh sách quản trị có sản phẩm ẩn và tồn kho thật
+        mvc.perform(get("/api/products").with(customer)).andExpect(status().isForbidden());
+        mvc.perform(get("/api/products/1").with(customer)).andExpect(status().isForbidden());
+        mvc.perform(get("/api/products").with(user("nhanvien").roles("FAMILY_MEMBER")))
+                .andExpect(result -> assertNotEquals(403, result.getResponse().getStatus()));
     }
 
     @Test
