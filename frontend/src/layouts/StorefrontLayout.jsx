@@ -105,7 +105,8 @@ function StoreHeader({ categories }) {
         ['/profile', 'Tài khoản của tôi'],
         ['/orders', 'Đơn hàng'],
         ['/addresses', 'Địa chỉ giao hàng'],
-        ['/notifications', 'Thông báo']
+        ['/notifications', 'Thông báo'],
+        ['/promotions', 'Khuyến mãi']
       ]
     : [
         ['/workspace', 'Trang quản lý'],
@@ -138,6 +139,9 @@ function StoreHeader({ categories }) {
               {c.categoryName}
             </Box>
           ))}
+          <Box component={RouterLink} to="/promotions" sx={{ ...linkSx, color: C.teal, fontWeight: 600 }}>
+            Khuyến mãi
+          </Box>
           <Box component={RouterLink} to="/#uu-dai" sx={{ ...linkSx, color: C.accent, fontWeight: 700 }}>
             Sale
           </Box>

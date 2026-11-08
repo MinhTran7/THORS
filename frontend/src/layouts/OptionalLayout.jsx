@@ -19,7 +19,8 @@ const CUSTOMER_STOREFRONT_PATHS = [
   '/notifications/:id',
   '/addresses',
   '/addresses/new',
-  '/addresses/:id/edit'
+  '/addresses/:id/edit',
+  '/promotions'
 ];
 
 /**

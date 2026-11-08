@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link as RouterLink, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import { Box } from '@mui/material';
+import { keyframes } from '@emotion/react';
 import { useAuth } from 'features/auth/AuthProvider';
 import { api } from 'services/http';
+import { getPromotions } from 'services/promotionService';
 import { money, priceText } from './ShopCommon';
 import PendingCartHandler from './PendingCartHandler';
 import ShopBanner from './ShopBanner';
-import { C, SERIF, Icon, btnSx, container, eyebrowSx, focusRing, h2Sx, linkSx, scrollToId, section, srOnly } from './storeTheme';
+import { C, RADIUS, SERIF, Icon, btnSx, container, eyebrowSx, focusRing, h2Sx, linkSx, scrollToId, section, srOnly } from './storeTheme';
 
 /**
  * Trang chủ cửa hàng (đường dẫn '/'). Header, footer và thanh thông báo nằm ở layouts/StorefrontLayout.
@@ -375,29 +377,109 @@ function ProductCard({ product, promo, sx }) {
   );
 }
 
-function PromoBanner({ promos }) {
-  if (promos.length === 0) return null;
-  const top = promos[0];
-  const best = promos.reduce((acc, p) => Math.max(acc, parseInt(String(p.discountLabel).replace(/\D/g, ''), 10) || 0), 0);
+/* ---------- Banner sales ---------- */
+
+const rise = keyframes`from { transform: translateY(105%); } to { transform: none; }`;
+const fadeUp = keyframes`from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; }`;
+const drift = keyframes`50% { transform: translate(-1.5%, 1%) rotate(-1deg); }`;
+
+const fade = (delay) => ({ opacity: 0, animation: `${fadeUp} .6s ${delay}s forwards` });
+
+const LETTERS = [
+  ['S', -30, 400, -12],
+  ['A', 300, 520, 8],
+  ['L', 640, 600, -16],
+  ['E', 900, 450, 14]
+];
+
+const discountText = (p) => {
+  const v = Number(p.discountValue) || 0;
+  if (['PERCENT', 'PERCENTAGE'].includes(p.discountType)) return `${v}%`;
+  return v >= 1000 ? `${Math.round(v / 1000)}K` : money(v);
+};
+
+const latestVoucher = (promos, vouchers) => {
+  const now = new Date();
+  const active = vouchers.filter((v) => (!v.status || v.status === 'ACTIVE') && new Date(v.startDate) <= now && now <= new Date(v.endDate));
+  if (active.length > 0) {
+    const v = active.reduce((a, b) => (b.promotionId > a.promotionId ? b : a));
+    const note = [
+      Number(v.minOrderValue) > 0 && `Đơn từ ${money(v.minOrderValue)}`,
+      v.applyScope === 'ALL' ? 'Toàn shop' : 'Một số sản phẩm',
+      `Đến ${new Date(v.endDate).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}`
+    ];
+    return { ...v, note: note.filter(Boolean).join(' · ') };
+  }
+  const p = promos[0];
+  if (!p) return null;
+  const count = promos.filter((x) => x.promotionName === p.promotionName).length;
+  return { ...p, name: p.promotionName, note: count > 1 ? `Áp dụng cho ${count} sản phẩm` : p.productName };
+};
+
+function RiseLine({ children, size, spacing, delay }) {
+  return (
+    <Box component="span" sx={{ display: 'block', overflow: 'hidden', pt: '.16em', fontSize: size, letterSpacing: `${spacing} !important` }}>
+      <Box component="span" sx={{ display: 'inline-block', transform: 'translateY(105%)', animation: `${rise} .8s cubic-bezier(.2,.8,.2,1) ${delay}s forwards` }}>
+        {children}
+      </Box>
+    </Box>
+  );
+}
+
+function PromoBanner({ promos, vouchers }) {
+  const voucher = useMemo(() => latestVoucher(promos, vouchers), [promos, vouchers]);
+  if (!voucher) return null;
+
   return (
     <Box component="section" id="uu-dai" sx={{ ...section, scrollMarginTop: 96 }}>
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', bgcolor: C.accent, color: '#FFFFFF' }}>
-        <Box sx={{ flex: { xs: '1 1 100%', sm: '1 1 480px' }, minHeight: { xs: 360, sm: 420 }, display: 'flex' }}>
-          <ProductPhoto src={top.imageUrl} name={top.productName} dark />
+      <Box
+        sx={{
+          position: 'relative',
+          height: { xs: 480, md: 560 },
+          borderRadius: RADIUS.card,
+          overflow: 'hidden',
+          bgcolor: '#E98AAB',
+          color: '#FFFFFF',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          textAlign: 'center',
+          px: 3
+        }}
+      >
+        <Box
+          component="svg"
+          viewBox="0 0 1200 560"
+          preserveAspectRatio="xMidYMid slice"
+          aria-hidden="true"
+          sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', animation: `${drift} 14s ease-in-out infinite` }}
+        >
+          {LETTERS.map(([ch, x, y, deg]) => (
+            <text key={ch} x={x} y={y} transform={`rotate(${deg} ${x} ${y})`} fontSize="460" fontWeight="800" fill="none" stroke="#C9475F" strokeWidth="3">
+              {ch}
+            </text>
+          ))}
         </Box>
-        <Box sx={{ flex: '1 1 420px', p: { xs: '40px 24px', sm: '64px 56px' }, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2.5 }}>
-          <Box component="p" sx={eyebrowSx}>
-            Ưu đãi có hạn
+
+        <Box sx={{ position: 'relative' }}>
+          <Box component="p" sx={{ ...eyebrowSx, fontSize: { xs: 18, md: 24 }, fontWeight: 800, letterSpacing: '.12em', ...fade(0.2) }}>
+            {voucher.name}
           </Box>
-          <Box component="h2" sx={{ m: 0, fontFamily: SERIF, fontWeight: 400, fontSize: { xs: 38, sm: 52 }, lineHeight: 1.1 }}>
-            {best > 0 ? `Giảm đến ${best}%` : top.promotionName}
+          <Box sx={{ width: 32, height: 3, bgcolor: '#FFFFFF', mx: 'auto', my: 2.5, ...fade(0.3) }} />
+          <Box component="h2" sx={{ m: 0, fontWeight: '800 !important', lineHeight: 0.86 }}>
+            <RiseLine size={{ xs: 22, md: 30 }} spacing=".08em" delay={0.4}>
+              GIẢM ĐẾN
+            </RiseLine>
+            <RiseLine size={{ xs: 110, md: 180 }} spacing="-3px" delay={0.5}>
+              {discountText(voucher)}
+            </RiseLine>
           </Box>
-          <Box component="p" sx={{ m: 0, fontSize: 16, lineHeight: 1.6, maxWidth: 400 }}>
-            {top.promotionName} — áp dụng cho {promos.length} sản phẩm đang khuyến mãi.
+          <Box sx={{ mt: 2.25, fontSize: 14, fontWeight: 700, letterSpacing: '.14em', textTransform: 'uppercase', ...fade(0.8) }}>
+            {voucher.note}
           </Box>
-          <Box>
-            <Box component={RouterLink} to={`/shop/products/${top.productId}`} sx={btnSx('light')}>
-              MUA ƯU ĐÃI
+          <Box sx={{ mt: 3.5, ...fade(1) }}>
+            <Box component={RouterLink} to="/promotions" sx={{ ...btnSx('light'), color: C.ink, '&:hover': { bgcolor: '#FFF3B0', borderColor: '#FFF3B0', color: C.ink } }}>
+              KHÁM PHÁ KHO VOUCHER
             </Box>
           </Box>
         </Box>
@@ -488,6 +570,7 @@ export default function ShopPage() {
   const categoryId = Number(params.get('category')) || 0;
 
   const [promos, setPromos] = useState([]);
+  const [vouchers, setVouchers] = useState([]);
 
   const [sort, setSort] = useState('newest');
   const [items, setItems] = useState([]);
@@ -502,6 +585,13 @@ export default function ShopPage() {
       .then((d) => setPromos(d.items || []))
       .catch(() => setPromos([]));
   }, []);
+
+  useEffect(() => {
+    if (!account) return;
+    getPromotions()
+      .then((d) => setVouchers(Array.isArray(d) ? d : d?.data || []))
+      .catch(() => setVouchers([]));
+  }, [account]);
 
   const promoMap = useMemo(() => new Map(promos.map((p) => [p.productId, p])), [promos]);
 
@@ -556,7 +646,7 @@ export default function ShopPage() {
         <>
           <ShopBanner />
           <Categories categories={categories} onPick={pickCategory} />
-          <PromoBanner promos={promos} />
+          <PromoBanner promos={promos} vouchers={vouchers} />
         </>
       )}
 
