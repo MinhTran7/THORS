@@ -350,23 +350,22 @@ try {
   await quick.getByRole('button', { name: 'Giảm Đơn giá nhập dòng 1' }).click();
   assert.equal(await buy.inputValue(), '80.000');
 
-  // Sale price: required (empty is not 0); never copied from the purchase price.
+  // Sale price: optional (empty is not 0, no error); never copied from the purchase price.
   const sell = quick.getByLabel('Giá bán dòng 1', { exact: true });
   assert.equal(await sell.inputValue(), '');
-  await quick.getByText('Nhập giá bán.', { exact: true }).first().waitFor();
+  assert.equal(await quick.getByText('Nhập giá bán.', { exact: true }).count(), 0);
   await sell.fill('120000');
   await quick.getByLabel('Tên sản phẩm').click();
   assert.equal(await sell.inputValue(), '120.000');
   await quick.getByText(/800\.000/).first().waitFor();
 
-  // Second variant: duplicate flagged; empty sale price is flagged as required.
+  // Second variant: duplicate flagged; empty sale price is allowed.
   await quick.getByRole('button', { name: 'Thêm màu/size', exact: true }).click();
   await quick.getByLabel('Size dòng 2').fill('l');
   await quick.getByText('Trùng màu/size trong form.', { exact: true }).first().waitFor();
   await quick.getByLabel('Size dòng 2').fill('XL');
   await quick.getByLabel('Số lượng đặt dòng 2', { exact: true }).fill('5');
   await quick.getByLabel('Đơn giá nhập dòng 2', { exact: true }).fill('90000');
-  await quick.getByText('Nhập giá bán.', { exact: true }).last().waitFor();
   await quick.getByLabel('Giá bán dòng 2', { exact: true }).fill('130000');
   await quick.getByText(/450\.000/).first().waitFor();
   await quick.getByText(/Tổng tiền nhập:\s*1\.250\.000/).waitFor();

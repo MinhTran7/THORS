@@ -85,8 +85,7 @@ public final class WarehouseRequests {
     public record QuickVariant(
             @NotBlank @Size(max = 30) String color,
             @NotBlank @Size(max = 10) String size,
-            // Required: the sale price is written to product_detail.price by the product module.
-            @NotNull
+            // Optional: when given it is written to product_detail.price; empty leaves the price NULL.
             @DecimalMin("0")
             @DecimalMax("999999999999")
             @Digits(integer = 12, fraction = 0)

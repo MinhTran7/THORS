@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Alert, Box, Button, Checkbox, Chip, CircularProgress, MenuItem, Stack, TextField, Typography } from '@mui/material';
+import { Alert, Box, Button, Checkbox, Chip, CircularProgress, MenuItem, Stack, TextField, Tooltip, Typography } from '@mui/material';
 import useSWR from 'swr';
 import MainCard from 'components/MainCard';
 import { api } from 'services/http';
@@ -10,6 +10,7 @@ import { money, number, skuLabel, stockStateColor, stockStateLabel, variantLabel
 import { exportSheet } from './excelWorkbook';
 import BarcodePrintDialog from './BarcodePrintDialog';
 import BarcodeScannerDialog from './BarcodeScannerDialog';
+import useBarcodeScanner from './useBarcodeScanner';
 import InventoryDetail from './InventoryDetail';
 
 // Every filter, the page and the opened variant live in the URL, so opening a detail (or another
@@ -60,8 +61,11 @@ export default function InventoryPage() {
   const [params, setParams] = useSearchParams();
   const [query, setQuery] = useState(params.get('q') || '');
   const [selected, setSelected] = useState({});
-  const [printing, setPrinting] = useState(false);
+  // Variants open in the print dialog: the selected rows, or the one row whose "In tem" was clicked.
+  const [printing, setPrinting] = useState(null);
   const [scanning, setScanning] = useState(false);
+  // A code read by a USB/Bluetooth scanner anywhere on this page: opens the lookup with that code.
+  const [scanRequest, setScanRequest] = useState(null);
   const [notice, setNotice] = useState('');
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState('');
@@ -90,6 +94,13 @@ export default function InventoryPage() {
   const slowDays = Number(value('slowDays')) || 30;
   const filtered = FILTERS.some((k) => !['page', 'pageSize', 'sort'].includes(k) && value(k));
   const detail = Number(value('detail')) || null;
+  useBarcodeScanner(
+    (code) => {
+      setScanRequest({ code, n: Date.now() });
+      setScanning(true);
+    },
+    !printing && !detail
+  );
   const selectedRows = Object.values(selected);
   const toggleState = (s) => update({ state: state === s ? '' : s });
   const shelves = snapshot.tiers
@@ -280,12 +291,18 @@ export default function InventoryPage() {
       </MainCard>
       <MainCard>
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mb: 2, flexWrap: 'wrap', gap: 1, alignItems: { sm: 'center' } }}>
-          <Button variant="contained" onClick={() => setScanning(true)}>
-            Quét mã tìm hàng
-          </Button>
-          <Button variant="outlined" disabled={!selectedRows.length} onClick={() => setPrinting(true)}>
-            In tem ({number(selectedRows.length)})
-          </Button>
+          <Tooltip describeChild title="Có máy quét USB/Bluetooth: không cần bấm, cứ bóp cò quét tem trên trang này là ra kết quả.">
+            <Button variant="contained" onClick={() => setScanning(true)}>
+              Quét mã tìm hàng
+            </Button>
+          </Tooltip>
+          <Tooltip title={selectedRows.length ? '' : 'Tick chọn các dòng cần in, hoặc bấm “In tem” trên từng dòng'}>
+            <span>
+              <Button variant="outlined" disabled={!selectedRows.length} onClick={() => setPrinting(selectedRows)}>
+                In tem các dòng đã chọn ({number(selectedRows.length)})
+              </Button>
+            </span>
+          </Tooltip>
           {owner && (
             <Button
               variant="outlined"
@@ -500,9 +517,24 @@ export default function InventoryPage() {
                 key: 'open',
                 label: '',
                 render: (r) => (
-                  <Button size="small" onClick={(e) => (e.stopPropagation(), update({ detail: r.detail_id, page: value('page') }))}>
-                    Chi tiết
-                  </Button>
+                  <Stack direction="row" spacing={0.5} sx={{ justifyContent: 'flex-end' }}>
+                    <Tooltip title={r.barcode ? `In tem ${r.barcode}` : 'Chưa có mã vạch — chủ cửa hàng bấm “Tạo mã” trước'}>
+                      <span>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          disabled={!r.barcode}
+                          onClick={(e) => (e.stopPropagation(), setPrinting([r]))}
+                          sx={{ whiteSpace: 'nowrap' }}
+                        >
+                          In tem
+                        </Button>
+                      </span>
+                    </Tooltip>
+                    <Button size="small" onClick={(e) => (e.stopPropagation(), update({ detail: r.detail_id, page: value('page') }))}>
+                      Chi tiết
+                    </Button>
+                  </Stack>
                 )
               }
             ]}
@@ -510,8 +542,16 @@ export default function InventoryPage() {
         )}
       </MainCard>
       {detail && <InventoryDetail id={detail} onClose={() => update({ detail: '', page: value('page') })} onChanged={() => mutate()} />}
-      {printing && <BarcodePrintDialog variants={selectedRows} onClose={() => setPrinting(false)} />}
-      {scanning && <BarcodeScannerDialog onClose={() => setScanning(false)} />}
+      {printing && <BarcodePrintDialog variants={printing} onClose={() => setPrinting(null)} />}
+      {scanning && (
+        <BarcodeScannerDialog
+          scanRequest={scanRequest}
+          onClose={() => {
+            setScanning(false);
+            setScanRequest(null);
+          }}
+        />
+      )}
     </>
   );
 }
