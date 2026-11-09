@@ -145,9 +145,9 @@ export default function StoreNotificationBell() {
               width: 380,
               maxWidth: 'calc(100vw - 24px)',
               mt: 1,
-              borderRadius: 0,
-              border: `1px solid ${C.line}`,
-              boxShadow: '0 12px 32px rgba(17, 17, 17, 0.10)',
+              borderRadius: '20px',
+              border: 0,
+              boxShadow: '0 24px 50px -24px rgba(31, 41, 55, 0.35), 0 0 0 1px #F2EBD3',
               fontFamily: SANS,
               color: C.ink
             }
@@ -166,7 +166,7 @@ export default function StoreNotificationBell() {
             borderBottom: `1px solid ${C.line}`
           }}
         >
-          <Box component="h2" sx={{ m: 0, fontFamily: SERIF, fontWeight: 400, fontSize: 22 }}>
+          <Box component="h2" sx={{ m: 0, fontFamily: SERIF, fontWeight: 800, letterSpacing: '-0.3px', fontSize: 20 }}>
             Thông báo
           </Box>
           <Box component="button" type="button" disabled={busy || unreadCount === 0} onClick={readAll} sx={textBtnSx}>

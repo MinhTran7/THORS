@@ -297,7 +297,7 @@ function CustomerView({ order, status, actions, busy, onAction, actionError, onP
             {canPay && (
               <Box sx={{ mt: 2 }}>
                 {payError && (
-                  <Alert severity="error" sx={{ mb: 1.5, borderRadius: 0, fontSize: 13 }}>
+                  <Alert severity="error" sx={{ mb: 1.5, borderRadius: '14px', fontSize: 13 }}>
                     {payError}
                   </Alert>
                 )}
@@ -682,7 +682,7 @@ export default function OrderDetailPage() {
         onClose={() => !busy && setDialog(null)}
         fullWidth
         maxWidth="xs"
-        slotProps={isCustomer ? { paper: { sx: { ...storeDialogPaperSx, ...storeInputsSx, '& .MuiButton-root': { borderRadius: 0, fontFamily: SANS } } } } : undefined}
+        slotProps={isCustomer ? { paper: { sx: { ...storeDialogPaperSx, ...storeInputsSx, '& .MuiButton-root': { borderRadius: '14px', fontFamily: SANS, textTransform: 'none', fontWeight: 700 } } } } : undefined}
       >
         <DialogTitle>{dialog?.label}</DialogTitle>
         <DialogContent>

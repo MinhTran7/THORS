@@ -14,12 +14,12 @@ import {
   TableCell,
   TableContainer,
   TableHead,
-  TablePagination,
   TableRow,
   TextField,
   Typography
 } from '@mui/material';
 import MainCard from 'components/MainCard';
+import { Pager } from 'features/account/components/Blocks';
 import { statusText, number } from './model';
 import { api } from 'services/http';
 import { useWarehouse } from './WarehouseContext';
@@ -163,21 +163,18 @@ export function DataTable({ columns, rows, empty = 'Chưa có dữ liệu.', onR
           </TableBody>
         </Table>
       </TableContainer>
-      <TablePagination
-        component="div"
-        count={server ? server.total : rows.length}
-        rowsPerPage={size}
+      <Pager
         page={current}
-        onPageChange={(_, p) => (server ? server.onPage(p) : setPage(p))}
-        onRowsPerPageChange={(e) => {
-          if (server) return server.onSize(Number(e.target.value));
-          setSize(Number(e.target.value));
+        total={server ? server.total : rows.length}
+        size={size}
+        noun="dòng"
+        onPage={(p) => (server ? server.onPage(p) : setPage(p))}
+        onSize={(value) => {
+          if (server) return server.onSize(value);
+          setSize(value);
           setPage(0);
         }}
-        rowsPerPageOptions={[20, 50, 100]}
-        labelRowsPerPage="Số dòng"
-        labelDisplayedRows={({ from, to, count }) => `${from}–${to} / ${count}`}
-        getItemAriaLabel={(type) => (type === 'next' ? 'Trang sau' : 'Trang trước')}
+        sizeOptions={[20, 50, 100]}
       />
     </>
   );

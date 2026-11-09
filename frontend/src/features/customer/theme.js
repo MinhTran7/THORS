@@ -1,43 +1,48 @@
+// Màu và kiểu nút / thẻ của trang địa chỉ giao hàng, đồng bộ với trang Đăng nhập và các trang tài khoản của khách
 export const C = {
-  cyan: '#8EECF5',
-  cyanHover: '#76DCED',
-  text: '#1E293B',
-  muted: '#64748B',
-  border: '#E2E8F0',
-  borderLight: '#F1F5F9',
+  cyan: '#A8F1F8',
+  cyanHover: '#8FE6EF',
+  cyanInk: '#0E3A41',
+  teal: '#1BA3B3',
+  text: '#1F2937',
+  muted: '#6B7280',
+  border: '#E7EBEE',
+  borderLight: '#F1F3F5',
   surface: '#FFFFFF',
-  error: '#EF4444'
+  error: '#D14343'
 };
 
 export const primaryButtonSx = {
   bgcolor: C.cyan,
-  color: '#0F172A',
-  fontWeight: 700,
-  fontSize: 13.5,
+  color: C.cyanInk,
+  fontWeight: 800,
+  fontSize: 14.5,
   px: 3,
-  height: 42,
-  borderRadius: 2.5,
+  height: 46,
+  borderRadius: '14px',
   textTransform: 'none',
   boxShadow: 'none',
-  '&:hover': { bgcolor: C.cyanHover, boxShadow: '0 2px 8px rgba(142, 236, 245, 0.4)' },
-  '&.Mui-disabled': { bgcolor: C.border, color: '#94A3B8' }
+  '&:hover': { bgcolor: C.cyanHover, boxShadow: 'none' },
+  '&.Mui-disabled': { bgcolor: '#E5E7EB', color: '#9CA3AF' }
 };
 
 export const outlineButtonSx = {
   textTransform: 'none',
-  fontWeight: 600,
-  fontSize: 13.5,
-  color: C.text,
+  fontWeight: 700,
+  fontSize: 14.5,
+  color: '#374151',
+  bgcolor: C.surface,
   px: 2.5,
-  height: 42,
-  borderRadius: 2.5,
-  border: `1px solid ${C.border}`,
-  '&:hover': { bgcolor: C.borderLight }
+  height: 46,
+  borderRadius: '14px',
+  border: `1.5px solid ${C.border}`,
+  '&:hover': { bgcolor: '#FAFDFD', borderColor: C.cyan }
 };
 
+// Thẻ trắng bo góc, bóng nhẹ như khung form Đăng nhập
 export const cardSx = {
   bgcolor: C.surface,
-  borderRadius: 3.5,
-  border: `1px solid ${C.border}`,
-  boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+  borderRadius: '24px',
+  border: 0,
+  boxShadow: '0 24px 50px -30px rgba(31, 41, 55, 0.25), 0 0 0 1px #F2EBD3'
 };

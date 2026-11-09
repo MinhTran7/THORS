@@ -198,7 +198,7 @@ export default function NotificationPage() {
           <Box
             sx={{
               mt: 1,
-              '& .MuiButton-root[aria-current="page"]': { bgcolor: C.ink, color: '#FFFFFF' }
+              '& .MuiButton-root[aria-current="page"]': { bgcolor: C.cyan, color: C.cyanInk }
             }}
           >
             <Pager

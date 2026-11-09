@@ -19,7 +19,6 @@ import {
   InputAdornment,
   Menu,
   MenuItem,
-  Pagination,
   Select,
   Stack,
   Switch,
@@ -33,6 +32,7 @@ import {
   Tooltip,
   Typography
 } from '@mui/material';
+import { Pager } from 'features/account/components/Blocks';
 
 import {
   AppstoreOutlined,
@@ -301,15 +301,6 @@ export default function CategoryPage() {
       start + PAGE_SIZE
     );
   }, [filteredCategories, currentPage]);
-
-  const showingFrom = filteredCategories.length
-    ? (currentPage - 1) * PAGE_SIZE + 1
-    : 0;
-
-  const showingTo = Math.min(
-    currentPage * PAGE_SIZE,
-    filteredCategories.length
-  );
 
   function handleSearchChange(value) {
     setSearch(value);
@@ -930,35 +921,14 @@ export default function CategoryPage() {
 
         <Divider />
 
-        <Stack
-          direction={{ xs: 'column', sm: 'row' }}
-          justifyContent="space-between"
-          alignItems="center"
-          spacing={2}
-          sx={{ px: 2, py: 1.5 }}
-        >
-          <Typography
-            fontSize={11}
-            color={COLORS.muted}
-          >
-            Showing {showingFrom}–{showingTo} of{' '}
-            {filteredCategories.length} categories
-          </Typography>
-
-          <Pagination
-            count={pageCount}
-            page={currentPage}
-            onChange={(_, value) => setPage(value)}
-            size="small"
-            shape="rounded"
-            sx={{
-              '& .Mui-selected': {
-                bgcolor: `${COLORS.cyan} !important`,
-                color: COLORS.text
-              }
-            }}
-          />
-        </Stack>
+        <Pager
+          page={currentPage - 1}
+          totalPages={pageCount}
+          total={filteredCategories.length}
+          size={PAGE_SIZE}
+          noun="danh mục"
+          onPage={(p) => setPage(p + 1)}
+        />
       </Card>
 
 

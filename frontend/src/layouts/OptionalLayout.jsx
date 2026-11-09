@@ -16,7 +16,10 @@ const CUSTOMER_STOREFRONT_PATHS = [
   '/profile/edit',
   '/profile/password',
   '/notifications',
-  '/notifications/:id'
+  '/notifications/:id',
+  '/addresses',
+  '/addresses/new',
+  '/addresses/:id/edit'
 ];
 
 /**

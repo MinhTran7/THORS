@@ -331,6 +331,8 @@ export default function ProfilePage() {
     try {
       const result = await accountsApi.linkGoogle();
       sessionStorage.setItem('thorsReturnTo', '/profile');
+      // Đánh dấu là liên kết (không phải đăng nhập) để sau khi Google trả về vẫn quay lại Hồ sơ
+      sessionStorage.setItem('thorsLinking', '1');
       window.location.assign(result.url);
     } catch (e) {
       setError(e.message || 'Không thể liên kết tài khoản Google. Vui lòng thử lại.');
