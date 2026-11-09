@@ -748,6 +748,43 @@ public class OrderRepository {
                 days);
     }
 
+    // ------------------------------------------------------------------
+    // Ghi nhận thanh toán online (PayOS)
+    // ------------------------------------------------------------------
+
+    /** Đơn đang chờ ghi nhận thanh toán: trạng thái trước khi ghi nhận để biết cần báo gì. */
+    public record Payable(int orderId, int userId, String orderNumber, String orderStatus, String paymentStatus) {}
+
+    /** Khóa dòng (FOR UPDATE) để webhook và lần kiểm tra trạng thái chạy cùng lúc không báo trùng. */
+    public Optional<Payable> findPayableForUpdate(int orderId) {
+        return db.query(
+                        "SELECT order_id, user_id, order_number, order_status, payment_status"
+                                + " FROM orders WHERE order_id = ? FOR UPDATE",
+                        (rs, i) ->
+                                new Payable(
+                                        rs.getInt("order_id"),
+                                        rs.getInt("user_id"),
+                                        rs.getString("order_number"),
+                                        rs.getString("order_status"),
+                                        rs.getString("payment_status")),
+                        orderId)
+                .stream()
+                .findFirst();
+    }
+
+    /** Đánh dấu đã thanh toán; đơn đang chờ thanh toán thì chuyển sang chờ xác nhận. */
+    public void markOnlinePaid(int orderId) {
+        db.update(
+                """
+                UPDATE orders
+                SET payment_status = 'PAID',
+                    order_status = CASE WHEN order_status = 'AWAITING_PAYMENT'
+                                        THEN 'PENDING_CONFIRMATION' ELSE order_status END
+                WHERE order_id = ?
+                """,
+                orderId);
+    }
+
     private record StatusCount(String status, long count) {}
 
     /** Số đơn theo từng trạng thái; customerId = null thì tính mọi đơn của loại đó. */

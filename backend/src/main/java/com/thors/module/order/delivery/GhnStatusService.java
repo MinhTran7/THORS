@@ -105,10 +105,19 @@ public class GhnStatusService {
                             "Đơn " + t.orderNumber() + " đã được GHN giao thành công.");
                 notifyOwner(t, "GHN đã giao đơn", "Đơn " + t.orderNumber() + " đã được GHN giao thành công.");
             }
-            case "FAILED" -> notifyOwner(t, "GHN giao không thành công",
-                    "Đơn " + t.orderNumber() + " giao không thành công (" + status + "). Vui lòng kiểm tra trên GHN.");
-            case "RETURNING" -> notifyOwner(t, "Đơn đang hoàn về",
-                    "Đơn " + t.orderNumber() + " đang được GHN hoàn về cửa hàng.");
+            case "FAILED" -> {
+                notifyCustomer(t, "Giao hàng không thành công",
+                        "GHN chưa giao được đơn " + t.orderNumber()
+                                + ". Cửa hàng sẽ liên hệ với bạn để sắp xếp lại việc giao hàng.");
+                notifyOwner(t, "GHN giao không thành công",
+                        "Đơn " + t.orderNumber() + " giao không thành công (" + status + "). Vui lòng kiểm tra trên GHN.");
+            }
+            case "RETURNING" -> {
+                notifyCustomer(t, "Đơn hàng đang được hoàn về",
+                        "Đơn " + t.orderNumber() + " không giao được và đang được GHN hoàn về cửa hàng.");
+                notifyOwner(t, "Đơn đang hoàn về",
+                        "Đơn " + t.orderNumber() + " đang được GHN hoàn về cửa hàng.");
+            }
             case "RETURNED" -> notifyOwner(t, "Đơn đã hoàn về",
                     "Đơn " + t.orderNumber() + " đã được GHN hoàn về cửa hàng.");
             case "CANCELLED" -> {

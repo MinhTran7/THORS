@@ -19,4 +19,13 @@ public class NotificationViews {
             LocalDateTime createdAt) {}
 
     public record Page(List<Item> items, int page, int size, long total, int totalPages) {}
+
+    /**
+     * Cài đặt nhận thông báo. available = false khi DB chưa có bảng notification_mute: frontend ẩn công
+     * tắc, mọi người vẫn nhận đủ thông báo.
+     */
+    public record Preferences(boolean available, boolean promotion) {}
+
+    /** Body của PUT /api/notifications/preferences. */
+    public record UpdatePreferences(Boolean promotion) {}
 }

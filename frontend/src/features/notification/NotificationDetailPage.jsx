@@ -13,7 +13,7 @@ import { entityPath, notificationsApi, refreshNotifications } from './api';
 
 const BACK = { to: '/notifications', label: 'Tất cả thông báo' };
 
-const RELATED_LABEL = { ORDER: 'Xem đơn hàng', USER: 'Mở trang tài khoản' };
+const RELATED_LABEL = { ORDER: 'Xem đơn hàng', USER: 'Mở trang tài khoản', PROMOTION: 'Xem khuyến mãi' };
 
 /** /notifications/:id: xem đầy đủ một thông báo; mở trang là coi như đã đọc. */
 export default function NotificationDetailPage() {

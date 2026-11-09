@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
-import { Alert, Box, Button, ButtonBase, Typography } from '@mui/material';
+import { Alert, Box, Button, ButtonBase, Switch, Typography } from '@mui/material';
 import { StoreAccountShell, storePanelSx, useIsCustomer } from 'features/account/components/StoreAccount';
 import { C, SERIF } from 'features/shop/storeTheme';
 import { Stack } from 'features/account/components/Flex';
@@ -15,7 +15,7 @@ import { StatusPill } from 'features/account/components/Chips';
 import { FilterSelect, PageHeader, Pager, Toolbar } from 'features/account/components/Blocks';
 import { useToast } from 'features/account/components/Toast';
 import { notificationTypeLabel } from './constants';
-import { customerNotificationPath, entityPath, notificationsApi, refreshNotifications, UNREAD_KEY } from './api';
+import { customerNotificationPath, entityPath, notificationsApi, PREFERENCES_KEY, refreshNotifications, UNREAD_KEY } from './api';
 
 const FILTER_OPTIONS = [
   { value: 'all', label: 'Tất cả thông báo' },
@@ -38,8 +38,25 @@ export default function NotificationPage() {
   });
   const unread = useSWR(UNREAD_KEY, notificationsApi.unreadCount, { revalidateOnFocus: false });
 
+  // Chỉ khách nhận thông báo khuyến mãi nên chỉ khách thấy công tắc
+  const prefs = useSWR(isCustomer ? PREFERENCES_KEY : null, notificationsApi.preferences, { revalidateOnFocus: false });
+  const [savingPrefs, setSavingPrefs] = useState(false);
+
   const items = list.data?.items ?? [];
   const unreadCount = unread.data?.count ?? 0;
+
+  async function togglePromotion(enabled) {
+    setSavingPrefs(true);
+    try {
+      const next = await notificationsApi.updatePreferences({ promotion: enabled });
+      await prefs.mutate(next, { revalidate: false });
+      showToast(enabled ? 'Đã bật thông báo khuyến mãi.' : 'Đã tắt thông báo khuyến mãi.');
+    } catch (e) {
+      showToast(e.message, 'error');
+    } finally {
+      setSavingPrefs(false);
+    }
+  }
 
   async function open(item) {
     try {
@@ -80,6 +97,39 @@ export default function NotificationPage() {
           </Button>
         }
       >
+        {/* Bật / tắt thông báo khuyến mãi; ẩn khi DB chưa chạy migration notification_mute */}
+        {prefs.data?.available && (
+          <Box
+            component="label"
+            sx={{
+              ...storePanelSx,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 2,
+              px: { xs: 2.5, sm: 3.5 },
+              py: 2,
+              mb: 3,
+              cursor: 'pointer'
+            }}
+          >
+            <Box component="span" sx={{ display: 'block', minWidth: 0 }}>
+              <Box component="span" sx={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink }}>
+                Nhận thông báo khuyến mãi
+              </Box>
+              <Box component="span" sx={{ display: 'block', mt: 0.5, fontSize: 13, color: C.muted, lineHeight: 1.5 }}>
+                Báo khi cửa hàng có chương trình khuyến mãi mới. Thông báo đơn hàng và tài khoản vẫn luôn được gửi.
+              </Box>
+            </Box>
+            <Switch
+              checked={prefs.data.promotion}
+              disabled={savingPrefs}
+              onChange={(event) => togglePromotion(event.target.checked)}
+              inputProps={{ 'aria-label': 'Nhận thông báo khuyến mãi' }}
+            />
+          </Box>
+        )}
+
         {/* Lọc: Tất cả / Chưa đọc, kiểu tab gạch chân như trang đơn hàng */}
         <Box role="tablist" aria-label="Lọc thông báo" sx={{ display: 'flex', gap: 3, borderBottom: `1px solid ${C.line}`, mb: 3 }}>
           {FILTER_OPTIONS.map((option) => {

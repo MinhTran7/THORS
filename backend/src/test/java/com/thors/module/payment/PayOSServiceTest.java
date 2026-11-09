@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.thors.common.ApiException;
 import com.thors.config.Settings;
 import com.thors.module.account.entity.Account;
+import com.thors.module.order.service.OrderService;
 import com.thors.module.payment.config.PayOSProperties;
 import com.thors.module.payment.dto.CreatePaymentLinkRequest;
 import com.thors.module.payment.dto.PayOSWebhookPayload;
@@ -29,6 +30,9 @@ class PayOSServiceTest {
     @Mock
     private PaymentRepository paymentRepository;
 
+    @Mock
+    private OrderService orderService;
+
     private PayOSProperties properties;
     private Settings settings;
     private ObjectMapper objectMapper;
@@ -48,7 +52,7 @@ class PayOSServiceTest {
 
         settings = new Settings("http://localhost:3000", null, null, null, null, null);
         objectMapper = new ObjectMapper();
-        service = new PayOSService(properties, settings, paymentRepository, objectMapper);
+        service = new PayOSService(properties, settings, paymentRepository, objectMapper, orderService);
     }
 
     @Test
@@ -99,7 +103,7 @@ class PayOSServiceTest {
         assertEquals(0, res.get("error"));
 
         verify(paymentRepository).markPaymentSuccess("1793600000");
-        verify(paymentRepository).markOrderPaid(10);
+        verify(orderService).onOnlinePaymentPaid(10);
     }
 
     @Test

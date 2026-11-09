@@ -233,6 +233,53 @@ public class OrderService {
     }
 
     /**
+     * Module thanh toán gọi khi xác nhận khách đã trả tiền online (webhook PayOS hoặc lần kiểm tra trạng
+     * thái), thay cho việc tự cập nhật bảng orders. Gọi nhiều lần cho cùng một đơn cũng chỉ báo một lần.
+     *
+     * <ul>
+     *   <li>Đơn đang chờ thanh toán: chuyển sang chờ xác nhận, báo khách và báo chủ shop có đơn mới.
+     *   <li>Đơn đã hủy / hết hạn / bị từ chối mà khách vẫn trả tiền: báo chủ shop để hoàn tiền.
+     * </ul>
+     */
+    @Transactional
+    public void onOnlinePaymentPaid(int orderId) {
+        var p = orders.findPayableForUpdate(orderId).orElse(null);
+        if (p == null || "PAID".equalsIgnoreCase(p.paymentStatus())) return;
+        orders.markOnlinePaid(orderId);
+
+        String number = p.orderNumber();
+        switch (p.orderStatus()) {
+            case OrderStatus.AWAITING_PAYMENT -> {
+                notifyCustomer(p.userId(), orderId, "Thanh toán thành công",
+                        "Đơn " + number + " đã được thanh toán và đang chờ cửa hàng xác nhận.");
+                notifyOwnersNewOrder(orderId, number);
+            }
+            case OrderStatus.CANCELLED, OrderStatus.EXPIRED, OrderStatus.REJECTED -> {
+                notifyCustomer(p.userId(), orderId, "Đã nhận thanh toán cho đơn đã đóng",
+                        "Cửa hàng đã nhận tiền cho đơn " + number
+                                + " nhưng đơn đã đóng trước đó. Cửa hàng sẽ liên hệ để hoàn tiền cho bạn.");
+                notifications.toRole(
+                        OWNER_ROLE,
+                        NotificationTypes.ORDER_STATUS,
+                        "Cần hoàn tiền cho khách",
+                        "Đơn " + number + " đã " + closedLabel(p.orderStatus())
+                                + " nhưng khách vừa thanh toán online. Vui lòng hoàn tiền cho khách.",
+                        NotificationTypes.ENTITY_ORDER,
+                        orderId);
+            }
+            default -> {}
+        }
+    }
+
+    private static String closedLabel(String status) {
+        return switch (status) {
+            case OrderStatus.EXPIRED -> "hết hạn thanh toán";
+            case OrderStatus.REJECTED -> "bị từ chối";
+            default -> "bị hủy";
+        };
+    }
+
+    /**
      * Chuyển trạng thái đơn. Owner đi theo luồng xác nhận -> giao -> hoàn tất (hoặc từ chối); Customer
      * chỉ hủy được đơn của mình khi chưa được xác nhận. Mỗi lần chuyển đều gửi thông báo cho bên còn lại.
      * Owner xác nhận đơn (sang chờ lấy hàng) thì trừ tồn kho ngay trong cùng transaction: mỗi dòng ghi
@@ -359,7 +406,9 @@ public class OrderService {
                             "Đơn " + number + " đã được khách xác nhận nhận hàng.",
                             NotificationTypes.ENTITY_ORDER,
                             orderId);
-            case OrderStatus.CANCELLED ->
+            // Đơn hủy lúc còn chờ thanh toán thì chủ shop chưa từng được báo có đơn, nên không báo hủy
+            case OrderStatus.CANCELLED -> {
+                if (OrderStatus.PENDING_CONFIRMATION.equals(current))
                     notifications.toRole(
                             OWNER_ROLE,
                             NotificationTypes.ORDER_STATUS,
@@ -367,6 +416,7 @@ public class OrderService {
                             "Đơn " + number + " đã bị khách hủy: " + finalReason,
                             NotificationTypes.ENTITY_ORDER,
                             orderId);
+            }
             default -> {}
         }
         return detail(actor, orderId);
@@ -419,6 +469,14 @@ public class OrderService {
                     "Đơn hàng hoàn tất",
                     "Đơn " + due.orderNumber() + " đã tự động hoàn tất sau " + AUTO_COMPLETE_DAYS
                             + " ngày kể từ khi giao.");
+            notifications.toRole(
+                    OWNER_ROLE,
+                    NotificationTypes.ORDER_STATUS,
+                    "Đơn hàng tự động hoàn tất",
+                    "Đơn " + due.orderNumber() + " đã tự hoàn tất vì khách chưa xác nhận sau "
+                            + AUTO_COMPLETE_DAYS + " ngày kể từ khi giao.",
+                    NotificationTypes.ENTITY_ORDER,
+                    due.orderId());
             count++;
         }
         return count;

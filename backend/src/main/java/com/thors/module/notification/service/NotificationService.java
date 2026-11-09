@@ -4,6 +4,9 @@ import com.thors.common.ApiException;
 import com.thors.module.account.entity.Account;
 import com.thors.module.notification.dto.NotificationViews.Item;
 import com.thors.module.notification.dto.NotificationViews.Page;
+import com.thors.module.notification.dto.NotificationViews.Preferences;
+import com.thors.module.notification.dto.NotificationViews.UpdatePreferences;
+import com.thors.module.notification.repository.NotificationMuteSchema;
 import com.thors.module.notification.repository.NotificationRepository;
 import org.springframework.stereotype.Service;
 
@@ -12,9 +15,30 @@ public class NotificationService {
     private static final int MAX_SIZE = 50;
 
     private final NotificationRepository repository;
+    private final NotificationMuteSchema muteSchema;
 
-    public NotificationService(NotificationRepository repository) {
+    public NotificationService(NotificationRepository repository, NotificationMuteSchema muteSchema) {
         this.repository = repository;
+        this.muteSchema = muteSchema;
+    }
+
+    /** Cài đặt nhận thông báo của chính mình. Chưa tắt gì thì mặc định nhận hết. */
+    public Preferences preferences(Account actor) {
+        if (!muteSchema.ready()) return new Preferences(false, true);
+        return new Preferences(true, !repository.isMuted(actor.id(), NotificationTypes.PROMOTION));
+    }
+
+    /** Bật / tắt nhận thông báo khuyến mãi. Chỉ ảnh hưởng thông báo gửi sau thời điểm này. */
+    public Preferences updatePreferences(Account actor, UpdatePreferences request) {
+        if (!muteSchema.ready())
+            throw new ApiException(
+                    503,
+                    "NOTIFICATION_PREFERENCES_UNAVAILABLE",
+                    "Chức năng bật/tắt thông báo chưa sẵn sàng (database chưa cập nhật).");
+        if (request == null || request.promotion() == null)
+            throw new ApiException(400, "NOTIFICATION_PREFERENCES", "Vui lòng chọn bật hoặc tắt thông báo khuyến mãi.");
+        repository.setMuted(actor.id(), NotificationTypes.PROMOTION, !request.promotion());
+        return preferences(actor);
     }
 
     /** View Notification: mọi người dùng đã đăng nhập chỉ xem thông báo của chính mình. */

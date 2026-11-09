@@ -1,6 +1,8 @@
 package com.thors.module.promotion.service;
 
 import com.thors.common.ApiException;
+import com.thors.module.notification.service.NotificationPublisher;
+import com.thors.module.notification.service.NotificationTypes;
 import com.thors.module.promotion.dto.CreatePromotionRequest;
 import com.thors.module.promotion.dto.UpdatePromotionRequest;
 import com.thors.module.promotion.entity.Promotion;
@@ -11,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -21,15 +24,20 @@ public class PromotionService {
     private static final BigDecimal ZERO = BigDecimal.ZERO;
     private static final BigDecimal ONE_HUNDRED = new BigDecimal("100");
 
+    private static final DateTimeFormatter NOTICE_TIME = DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy");
+
     private final PromotionRepository repository;
     private final SessionAccess sessionAccess;
+    private final NotificationPublisher notifications;
 
     public PromotionService(
             PromotionRepository repository,
-            SessionAccess sessionAccess
+            SessionAccess sessionAccess,
+            NotificationPublisher notifications
     ) {
         this.repository = repository;
         this.sessionAccess = sessionAccess;
+        this.notifications = notifications;
     }
 
     public List<Promotion> getAll() {
@@ -130,6 +138,8 @@ public class PromotionService {
 
         repository.replacePromotionProducts(createdId, productIds);
 
+        notifyCustomersCreated(createdId, name, type, value, startDate, endDate);
+
         return withProductIds(
                 repository.findById(createdId).orElseThrow(this::notFound)
         );
@@ -221,6 +231,42 @@ public class PromotionService {
         }
 
         repository.replacePromotionProducts(id, productIds);
+    }
+
+    /**
+     * Báo cho mọi khách hàng khi có khuyến mãi mới. Không có job nào chạy lúc khuyến mãi bắt đầu, nên
+     * khuyến mãi bắt đầu sau cũng được báo ngay lúc tạo, kèm thời gian bắt đầu.
+     */
+    private void notifyCustomersCreated(
+            int promotionId,
+            String name,
+            String type,
+            BigDecimal value,
+            LocalDateTime startDate,
+            LocalDateTime endDate
+    ) {
+        String discount = "PERCENT".equals(type)
+                ? "giảm " + value.stripTrailingZeros().toPlainString() + "%"
+                : "giảm " + String.format(Locale.forLanguageTag("vi-VN"), "%,d", value.longValue()) + "đ";
+        boolean startsNow = !startDate.isAfter(LocalDateTime.now());
+
+        String title = startsNow ? "Khuyến mãi mới đang diễn ra" : "Sắp có khuyến mãi mới";
+        String message = startsNow
+                ? "Khuyến mãi \"" + name + "\" (" + discount + ") đã bắt đầu, áp dụng đến "
+                        + NOTICE_TIME.format(endDate) + "."
+                : "Khuyến mãi \"" + name + "\" (" + discount + ") sẽ bắt đầu từ "
+                        + NOTICE_TIME.format(startDate) + " đến " + NOTICE_TIME.format(endDate) + ".";
+
+        // Trang khuyến mãi của khách chỉ hiện khuyến mãi đang chạy, nên khuyến mãi chưa bắt đầu không gắn
+        // liên kết: khách bấm vào sẽ mở trang chi tiết thông báo để đọc thời gian bắt đầu
+        notifications.toRole(
+                "CUSTOMER",
+                NotificationTypes.PROMOTION,
+                title,
+                message,
+                startsNow ? NotificationTypes.ENTITY_PROMOTION : null,
+                startsNow ? promotionId : null
+        );
     }
 
     private String normalizeApplyScope(String scope) {

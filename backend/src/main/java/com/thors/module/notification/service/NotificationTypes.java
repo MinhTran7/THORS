@@ -10,6 +10,11 @@ public final class NotificationTypes {
     public static final String ORDER_STATUS = "ORDER_STATUS";
     public static final String PROMOTION = "PROMOTION";
 
+    /**
+     * Các loại người dùng được tự tắt. Thông báo đơn hàng và bảo mật tài khoản luôn gửi, không cho tắt.
+     */
+    public static final java.util.Set<String> MUTABLE = java.util.Set.of(PROMOTION);
+
     // notification.related_entity_type
     public static final String ENTITY_USER = "USER";
     public static final String ENTITY_ORDER = "ORDER";

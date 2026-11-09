@@ -1,5 +1,6 @@
 package com.thors.module.notification.controller;
 
+import com.thors.module.notification.dto.NotificationViews.UpdatePreferences;
 import com.thors.module.notification.service.NotificationService;
 import com.thors.security.SessionAccess;
 import java.util.Map;
@@ -28,6 +29,18 @@ public class NotificationController {
     @GetMapping("/unread-count")
     Object unreadCount() {
         return Map.of("count", service.unreadCount(sessions.current()));
+    }
+
+    /** GET /api/notifications/preferences: {available, promotion} của người đang đăng nhập. */
+    @GetMapping("/preferences")
+    Object preferences() {
+        return service.preferences(sessions.current());
+    }
+
+    /** PUT /api/notifications/preferences {"promotion": false} để tắt thông báo khuyến mãi. */
+    @PutMapping("/preferences")
+    Object updatePreferences(@RequestBody(required = false) UpdatePreferences request) {
+        return service.updatePreferences(sessions.current(), request);
     }
 
     /** GET /api/notifications/{id}: chi tiết một thông báo của người đang đăng nhập (id = user_notification_id). */

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.thors.common.ApiException;
 import com.thors.config.Settings;
 import com.thors.module.account.entity.Account;
+import com.thors.module.order.service.OrderService;
 import com.thors.module.payment.config.PayOSProperties;
 import com.thors.module.payment.dto.*;
 import com.thors.module.payment.repository.PaymentRepository;
@@ -31,16 +32,19 @@ public class PayOSService {
     private final PaymentRepository paymentRepository;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
+    private final OrderService orderService;
 
     public PayOSService(
             PayOSProperties properties,
             Settings settings,
             PaymentRepository paymentRepository,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            OrderService orderService) {
         this.properties = properties;
         this.settings = settings;
         this.paymentRepository = paymentRepository;
         this.objectMapper = objectMapper;
+        this.orderService = orderService;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
@@ -222,7 +226,8 @@ public class PayOSService {
             if (paymentOpt.isPresent()) {
                 var payment = paymentOpt.get();
                 paymentRepository.markPaymentSuccess(payment.transactionRef());
-                paymentRepository.markOrderPaid(payment.orderId());
+                // Cập nhật đơn và gửi thông báo (chỉ báo một lần dù webhook gọi lại)
+                orderService.onOnlinePaymentPaid(payment.orderId());
                 log.info("PayOS Webhook: Đã cập nhật thành công đơn hàng orderId={}, code={}", payment.orderId(), transactionRef);
             } else {
                 log.warn("PayOS Webhook: Không tìm thấy giao dịch với transactionRef={}", transactionRef);
@@ -253,7 +258,7 @@ public class PayOSService {
 
         var p = latestPayment.get();
         if ("SUCCESS".equalsIgnoreCase(p.paymentStatus())) {
-            paymentRepository.markOrderPaid(orderId);
+            orderService.onOnlinePaymentPaid(orderId);
             return Map.of("paid", true, "orderId", orderId, "paymentStatus", "PAID");
         }
 
@@ -275,7 +280,7 @@ public class PayOSService {
                         String status = (String) apiResponse.getData().get("status");
                         if ("PAID".equalsIgnoreCase(status)) {
                             paymentRepository.markPaymentSuccess(p.transactionRef());
-                            paymentRepository.markOrderPaid(orderId);
+                            orderService.onOnlinePaymentPaid(orderId);
                             log.info("PayOS CheckStatus: Đã đồng bộ thành công trạng thái PAID cho orderId={}", orderId);
                             return Map.of("paid", true, "orderId", orderId, "paymentStatus", "PAID");
                         }

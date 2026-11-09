@@ -19,13 +19,20 @@ export const notificationsApi = {
   detail: (id) => api(`/notifications/${id}`),
   unreadCount: () => api('/notifications/unread-count'),
   markRead: (id) => api(`/notifications/${id}/read`, { method: 'PATCH' }),
-  markAllRead: () => post('/notifications/read-all')
+  markAllRead: () => post('/notifications/read-all'),
+  // { available, promotion }: available = false khi DB chưa có bảng notification_mute (ẩn công tắc)
+  preferences: () => api('/notifications/preferences'),
+  updatePreferences: (body) => api('/notifications/preferences', { method: 'PUT', body })
 };
+
+export const PREFERENCES_KEY = 'notifications-preferences';
 
 // Thông báo gắn với thực thể nào thì bấm vào mở trang của thực thể đó.
 // Thêm dòng mới ở đây khi có thêm loại related_entity_type.
 const ENTITY_ROUTES = {
   ORDER: (id) => `/orders/${id}`,
+  // Khách chỉ có trang danh sách khuyến mãi đang chạy (chưa có trang chi tiết cho khách)
+  PROMOTION: () => '/promotions',
   // Yêu cầu đặt lại mật khẩu của Owner chỉ gửi cho Admin; Admin xử lý ở trang Accounts.
   USER: () => '/accounts'
 };
