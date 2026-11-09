@@ -5,7 +5,7 @@ import ThorsLayout from './ThorsLayout';
 import StorefrontLayout from './StorefrontLayout';
 
 // Các trang mua sắm của khách dùng chung giao diện cửa hàng (header + footer kiểu thời trang)
-const STOREFRONT_PATHS = ['/', '/shop/products/:productId', '/cart', '/checkout', '/order-success'];
+const STOREFRONT_PATHS = ['/', '/shop/category/:categoryId', '/shop/best-sellers', '/shop/new-arrivals', '/shop/sale', '/shop/products/:productId', '/cart', '/checkout', '/order-success'];
 
 /**
  * Khung giao diện dùng cho cả trang công khai và trang cần đăng nhập:

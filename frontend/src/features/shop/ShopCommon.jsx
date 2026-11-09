@@ -57,7 +57,7 @@ const COLOR_HEX = {
   cam: '#EF7D2D',
   tim: '#7E57C2',
   'tim than': '#4A2C6F',
-  'reu': '#556B2F',
+  reu: '#556B2F',
   olive: '#708238'
 };
 
@@ -76,18 +76,24 @@ export function colorHex(name) {
 
 // Danh sách màu của một sản phẩm. API danh sách có trường colors thì dùng luôn;
 // không thì lấy từ API chi tiết (có lưu tạm để mỗi sản phẩm chỉ gọi một lần).
-const colorCache = new Map(); // productId -> Promise<string[]>
+const variantCache = new Map(); // productId -> Promise<variant[]>
 
-function fetchColors(productId) {
-  if (!colorCache.has(productId)) {
-    colorCache.set(
-      productId,
+// Các phân loại (size, màu, giá, tồn) của một sản phẩm, lấy từ API chi tiết; mỗi sản phẩm chỉ gọi một lần.
+export function fetchProductVariants(productId) {
+  const key = String(productId);
+  if (!variantCache.has(key)) {
+    variantCache.set(
+      key,
       api(`/shop/products/${productId}`)
-        .then((d) => [...new Set((d.variants || []).map((v) => v.color).filter(Boolean))])
+        .then((d) => d.variants || [])
         .catch(() => [])
     );
   }
-  return colorCache.get(productId);
+  return variantCache.get(key);
+}
+
+function fetchColors(productId) {
+  return fetchProductVariants(productId).then((variants) => [...new Set(variants.map((v) => v.color).filter(Boolean))]);
 }
 
 export function useProductColors(product) {
@@ -162,9 +168,23 @@ function SearchForm({ initialQuery, onSearch, sx }) {
     <Box
       component="form"
       onSubmit={submit}
-      sx={{ display: 'flex', alignItems: 'center', border: `1.5px solid ${brand.cyan}`, borderRadius: '10px', bgcolor: '#fff', pl: 1.5, ...sx }}
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        border: `1.5px solid ${brand.cyan}`,
+        borderRadius: '10px',
+        bgcolor: '#fff',
+        pl: 1.5,
+        ...sx
+      }}
     >
-      <InputBase fullWidth placeholder="Tìm sản phẩm..." value={input} onChange={(e) => setInput(e.target.value)} inputProps={{ 'aria-label': 'Tìm sản phẩm' }} />
+      <InputBase
+        fullWidth
+        placeholder="Tìm sản phẩm..."
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        inputProps={{ 'aria-label': 'Tìm sản phẩm' }}
+      />
       <IconButton type="submit" aria-label="Tìm kiếm">
         <SearchOutlined />
       </IconButton>
@@ -186,7 +206,10 @@ export function ShopHeader({ account, initialQuery = '', onSearch }) {
   if (account) return <ShopSearchBar initialQuery={initialQuery} onSearch={onSearch} />;
 
   return (
-    <Box component="header" sx={{ position: 'sticky', top: 0, zIndex: 10, bgcolor: brand.surface, borderBottom: `1px solid ${brand.line}` }}>
+    <Box
+      component="header"
+      sx={{ position: 'sticky', top: 0, zIndex: 10, bgcolor: brand.surface, borderBottom: `1px solid ${brand.line}` }}
+    >
       <Box sx={{ maxWidth: 1240, mx: 'auto', px: { xs: 2, md: 4 }, height: 64, display: 'flex', alignItems: 'center', gap: 2 }}>
         <Box component={RouterLink} to="/" sx={{ display: 'flex', alignItems: 'center', gap: 1, textDecoration: 'none' }}>
           <ThorsMark />
