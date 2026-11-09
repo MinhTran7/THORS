@@ -491,7 +491,7 @@ class WarehouseOrderFlowTest {
         try (var factory = jakarta.validation.Validation.buildDefaultValidatorFactory()) {
             var validator = factory.getValidator();
             var empty = new QuickProduct(1, "Áo Hooldy Nâu kem", null, List.of(new QuickVariant("Be", "L", null)), false);
-            assertFalse(validator.validate(empty).isEmpty(), "sale price is required");
+            assertTrue(validator.validate(empty).isEmpty(), "sale price is optional: " + validator.validate(empty));
             var negative = new QuickProduct(1, "Áo", null, List.of(new QuickVariant("Be", "L", BigDecimal.valueOf(-1))), false);
             assertFalse(validator.validate(negative).isEmpty());
             var ok = new QuickProduct(1, "Áo", null, List.of(new QuickVariant("Be", "L", BigDecimal.valueOf(120000))), false);
@@ -500,14 +500,16 @@ class WarehouseOrderFlowTest {
     }
 
     @Test
-    void quickCreateWithoutSalePriceIsRefusedAndCreatesNothing() {
-        var e = fails(() -> catalog.createProduct(OWNER, new QuickProduct(1, "Áo len", "",
-                List.of(new QuickVariant("Nâu kem", "L", null)), false)));
-        assertEquals("CATALOG_INVALID", e.code);
-        assertEquals(0, db.queryForObject("SELECT COUNT(*) FROM product WHERE product_name='Áo len'", Integer.class));
-        var add = fails(() -> catalog.addVariants(OWNER, 10, new QuickVariants(List.of(new QuickVariant("Nâu kem", "S", null)))));
-        assertEquals("CATALOG_INVALID", add.code);
-        assertEquals(0, db.queryForObject("SELECT COUNT(*) FROM product_detail WHERE product_id=10 AND color='Nâu kem' AND size='S'", Integer.class));
+    void quickCreateWithoutSalePriceLeavesPriceNull() {
+        // Empty sale price is allowed: the variant is created with price NULL — never 0, never the purchase price.
+        catalog.createProduct(OWNER, new QuickProduct(1, "Áo len", "", List.of(new QuickVariant("Nâu kem", "L", null)), false));
+        assertEquals(1, db.queryForObject("SELECT COUNT(*) FROM product WHERE product_name='Áo len'", Integer.class));
+        assertEquals(1, db.queryForObject("""
+                SELECT COUNT(*) FROM product_detail d JOIN product p ON p.product_id=d.product_id
+                WHERE p.product_name='Áo len' AND d.color='Nâu kem' AND d.size='L' AND d.price IS NULL""", Integer.class));
+        catalog.addVariants(OWNER, 10, new QuickVariants(List.of(new QuickVariant("Nâu kem", "S", null))));
+        assertEquals(1, db.queryForObject(
+                "SELECT COUNT(*) FROM product_detail WHERE product_id=10 AND color='Nâu kem' AND size='S' AND price IS NULL", Integer.class));
     }
 
     @Test
