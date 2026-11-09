@@ -78,9 +78,7 @@ function rowErrors(rows, withOrderFields, existingKeys) {
       if (p.empty) e.unitPrice = 'Nhập đơn giá nhập.';
       else if (p.invalid) e.unitPrice = 'Số tiền VNĐ không hợp lệ.';
     }
-    const sale = parseMoney(r.salePrice);
-    if (sale.empty) e.salePrice = 'Nhập giá bán.';
-    else if (sale.invalid) e.salePrice = 'Số tiền VNĐ không hợp lệ.';
+    if (parseMoney(r.salePrice).invalid) e.salePrice = 'Số tiền VNĐ không hợp lệ.';
     return e;
   });
 }
@@ -192,7 +190,7 @@ function SuggestField({ value, onChange, options, label, error, disabled, maxLen
 
 /**
  * Quick catalogue creation inside a purchase order. Per variant: order quantity and purchase price
- * (go to the order line, stock_receipt_item.unit_price) and a required sale price
+ * (go to the order line, stock_receipt_item.unit_price) and an optional sale price
  * (product_detail.price, written through the product module's normal create).
  * New variants have stock 0 and online sales off; nothing is created until "Tạo và thêm vào phiếu".
  *
@@ -320,7 +318,7 @@ export default function QuickCreateDialog({ initial = {}, products, variants = [
     if (created.current) return finish(created.current); // retry adding without re-creating
     setShowErrors(true);
     if (headerError || errors.some((e) => Object.keys(e).length)) return;
-    const payload = rows.map((r) => ({ color: clean(r.color), size: clean(r.size), salePrice: parseMoney(r.salePrice).value }));
+    const payload = rows.map((r) => ({ color: clean(r.color), size: clean(r.size), salePrice: parseMoney(r.salePrice).value ?? null }));
     sending.current = true;
     setBusy(true);
     try {
@@ -474,7 +472,7 @@ export default function QuickCreateDialog({ initial = {}, products, variants = [
                   <TableCell sx={{ minWidth: 120 }}>Size</TableCell>
                   {withOrderFields && <TableCell sx={{ minWidth: 160 }}>Số lượng đặt</TableCell>}
                   {withOrderFields && <TableCell sx={{ minWidth: 210 }}>Đơn giá nhập (VNĐ)</TableCell>}
-                  <TableCell sx={{ minWidth: 210 }}>Giá bán (VNĐ)</TableCell>
+                  <TableCell sx={{ minWidth: 210 }}>Giá bán (VNĐ, tùy chọn)</TableCell>
                   {withOrderFields && (
                     <TableCell align="right" sx={{ minWidth: 140 }}>
                       Thành tiền nhập
@@ -535,6 +533,8 @@ export default function QuickCreateDialog({ initial = {}, products, variants = [
                         label={`Giá bán dòng ${idx + 1}`}
                         value={r.salePrice}
                         disabled={locked}
+                        allowEmpty
+                        emptyHint="Không bắt buộc"
                         error={err(idx, 'salePrice') || (parseMoney(r.salePrice).invalid ? 'Số tiền VNĐ không hợp lệ.' : '')}
                         onChange={(v) => setRow(idx, { salePrice: v })}
                       />
