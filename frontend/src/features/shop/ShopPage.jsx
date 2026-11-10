@@ -479,49 +479,22 @@ function PromoBanner({ promos, vouchers }) {
             </text>
           ))}
         </Box>
-        <Box
-          sx={{
-            flex: '1 1 420px',
-            p: { xs: '40px 24px', sm: '64px 56px' },
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-            gap: 2.5
-          }}
-        >
+        <Box sx={{ position: 'relative' }}>
           <Box component="p" sx={{ ...eyebrowSx, fontSize: { xs: 18, md: 24 }, fontWeight: 800, letterSpacing: '.12em', ...fade(0.2) }}>
             {voucher.name}
           </Box>
-        </Box>
-        <Box sx={{ width: 32, height: 3, bgcolor: '#FFFFFF', mx: 'auto', my: 2.5, ...fade(0.3) }} />
-        <Box component="h2" sx={{ m: 0, fontWeight: '800 !important', lineHeight: 0.86 }}>
-          <RiseLine size={{ xs: 22, md: 30 }} spacing=".08em" delay={0.4}>
-            GIẢM ĐẾN
-          </RiseLine>
-          <RiseLine size={{ xs: 110, md: 180 }} spacing="-3px" delay={0.5}>
-            {discountText(voucher)}
-          </RiseLine>
-        </Box>
-        <Box sx={{ mt: 2.25, fontSize: 14, fontWeight: 700, letterSpacing: '.14em', textTransform: 'uppercase', ...fade(0.8) }}>
-          {voucher.note}
-        </Box>
-        <Box
-          sx={{
-            position: 'relative',
-            flex: '1 1 420px',
-            p: { xs: '40px 24px', sm: '64px 56px' },
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-            gap: 2.5
-          }}
-        >
-          <Box component="p" sx={{ ...eyebrowSx, fontSize: { xs: 18, md: 24 }, fontWeight: 800, letterSpacing: '.12em', ...fade(0.2) }}>
-            {voucher.name}
+          <Box sx={{ width: 32, height: 3, bgcolor: '#FFFFFF', mx: 'auto', my: 2.5, ...fade(0.3) }} />
+          <Box component="h2" sx={{ m: 0, fontWeight: '800 !important', lineHeight: 0.86 }}>
+            <RiseLine size={{ xs: 22, md: 30 }} spacing=".08em" delay={0.4}>
+              GIẢM ĐẾN
+            </RiseLine>
+            <RiseLine size={{ xs: 110, md: 180 }} spacing="-3px" delay={0.5}>
+              {discountText(voucher)}
+            </RiseLine>
           </Box>
-
-          {/* ... các phần giữa của phuoc (nằm giữa 2 xung đột, giữ nguyên) ... */}
-
+          <Box sx={{ mt: 2.25, fontSize: 14, fontWeight: 700, letterSpacing: '.14em', textTransform: 'uppercase', ...fade(0.8) }}>
+            {voucher.note}
+          </Box>
           <Box sx={{ mt: 3.5, ...fade(1) }}>
             <Box
               component={RouterLink}
