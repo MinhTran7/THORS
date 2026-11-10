@@ -54,8 +54,9 @@ const discountParts = (p) => {
   return v >= 1000 ? [Math.round(v / 1000), 'K'] : [v, 'đ'];
 };
 
-const CYAN = '#A7F2FA';
-const CYAN_HOVER = '#8EECF5';
+// Theo màu chung của màn khách (storeTheme)
+const CYAN = C.cyan;
+const CYAN_HOVER = C.accent;
 
 const noClickFx = { '&::after': { display: 'none !important' } };
 
