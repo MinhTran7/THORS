@@ -9,6 +9,7 @@
   },
   "scripts": {
     "start": "vite",
+    "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint \"src/**/*.{js,jsx}\"",
@@ -35,6 +36,7 @@
     "formik": "2.4.9",
     "framer-motion": "12.39.0",
     "jsbarcode": "3.12.3",
+    "jspdf": "4.2.1",
     "lodash-es": "4.18.1",
     "prop-types": "15.8.1",
     "react": "19.2.6",

@@ -41,13 +41,13 @@ public class AuditLogViews {
 
     public record Page(List<Item> items, int page, int size, long total, int totalPages) {}
 
-    /** Số liệu trong ngày cho các thẻ thống kê của màn hình System Log. */
+    /** Số liệu trong khoảng ngày đang lọc cho các thẻ thống kê của màn hình System Log. */
     public record Summary(
-            long eventsToday,
-            long successfulToday,
-            long failedToday,
-            long failedSignInsToday,
-            long pausedSignInsToday) {}
+            long events,
+            long successful,
+            long failed,
+            long failedSignIns,
+            long pausedSignIns) {}
 
     /**
      * Một dòng hoạt động hiển thị cho chính chủ tài khoản ở trang hồ sơ. Cố ý không có tên người

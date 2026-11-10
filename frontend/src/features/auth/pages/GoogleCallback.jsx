@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { CircularProgress, Stack, Typography } from '@mui/material';
 import { api, clearCsrf } from 'services/http';
 import { useAuth } from '../AuthProvider';
-import { safeReturn } from '../validation';
+import { landingAfterLogin, safeReturn } from '../validation';
 export default function GoogleCallback({ provider = 'google' }) {
   const { setAccount } = useAuth();
   const navigate = useNavigate();
@@ -12,9 +12,12 @@ export default function GoogleCallback({ provider = 'google' }) {
     api('/auth/me')
       .then((a) => {
         setAccount(a);
-        const target = safeReturn(sessionStorage.getItem('thorsReturnTo'));
+        const saved = sessionStorage.getItem('thorsReturnTo');
+        // Đang liên kết Google từ trang Hồ sơ (đã đăng nhập sẵn) thì quay lại Hồ sơ cho mọi vai trò
+        const linking = sessionStorage.getItem('thorsLinking') === '1';
         sessionStorage.removeItem('thorsReturnTo');
-        navigate(target, { replace: true });
+        sessionStorage.removeItem('thorsLinking');
+        navigate(linking ? safeReturn(saved) : landingAfterLogin(a, saved), { replace: true });
       })
       .catch(() => navigate('/login?error=' + provider + '_failed', { replace: true }));
   }, [navigate, setAccount, provider]);

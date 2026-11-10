@@ -13,12 +13,14 @@ public class AccountRequests {
 
   public record Edit(@NotBlank String fullName, String status) {}
 
-  /** fullName bắt buộc; các trường còn lại null = giữ nguyên, chuỗi rỗng = xóa (address, avatarUrl). */
+  /**
+   * fullName bắt buộc; các trường còn lại null = giữ nguyên, address rỗng = xóa. Ảnh đại diện không đổi
+   * qua đây mà qua PUT/DELETE /api/accounts/profile/avatar (backend tự tải ảnh lên và ghi link).
+   */
   public record UpdateProfile(
           @NotBlank @Size(max = 100) String fullName,
           @Size(max = 15) String phone,
-          @Size(max = 255) String address,
-          @Size(max = 500) String avatarUrl) {}
+          @Size(max = 255) String address) {}
 
   public record StatusChange(@NotBlank String status) {}
 

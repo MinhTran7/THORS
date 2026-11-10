@@ -76,9 +76,9 @@ export default function NotificationBell() {
   return (
     <>
       <Tooltip title={unreadCount > 0 ? `${unreadCount} thông báo chưa đọc` : 'Không có thông báo mới'}>
-        <IconButton aria-label="Thông báo" aria-haspopup="true" size="small" onClick={(event) => setAnchor(event.currentTarget)}>
+        <IconButton aria-label="Thông báo" aria-haspopup="true" onClick={(event) => setAnchor(event.currentTarget)}>
           <Badge color="error" badgeContent={unreadCount} max={99}>
-            <BellOutlined />
+            <BellOutlined style={{ fontSize: 22 }} />
           </Badge>
         </IconButton>
       </Tooltip>

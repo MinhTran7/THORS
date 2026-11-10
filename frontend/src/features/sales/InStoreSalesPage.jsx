@@ -1,43 +1,30 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Box, Button, CircularProgress, ClickAwayListener, Dialog, IconButton, InputAdornment, MenuItem, Snackbar, TextField, Typography, useMediaQuery } from '@mui/material';
 import {
-  Alert,
-  Avatar,
-  Box,
-  Button,
-  Card,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Divider,
-  IconButton,
-  InputAdornment,
-  Stack,
-  TextField,
-  ToggleButton,
-  ToggleButtonGroup,
-  Typography
-} from '@mui/material';
-import { SearchOutlined, DeleteOutlined, PlusOutlined, MinusOutlined, ShoppingCartOutlined } from '@ant-design/icons';
+  SearchOutlined,
+  ScanOutlined,
+  FileTextOutlined,
+  EditOutlined,
+  CloseOutlined,
+  PlusOutlined,
+  MinusOutlined,
+  DeleteOutlined,
+  CheckOutlined,
+  DollarOutlined,
+  BankOutlined,
+  ShoppingCartOutlined
+} from '@ant-design/icons';
 import { getProducts, getProductById } from '../../services/productService';
 import { api } from '../../services/http';
 import { useAuth } from '../auth/AuthProvider';
+// Quét mã vạch (phần kho/mã vạch): máy quét USB/Bluetooth, ô tìm kiếm hoặc camera → thêm vào hóa đơn.
+import useBarcodeScanner from '../warehouse/useBarcodeScanner';
+import { addScannedLine, scanToCartLine } from '../warehouse/scanToCart';
+import CameraScanDialog from '../warehouse/CameraScanDialog';
 import { useCrumbs } from '../../layouts/crumbs';
 import ReceiptDialog from './ReceiptDialog';
 
-const C = {
-  text: '#202D42',
-  muted: '#75869F',
-  border: '#E5EBF2',
-  main: '#8DE9F2',
-  selected: '#DDF7FA',
-  bg: '#F8FAFC',
-  disabled: '#F0F3F7',
-  cancelHover: '#FFFBE7'
-};
-
-const money = (value) => `${Number(value || 0).toLocaleString('vi-VN')} ₫`;
+const money = (value) => `${Number(value || 0).toLocaleString('vi-VN')} đ`;
 const isActive = (value) => String(value ?? '').toUpperCase() === 'ACTIVE';
 const getId = (p) => p?.productId ?? p?.id;
 const getVariantId = (v) => v?.detailId ?? v?.variantId ?? v?.id;
@@ -46,92 +33,138 @@ const getPrice = (v) => Number(v?.price ?? v?.salePrice ?? v?.sale_price ?? 0);
 const getList = (data) => (Array.isArray(data) ? data : (data?.content ?? data?.data ?? []));
 const getProductStock = (p) => Number(p?.stockQuantity ?? p?.totalStock ?? p?.stock ?? p?.quantity ?? 0);
 
-const buttonSx = {
-  textTransform: 'none',
-  borderRadius: 2,
-  fontWeight: 600
-};
-
-function ChoiceButton({ label, selected, disabled, onClick }) {
-  return (
-    <Button
-      variant="outlined"
-      disabled={disabled}
-      onClick={onClick}
-      sx={{
-        ...buttonSx,
-        minWidth: 48,
-        minHeight: 32,
-        px: 1.25,
-        py: 0.4,
-        fontSize: 12,
-        lineHeight: 1.2,
-        borderWidth: selected ? 1.5 : 1,
-        borderColor: selected ? C.main : C.border,
-        bgcolor: disabled ? C.disabled : selected ? C.selected : '#fff',
-        color: disabled ? '#9AA7B7' : C.text,
-        '&:hover': {
-          bgcolor: disabled ? C.disabled : C.selected,
-          borderColor: C.main
-        },
-        '&.Mui-disabled': { opacity: 1 }
-      }}
-    >
-      {label}
-    </Button>
-  );
-}
-
-function ToggleGroup({ value, onChange, children, fullWidth = false }) {
-  return (
-    <ToggleButtonGroup
-      exclusive
-      size="small"
-      value={value}
-      fullWidth={fullWidth}
-      onChange={(_, next) => next && onChange(next)}
-      sx={{
-        display: 'flex',
-        flexWrap: fullWidth ? 'nowrap' : 'wrap',
-        gap: 1,
-        '& .MuiToggleButtonGroup-grouped': {
-          m: '0 !important',
-          border: `1px solid ${C.border} !important`,
-          borderRadius: '8px !important'
-        },
-        '& .MuiToggleButton-root': {
-          ...buttonSx,
-          px: 1.5,
-          color: C.text,
-          ...(fullWidth ? { flex: 1, minWidth: 0 } : {})
-        },
-        '& .Mui-selected': {
-          bgcolor: `${C.main} !important`,
-          fontWeight: 700
-        }
-      }}
-    >
-      {children}
-    </ToggleButtonGroup>
-  );
-}
-
 export default function InStoreSalesPage() {
   const { account } = useAuth();
   useCrumbs(['Bán hàng tại quầy', 'Bán hàng']);
 
+  const isDesktop = useMediaQuery((theme) => theme.breakpoints.up('lg'));
+
+  useEffect(() => {
+    if (!isDesktop) return undefined;
+    const html = document.documentElement;
+    const prev = html.style.overflow;
+    html.style.overflow = 'hidden';
+    return () => {
+      html.style.overflow = prev;
+    };
+  }, [isDesktop]);
+
   const [products, setProducts] = useState([]);
-  const [category, setCategory] = useState('All products');
+  const [category, setCategory] = useState('Tất cả danh mục');
   const [search, setSearch] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [addingId, setAddingId] = useState(null);
 
-  const [cart, setCart] = useState([]);
-  const [customer, setCustomer] = useState('');
-  const [payment, setPayment] = useState('Cash');
-  const [received, setReceived] = useState('');
-  const [discount, setDiscount] = useState('');
+  // Quản lý nhiều tab hóa đơn chờ kiểu Sapo
+  const [orders, setOrders] = useState([
+    {
+      id: 1,
+      label: 'Hóa đơn 1',
+      cart: [],
+      payment: 'Cash',
+      discount: '',
+      discountType: 'amount'
+    }
+  ]);
+  const [activeOrderId, setActiveOrderId] = useState(1);
 
+  const activeOrder = useMemo(() => {
+    return orders.find((o) => o.id === activeOrderId) || orders[0] || {};
+  }, [orders, activeOrderId]);
+
+  function updateActiveOrder(patchOrFn) {
+    setOrders((prev) =>
+      prev.map((ord) => {
+        if (ord.id !== activeOrderId) return ord;
+        return typeof patchOrFn === 'function' ? patchOrFn(ord) : { ...ord, ...patchOrFn };
+      })
+    );
+  }
+
+  const cart = activeOrder.cart || [];
+  const payment = activeOrder.payment || 'Cash';
+  const discount = activeOrder.discount || '';
+  const discountType = activeOrder.discountType || 'amount';
+
+  const setCart = (action) => {
+    updateActiveOrder((ord) => ({
+      ...ord,
+      cart: typeof action === 'function' ? action(ord.cart || []) : action
+    }));
+  };
+
+  const setPayment = (val) => updateActiveOrder({ payment: val });
+
+  // Popup giảm giá (VNĐ hoặc %)
+  const [discountOpen, setDiscountOpen] = useState(false);
+  const [draftType, setDraftType] = useState('amount');
+  const [draftValue, setDraftValue] = useState('');
+  const [draftError, setDraftError] = useState('');
+
+  function openDiscount() {
+    setDraftType(discountType);
+    setDraftValue(discount);
+    setDraftError('');
+    setDiscountOpen(true);
+  }
+
+  function applyDiscount() {
+    const value = Number(draftValue) || 0;
+    if (value < 0) return setDraftError('Giá trị giảm không hợp lệ.');
+    if (draftType === 'percent' && value > 100) return setDraftError('Phần trăm giảm tối đa là 100%.');
+    if (draftType === 'amount' && value > subtotal) return setDraftError('Giảm giá không được vượt quá tổng tiền hàng.');
+    updateActiveOrder({ discount: draftValue, discountType: draftType });
+    setDiscountOpen(false);
+  }
+
+  function addOrderTab() {
+    if (orders.length >= 8) {
+      setError('Đã đạt giới hạn tối đa 8 hóa đơn chờ.');
+      return;
+    }
+    const newId = Date.now();
+    const existingNums = orders.map((o) => {
+      const m = o.label.match(/\d+/);
+      return m ? parseInt(m[0], 10) : 0;
+    });
+    let nextNum = 1;
+    while (existingNums.includes(nextNum)) nextNum++;
+
+    const newOrder = {
+      id: newId,
+      label: `Hóa đơn ${nextNum}`,
+      cart: [],
+      payment: 'Cash',
+      discount: '',
+      discountType: 'amount'
+    };
+    setOrders((prev) => [...prev, newOrder]);
+    setActiveOrderId(newId);
+    setError('');
+  }
+
+  function switchOrderTab(id) {
+    setActiveOrderId(id);
+    setError('');
+  }
+
+  function closeOrderTab(id, e) {
+    e?.stopPropagation();
+    if (orders.length <= 1) {
+      clearInvoice();
+      return;
+    }
+    setOrders((prev) => {
+      const next = prev.filter((o) => o.id !== id);
+      if (activeOrderId === id) {
+        setActiveOrderId(next[next.length - 1].id);
+      }
+      return next;
+    });
+  }
+
+  // Modal chọn biến thể sản phẩm
   const [variantProduct, setVariantProduct] = useState(null);
   const [variantDialogOpen, setVariantDialogOpen] = useState(false);
   const [variants, setVariants] = useState([]);
@@ -140,19 +173,14 @@ export default function InStoreSalesPage() {
   const [loadingVariants, setLoadingVariants] = useState(false);
 
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
-
-  // Trạng thái gửi API — ngăn click nút Complete Sale nhiều lần
+  const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
 
-  // Dữ liệu sau khi tạo đơn thành công — mở ReceiptDialog
+  // Modal hóa đơn sau thanh toán
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [completedSale, setCompletedSale] = useState(null);
   const [completedCart, setCompletedCart] = useState([]);
-  const [completedCustomer, setCompletedCustomer] = useState('');
-  const [completedReceived, setCompletedReceived] = useState(0);
-  const [completedChange, setCompletedChange] = useState(0);
   const [completedAt, setCompletedAt] = useState(null);
 
   useEffect(() => {
@@ -160,17 +188,16 @@ export default function InStoreSalesPage() {
       .then((res) => {
         setProducts(getList(res?.data ?? res).filter((p) => isActive(p.status)));
       })
-      .catch((err) => setError(err.message || 'Unable to load products.'))
+      .catch((err) => setError(err.message || 'Không thể tải danh sách sản phẩm.'))
       .finally(() => setLoading(false));
   }, []);
 
-  const categories = useMemo(() => ['All products', ...new Set(products.map((p) => p.categoryName).filter(Boolean))], [products]);
+  const categories = useMemo(() => ['Tất cả danh mục', ...new Set(products.map((p) => p.categoryName).filter(Boolean))], [products]);
 
   const visibleProducts = useMemo(() => {
     const keyword = search.trim().toLowerCase();
-
     return products.filter((p) => {
-      const matchesCategory = category === 'All products' || p.categoryName === category;
+      const matchesCategory = category === 'Tất cả danh mục' || p.categoryName === category;
       const matchesSearch = [p.productName, p.sku].some((value) =>
         String(value || '')
           .toLowerCase()
@@ -180,22 +207,21 @@ export default function InStoreSalesPage() {
     });
   }, [products, category, search]);
 
-  const sizes = useMemo(() => [...new Set(variants.map((v) => String(v.size ?? '')))], [variants]);
+  const sizes = useMemo(() => [...new Set(variants.map((v) => String(v.size ?? '')).filter(Boolean))], [variants]);
 
-  const colors = useMemo(
-    () => [...new Set(variants.filter((v) => String(v.size ?? '') === selectedSize).map((v) => String(v.color ?? '')))],
-    [variants, selectedSize]
-  );
+  const colors = useMemo(() => [...new Set(variants.map((v) => String(v.color ?? '')).filter(Boolean))], [variants]);
 
-  const selectedVariant = variants.find((v) => String(v.size ?? '') === selectedSize && String(v.color ?? '') === selectedColor);
+  const selectedVariant = useMemo(() => {
+    if (!selectedSize || !selectedColor) return null;
+    return variants.find((v) => String(v.size ?? '') === selectedSize && String(v.color ?? '') === selectedColor) || null;
+  }, [variants, selectedSize, selectedColor]);
 
   const priceRange = useMemo(() => {
     const prices = variants.map(getPrice).filter((price) => price > 0);
-    if (!prices.length) return 'Price unavailable';
-
+    if (!prices.length) return 'Liên hệ';
     const min = Math.min(...prices);
     const max = Math.max(...prices);
-    return min === max ? money(min) : `${money(min)} – ${money(max)}`;
+    return min === max ? money(min) : `${Number(min).toLocaleString('vi-VN')}–${Number(max).toLocaleString('vi-VN')} đ`;
   }, [variants]);
 
   async function addProduct(product) {
@@ -204,7 +230,6 @@ export default function InStoreSalesPage() {
 
     setAddingId(id);
     setError('');
-    setNotice('');
     setLoadingVariants(true);
 
     try {
@@ -217,27 +242,26 @@ export default function InStoreSalesPage() {
       const activeVariants = Array.isArray(rawVariants) ? rawVariants.filter((v) => isActive(v.status)) : [];
 
       if (!activeVariants.length) {
-        setError('No active variants found for this product.');
+        setError('Sản phẩm chưa có biến thể hoạt động.');
         return;
       }
 
       const image =
         detail?.images?.[0]?.imageUrl ||
         item?.images?.[0]?.imageUrl ||
+        product.primaryImageUrl ||
         product.imageUrl ||
         product.thumbnailUrl ||
         product.mainImageUrl ||
         '';
 
-      const first = activeVariants.find((v) => getStock(v) > 0) || activeVariants[0];
-
       setVariantProduct({ ...product, ...item, productId: id, image });
       setVariants(activeVariants);
-      setSelectedSize(String(first?.size ?? ''));
-      setSelectedColor(String(first?.color ?? ''));
+      setSelectedSize('');
+      setSelectedColor('');
       setVariantDialogOpen(true);
     } catch (err) {
-      setError(err.message || 'Could not load product variants.');
+      setError(err.message || 'Không thể tải biến thể sản phẩm.');
     } finally {
       setAddingId(null);
       setLoadingVariants(false);
@@ -256,16 +280,16 @@ export default function InStoreSalesPage() {
   }
 
   function chooseSize(size) {
-    setSelectedSize(size);
+    setSelectedSize((prev) => (prev === size ? '' : size));
+  }
 
-    const matching = variants.filter((v) => String(v.size ?? '') === size);
-    const first = matching.find((v) => getStock(v) > 0) || matching[0];
-    setSelectedColor(String(first?.color ?? ''));
+  function chooseColor(color) {
+    setSelectedColor((prev) => (prev === color ? '' : color));
   }
 
   function confirmVariant() {
     if (!variantProduct || !selectedVariant || getStock(selectedVariant) <= 0) {
-      setError('Please select an available size and color.');
+      setError('Vui lòng chọn kích cỡ và màu sắc còn hàng.');
       return;
     }
 
@@ -273,7 +297,7 @@ export default function InStoreSalesPage() {
     const variantId = getVariantId(selectedVariant);
 
     if (variantId == null) {
-      setError('Product variant ID is missing.');
+      setError('Không tìm thấy thông tin biến thể.');
       return;
     }
 
@@ -282,7 +306,7 @@ export default function InStoreSalesPage() {
     const stock = getStock(selectedVariant);
 
     if (existing && existing.quantity >= stock) {
-      setError('Quantity cannot exceed available stock.');
+      setError('Số lượng trong giỏ đã đạt mức tồn kho tối đa.');
       return;
     }
 
@@ -295,7 +319,7 @@ export default function InStoreSalesPage() {
           key,
           productId,
           variantId,
-          name: variantProduct.productName || 'Unnamed product',
+          name: variantProduct.productName || 'Sản phẩm',
           image: variantProduct.image || '',
           size: selectedVariant.size ?? '',
           color: selectedVariant.color ?? '',
@@ -306,9 +330,39 @@ export default function InStoreSalesPage() {
       ]);
     }
 
-    setNotice(`${variantProduct.productName || 'Product'} added to invoice.`);
     closeDialog();
   }
+
+  // ---- Quét mã vạch → thêm vào hóa đơn đang mở (quét lại cùng mã thì +1, không vượt tồn kho) ----
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const searchInputRef = useRef(null);
+  const cartRef = useRef(cart);
+  cartRef.current = cart;
+
+  async function addScanned(code) {
+    setError('');
+    setSuccess('');
+    try {
+      const line = await scanToCartLine(code);
+      const result = addScannedLine(cartRef.current, line);
+      if (result.error) {
+        setError(result.error);
+        return { ok: false, message: result.error };
+      }
+      cartRef.current = result.cart; // several fast scans before the next render still add up
+      setCart(result.cart);
+      const quantity = result.cart.find((item) => item.key === line.key)?.quantity ?? 1;
+      const message = `Đã thêm ${line.name} · ${line.color} · ${line.size} (SL: ${quantity})`;
+      setSuccess(message);
+      return { ok: true, message };
+    } catch (err) {
+      setError(err.message);
+      return { ok: false, message: err.message };
+    }
+  }
+
+  // Máy quét cắm vào là dùng: bóp cò ở bất kỳ đâu trên trang (trừ khi đang mở hộp thoại khác).
+  useBarcodeScanner(addScanned, !variantDialogOpen && !receiptOpen && !discountOpen && !cameraOpen);
 
   function updateQuantity(key, delta) {
     setCart((current) =>
@@ -322,48 +376,22 @@ export default function InStoreSalesPage() {
     );
   }
 
-  const itemCount = cart.reduce((sum, line) => sum + line.quantity, 0);
   const subtotal = cart.reduce((sum, line) => sum + line.price * line.quantity, 0);
-  const discountValue = Math.min(subtotal, Math.max(0, Number(discount) || 0));
+  const discountNumber = Math.max(0, Number(discount) || 0);
+  const discountValue =
+    discountType === 'percent'
+      ? Math.round((subtotal * Math.min(100, discountNumber)) / 100)
+      : Math.min(subtotal, Math.round(discountNumber));
   const total = subtotal - discountValue;
-  const receivedValue = Math.max(0, Number(received) || 0);
-  const change = Math.max(0, receivedValue - total);
-
-  const cardSx = {
-    p: 2,
-    border: `1px solid ${C.border}`,
-    borderRadius: 2,
-    boxShadow: 'none'
-  };
 
   async function completeSale() {
     setError('');
-    setNotice('');
 
-    // Validate client-side trước khi gửi API
     if (!cart.length) {
-      setError('Add at least one product to the invoice.');
+      setError('Vui lòng thêm sản phẩm vào hóa đơn.');
       return;
     }
 
-    const discountNum = Math.round(Number(discount) || 0);
-
-    if (discountNum < 0 || !Number.isInteger(discountNum)) {
-      setError('Discount must be a non-negative whole number (VND).');
-      return;
-    }
-
-    if (discountNum > subtotal) {
-      setError('Discount cannot exceed the subtotal.');
-      return;
-    }
-
-    if (payment === 'Cash' && receivedValue < total) {
-      setError('Amount received must be at least equal to the total.');
-      return;
-    }
-
-    // Chống gửi request trùng (double-submit)
     if (submittingRef.current) return;
     submittingRef.current = true;
     setSubmitting(true);
@@ -376,36 +404,41 @@ export default function InStoreSalesPage() {
             detailId: line.variantId,
             quantity: line.quantity
           })),
-          discountAmount: discountNum,
-          paymentMethod: payment === 'Cash' ? 'CASH' : 'BANK_TRANSFER',
-          customerName: customer.trim() || null
+          discountAmount: discountValue,
+          paymentMethod: payment === 'Cash' ? 'CASH' : 'BANK_TRANSFER'
         }
       });
 
-      // Lưu dữ liệu hóa đơn để hiển thị ReceiptDialog
-      // Toàn bộ lấy từ Backend response, không tự sinh ở Frontend
       setCompletedSale(result);
       setCompletedCart([...cart]);
-      setCompletedCustomer(customer.trim());
-      setCompletedReceived(receivedValue);
-      setCompletedChange(payment === 'Cash' ? Math.max(0, receivedValue - total) : 0);
       setCompletedAt(new Date());
       setReceiptOpen(true);
 
-      // Làm sạch giỏ hàng sau khi thành công
-      clearInvoice();
+      setOrders((prev) => {
+        if (prev.length > 1) {
+          const next = prev.filter((o) => o.id !== activeOrderId);
+          setActiveOrderId(next[0].id);
+          return next;
+        }
+        return [
+          {
+            id: Date.now(),
+            label: 'Hóa đơn 1',
+            cart: [],
+            payment: 'Cash',
+            discount: '',
+            discountType: 'amount'
+          }
+        ];
+      });
 
-      // Làm mới danh sách sản phẩm để hiển thị tồn kho mới nhất từ server
       getProducts()
         .then((res) => {
           setProducts(getList(res?.data ?? res).filter((p) => isActive(p.status)));
         })
-        .catch(() => {
-          // Lỗi refresh nền không ảnh hưởng luồng bán hàng
-        });
+        .catch(() => {});
     } catch (err) {
-      // Giữ nguyên giỏ hàng, chỉ hiển thị lỗi
-      setError(err.message || 'Could not complete the sale. Please try again.');
+      setError(err.message || 'Không thể tạo đơn hàng. Vui lòng thử lại.');
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
@@ -413,573 +446,1108 @@ export default function InStoreSalesPage() {
   }
 
   function clearInvoice() {
-    setCart([]);
-    setDiscount('');
-    setReceived('');
-    setNotice('');
+    if (!cart.length) {
+      setError('Hóa đơn đang trống, không có gì để xóa.');
+      return;
+    }
+    updateActiveOrder({
+      cart: [],
+      discount: '',
+      discountType: 'amount'
+    });
     setError('');
+    setSuccess('Đã xóa hóa đơn.');
   }
 
   function handleReceiptClose() {
     setReceiptOpen(false);
     setCompletedSale(null);
     setCompletedCart([]);
-    setCompletedCustomer('');
-    setCompletedReceived(0);
-    setCompletedChange(0);
     setCompletedAt(null);
-    setCustomer('');
-    setPayment('Cash');
   }
 
   return (
-    <Box sx={{ maxWidth: 1600, mx: 'auto', color: C.text }}>
-      <Box sx={{ mb: 2.5 }}>
-        <Typography variant="h3" sx={{ fontWeight: 800, color: C.text }}>
-          Bán hàng tại quầy
-        </Typography>
-        <Typography variant="body2" sx={{ color: C.muted, mt: 0.5 }}>
-          Tạo và xử lý đơn bán hàng trực tiếp tại quầy thanh toán.
-        </Typography>
-      </Box>
-
-      {error && (
-        <Alert severity="error" sx={{ mb: 1.5 }} onClose={() => setError('')}>
-          {error}
-        </Alert>
-      )}
-
-      {notice && (
-        <Alert severity="info" sx={{ mb: 1.5 }} onClose={() => setNotice('')}>
-          {notice}
-        </Alert>
-      )}
-
+    <Box
+      sx={{
+        maxWidth: 1600,
+        mx: 'auto',
+        color: '#0F172A',
+        display: { lg: 'flex' },
+        flexDirection: 'column',
+        height: { lg: 'calc(100vh - 128px)' }
+      }}
+    >
+      {/* ─── BỐ CỤC CHÍNH (2 CỘT) ─── */}
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr', lg: '1.65fr minmax(320px, .95fr)' },
-          gap: 2,
-          alignItems: 'start'
+          gridTemplateColumns: { xs: '1fr', lg: '1fr 390px' },
+          gap: 2.5,
+          gridTemplateRows: { lg: 'minmax(0, 1fr)' },
+          flex: 1,
+          minHeight: 0
         }}
       >
-        {/* Product catalog */}
-        <Card sx={cardSx}>
-          <TextField
-            fullWidth
-            size="small"
-            placeholder="Search products by name or SKU"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchOutlined />
-                </InputAdornment>
-              )
-            }}
-            sx={{ mb: 2 }}
-          />
-
-          <Box sx={{ mb: 2.5 }}>
-            <ToggleGroup value={category} onChange={setCategory}>
-              {categories.map((item) => (
-                <ToggleButton key={item} value={item}>
-                  {item}
-                </ToggleButton>
-              ))}
-            </ToggleGroup>
-          </Box>
-
-          {loading ? (
-            <Box sx={{ py: 8, textAlign: 'center' }}>
-              <CircularProgress />
-            </Box>
-          ) : !visibleProducts.length ? (
-            <Typography sx={{ py: 8, textAlign: 'center', color: C.muted }}>No products found.</Typography>
-          ) : (
-            <Box
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(175px, 1fr))',
-                gap: 1.5
-              }}
-            >
-              {visibleProducts.map((product) => {
-                const id = getId(product);
-
-                  const image =
-                      product.primaryImageUrl ||
-                      product.imageUrl ||
-                      product.thumbnailUrl ||
-                      product.mainImageUrl ||
-                      product.images?.[0]?.imageUrl ||
-                      '';
-                const min = product.minPrice;
-                const max = product.maxPrice;
-                const price =
-                  min == null ? 'View price' : max == null || Number(min) === Number(max) ? money(min) : `${money(min)} – ${money(max)}`;
-
-                return (
-                  <Card
-                    key={id}
-                    onClick={() => addProduct(product)}
-                    sx={{
-                      p: 1,
-                      border: `1px solid ${C.border}`,
-                      borderRadius: 2,
-                      boxShadow: 'none',
-                      cursor: 'pointer',
-                      opacity: addingId === id ? 0.6 : 1,
-                      transition: 'border-color .2s, transform .2s',
-                      '&:hover': {
-                        borderColor: C.main,
-                        transform: 'translateY(-2px)'
-                      }
-                    }}
-                  >
-                    <Box
-                      sx={{
-                        height: 118,
-                        mb: 1,
-                        bgcolor: C.bg,
-                        borderRadius: 1.5,
-                        overflow: 'hidden',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}
-                    >
-                      {image ? (
-                        <Box
-                          component="img"
-                          src={image}
-                          alt={product.productName}
-                          sx={{
-                            width: '100%',
-                            height: '100%',
-                            objectFit: 'cover'
-                          }}
-                        />
-                      ) : (
-                        <ShoppingCartOutlined style={{ fontSize: 32, color: '#B7C3D2' }} />
-                      )}
-                    </Box>
-
-                    <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
-                      <Typography
-                        sx={{
-                          flex: 1,
-                          minWidth: 0,
-                          fontSize: 13,
-                          fontWeight: 700
-                        }}
-                      >
-                        {product.productName || 'Unnamed product'}
-                      </Typography>
-
-                      <Typography
-                        sx={{
-                          flexShrink: 0,
-                          fontSize: 10.5,
-                          color: C.muted,
-                          whiteSpace: 'nowrap'
-                        }}
-                      >
-                        Stock: {getProductStock(product)}
-                      </Typography>
-                    </Stack>
-
-                    <Typography sx={{ fontSize: 13, fontWeight: 700, mt: 1 }}>{price}</Typography>
-
-                    {addingId === id && <CircularProgress size={16} sx={{ mt: 1 }} />}
-                  </Card>
-                );
-              })}
-            </Box>
-          )}
-        </Card>
-
-        {/* Invoice */}
-        <Card sx={cardSx}>
-          <Typography sx={{ fontSize: 18, fontWeight: 700, mb: 1.5 }}>Invoice</Typography>
-
-          <TextField
-            fullWidth
-            size="small"
-            label="Customer"
-            value={customer}
-            onChange={(e) => setCustomer(e.target.value)}
-            sx={{ mb: 1.5 }}
-          />
-
-          {!cart.length ? (
-            <Box
-              sx={{
-                py: 6,
-                textAlign: 'center',
-                bgcolor: C.bg,
-                borderRadius: 2,
-                mb: 2
-              }}
-            >
-              <ShoppingCartOutlined style={{ fontSize: 28, color: '#A9B6C8' }} />
-              <Typography sx={{ mt: 1, fontSize: 13, fontWeight: 600 }}>Your invoice is empty</Typography>
-              <Typography sx={{ fontSize: 12, color: C.muted }}>Click a product to choose its size and color.</Typography>
-            </Box>
-          ) : (
-            <Stack spacing={1.5} sx={{ mb: 2 }}>
-              {cart.map((line) => (
-                <Box key={line.key}>
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <Avatar variant="rounded" src={line.image} sx={{ width: 54, height: 54, bgcolor: C.bg }}>
-                      <ShoppingCartOutlined />
-                    </Avatar>
-
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography sx={{ fontSize: 12.5, fontWeight: 700 }}>{line.name}</Typography>
-                      <Typography sx={{ fontSize: 10.5, color: C.muted }}>
-                        {line.size || 'Default size'} / {line.color || 'Default color'}
-                        {' · '}
-                        {money(line.price)} each
-                      </Typography>
-
-                      <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mt: 0.75 }}>
-                        <IconButton
-                          size="small"
-                          onClick={() => updateQuantity(line.key, -1)}
-                          sx={{
-                            border: `1px solid ${C.border}`,
-                            borderRadius: 1,
-                            p: 0.5
-                          }}
-                        >
-                          <MinusOutlined style={{ fontSize: 10 }} />
-                        </IconButton>
-
-                        <Typography
-                          sx={{
-                            minWidth: 20,
-                            textAlign: 'center',
-                            fontSize: 12
-                          }}
-                        >
-                          {line.quantity}
-                        </Typography>
-
-                        <IconButton
-                          size="small"
-                          disabled={line.quantity >= line.stock}
-                          onClick={() => updateQuantity(line.key, 1)}
-                          sx={{
-                            border: `1px solid ${C.border}`,
-                            borderRadius: 1,
-                            p: 0.5
-                          }}
-                        >
-                          <PlusOutlined style={{ fontSize: 10 }} />
-                        </IconButton>
-                      </Stack>
-                    </Box>
-
-                    <Box sx={{ textAlign: 'right' }}>
-                      <Typography sx={{ fontSize: 12.5, fontWeight: 700 }}>{money(line.price * line.quantity)}</Typography>
-                      <IconButton size="small" onClick={() => setCart((current) => current.filter((item) => item.key !== line.key))}>
-                        <DeleteOutlined style={{ fontSize: 13 }} />
-                      </IconButton>
-                    </Box>
-                  </Stack>
-
-                  <Divider sx={{ mt: 1.5, borderColor: C.border }} />
-                </Box>
-              ))}
-            </Stack>
-          )}
-
-          <Stack spacing={1.5}>
-            <Stack direction="row" justifyContent="space-between">
-              <Typography sx={{ fontSize: 12, color: C.muted }}>Items ({itemCount})</Typography>
-              <Typography sx={{ fontSize: 12, fontWeight: 600 }}>{money(subtotal)}</Typography>
-            </Stack>
-
-            <Stack direction="row" alignItems="center" spacing={1}>
-              <Typography sx={{ flex: 1, fontSize: 12, color: C.muted }}>Discount (₫)</Typography>
-              <TextField
-                size="small"
-                type="number"
-                value={discount}
-                onChange={(e) => setDiscount(e.target.value)}
-                inputProps={{ min: 0, max: subtotal }}
-                sx={{ width: 130 }}
-              />
-            </Stack>
-
-            <Divider sx={{ borderColor: C.border }} />
-
-            <Stack direction="row" justifyContent="space-between" alignItems="center">
-              <Typography sx={{ fontWeight: 700 }}>Total to pay</Typography>
-              <Typography sx={{ fontSize: 22, fontWeight: 800 }}>{money(total)}</Typography>
-            </Stack>
-
-            <Typography sx={{ fontSize: 12, fontWeight: 700 }}>Payment method</Typography>
-
-            <ToggleGroup value={payment} onChange={setPayment} fullWidth>
-              <ToggleButton value="Cash">Cash</ToggleButton>
-              <ToggleButton value="Bank transfer">Bank transfer</ToggleButton>
-            </ToggleGroup>
-
-            {payment === 'Cash' && (
-              <>
+        {/* CỘT TRÁI: TÌM KIẾM & SẢN PHẨM ĐÃ CHỌN */}
+        <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          <Box sx={{ display: 'flex', gap: 1.5, mb: 2 }}>
+            <ClickAwayListener onClickAway={() => setSearchOpen(false)}>
+              <Box sx={{ position: 'relative', flex: 1 }}>
                 <TextField
                   fullWidth
                   size="small"
-                  type="number"
-                  label="Amount received (₫)"
-                  value={received}
-                  onChange={(e) => setReceived(e.target.value)}
-                  inputProps={{ min: 0 }}
+                  placeholder="Tìm theo tên sản phẩm hoặc mã SKU"
+                  inputRef={searchInputRef}
+                  value={search}
+                  onFocus={() => setSearchOpen(true)}
+                  onChange={(e) => {
+                    setSearch(e.target.value);
+                    setSearchOpen(true);
+                  }}
+                  onKeyDown={async (e) => {
+                    // Máy quét gõ mã vào ô này rồi Enter (hoặc người gõ mã vạch TH… rồi Enter) → thêm vào hóa đơn.
+                    const code = search.trim();
+                    if (e.key !== 'Enter' || !/^TH\d{6,}(-\d+)?$/i.test(code)) return;
+                    e.preventDefault();
+                    const result = await addScanned(code);
+                    if (result.ok) {
+                      setSearch('');
+                      setSearchOpen(false);
+                    }
+                  }}
+                  slotProps={{
+                    input: {
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchOutlined style={{ color: '#94A3B8', fontSize: 16 }} />
+                      </InputAdornment>
+                    ),
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton
+                          size="small"
+                          aria-label="Quét mã bằng camera"
+                          title="Có máy quét: cứ bóp cò là thêm vào hóa đơn. Không có máy quét: bấm để quét bằng camera."
+                          onClick={() => setCameraOpen(true)}
+                        >
+                          <ScanOutlined style={{ color: '#64748B', fontSize: 18 }} />
+                        </IconButton>
+                      </InputAdornment>
+                    )
+                    }
+                  }}
+                  sx={{
+                    bgcolor: '#FFFFFF',
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: 2.5,
+                      height: 42,
+                      '& fieldset': { borderColor: '#E2E8F0' },
+                      '&:hover fieldset': { borderColor: '#8EECF5' },
+                      '&.Mui-focused fieldset': { borderColor: '#8EECF5' }
+                    }
+                  }}
                 />
 
-                <Stack direction="row" justifyContent="space-between" sx={{ p: 1.25, bgcolor: C.bg, borderRadius: 1.5 }}>
-                  <Typography sx={{ fontSize: 12, color: C.muted }}>Change due</Typography>
-                  <Typography sx={{ fontWeight: 700 }}>{money(change)}</Typography>
-                </Stack>
-              </>
-            )}
+                {searchOpen && (
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      top: 48,
+                      left: 0,
+                      right: 0,
+                      zIndex: 20,
+                      bgcolor: '#FFFFFF',
+                      border: '1px solid #E2E8F0',
+                      borderRadius: 2.5,
+                      boxShadow: '0 10px 24px rgba(15, 23, 42, 0.12)',
+                      maxHeight: 380,
+                      overflowY: 'auto',
+                      py: 0.5
+                    }}
+                  >
+                    {loading ? (
+                      <Box sx={{ py: 3, textAlign: 'center' }}>
+                        <CircularProgress size={24} sx={{ color: '#8EECF5' }} />
+                      </Box>
+                    ) : !visibleProducts.length ? (
+                      <Typography sx={{ py: 3, textAlign: 'center', color: '#64748B', fontSize: 13 }}>
+                        Không tìm thấy sản phẩm phù hợp.
+                      </Typography>
+                    ) : (
+                      visibleProducts.map((product) => {
+                        const id = getId(product);
+                        const stock = getProductStock(product);
+                        const isOut = stock <= 0;
+                        const min = product.minPrice;
+                        const max = product.maxPrice;
+                        const priceText =
+                          min == null
+                            ? 'Liên hệ'
+                            : max == null || Number(min) === Number(max)
+                              ? money(min)
+                              : `${Number(min).toLocaleString('vi-VN')}–${Number(max).toLocaleString('vi-VN')} đ`;
+                        const image =
+                          product.primaryImageUrl ||
+                          product.imageUrl ||
+                          product.thumbnailUrl ||
+                          product.mainImageUrl ||
+                          product.images?.[0]?.imageUrl ||
+                          '';
 
-            <Button
-              fullWidth
-              variant="contained"
-              onClick={completeSale}
-              disabled={!cart.length || submitting}
-              sx={{
-                ...buttonSx,
-                py: 1.2,
-                bgcolor: C.main,
-                color: C.text,
-                '&:hover': { bgcolor: '#6BDCE7' }
+                        return (
+                          <Box
+                            key={id}
+                            onClick={() => {
+                              setSearchOpen(false);
+                              addProduct(product);
+                            }}
+                            sx={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 1.25,
+                              px: 1.5,
+                              py: 1,
+                              cursor: 'pointer',
+                              opacity: isOut ? 0.55 : 1,
+                              '&:hover': { bgcolor: '#F0FDFF' }
+                            }}
+                          >
+                            <Box
+                              sx={{
+                                width: 40,
+                                height: 40,
+                                borderRadius: 1.5,
+                                bgcolor: '#F8FAFC',
+                                border: '1px solid #E2E8F0',
+                                flexShrink: 0,
+                                overflow: 'hidden',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}
+                            >
+                              {image ? (
+                                <Box component="img" src={image} alt={product.productName} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              ) : (
+                                <ShoppingCartOutlined style={{ fontSize: 16, color: '#CBD5E1' }} />
+                              )}
+                            </Box>
+                            <Box sx={{ flex: 1, minWidth: 0 }}>
+                              <Typography
+                                sx={{ fontSize: 13, fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                              >
+                                {product.productName}
+                              </Typography>
+                              <Typography sx={{ fontSize: 11.5, color: '#94A3B8' }}>{product.sku || '—'}</Typography>
+                            </Box>
+                            <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
+                              <Typography sx={{ fontSize: 13, fontWeight: 800, color: '#0F172A' }}>{priceText}</Typography>
+                              <Typography sx={{ fontSize: 11.5, color: isOut ? '#EF4444' : '#64748B' }}>
+                                {isOut ? 'Hết hàng' : `Tồn: ${stock}`}
+                              </Typography>
+                            </Box>
+                          </Box>
+                        );
+                      })
+                    )}
+                  </Box>
+                )}
+              </Box>
+            </ClickAwayListener>
+
+            <TextField
+              select
+              size="small"
+              value={category}
+              onChange={(e) => {
+                setCategory(e.target.value);
+                setSearchOpen(true);
               }}
-            >
-              {submitting ? (
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <CircularProgress size={16} sx={{ color: C.text }} />
-                  <span>Processing…</span>
-                </Stack>
-              ) : (
-                `Complete sale · ${money(total)}`
-              )}
-            </Button>
-
-            <Button
-              fullWidth
-              variant="outlined"
-              onClick={clearInvoice}
               sx={{
-                ...buttonSx,
-                py: 1,
-                borderColor: C.border,
-                color: C.text,
-                '&:hover': {
-                  bgcolor: C.cancelHover,
-                  borderColor: C.cancelHover
+                minWidth: { xs: 150, sm: 200 },
+                bgcolor: '#FFFFFF',
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 2.5,
+                  height: 42,
+                  '& fieldset': { borderColor: '#E2E8F0' },
+                  '&:hover fieldset': { borderColor: '#8EECF5' },
+                  '&.Mui-focused fieldset': { borderColor: '#8EECF5' }
                 }
               }}
             >
-              Clear invoice
+              {categories.map((c) => (
+                <MenuItem key={c} value={c}>
+                  {c}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Box>
+
+          <Box
+            sx={{
+              bgcolor: '#FFFFFF',
+              borderRadius: 3.5,
+              border: '1px solid #E2E8F0',
+              p: { xs: 2, sm: 2.5 },
+              boxShadow: '0 1px 4px rgba(0,0,0,0.03)',
+              flex: 1,
+              minHeight: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              overflowY: 'auto',
+              scrollbarWidth: 'none',
+              msOverflowStyle: 'none',
+              '&::-webkit-scrollbar': { display: 'none' }
+            }}
+          >
+          {/* Danh sách món hàng trong giỏ */}
+          <Box
+            sx={{
+              flex: '1 0 auto',
+              minHeight: { xs: 240, lg: 0 },
+              display: 'flex',
+              flexDirection: 'column'
+            }}
+          >
+            {!cart.length ? (
+              <Box
+                sx={{
+                  flex: 1,
+                  minHeight: { xs: 240, lg: 0 },
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  bgcolor: '#F8FAFC',
+                  borderRadius: 2.5,
+                  p: 2,
+                  textAlign: 'center'
+                }}
+              >
+                <ShoppingCartOutlined style={{ fontSize: 30, color: '#CBD5E1', marginBottom: 8 }} />
+                <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#475569' }}>Chưa có sản phẩm nào</Typography>
+                <Typography sx={{ fontSize: 11.5, color: '#94A3B8', mt: 0.25 }}>Tìm và chọn sản phẩm ở thanh tìm kiếm để thêm vào hóa đơn</Typography>
+              </Box>
+            ) : (
+              cart.map((line) => (
+                <Box key={line.key} sx={{ py: 1.5, borderBottom: '1px solid #F1F5F9' }}>
+                  <Box sx={{ display: 'flex', gap: 1.25 }}>
+                    {/* Thumbnail */}
+                    <Box
+                      component="img"
+                      src={line.image || ''}
+                      alt={line.name}
+                      sx={{
+                        width: 48,
+                        height: 48,
+                        borderRadius: 2,
+                        objectFit: 'cover',
+                        bgcolor: '#F8FAFC',
+                        flexShrink: 0,
+                        border: '1px solid #E2E8F0'
+                      }}
+                    />
+
+                    {/* Chi tiết tên & biến thể */}
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <Typography
+                          sx={{
+                            fontSize: 13,
+                            fontWeight: 700,
+                            color: '#0F172A',
+                            lineHeight: 1.3,
+                            pr: 1,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
+                          {line.name}
+                        </Typography>
+                        <IconButton
+                          size="small"
+                          onClick={() => setCart((prev) => prev.filter((item) => item.key !== line.key))}
+                          sx={{ p: 0.25, color: '#94A3B8', '&:hover': { color: '#EF4444' } }}
+                        >
+                          <CloseOutlined style={{ fontSize: 11 }} />
+                        </IconButton>
+                      </Box>
+
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.25, flexWrap: 'wrap' }}>
+                        {(line.size || line.color) && (
+                          <Typography sx={{ fontSize: 11.5, color: '#64748B' }}>
+                            {[line.size, line.color].filter(Boolean).join(' · ')}
+                          </Typography>
+                        )}
+                        {(line.size || line.color) && <Typography sx={{ fontSize: 11.5, color: '#CBD5E1' }}>•</Typography>}
+                        <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: '#475569' }}>Đơn giá: {money(line.price)}</Typography>
+                      </Box>
+
+                      {/* Tăng giảm số lượng & Thành tiền dòng */}
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1 }}>
+                        <Box
+                          sx={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            border: '1px solid #E2E8F0',
+                            borderRadius: 1.5,
+                            bgcolor: '#FFFFFF'
+                          }}
+                        >
+                          <IconButton size="small" onClick={() => updateQuantity(line.key, -1)} sx={{ p: 0.5, borderRadius: 1 }}>
+                            <MinusOutlined style={{ fontSize: 10, color: '#475569' }} />
+                          </IconButton>
+                          <Typography sx={{ minWidth: 26, textAlign: 'center', fontSize: 12.5, fontWeight: 700, color: '#0F172A' }}>
+                            {line.quantity}
+                          </Typography>
+                          <IconButton
+                            size="small"
+                            disabled={line.quantity >= line.stock}
+                            onClick={() => updateQuantity(line.key, 1)}
+                            sx={{ p: 0.5, borderRadius: 1 }}
+                          >
+                            <PlusOutlined style={{ fontSize: 10, color: '#475569' }} />
+                          </IconButton>
+                        </Box>
+
+                        <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: '#0F172A' }}>
+                          {money(line.price * line.quantity)}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </Box>
+                </Box>
+              ))
+            )}
+          </Box>
+
+          {/* Nút + góc dưới bên phải: thêm món khác vào hóa đơn này (đưa con trỏ lên ô tìm kiếm) */}
+          {cart.length > 0 && (
+            <Box sx={{ position: 'sticky', bottom: 0, display: 'flex', justifyContent: 'flex-end', pt: 1.5, pointerEvents: 'none' }}>
+              <IconButton
+                aria-label="Thêm sản phẩm vào hóa đơn"
+                title="Thêm sản phẩm vào hóa đơn này (hoặc cứ quét mã bằng máy quét)"
+                onClick={() => {
+                  // Đợi ClickAwayListener của ô tìm kiếm xử lý cú click này xong rồi mới mở danh sách.
+                  setTimeout(() => {
+                    searchInputRef.current?.focus();
+                    setSearchOpen(true);
+                  }, 0);
+                }}
+                sx={{
+                  pointerEvents: 'auto',
+                  width: 44,
+                  height: 44,
+                  bgcolor: '#8EECF5',
+                  color: '#0F172A',
+                  boxShadow: '0 4px 12px rgba(15, 23, 42, 0.15)',
+                  '&:hover': { bgcolor: '#5FDDEA' }
+                }}
+              >
+                <PlusOutlined style={{ fontSize: 18 }} />
+              </IconButton>
+            </Box>
+          )}
+          </Box>
+        </Box>
+
+        {/* CỘT PHẢI: TỔNG TIỀN & THANH TOÁN */}
+        <Box
+          sx={{
+            bgcolor: '#FFFFFF',
+            borderRadius: 3.5,
+            border: '1px solid #E2E8F0',
+            px: { xs: 2, sm: 2.5 },
+            py: 2,
+            boxShadow: '0 1px 4px rgba(0,0,0,0.03)',
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            '& > *': { flexShrink: 0 }
+          }}
+        >
+          {/* Thanh danh sách tab hóa đơn chờ kiểu Sapo */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1, overflowX: 'auto', pb: 0.25 }}>
+            {orders.map((ord) => {
+              const isActiveTab = ord.id === activeOrderId;
+
+              return (
+                <Box
+                  key={ord.id}
+                  onClick={() => switchOrderTab(ord.id)}
+                  sx={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 0.75,
+                    px: 1.25,
+                    py: 0.5,
+                    borderRadius: 2,
+                    cursor: 'pointer',
+                    bgcolor: isActiveTab ? '#FEF9C3' : '#F1F5F9',
+                    border: '1.5px solid',
+                    borderColor: isActiveTab ? '#FDE047' : '#E2E8F0',
+                    color: isActiveTab ? '#854D0E' : '#64748B',
+                    fontWeight: 600,
+                    fontSize: 12,
+                    whiteSpace: 'nowrap',
+                    userSelect: 'none',
+                    boxSizing: 'border-box',
+                    transition: 'background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease',
+                    '&:hover': {
+                      bgcolor: isActiveTab ? '#FEF9C3' : '#E2E8F0',
+                      color: '#0F172A'
+                    }
+                  }}
+                >
+                  <span>{ord.label}</span>
+                  {orders.length > 1 && (
+                    <Box
+                      component="span"
+                      onClick={(e) => closeOrderTab(ord.id, e)}
+                      sx={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: 15,
+                        height: 15,
+                        borderRadius: 99,
+                        fontSize: 11,
+                        color: '#94A3B8',
+                        ml: 0.25,
+                        '&:hover': { bgcolor: '#FEE2E2', color: '#EF4444' }
+                      }}
+                      title="Đóng hóa đơn này"
+                    >
+                      ×
+                    </Box>
+                  )}
+                </Box>
+              );
+            })}
+
+            {/* Nút thêm tab hóa đơn mới (+) */}
+            <Box
+              component="button"
+              type="button"
+              onClick={addOrderTab}
+              title="Mở thêm hóa đơn cho khách tiếp theo"
+              sx={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 28,
+                height: 28,
+                borderRadius: 1.75,
+                bgcolor: '#FFFFFF',
+                border: '1.5px dashed #CBD5E1',
+                color: '#475569',
+                cursor: 'pointer',
+                fontSize: 15,
+                fontWeight: 700,
+                flexShrink: 0,
+                outline: 'none',
+                transition: 'all 0.15s ease',
+                '&:hover': {
+                  borderColor: '#0F172A',
+                  color: '#0F172A',
+                  bgcolor: '#F8FAFC'
+                }
+              }}
+            >
+              +
+            </Box>
+          </Box>
+
+          {/* Header hóa đơn */}
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <FileTextOutlined style={{ fontSize: 18, color: '#0F172A' }} />
+              <Typography sx={{ fontSize: 16.5, fontWeight: 800, color: '#0F172A' }}>{activeOrder?.label || 'Hóa đơn hiện tại'}</Typography>
+            </Box>
+            <Box
+              sx={{
+                bgcolor: '#FEF9C3',
+                color: '#854D0E',
+                border: '1px solid #FDE047',
+                borderRadius: 99,
+                px: 1.25,
+                py: 0.35,
+                fontSize: 11.5,
+                fontWeight: 700
+              }}
+            >
+              Đang tạo
+            </Box>
+          </Box>
+
+          <Box
+            sx={{
+              flex: '1 1 auto',
+              flexShrink: '1 !important',
+              minHeight: 0,
+              overflowY: 'auto',
+              scrollbarWidth: 'none',
+              msOverflowStyle: 'none',
+              '&::-webkit-scrollbar': { display: 'none' }
+            }}
+          >
+          {/* Tổng tiền hàng & Giảm giá */}
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, py: 1, borderTop: '1px solid #F1F5F9' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography sx={{ fontSize: 13, color: '#64748B' }}>Tổng tiền hàng</Typography>
+              <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: '#0F172A' }}>{money(subtotal)}</Typography>
+            </Box>
+
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                <Typography sx={{ fontSize: 13, color: '#64748B' }}>
+                  Giảm giá{discountType === 'percent' && discountNumber > 0 ? ` (${discountNumber}%)` : ''}
+                </Typography>
+                <IconButton
+                  size="small"
+                  onClick={openDiscount}
+                  sx={{ p: 0.25, color: '#64748B', '&:hover': { color: '#0F172A' } }}
+                >
+                  <EditOutlined style={{ fontSize: 12 }} />
+                </IconButton>
+              </Box>
+              <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: discountValue > 0 ? '#10B981' : '#0F172A' }}>
+                {discountValue > 0 ? `-${money(discountValue)}` : '-0 đ'}
+              </Typography>
+            </Box>
+
+            {/* Tổng phải trả */}
+            <Box
+              sx={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                pt: 0.75,
+                mt: 0.25,
+                borderTop: '1px dashed #E2E8F0'
+              }}
+            >
+              <Typography sx={{ fontSize: 14.5, fontWeight: 800, color: '#0F172A' }}>Tổng phải trả</Typography>
+              <Typography sx={{ fontSize: 22, fontWeight: 800, color: '#0F172A' }}>{money(total)}</Typography>
+            </Box>
+          </Box>
+
+          {/* Phương thức thanh toán */}
+          <Box sx={{ mt: 1 }}>
+            <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: '#334155', mb: 1 }}>Phương thức thanh toán</Typography>
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
+              <Box
+                component="button"
+                type="button"
+                onClick={() => setPayment('Cash')}
+                sx={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 1,
+                  fontFamily: 'inherit',
+                  bgcolor: payment === 'Cash' ? '#FEF9C3' : '#FFFFFF',
+                  border: `1.5px solid ${payment === 'Cash' ? '#FDE047' : '#E2E8F0'}`,
+                  color: payment === 'Cash' ? '#854D0E' : '#475569',
+                  fontWeight: 700,
+                  fontSize: 13,
+                  height: 36,
+                  borderRadius: 2.5,
+                  cursor: 'pointer',
+                  boxShadow: 'none',
+                  outline: 'none',
+                  transition: 'none',
+                  WebkitTapHighlightColor: 'transparent',
+                  userSelect: 'none',
+                  '&:hover': {
+                    bgcolor: payment === 'Cash' ? '#FEF9C3' : '#F8FAFC'
+                  }
+                }}
+              >
+                <DollarOutlined />
+                <span>Tiền mặt</span>
+              </Box>
+
+              <Box
+                component="button"
+                type="button"
+                onClick={() => setPayment('Bank transfer')}
+                sx={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 1,
+                  fontFamily: 'inherit',
+                  bgcolor: payment === 'Bank transfer' ? '#FEF9C3' : '#FFFFFF',
+                  border: `1.5px solid ${payment === 'Bank transfer' ? '#FDE047' : '#E2E8F0'}`,
+                  color: payment === 'Bank transfer' ? '#854D0E' : '#475569',
+                  fontWeight: 700,
+                  fontSize: 13,
+                  height: 36,
+                  borderRadius: 2.5,
+                  cursor: 'pointer',
+                  boxShadow: 'none',
+                  outline: 'none',
+                  transition: 'none',
+                  WebkitTapHighlightColor: 'transparent',
+                  userSelect: 'none',
+                  '&:hover': {
+                    bgcolor: payment === 'Bank transfer' ? '#FEF9C3' : '#F8FAFC'
+                  }
+                }}
+              >
+                <BankOutlined />
+                <span>Chuyển khoản</span>
+              </Box>
+            </Box>
+          </Box>
+
+          </Box>
+
+          {/* Nút Hoàn tất thanh toán */}
+          <Button
+            fullWidth
+            variant="contained"
+            onClick={completeSale}
+            disabled={submitting}
+            startIcon={!submitting && <CheckOutlined />}
+            sx={{
+              mt: 1,
+              bgcolor: '#8EECF5',
+              color: '#0F172A',
+              fontWeight: 800,
+              fontSize: 14,
+              height: 40,
+              borderRadius: 2.5,
+              textTransform: 'none',
+              boxShadow: 'none',
+              '&:hover': {
+                bgcolor: '#76DCED',
+                boxShadow: '0 2px 10px rgba(142, 236, 245, 0.45)'
+              },
+              '&.Mui-disabled': {
+                bgcolor: '#E2E8F0',
+                color: '#94A3B8'
+              }
+            }}
+          >
+            {submitting ? 'Đang xử lý...' : 'Hoàn tất thanh toán'}
+          </Button>
+
+          {/* Nút Xóa hóa đơn */}
+          <Box sx={{ textAlign: 'center', mt: 0.75 }}>
+            <Button
+              size="small"
+              onClick={clearInvoice}
+              startIcon={<DeleteOutlined style={{ fontSize: 12 }} />}
+              sx={{
+                color: '#64748B',
+                fontSize: 12,
+                fontWeight: 600,
+                textTransform: 'none',
+                '&:hover': { color: '#EF4444', bgcolor: 'transparent' }
+              }}
+            >
+              Xóa hóa đơn
             </Button>
-          </Stack>
-        </Card>
+          </Box>
+        </Box>
       </Box>
 
-      {/* Receipt dialog — mở sau khi tạo hóa đơn thành công */}
-      <ReceiptDialog
-        open={receiptOpen}
-        onClose={handleReceiptClose}
-        saleData={completedSale}
-        cartItems={completedCart}
-        customerName={completedCustomer}
-        sellerName={account?.fullName ?? ''}
-        amountReceived={completedReceived}
-        changeDue={completedChange}
-        completedAt={completedAt}
-      />
-
-      {/* Variant popup */}
+      {/* ─── MODAL CHỌN BIẾN THỂ SẢN PHẨM (ẢNH 2) ─── */}
       <Dialog
         open={variantDialogOpen}
         onClose={closeDialog}
         TransitionProps={{ onExited: resetDialog }}
         fullWidth
-        maxWidth="xs"
-        PaperProps={{
+        maxWidth="sm"
+        slotProps={{
+          paper: {
             sx: {
-                width: '100%',
-                maxWidth: 360,
-                m: 1.5,
-                borderRadius: 3,
-                overflow: 'hidden',
-                outline: 'none',
-                border: 'none',
-                boxShadow: '0 8px 32px rgba(32, 45, 66, 0.12)'
+              maxWidth: 500,
+              width: '100%',
+              borderRadius: 3.5,
+              m: 2,
+              p: 0,
+              overflow: 'hidden',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
             }
-        }}
-        sx={{
-          '& .MuiDialog-container': { alignItems: 'center' },
-          '& .MuiDialog-paper': { maxHeight: 'calc(100% - 24px)' }
+          }
         }}
       >
-        <DialogTitle sx={{ fontSize: 15, fontWeight: 800, px: 2, py: 1.5 }}>Select product variant</DialogTitle>
+        <Box sx={{ p: { xs: 2.25, sm: 2.75 } }}>
+          {/* Header Modal */}
+          <Box sx={{ mb: 2 }}>
+            <Typography sx={{ fontSize: 16.5, fontWeight: 800, color: '#0F172A' }}>Chọn biến thể sản phẩm</Typography>
+          </Box>
 
-        <DialogContent
-          dividers
-          sx={{
-            px: 2,
-            py: 1.5,
-            borderColor: C.border,
-            overflowY: 'hidden'
-          }}
-        >
           {loadingVariants ? (
-            <Box sx={{ py: 3, textAlign: 'center' }}>
-              <CircularProgress size={24} />
+            <Box sx={{ py: 4, textAlign: 'center' }}>
+              <CircularProgress size={28} sx={{ color: '#8EECF5' }} />
             </Box>
           ) : (
             <>
-              <Stack direction="row" spacing={1.25} alignItems="center" sx={{ mb: 1.5 }}>
-                <Avatar
-                  variant="rounded"
-                  src={variantProduct?.image || ''}
-                  sx={{
-                    width: 56,
-                    height: 56,
-                    bgcolor: C.bg,
-                    borderRadius: 1.5
-                  }}
-                >
-                  <ShoppingCartOutlined />
-                </Avatar>
-
-                <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography
-                    sx={{
-                      fontSize: 13,
-                      fontWeight: 800,
-                      lineHeight: 1.35
-                    }}
-                  >
-                    {variantProduct?.productName}
-                  </Typography>
-                  <Typography
-                    sx={{
-                      mt: 0.4,
-                      fontSize: 13,
-                      fontWeight: 800,
-                      color: '#087F8C'
-                    }}
-                  >
-                    {priceRange}
-                  </Typography>
-                </Box>
-              </Stack>
-
-              <Divider sx={{ mb: 1.5, borderColor: C.border }} />
-
-              <Typography sx={{ fontSize: 12, fontWeight: 800, mb: 1 }}>Size</Typography>
-
+              {/* Tóm tắt sản phẩm đang chọn */}
               <Box
                 sx={{
                   display: 'flex',
-                  flexWrap: 'wrap',
-                  gap: '10px',
-                  mb: 2
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: 1.5,
+                  pb: 1.75,
+                  borderBottom: '1px solid #F1F5F9'
                 }}
               >
-                {sizes.map((size) => {
-                  const hasStock = variants.some((v) => String(v.size ?? '') === size && getStock(v) > 0);
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  <Box
+                    component="img"
+                    src={variantProduct?.image || ''}
+                    alt={variantProduct?.productName}
+                    sx={{
+                      width: 58,
+                      height: 58,
+                      borderRadius: 2,
+                      objectFit: 'cover',
+                      bgcolor: '#F8FAFC',
+                      border: '1px solid #E2E8F0'
+                    }}
+                  />
+                  <Box>
+                    <Typography sx={{ fontSize: 15, fontWeight: 800, color: '#0F172A', lineHeight: 1.25 }}>
+                      {variantProduct?.productName}
+                    </Typography>
+                    <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: '#0F172A', mt: 0.35 }}>{priceRange}</Typography>
+                  </Box>
+                </Box>
 
-                  return (
-                    <ChoiceButton
-                      key={size || 'default-size'}
-                      label={size || 'Default'}
-                      selected={selectedSize === size}
-                      disabled={!hasStock}
-                      onClick={() => chooseSize(size)}
-                    />
-                  );
-                })}
+                {/* Thông tin Tồn kho & Biến thể góc phải (cùng size và màu) */}
+                <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
+                  <Typography sx={{ fontSize: 12, fontWeight: 600, color: '#64748B', lineHeight: 1.2 }}>
+                    {selectedVariant
+                      ? `Tồn: ${getStock(selectedVariant)}`
+                      : variantProduct
+                        ? `Tồn: ${getProductStock(variantProduct)}`
+                        : ''}
+                  </Typography>
+                  <Typography sx={{ fontSize: 12, fontWeight: 600, color: '#64748B', mt: 0.35 }}>
+                    {selectedSize ? `Size ${selectedSize}` : 'Chưa chọn size'}
+                    {' · '}
+                    {selectedColor ? `Màu ${selectedColor}` : 'Chưa chọn màu'}
+                  </Typography>
+                </Box>
               </Box>
 
-              <Divider sx={{ mb: 1.5, borderColor: C.border }} />
+              {/* Bộ chọn Kích cỡ */}
+              <Box sx={{ mt: 2 }}>
+                <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: '#475569', mb: 0.85 }}>Kích cỡ</Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.85 }}>
+                  {sizes.map((size) => {
+                    const isSelected = selectedSize === size;
+                    const hasStock = variants.some((v) => String(v.size ?? '') === size && getStock(v) > 0);
 
-              <Typography sx={{ fontSize: 12, fontWeight: 800, mb: 1 }}>Color</Typography>
-
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-                {colors.map((color) => {
-                  const variant = variants.find((v) => String(v.size ?? '') === selectedSize && String(v.color ?? '') === color);
-
-                  return (
-                    <ChoiceButton
-                      key={color || 'default-color'}
-                      label={color || 'Default'}
-                      selected={selectedColor === color}
-                      disabled={!variant || getStock(variant) <= 0}
-                      onClick={() => setSelectedColor(color)}
-                    />
-                  );
-                })}
+                    return (
+                      <Box
+                        key={size}
+                        component="button"
+                        type="button"
+                        disabled={!hasStock}
+                        onClick={() => chooseSize(size)}
+                        sx={{
+                          minWidth: 42,
+                          height: 35,
+                          px: 1.5,
+                          borderRadius: 1.75,
+                          fontFamily: 'inherit',
+                          fontSize: 12.5,
+                          fontWeight: isSelected ? 700 : 500,
+                          bgcolor: '#FFFFFF',
+                          color: !hasStock ? '#CBD5E1' : isSelected ? '#0F172A' : '#475569',
+                          border: isSelected ? '1.5px solid #64748B' : '1.5px solid #E2E8F0',
+                          cursor: hasStock ? 'pointer' : 'not-allowed',
+                          opacity: hasStock ? 1 : 0.4,
+                          outline: 'none',
+                          transition: 'none',
+                          '&:hover': hasStock
+                            ? {
+                                borderColor: isSelected ? '#64748B' : '#94A3B8'
+                              }
+                            : {}
+                        }}
+                      >
+                        {size}
+                      </Box>
+                    );
+                  })}
+                </Box>
               </Box>
 
-              {selectedVariant && (
-                <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 1.5, width: '100%' }}>
-                  <Typography sx={{ fontSize: 11, color: C.muted, mr: 2 }}>Selected price</Typography>
+              {/* Bộ chọn Màu sắc */}
+              <Box sx={{ mt: 2, mb: 2.25 }}>
+                <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: '#475569', mb: 0.85 }}>Màu sắc</Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.85 }}>
+                  {colors.map((color) => {
+                    const isSelected = selectedColor === color;
+                    const inStock = variants.some(
+                      (v) =>
+                        String(v.color ?? '') === color && (selectedSize ? String(v.size ?? '') === selectedSize : true) && getStock(v) > 0
+                    );
 
-                  <Typography sx={{ fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap' }}>{money(getPrice(selectedVariant))}</Typography>
-                </Stack>
-              )}
+                    return (
+                      <Box
+                        key={color}
+                        component="button"
+                        type="button"
+                        disabled={!inStock}
+                        onClick={() => chooseColor(color)}
+                        sx={{
+                          minWidth: 50,
+                          height: 35,
+                          px: 1.75,
+                          borderRadius: 1.75,
+                          fontFamily: 'inherit',
+                          fontSize: 12.5,
+                          fontWeight: isSelected ? 700 : 500,
+                          bgcolor: '#FFFFFF',
+                          color: !inStock ? '#CBD5E1' : isSelected ? '#0F172A' : '#475569',
+                          border: isSelected ? '1.5px solid #64748B' : '1.5px solid #E2E8F0',
+                          cursor: inStock ? 'pointer' : 'not-allowed',
+                          opacity: inStock ? 1 : 0.4,
+                          outline: 'none',
+                          transition: 'none',
+                          '&:hover': inStock
+                            ? {
+                                borderColor: isSelected ? '#64748B' : '#94A3B8'
+                              }
+                            : {}
+                        }}
+                      >
+                        {color}
+                      </Box>
+                    );
+                  })}
+                </Box>
+              </Box>
+
+              {/* Footer Modal */}
+              <Box
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  pt: 2,
+                  borderTop: '1px solid #F1F5F9'
+                }}
+              >
+                <Box>
+                  <Typography sx={{ fontSize: 11.5, color: '#64748B' }}>
+                    {selectedVariant ? 'Thành tiền · 1 sản phẩm' : 'Giá sản phẩm'}
+                  </Typography>
+                  <Typography sx={{ fontSize: 17, fontWeight: 800, color: '#0F172A', mt: 0.25 }}>
+                    {selectedVariant ? money(getPrice(selectedVariant)) : priceRange}
+                  </Typography>
+                </Box>
+
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Button
+                    type="button"
+                    onClick={closeDialog}
+                    sx={{
+                      bgcolor: '#FFFFFF',
+                      border: '1px solid #E2E8F0',
+                      color: '#334155',
+                      fontWeight: 600,
+                      fontSize: 11.5,
+                      height: 30,
+                      px: 1.5,
+                      borderRadius: 1.5,
+                      textTransform: 'none',
+                      '&:hover': { bgcolor: '#F8FAFC' }
+                    }}
+                  >
+                    Hủy
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="contained"
+                    disabled={!selectedVariant || getStock(selectedVariant) <= 0}
+                    onClick={confirmVariant}
+                    startIcon={<PlusOutlined style={{ fontSize: 10 }} />}
+                    sx={{
+                      bgcolor: '#8EECF5',
+                      color: '#0F172A',
+                      fontWeight: 700,
+                      fontSize: 11.5,
+                      height: 30,
+                      px: 1.75,
+                      borderRadius: 1.5,
+                      textTransform: 'none',
+                      boxShadow: 'none',
+                      '&:hover': {
+                        bgcolor: '#76DCED',
+                        boxShadow: '0 2px 8px rgba(142, 236, 245, 0.4)'
+                      },
+                      '&.Mui-disabled': {
+                        bgcolor: '#E2E8F0',
+                        color: '#94A3B8'
+                      }
+                    }}
+                  >
+                    Thêm vào hóa đơn
+                  </Button>
+                </Box>
+              </Box>
             </>
           )}
-        </DialogContent>
-
-        <DialogActions sx={{ px: 2, py: 1.25, gap: 1 }}>
-          <Button
-            type="button"
-            onClick={closeDialog}
-            sx={{
-              ...buttonSx,
-              minHeight: 32,
-              px: 1.75,
-              fontSize: 12,
-              color: C.text,
-              border: `1px solid ${C.border}`,
-              bgcolor: '#FFFFFF',
-              transition: 'background-color 0.15s ease',
-              '&:hover': {
-                bgcolor: C.cancelHover,
-                borderColor: C.cancelHover
-              }
-            }}
-          >
-            Cancel
-          </Button>
-
-          <Button
-            variant="contained"
-            disabled={!selectedVariant || getStock(selectedVariant) <= 0 || loadingVariants}
-            onClick={confirmVariant}
-            sx={{
-              ...buttonSx,
-              minHeight: 32,
-              px: 1.75,
-              fontSize: 12,
-              bgcolor: C.main,
-              color: C.text,
-              '&:hover': { bgcolor: '#6BDCE7' }
-            }}
-          >
-            Add to invoice
-          </Button>
-        </DialogActions>
+        </Box>
       </Dialog>
+
+      {/* ─── POPUP GIẢM GIÁ ─── */}
+      <Dialog
+        open={discountOpen}
+        onClose={() => setDiscountOpen(false)}
+        fullWidth
+        slotProps={{ paper: { sx: { maxWidth: 380, borderRadius: 3.5, m: 2 } } }}
+      >
+        <Box sx={{ p: 2.5 }}>
+          <Typography sx={{ fontSize: 16.5, fontWeight: 800, color: '#0F172A', mb: 2 }}>Giảm giá</Typography>
+
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, mb: 2 }}>
+            {[
+              { value: 'amount', label: 'VNĐ' },
+              { value: 'percent', label: '%' }
+            ].map((opt) => {
+              const selected = draftType === opt.value;
+              return (
+                <Box
+                  key={opt.value}
+                  component="button"
+                  type="button"
+                  onClick={() => {
+                    setDraftType(opt.value);
+                    setDraftValue('');
+                    setDraftError('');
+                  }}
+                  sx={{
+                    fontFamily: 'inherit',
+                    fontWeight: 700,
+                    fontSize: 13,
+                    height: 36,
+                    borderRadius: 2.5,
+                    cursor: 'pointer',
+                    outline: 'none',
+                    bgcolor: selected ? '#FEF9C3' : '#FFFFFF',
+                    border: `1.5px solid ${selected ? '#FDE047' : '#E2E8F0'}`,
+                    color: selected ? '#854D0E' : '#475569'
+                  }}
+                >
+                  {opt.label}
+                </Box>
+              );
+            })}
+          </Box>
+
+          <TextField
+            fullWidth
+            autoFocus
+            size="small"
+            type="number"
+            placeholder={draftType === 'percent' ? 'Nhập % giảm' : 'Nhập số tiền giảm'}
+            value={draftValue}
+            onChange={(e) => {
+              setDraftValue(e.target.value);
+              setDraftError('');
+            }}
+            onKeyDown={(e) => e.key === 'Enter' && applyDiscount()}
+            error={Boolean(draftError)}
+            helperText={
+              draftError ||
+              (draftType === 'percent' && Number(draftValue) > 0
+                ? `= ${money(Math.round((subtotal * Math.min(100, Number(draftValue))) / 100))}`
+                : `Tổng tiền hàng: ${money(subtotal)}`)
+            }
+            inputProps={{ min: 0, max: draftType === 'percent' ? 100 : subtotal }}
+            InputProps={{ endAdornment: <InputAdornment position="end">{draftType === 'percent' ? '%' : 'đ'}</InputAdornment> }}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, height: 40 } }}
+          />
+
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 2.5 }}>
+            <Button
+              type="button"
+              onClick={() => setDiscountOpen(false)}
+              sx={{
+                border: '1px solid #E2E8F0',
+                color: '#334155',
+                fontWeight: 600,
+                fontSize: 12.5,
+                height: 34,
+                px: 2,
+                borderRadius: 1.5,
+                textTransform: 'none',
+                '&:hover': { bgcolor: '#F8FAFC' }
+              }}
+            >
+              Hủy
+            </Button>
+            <Button
+              type="button"
+              variant="contained"
+              onClick={applyDiscount}
+              sx={{
+                bgcolor: '#8EECF5',
+                color: '#0F172A',
+                fontWeight: 700,
+                fontSize: 12.5,
+                height: 34,
+                px: 2,
+                borderRadius: 1.5,
+                textTransform: 'none',
+                boxShadow: 'none',
+                '&:hover': { bgcolor: '#76DCED', boxShadow: 'none' }
+              }}
+            >
+              Áp dụng
+            </Button>
+          </Box>
+        </Box>
+      </Dialog>
+
+      {cameraOpen && <CameraScanDialog title="Quét mã thêm vào hóa đơn" onDetected={addScanned} onClose={() => setCameraOpen(false)} />}
+
+      <Snackbar
+        open={Boolean(error || success)}
+        autoHideDuration={5000}
+        onClose={(e, reason) => {
+          if (reason === 'clickaway') return;
+          setError('');
+          setSuccess('');
+        }}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+        sx={{ top: { xs: 64, sm: 72 } }}
+      >
+        <Alert
+          severity={error ? 'error' : 'success'}
+          variant="filled"
+          onClose={() => {
+            setError('');
+            setSuccess('');
+          }}
+          sx={{ width: '100%' }}
+        >
+          {error || success}
+        </Alert>
+      </Snackbar>
+
+      {/* Modal Hóa đơn sau thanh toán */}
+      <ReceiptDialog
+        open={receiptOpen}
+        onClose={handleReceiptClose}
+        saleData={completedSale}
+        cartItems={completedCart}
+        sellerName={account?.fullName ?? ''}
+        completedAt={completedAt}
+      />
     </Box>
   );
 }

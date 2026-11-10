@@ -5,16 +5,14 @@ import {
   Box,
   Collapse,
   Drawer,
-  IconButton,
   List,
   ListItemButton,
   ListItemIcon,
   ListItemText,
-  Tooltip,
   Typography
 } from '@mui/material';
 import { Stack } from 'features/account/components/Flex';
-import { LogoutOutlined, DownOutlined, UpOutlined } from '@ant-design/icons';
+import { DownOutlined } from '@ant-design/icons';
 import { useAuth } from 'features/auth/AuthProvider';
 import { ROLE_LABEL, STORE_NAME } from 'features/account/constants';
 import { brand } from 'features/account/tokens';
@@ -23,9 +21,94 @@ import AppFooter from './AppFooter';
 import AppHeader from './AppHeader';
 import { CrumbsContext } from './crumbs';
 import { navFor } from './navigation';
+import { crumbsForPath } from './routeCrumbs';
 import ThorsMark from './ThorsMark';
 
-const SIDEBAR_WIDTH = 248;
+const SIDEBAR_WIDTH = 256;
+
+// Màu theo trang Đăng nhập
+const ACCENT = brand.cyan;
+const HOVER_BG = 'rgba(168, 241, 248, 0.32)';
+// Nền sidebar: trắng phía trên, ngả xanh ngọc rất nhạt phía dưới (giống tông form đăng nhập)
+const SIDEBAR_BG = 'linear-gradient(180deg, #FFFFFF 0%, #FFFFFF 40%, #F1FCFD 100%)';
+
+const textProps = { fontSize: 14, fontWeight: 'inherit', noWrap: true };
+const iconBoxSx = {
+  width: 24,
+  minWidth: 0,
+  mr: 1.25,
+  display: 'grid',
+  placeItems: 'center',
+  color: 'inherit',
+  fontSize: 16
+};
+const itemSx = {
+  minHeight: 42,
+  px: 1.25,
+  mb: 0.25,
+  borderRadius: '10px',
+  color: brand.ink,
+  fontWeight: 500,
+  transition: 'background-color .2s, color .2s',
+  '&:hover': { bgcolor: HOVER_BG, color: brand.ink }
+};
+// Mục đang chọn: nền xanh ngọc nhạt
+const SELECT_MAIN = '#48EFFE';
+const SELECT_BG = 'rgba(72, 239, 254, 0.2)';
+const selectedSx = {
+  '&.Mui-selected, &.Mui-selected:hover': { bgcolor: SELECT_BG, color: brand.ink, fontWeight: 600 },
+  '&.Mui-selected .nav-icon': { color: '#2BDDF0' }
+};
+
+const navListSx = {
+  position: 'relative', // nằm trên các đốm trang trí
+  px: 1.5,
+  pt: 0.5,
+  flexGrow: 1,
+  overflowY: 'auto',
+  scrollbarWidth: 'none',
+  msOverflowStyle: 'none',
+  '&::-webkit-scrollbar': { display: 'none' }
+};
+
+// Menu sổ xuống: đường dọc xám thẳng hàng với icon mục cha
+const childListSx = { ml: '22px', pl: 1, mb: 0.5, borderLeft: `2px solid ${brand.cardLine}` };
+
+function NavLink({ item, selected, nested = false, onClick }) {
+  return (
+    <ListItemButton
+      component={Link}
+      to={item.to}
+      selected={selected}
+      onClick={onClick}
+      sx={{
+        ...itemSx,
+        ...selectedSx,
+        // Mục con: chữ xám, đậm lên khi được chọn
+        ...(nested && {
+          minHeight: 40,
+          position: 'relative',
+          color: brand.muted,
+          // Đoạn đường dọc cạnh mục đang chọn chuyển sang xanh
+          '&.Mui-selected::before': {
+            content: '""',
+            position: 'absolute',
+            left: -10,
+            top: 0,
+            bottom: 0,
+            width: 2,
+            bgcolor: SELECT_MAIN
+          }
+        })
+      }}
+    >
+      <ListItemIcon className="nav-icon" sx={iconBoxSx}>
+        {item.icon}
+      </ListItemIcon>
+      <ListItemText primary={item.label} primaryTypographyProps={textProps} />
+    </ListItemButton>
+  );
+}
 
 export default function ThorsLayout() {
   const { account, logout } = useAuth();
@@ -43,7 +126,8 @@ export default function ThorsLayout() {
     setError('');
     try {
       await logout();
-      navigate('/login', { replace: true });
+      // Đăng xuất xong về trang chủ cửa hàng (giao diện khách chưa đăng nhập)
+      navigate('/', { replace: true });
     } catch (e) {
       setError(e.message);
     }
@@ -51,133 +135,116 @@ export default function ThorsLayout() {
 
   const isSelected = (to) => location.pathname === to || location.pathname.startsWith(`${to}/`);
 
+  const activeChildTo = (children) =>
+    children.reduce((best, c) => (isSelected(c.to) && c.to.length > (best?.length ?? 0) ? c.to : best), null);
+  const closeMobile = () => setMobile(false);
+
   const sidebar = (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: brand.surface }}>
-      <Stack direction="row" alignItems="center" spacing={1.25} sx={{ px: 3, py: 2.5 }}>
-        <ThorsMark />
-        <Box sx={{ minWidth: 0 }}>
-          <Typography variant="h5" sx={{ color: brand.ink, lineHeight: 1.2 }}>
-            THORS
-          </Typography>
-          <Typography variant="caption" noWrap sx={{ color: brand.muted, display: 'block' }}>
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', background: SIDEBAR_BG, position: 'relative', overflow: 'hidden' }}>
+      {/* Đốm hồng mờ trang trí, gợi tag hồng ở trang Đăng nhập */}
+      <Box
+        aria-hidden
+        sx={{
+          position: 'absolute',
+          bottom: 60,
+          left: -70,
+          width: 170,
+          height: 170,
+          borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(224, 85, 154, 0.10) 0%, rgba(224, 85, 154, 0) 70%)',
+          pointerEvents: 'none'
+        }}
+      />
+
+      {/* Logo giống trang Đăng nhập và màn khách hàng */}
+      <Stack
+        component={Link}
+        to="/workspace"
+        aria-label={`${STORE_NAME} — Dashboard`}
+        direction="row"
+        alignItems="center"
+        spacing={1.25}
+        sx={{ position: 'relative', px: 2.75, pt: 3, pb: 2.5, color: brand.ink, textDecoration: 'none' }}
+      >
+        <ThorsMark height={34} />
+        <Box>
+          <Typography component="span" sx={{ display: 'block', color: brand.ink, fontSize: 22, fontWeight: 800, letterSpacing: '3px', lineHeight: 1 }}>
             {STORE_NAME}
+          </Typography>
+          <Typography component="span" sx={{ display: 'block', color: brand.pink, fontSize: 11.5, fontWeight: 700, mt: 0.5 }}>
+            Quản lý cửa hàng
           </Typography>
         </Box>
       </Stack>
+      <Box aria-hidden sx={{ mx: 2.75, mb: 1.5, borderTop: `2px dashed ${brand.cardLine}` }} />
 
-      <List component="nav" aria-label="Menu chính" sx={{ px: 1.5, flexGrow: 1, overflowY: 'auto' }}>
+      <List component="nav" aria-label="Menu chính" sx={navListSx}>
         {items.map((item) => {
-          if (item.children) {
-            const isChildActive = item.children.some(
-              (c) => location.pathname === c.to || location.pathname.startsWith(`${c.to}/`)
-            );
-            const isOpen = openSubmenus[item.label] ?? isChildActive;
-
-            return (
-              <Box key={item.label}>
-                <ListItemButton
-                  onClick={() => setOpenSubmenus((prev) => ({ ...prev, [item.label]: !isOpen }))}
-                  sx={{
-                    borderRadius: '10px',
-                    mb: 0.5,
-                    color: isChildActive ? brand.ink : brand.muted,
-                    bgcolor: 'transparent',
-                    fontWeight: isChildActive ? 600 : 400,
-                    '&:hover': { bgcolor: '#F6F8FA' }
-                  }}
-                >
-                  <ListItemIcon sx={{ color: 'inherit', minWidth: 36 }}>{item.icon}</ListItemIcon>
-                  <ListItemText primary={item.label} primaryTypographyProps={{ fontSize: 14, fontWeight: 'inherit' }} />
-                  {isOpen ? (
-                    <UpOutlined style={{ fontSize: 10, color: brand.muted }} />
-                  ) : (
-                    <DownOutlined style={{ fontSize: 10, color: brand.muted }} />
-                  )}
-                </ListItemButton>
-
-                <Collapse in={isOpen} timeout="auto" unmountOnExit>
-                  <List component="div" disablePadding sx={{ pl: 1.5, mb: 0.5 }}>
-                    {item.children.map((child) => {
-                      const selected = child.to === '/in-store-sales'
-                        ? location.pathname === '/in-store-sales'
-                        : (location.pathname === child.to || location.pathname.startsWith(`${child.to}/`));
-                      return (
-                        <ListItemButton
-                          key={child.to}
-                          component={Link}
-                          to={child.to}
-                          selected={selected}
-                          onClick={() => setMobile(false)}
-                          sx={{
-                            borderRadius: '10px',
-                            mb: 0.5,
-                            pl: 2,
-                            color: brand.muted,
-                            '&.Mui-selected, &.Mui-selected:hover': {
-                              bgcolor: '#E8F8FA',
-                              color: brand.ink,
-                              fontWeight: 600,
-                              '& .MuiListItemIcon-root': {
-                                color: '#1677FF'
-                              }
-                            }
-                          }}
-                        >
-                          {child.icon && (
-                            <ListItemIcon sx={{ color: 'inherit', minWidth: 32 }}>
-                              {child.icon}
-                            </ListItemIcon>
-                          )}
-                          <ListItemText primary={child.label} primaryTypographyProps={{ fontSize: 14, fontWeight: 'inherit' }} />
-                        </ListItemButton>
-                      );
-                    })}
-                  </List>
-                </Collapse>
-              </Box>
-            );
+          if (!item.children) {
+            return <NavLink key={item.to} item={item} selected={isSelected(item.to)} onClick={closeMobile} />;
           }
 
-          const { to, label, icon } = item;
+          const activeTo = activeChildTo(item.children);
+          const isOpen = openSubmenus[item.label] ?? Boolean(activeTo);
           return (
-            <ListItemButton
-              key={to}
-              component={Link}
-              to={to}
-              selected={isSelected(to)}
-              onClick={() => setMobile(false)}
-              sx={{
-                borderRadius: '10px',
-                mb: 0.5,
-                color: brand.muted,
-                '&.Mui-selected, &.Mui-selected:hover': { bgcolor: '#E8F8FA', color: brand.ink, fontWeight: 600 }
-              }}
-            >
-              <ListItemIcon sx={{ color: 'inherit', minWidth: 36 }}>{icon}</ListItemIcon>
-              <ListItemText primary={label} primaryTypographyProps={{ fontSize: 14, fontWeight: 'inherit' }} />
-            </ListItemButton>
+            <Box key={item.label}>
+              <ListItemButton onClick={() => setOpenSubmenus((prev) => ({ ...prev, [item.label]: !isOpen }))} sx={itemSx}>
+                <ListItemIcon className="nav-icon" sx={iconBoxSx}>
+                  {item.icon}
+                </ListItemIcon>
+                <ListItemText primary={item.label} primaryTypographyProps={textProps} />
+                <DownOutlined
+                  style={{ fontSize: 10, color: brand.muted, transition: 'transform .2s', transform: isOpen ? 'rotate(180deg)' : 'none' }}
+                />
+              </ListItemButton>
+
+              <Collapse in={isOpen} timeout="auto" unmountOnExit>
+                <List component="div" disablePadding sx={childListSx}>
+                  {item.children.map((child) => (
+                    <NavLink key={child.to} item={child} nested selected={child.to === activeTo} onClick={closeMobile} />
+                  ))}
+                </List>
+              </Collapse>
+            </Box>
           );
         })}
       </List>
 
-      <Stack direction="row" alignItems="center" spacing={1.25} sx={{ p: 2, borderTop: `1px solid ${brand.line}` }}>
-        <UserAvatar name={account.fullName} src={account.avatarUrl} size={36} />
+      {/* Thẻ người dùng: nền trong suốt theo nền sidebar, bấm để mở hồ sơ */}
+      <Stack
+        component={Link}
+        to="/profile"
+        onClick={closeMobile}
+        direction="row"
+        alignItems="center"
+        spacing={1.25}
+        sx={{
+          position: 'relative',
+          // Thẻ người dùng: hình chữ nhật khớp đáy sidebar
+          px: 2,
+          py: 1.5,
+          bgcolor: 'transparent',
+          borderTop: `1px solid ${brand.yellowLine}`,
+          textDecoration: 'none',
+          transition: 'box-shadow .2s',
+          '&:hover': { boxShadow: '0 10px 22px -16px rgba(31, 41, 55, 0.5)' },
+          '&:focus-visible': { outline: `2px solid ${brand.teal}`, outlineOffset: 2 }
+        }}
+      >
+        <Box sx={{ borderRadius: '50%', p: '2px', bgcolor: '#FFFFFF', boxShadow: `0 0 0 2px ${ACCENT}`, display: 'flex' }}>
+          <UserAvatar name={account.fullName} src={account.avatarUrl} size={34} />
+        </Box>
         <Box sx={{ minWidth: 0, flexGrow: 1 }}>
-          <Typography variant="subtitle2" noWrap sx={{ color: brand.ink }}>
+          <Typography variant="subtitle2" noWrap sx={{ color: brand.ink, fontWeight: 700 }}>
             {account.fullName}
           </Typography>
-          {/* Khách hàng chỉ có một vai trò nên không cần hiện nhãn; các vai trò khác thì có phân biệt. */}
+
           {account.role !== 'CUSTOMER' && (
-            <Typography variant="caption" noWrap sx={{ color: brand.muted, display: 'block' }}>
+            <Typography variant="caption" noWrap sx={{ color: brand.pink, fontWeight: 700, display: 'block' }}>
               {ROLE_LABEL[account.role] ?? account.role}
             </Typography>
           )}
         </Box>
-        <Tooltip title="Đăng xuất">
-          <IconButton aria-label="Đăng xuất" onClick={signOut}>
-            <LogoutOutlined />
-          </IconButton>
-        </Tooltip>
       </Stack>
     </Box>
   );
@@ -191,10 +258,13 @@ export default function ThorsLayout() {
             display: { xs: 'none', md: 'block' },
             width: SIDEBAR_WIDTH,
             flexShrink: 0,
-            borderRight: `1px solid ${brand.line}`,
+            alignSelf: 'flex-start',
             position: 'sticky',
             top: 0,
-            height: '100vh'
+            height: '100vh',
+            overflow: 'hidden',
+            // Sidebar chiếm hết chiều dọc, không bo góc
+            borderRight: `1px solid ${brand.cardLine}`
           }}
         >
           {sidebar}
@@ -203,12 +273,12 @@ export default function ThorsLayout() {
           variant="temporary"
           open={mobile}
           onClose={() => setMobile(false)}
-          sx={{ display: { md: 'none' }, '& .MuiDrawer-paper': { width: SIDEBAR_WIDTH } }}
+          sx={{ display: { md: 'none' }, '& .MuiDrawer-paper': { width: SIDEBAR_WIDTH, borderRadius: 0, border: 0 } }}
         >
           {sidebar}
         </Drawer>
         <Box sx={{ flexGrow: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-          <AppHeader crumbs={crumbs} onOpenMenu={() => setMobile(true)} onSignOut={signOut} />
+          <AppHeader crumbs={crumbs.length > 0 ? crumbs : crumbsForPath(location.pathname)}onOpenMenu={() => setMobile(true)} onSignOut={signOut} />
           <Box component="main" sx={{ px: { xs: 2, md: 4 }, py: 3, maxWidth: 1920, mx: 'auto', width: '100%', flexGrow: 1 }}>
             {error && (
               <Alert severity="error" sx={{ mb: 2 }}>

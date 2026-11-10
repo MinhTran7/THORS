@@ -28,6 +28,15 @@ function getColorStyle({ variant, color, theme }) {
 
   switch (variant) {
     case 'contained':
+      if (color === 'primary') {
+        return {
+          backgroundColor: '#A8F1F8',
+          color: '#0E3A41',
+          fontWeight: 800,
+          '&:hover': { backgroundColor: '#8FE6EF' },
+          ...commonShadow
+        };
+      }
       return {
         '&:hover': {
           backgroundColor: dark
@@ -125,8 +134,11 @@ export default function Button(theme) {
         disableElevation: true
       },
       styleOverrides: {
+        // Giống nút trên trang Đăng nhập: bo 12px, chữ đậm, không viết hoa
         root: {
-          fontWeight: 400,
+          fontWeight: 700,
+          borderRadius: 12,
+          textTransform: 'none',
           '&::after': {
             content: '""',
             display: 'block',
@@ -135,14 +147,14 @@ export default function Button(theme) {
             top: 0,
             width: '100%',
             height: '100%',
-            borderRadius: 4,
+            borderRadius: 12,
             opacity: 0,
             transition: 'all 0.5s'
           },
 
           '&:active::after': {
             position: 'absolute',
-            borderRadius: 4,
+            borderRadius: 12,
             left: 0,
             top: 0,
             opacity: 1,
@@ -157,6 +169,8 @@ export default function Button(theme) {
           }
         },
         outlined: {
+          borderWidth: '1.5px',
+          '&:hover': { borderWidth: '1.5px' },
           '&.Mui-disabled': {
             ...disabledStyle,
             '&:hover': {

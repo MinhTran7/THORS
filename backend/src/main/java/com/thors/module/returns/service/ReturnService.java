@@ -12,7 +12,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+import com.cloudinary.Cloudinary;
+import com.cloudinary.utils.ObjectUtils;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -28,10 +32,17 @@ public class ReturnService {
 
     private final ReturnRepository returnRepository;
     private final SessionAccess sessionAccess;
+    private final Cloudinary cloudinary;
 
     public ReturnService(ReturnRepository returnRepository, SessionAccess sessionAccess) {
+        this(returnRepository, sessionAccess, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public ReturnService(ReturnRepository returnRepository, SessionAccess sessionAccess, @org.springframework.lang.Nullable Cloudinary cloudinary) {
         this.returnRepository = returnRepository;
         this.sessionAccess = sessionAccess;
+        this.cloudinary = cloudinary;
     }
 
     // ==========================================
@@ -60,13 +71,58 @@ public class ReturnService {
     }
 
     // ==========================================
+    // TRACK ORDER (PUBLIC / GUEST TRACKING)
+    // ==========================================
+
+    @Transactional(readOnly = true)
+    public ReturnableOrderResponse trackOrder(String orderNumber, String phone) {
+        if (orderNumber == null || orderNumber.isBlank()) {
+            throw new ApiException(400, "INVALID_ORDER_NUMBER", "Mã đơn hàng không được để trống.");
+        }
+
+        ReturnableOrderResponse order = returnRepository.findOrderByNumber(orderNumber.trim())
+                .orElseThrow(() -> new ApiException(404, "ORDER_NOT_FOUND", "Không tìm thấy đơn hàng với mã: " + orderNumber));
+
+        String rawPhone = order.getCustomerPhone() != null ? order.getCustomerPhone().replaceAll("[^0-9]", "") : "";
+        String inputPhone = phone != null ? phone.replaceAll("[^0-9]", "") : "";
+
+        boolean isVerified = false;
+        if (!inputPhone.isBlank()) {
+            if (rawPhone.endsWith(inputPhone) || inputPhone.endsWith(rawPhone) || rawPhone.equals(inputPhone)) {
+                isVerified = true;
+            }
+        }
+
+        order.setVerified(isVerified);
+
+        if (!isVerified) {
+            // Che bớt SĐT: 0566***971
+            if (rawPhone.length() >= 7) {
+                order.setCustomerPhone(rawPhone.substring(0, 4) + "***" + rawPhone.substring(rawPhone.length() - 3));
+            }
+            // Che bớt địa chỉ
+            String addr = order.getDeliveryAddress();
+            if (addr != null && addr.length() > 10) {
+                order.setDeliveryAddress(addr.substring(0, 6) + "******");
+            }
+        }
+
+        return order;
+    }
+
+    // ==========================================
     // CREATE RETURN REQUEST
     // ==========================================
 
     @Transactional
     public ReturnRequestResponse createReturnRequest(CreateReturnRequest request) {
         Account currentUser = sessionAccess.current();
+        ReturnableOrderResponse order = getOrderByNumber(request != null ? request.getOrderNumber() : null);
+        return createReturnRequestInternal(request, order, currentUser);
+    }
 
+    @Transactional
+    public ReturnRequestResponse createPublicReturnRequest(CreateReturnRequest request) {
         if (request == null) {
             throw new ApiException(400, "INVALID_REQUEST", "Dữ liệu yêu cầu hoàn hàng không hợp lệ.");
         }
@@ -74,6 +130,29 @@ public class ReturnService {
         String orderNumber = request.getOrderNumber();
         if (orderNumber == null || orderNumber.isBlank()) {
             throw new ApiException(400, "INVALID_ORDER_NUMBER", "Mã đơn hàng không được để trống.");
+        }
+
+        ReturnableOrderResponse order = getOrderByNumber(orderNumber);
+
+        String reqPhone = request.getCustomerPhone() != null ? request.getCustomerPhone().replaceAll("[^0-9]", "") : "";
+        String orderPhone = order.getCustomerPhone() != null ? order.getCustomerPhone().replaceAll("[^0-9]", "") : "";
+
+        if (reqPhone.isBlank() || (!orderPhone.endsWith(reqPhone) && !reqPhone.endsWith(orderPhone))) {
+            throw new ApiException(400, "PHONE_MISMATCH", "Số điện thoại xác thực không khớp với đơn hàng.");
+        }
+
+        if (order.getActiveReturnStatus() != null &&
+                ("PENDING".equalsIgnoreCase(order.getActiveReturnStatus()) || "APPROVED".equalsIgnoreCase(order.getActiveReturnStatus()))) {
+            throw new ApiException(400, "RETURN_ALREADY_EXISTS", "Đơn hàng này đang có một yêu cầu hoàn trả đang được xử lý.");
+        }
+
+        request.setInstantComplete(false); // Khách gửi online luôn ở trạng thái PENDING
+        return createReturnRequestInternal(request, order, null);
+    }
+
+    private ReturnRequestResponse createReturnRequestInternal(CreateReturnRequest request, ReturnableOrderResponse order, Account currentUser) {
+        if (request == null) {
+            throw new ApiException(400, "INVALID_REQUEST", "Dữ liệu yêu cầu hoàn hàng không hợp lệ.");
         }
 
         String reason = request.getReason();
@@ -86,8 +165,7 @@ public class ReturnService {
             throw new ApiException(400, "ITEMS_REQUIRED", "Cần chọn ít nhất một sản phẩm để hoàn trả.");
         }
 
-        ReturnableOrderResponse order = getOrderByNumber(orderNumber);
-
+        String orderNumber = order.getOrderNumber();
         Map<Integer, ReturnableOrderResponse.OrderItemDetail> orderItemMap = order.getItems().stream()
                 .collect(Collectors.toMap(ReturnableOrderResponse.OrderItemDetail::getOrderItemId, item -> item));
 
@@ -123,22 +201,23 @@ public class ReturnService {
                 ? request.getCustomerPhone().trim()
                 : order.getCustomerPhone();
 
-        boolean isCustomer = "CUSTOMER".equalsIgnoreCase(currentUser.role());
+        boolean isCustomer = currentUser != null && "CUSTOMER".equalsIgnoreCase(currentUser.role());
         if (isCustomer && order.getUserId() != null && !order.getUserId().equals(currentUser.id())) {
             throw new ApiException(403, "FORBIDDEN", "Bạn chỉ có thể yêu cầu hoàn hàng cho đơn hàng của chính mình.");
         }
 
-        boolean isInstant = !isCustomer && request.isInstantComplete();
+        boolean isInstant = currentUser != null && !isCustomer && request.isInstantComplete();
         String initialStatus = isInstant ? "COMPLETED" : "PENDING";
         LocalDateTime now = LocalDateTime.now();
+        int createdById = currentUser != null ? currentUser.id() : (order.getUserId() != null ? order.getUserId() : 1);
 
         int returnRequestId = returnRepository.insertReturnRequest(
                 order.getOrderId(),
-                order.getUserId() != null ? order.getUserId() : currentUser.id(),
+                order.getUserId() != null ? order.getUserId() : (currentUser != null ? currentUser.id() : null),
                 reason.trim(),
                 initialStatus,
                 now,
-                currentUser.id(),
+                createdById,
                 requestType,
                 customerName,
                 customerPhone,
@@ -410,6 +489,39 @@ public class ReturnService {
         }
 
         return getReturnRequestById(returnRequestId);
+    }
+
+    // ==========================================
+    // UPLOAD EVIDENCE (IMAGE / VIDEO)
+    // ==========================================
+
+    public Map<String, Object> uploadEvidence(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new ApiException(400, "FILE_EMPTY", "Vui lòng chọn ảnh hoặc video.");
+        }
+        if (file.getSize() > 25 * 1024 * 1024) {
+            throw new ApiException(400, "FILE_TOO_LARGE", "Dung lượng tệp tối đa là 25MB.");
+        }
+        if (cloudinary == null) {
+            throw new ApiException(500, "CLOUDINARY_NOT_CONFIGURED", "Dịch vụ tải tệp chưa được cấu hình.");
+        }
+
+        try {
+            Map<?, ?> uploadResult = cloudinary.uploader().upload(
+                    file.getBytes(),
+                    ObjectUtils.asMap(
+                            "folder", "thors/returns",
+                            "resource_type", "auto"
+                    )
+            );
+            return Map.of(
+                    "url", uploadResult.get("secure_url"),
+                    "resourceType", uploadResult.get("resource_type") != null ? uploadResult.get("resource_type") : "image"
+            );
+        } catch (IOException e) {
+            logger.error("Failed to upload evidence to Cloudinary: ", e);
+            throw new ApiException(500, "UPLOAD_FAILED", "Không thể tải lên tệp: " + e.getMessage());
+        }
     }
 
     // ==========================================

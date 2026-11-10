@@ -4,7 +4,8 @@ const LOCALE = 'vi-VN';
 export function parseUtc(value) {
   if (!value) return null;
   const text = String(value);
-  return new Date(/([zZ]|[+-]\d\d:?\d\d)$/.test(text) ? text : `${text}Z`);
+  const date = new Date(/([zZ]|[+-]\d\d:?\d\d)$/.test(text) ? text : `${text}Z`);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 export const initials = (name = '') =>

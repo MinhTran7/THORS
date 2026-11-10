@@ -10,8 +10,6 @@ public record ShippingAddressResponse(
         String phone,
         String provinceCode,
         String provinceName,
-        String districtCode,
-        String districtName,
         String wardCode,
         String wardName,
         String addressDetail,
@@ -21,13 +19,11 @@ public record ShippingAddressResponse(
         LocalDateTime createdAt,
         LocalDateTime updatedAt) {
 
-    public static ShippingAddressResponse from(ShippingAddress address) {
+    public static ShippingAddressResponse from(ShippingAddress a) {
         return new ShippingAddressResponse(
-                address.addressId(), address.recipientName(), address.phone(),
-                address.provinceCode(), address.provinceName(),
-                address.districtCode(), address.districtName(),
-                address.wardCode(), address.wardName(),
-                address.addressDetail(), address.latitude(),
-                address.longitude(), address.isDefault(), address.createdAt(), address.updatedAt());
+                a.addressId(), a.recipientName(), a.phone(),
+                a.provinceCode(), a.provinceName(), a.wardCode(), a.wardName(),
+                a.addressDetail(), a.latitude(), a.longitude(),
+                a.isDefault(), a.createdAt(), a.updatedAt());
     }
 }

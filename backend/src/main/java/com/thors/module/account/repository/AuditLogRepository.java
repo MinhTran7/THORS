@@ -3,7 +3,6 @@ package com.thors.module.account.repository;
 import com.thors.module.account.dto.AuditLogViews.*;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -128,14 +127,7 @@ public class AuditLogRepository {
                             + " OR LOWER(l.action_type) LIKE ? OR LOWER(l.new_value) LIKE ?)");
             for (int i = 0; i < 4; i++) args.add(like);
         }
-        if (f.from() != null) {
-            where.append(" AND l.performed_at >= ?");
-            args.add(f.from().atStartOfDay().minusMinutes(f.offset()));
-        }
-        if (f.to() != null) {
-            where.append(" AND l.performed_at < ?");
-            args.add(f.to().plusDays(1).atStartOfDay().minusMinutes(f.offset()));
-        }
+        dateRange(where, args, "l.performed_at", f.from(), f.to(), f.offset());
 
         long total = db.queryForObject("SELECT COUNT(*) " + FROM + where, Long.class, args.toArray());
 
@@ -155,18 +147,18 @@ public class AuditLogRepository {
         return new Page(items, page, size, total, totalPages);
     }
 
-    /** Số liệu của ngày hôm nay theo múi giờ của người xem (offset phút lệch về phía đông UTC). */
-    public Summary summary(int offset) {
-        LocalDate today = LocalDateTime.now(ZoneOffset.UTC).plusMinutes(offset).toLocalDate();
-        LocalDateTime start = today.atStartOfDay().minusMinutes(offset);
+    /**
+     * Số liệu cho các thẻ thống kê trong khoảng ngày [from, to] theo múi giờ của người xem (offset
+     * phút lệch về phía đông UTC), cùng cách tính ranh giới ngày với {@link #search}. from/to null thì
+     * không giới hạn phía đó; cả hai null là toàn bộ lịch sử.
+     */
+    public Summary summary(LocalDate from, LocalDate to, int offset) {
+        var where = new StringBuilder(" WHERE action_type NOT IN (" + marks(HIDDEN.size()) + ")");
         List<Object> args = new ArrayList<>(HIDDEN);
-        args.add(start);
-        args.add(start.plusDays(1));
+        dateRange(where, args, "performed_at", from, to, offset);
         Map<String, Long> counts = new HashMap<>();
         db.query(
-                "SELECT action_type, COUNT(*) AS n FROM audit_log WHERE action_type NOT IN ("
-                        + marks(HIDDEN.size())
-                        + ") AND performed_at >= ? AND performed_at < ? GROUP BY action_type",
+                "SELECT action_type, COUNT(*) AS n FROM audit_log" + where + " GROUP BY action_type",
                 rs -> {
                     counts.put(rs.getString("action_type"), rs.getLong("n"));
                 },
@@ -235,6 +227,19 @@ public class AuditLogRepository {
                     ip,
                     rs.getObject("performed_at", LocalDateTime.class));
         };
+    }
+
+    /** Ngày from/to theo giờ địa phương của người xem, quy về UTC (cột performed_at lưu UTC). */
+    private static void dateRange(
+            StringBuilder where, List<Object> args, String column, LocalDate from, LocalDate to, int offset) {
+        if (from != null) {
+            where.append(" AND ").append(column).append(" >= ?");
+            args.add(from.atStartOfDay().minusMinutes(offset));
+        }
+        if (to != null) {
+            where.append(" AND ").append(column).append(" < ?");
+            args.add(to.plusDays(1).atStartOfDay().minusMinutes(offset));
+        }
     }
 
     private static String like(String q) {

@@ -16,9 +16,9 @@ import GoogleCallback from 'features/auth/pages/GoogleCallback';
 import ProfilePage from 'features/account/pages/ProfilePage';
 import UpdateProfilePage from 'features/account/pages/UpdateProfilePage';
 import ChangePasswordPage from 'features/account/pages/ChangePasswordPage';
-import StaffListPage from 'features/account/pages/StaffListPage';
-import StaffFormPage from 'features/account/pages/StaffFormPage';
-import StaffDetailPage from 'features/account/pages/StaffDetailPage';
+import FamilyListPage from 'features/account/pages/FamilyListPage';
+import FamilyFormPage from 'features/account/pages/FamilyFormPage';
+import FamilyDetailPage from 'features/account/pages/FamilyDetailPage';
 import AccountsPage from 'features/account/pages/AccountListPage';
 import SystemLogPage from 'features/account/pages/SystemLogPage';
 import WorkspacePage from 'features/account/WorkspacePage';
@@ -26,10 +26,12 @@ import { AuthShell } from 'features/auth/components/AuthForm';
 
 // Notification Management
 import NotificationPage from 'features/notification/NotificationPage';
+import NotificationDetailPage from 'features/notification/NotificationDetailPage';
 
 // Online Order Management
 import OrderListPage from 'features/order/OrderListPage';
 import OrderDetailPage from 'features/order/OrderDetailPage';
+import OrderTrackingPage from 'features/order/OrderTrackingPage';
 
 // Category Management
 import CategoryPage from 'features/category/CategoryPage';
@@ -39,7 +41,8 @@ import ProductPage from '../features/product/ProductPage';
 import AddProductPage from '../features/product/AddProductPage';
 import ProductDetailPage from 'features/product/ProductDetailPage';
 import EditProductPage from 'features/product/EditProductPage';
-//sales
+
+// Sales
 import InStoreSalesPage from 'features/sales/InStoreSalesPage';
 import InStoreSalesHistoryPage from 'features/sales/InStoreSalesHistoryPage';
 import InStoreSaleDetailPage from 'features/sales/InStoreSaleDetailPage';
@@ -47,8 +50,10 @@ import PromotionPage from 'features/promotion/PromotionPage';
 import AddPromotionPage from 'features/promotion/AddPromotionPage';
 import PromotionDetailPage from 'features/promotion/PromotionDetailPage';
 import EditPromotionPage from 'features/promotion/EditPromotionPage';
+
 // Returns Management (Đổi trả / Hoàn hàng)
 import ReturnsPage from 'features/returns/ReturnsPage';
+import FacebookPOSPage from 'features/facebook/FacebookPOSPage';
 // Customer Addresses
 import CustomerAddressPage from 'features/customer/CustomerAddressPage';
 import AddAddressPage from 'features/customer/AddAddressPage';
@@ -92,6 +97,7 @@ export default createBrowserRouter([
       { path: '/shop/best-sellers', element: <ShopCollectionPage key="best" collection="best_selling" /> },
       { path: '/shop/new-arrivals', element: <ShopCollectionPage key="new" collection="newest" /> },
       { path: '/shop/sale', element: <ShopCollectionPage key="sale" collection="sale" /> },
+      { path: '/tracking/:orderNumber', element: <OrderTrackingPage /> },
       {
         element: <RequireAuth />,
         children: [
@@ -100,6 +106,7 @@ export default createBrowserRouter([
           { path: '/profile/edit', element: <UpdateProfilePage /> },
           { path: '/profile/password', element: <ChangePasswordPage /> },
           { path: '/notifications', element: <NotificationPage /> },
+          { path: '/notifications/:id', element: <NotificationDetailPage /> },
           {
             // Giỏ hàng và đặt hàng chỉ dành cho khách hàng
             element: <RequireAuth roles={['CUSTOMER']} />,
@@ -114,7 +121,8 @@ export default createBrowserRouter([
             element: <RequireAuth roles={['CUSTOMER', 'OWNER', 'FAMILY_MEMBER']} />,
             children: [
               { path: '/orders', element: <OrderListPage /> },
-              { path: '/orders/:id', element: <OrderDetailPage /> }
+              { path: '/orders/:id', element: <OrderDetailPage /> },
+              { path: '/promotions', element: <PromotionPage /> }
             ]
           },
           {
@@ -149,16 +157,17 @@ export default createBrowserRouter([
             children: [
               { path: '/in-store-sales', element: <InStoreSalesPage /> },
               { path: '/in-store-sales/history', element: <InStoreSalesHistoryPage /> },
-              { path: '/in-store-sales/history/:orderId', element: <InStoreSaleDetailPage /> }
+              { path: '/in-store-sales/history/:orderId', element: <InStoreSaleDetailPage /> },
+              { path: '/facebook', element: <FacebookPOSPage /> }
             ]
           },
           {
             element: <RequireAuth roles={['OWNER']} />,
             children: [
-              { path: '/family', element: <StaffListPage /> },
-              { path: '/family/new', element: <StaffFormPage /> },
-              { path: '/family/:id', element: <StaffDetailPage /> },
-              { path: '/family/:id/edit', element: <StaffFormPage /> },
+              { path: '/family', element: <FamilyListPage /> },
+              { path: '/family/new', element: <FamilyFormPage /> },
+              { path: '/family/:id', element: <FamilyDetailPage /> },
+              { path: '/family/:id/edit', element: <FamilyFormPage /> },
               // Category, Product & Returns (của DongNV)
               { path: '/categories', element: <CategoryPage /> },
               { path: '/products', element: <ProductPage /> },
@@ -167,7 +176,6 @@ export default createBrowserRouter([
               { path: '/products/:productId/edit', element: <EditProductPage /> },
               { path: '/returns', element: <ReturnsPage /> },
               // Promotion (của phuoc)
-              { path: '/promotions', element: <PromotionPage /> },
               { path: '/promotions/add', element: <AddPromotionPage /> },
               { path: '/promotions/:promotionId', element: <PromotionDetailPage /> },
               { path: '/promotions/:promotionId/edit', element: <EditPromotionPage /> }

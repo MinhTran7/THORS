@@ -4,9 +4,13 @@ import com.thors.common.ApiException;
 import com.thors.module.account.entity.Account;
 import com.thors.module.notification.service.NotificationPublisher;
 import com.thors.module.notification.service.NotificationTypes;
+import com.thors.module.order.delivery.DeliveryService;
+import com.thors.module.order.delivery.GhnShippingService;
 import com.thors.module.order.dto.OrderViews.Detail;
 import com.thors.module.order.dto.OrderViews.Page;
 import com.thors.module.order.repository.OrderRepository;
+import com.thors.module.warehouse.WarehouseStore;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -52,12 +56,26 @@ public class OrderService {
     private static final Set<String> ALLOWED_CARRIERS =
             Set.of("SELF", "GHN", "GHTK", "VIETTEL_POST", "JT");
 
+    /** Bộ lọc hình thức thanh toán: khớp đúng giá trị cột orders.payment_method. */
+    private static final Set<String> PAYMENT_FILTERS = Set.of("COD", "ONLINE", "CASH");
+
     private final OrderRepository orders;
     private final NotificationPublisher notifications;
+    private final GhnShippingService ghnShipping;
+    private final DeliveryService delivery;
+    private final WarehouseStore warehouse;
 
-    public OrderService(OrderRepository orders, NotificationPublisher notifications) {
+    public OrderService(
+            OrderRepository orders,
+            NotificationPublisher notifications,
+            GhnShippingService ghnShipping,
+            DeliveryService delivery,
+            WarehouseStore warehouse) {
         this.orders = orders;
         this.notifications = notifications;
+        this.ghnShipping = ghnShipping;
+        this.delivery = delivery;
+        this.warehouse = warehouse;
     }
 
     private static boolean isStore(Account actor) {
@@ -75,14 +93,33 @@ public class OrderService {
 
     /**
      * View Order List: Customer thấy đơn của chính mình; Owner và Family Member thấy mọi đơn
-     * online. Có lọc theo trạng thái, tìm theo mã đơn / tên / số điện thoại người nhận và phân trang.
+     * online. Có lọc theo trạng thái, ngày đặt (dateFrom, dateTo, gồm cả hai đầu), hình thức thanh
+     * toán (COD / ONLINE / CASH), tìm theo mã đơn / tên / số điện thoại người nhận và phân trang.
      */
-    public Page list(Account actor, String status, String q, int page, int size) {
+    public Page list(
+            Account actor,
+            String status,
+            String q,
+            LocalDate dateFrom,
+            LocalDate dateTo,
+            String paymentMethod,
+            int page,
+            int size) {
         requireOrderAccess(actor);
         List<String> statuses = parseStatuses(status);
         String safeQuery = blankToNull(q);
         if (safeQuery != null && safeQuery.length() > 100)
             throw new ApiException(400, "QUERY", "Từ khóa tìm kiếm quá dài.");
+
+        if (dateFrom != null && dateTo != null && dateFrom.isAfter(dateTo))
+            throw new ApiException(400, "DATE_RANGE", "Ngày bắt đầu phải trước hoặc bằng ngày kết thúc.");
+
+        String safePayment = blankToNull(paymentMethod);
+        if (safePayment != null) {
+            safePayment = safePayment.toUpperCase();
+            if (!PAYMENT_FILTERS.contains(safePayment))
+                throw new ApiException(400, "PAYMENT_METHOD", "Hình thức thanh toán không hợp lệ.");
+        }
 
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), MAX_SIZE);
@@ -90,7 +127,15 @@ public class OrderService {
 
         var slice =
                 orders.search(
-                        customerId, OrderStatus.TYPE_ONLINE, statuses, safeQuery, safePage, safeSize);
+                        customerId,
+                        OrderStatus.TYPE_ONLINE,
+                        statuses,
+                        safeQuery,
+                        dateFrom,
+                        dateTo,
+                        safePayment,
+                        safePage,
+                        safeSize);
         int totalPages = (int) Math.ceil(slice.total() / (double) safeSize);
         return new Page(slice.items(), safePage, safeSize, slice.total(), totalPages);
     }
@@ -142,15 +187,42 @@ public class OrderService {
                                         new ApiException(
                                                 400, "NO_PRODUCT", "Chưa có sản phẩm nào để tạo đơn mẫu."));
 
-        // Báo cho khách
-        notifications.toUser(
+        // Dùng chung thông báo với luồng đặt hàng thật
+        notifyOrderPlaced(customerId, orderId, orderNumber, OrderStatus.PENDING_CONFIRMATION);
+
+        return detail(actor, orderId);
+    }
+
+    // ------------------------------------------------------------------
+    // Thông báo khi có đơn mới: gọi từ mọi nơi tạo đơn online (checkout thật, đơn mẫu, thanh toán xong)
+    // ------------------------------------------------------------------
+
+    /**
+     * Gọi ngay sau khi một đơn online mới được tạo (checkout thật hoặc đơn mẫu). Đơn chờ thanh toán
+     * online thì chỉ báo khách; chủ shop chỉ được báo khi đơn đã sẵn sàng để xác nhận.
+     */
+    public void notifyOrderPlaced(int customerId, int orderId, String orderNumber, String orderStatus) {
+        if (OrderStatus.AWAITING_PAYMENT.equals(orderStatus)) {
+            notifyCustomer(
+                    customerId,
+                    orderId,
+                    "Đặt hàng thành công",
+                    "Đơn " + orderNumber + " đã được tạo. Vui lòng thanh toán để cửa hàng xử lý đơn.");
+            return;
+        }
+        notifyCustomer(
                 customerId,
-                NotificationTypes.ORDER_STATUS,
+                orderId,
                 "Đặt hàng thành công",
-                "Đơn " + orderNumber + " đã được ghi nhận và đang chờ cửa hàng xác nhận.",
-                NotificationTypes.ENTITY_ORDER,
-                orderId);
-        // Báo cho chủ shop: có đơn đang chờ xác nhận
+                "Đơn " + orderNumber + " đã được ghi nhận và đang chờ cửa hàng xác nhận.");
+        notifyOwnersNewOrder(orderId, orderNumber);
+    }
+
+    /**
+     * Báo chủ shop có đơn đang chờ xác nhận. Gọi thêm ở chỗ xử lý thanh toán online thành công (đơn
+     * chuyển từ AWAITING_PAYMENT sang PENDING_CONFIRMATION).
+     */
+    public void notifyOwnersNewOrder(int orderId, String orderNumber) {
         notifications.toRole(
                 OWNER_ROLE,
                 NotificationTypes.ORDER_STATUS,
@@ -158,18 +230,29 @@ public class OrderService {
                 "Đơn " + orderNumber + " đang chờ xác nhận.",
                 NotificationTypes.ENTITY_ORDER,
                 orderId);
-
-        return detail(actor, orderId);
     }
 
     /**
      * Chuyển trạng thái đơn. Owner đi theo luồng xác nhận -> giao -> hoàn tất (hoặc từ chối); Customer
      * chỉ hủy được đơn của mình khi chưa được xác nhận. Mỗi lần chuyển đều gửi thông báo cho bên còn lại.
-     * Bản này chỉ đổi trạng thái, chưa trừ tồn kho.
+     * Owner xác nhận đơn (sang chờ lấy hàng) thì trừ tồn kho ngay trong cùng transaction: mỗi dòng ghi
+     * "Xuất bán" (ORDER_OUT) vào thẻ kho, lấy hàng chưa xếp trước rồi tới vị trí trên kệ. Không đủ hàng
+     * thì không xác nhận được.
+     *
+     * <p>Chọn GHN khi chuyển sang SHIPPING thì tạo vận đơn thật trên GHN; weightG là cân nặng Owner
+     * nhập (null = cân nặng mặc định), ghnDistrictId / ghnWardCode là Quận-Huyện / Phường-Xã theo GHN
+     * Owner chọn (null = dùng mã đã lưu ở đơn).
      */
     @Transactional
     public Detail changeStatus(
-            Account actor, int orderId, String target, String reason, String carrier) {
+            Account actor,
+            int orderId,
+            String target,
+            String reason,
+            String carrier,
+            Integer weightG,
+            Integer ghnDistrictId,
+            String ghnWardCode) {
         requireOrderAccess(actor);
         if (!isCustomer(actor) && !"OWNER".equals(actor.role()))
             throw new ApiException(403, "ROLE", "Chỉ Owner được xử lý đơn hàng online.");
@@ -203,13 +286,49 @@ public class OrderService {
             throw new ApiException(
                     409, "ORDER_TRANSITION", "Không thể chuyển đơn từ " + current + " sang " + target + ".");
 
+        // Đơn đã tạo vận đơn GHN: "Đang giao" / "Đã giao" do GHN báo về (webhook / hỏi định kỳ), chủ shop
+        // không tự bấm
+        var shipment = found.detail().shipment();
+        if ((OrderStatus.SHIPPING.equals(target) || OrderStatus.DELIVERED.equals(target))
+                && shipment != null
+                && GhnShippingService.CARRIER.equals(shipment.carrier()))
+            throw new ApiException(
+                    409,
+                    "CARRIER_MANAGED",
+                    "Đơn đã gửi GHN sẽ tự chuyển trạng thái khi GHN lấy hàng và giao thành công.");
+
+        // Không tìm thấy địa chỉ giao trên bản đồ: chặn ngay từ bước xác nhận đơn (lúc này chủ shop vẫn từ
+        // chối được), và chặn cả lúc bàn giao (bất kể hình thức giao) cho các đơn đã xác nhận từ trước
+        if (OrderStatus.AWAITING_PICKUP.equals(target))
+            delivery.requireDeliverableAddress(orderId, DeliveryService.NOT_FOUND_ON_CONFIRM);
+        else if (OrderStatus.SHIPPING.equals(target))
+            delivery.requireDeliverableAddress(orderId, DeliveryService.NOT_FOUND_ON_SHIP);
+
         String finalReason = safeReason;
         if (finalReason == null && OrderStatus.REJECTED.equals(target)) finalReason = "Cửa hàng từ chối đơn";
         if (finalReason == null && OrderStatus.CANCELLED.equals(target)) finalReason = "Khách hủy đơn";
 
-        if (!orders.transition(orderId, current, target, actor.id(), finalReason, safeCarrier))
+        boolean confirm = OrderStatus.AWAITING_PICKUP.equals(target);
+        // Khóa kho trước khi đổi trạng thái, cùng thứ tự với các thao tác kho khác.
+        if (confirm) warehouse.lock();
+        if (OrderStatus.SHIPPING.equals(target) && GhnShippingService.CARRIER.equals(safeCarrier)) {
+            // Tạo vận đơn GHN và lưu vào đơn; tự kiểm tra trạng thái đơn và báo lỗi nếu không được
+            ghnShipping.ship(orderId, current, weightG, ghnDistrictId, ghnWardCode);
+        } else if (!orders.transition(orderId, current, target, actor.id(), finalReason, safeCarrier))
             throw new ApiException(
                     409, "ORDER_STATE", "Trạng thái đơn vừa thay đổi, vui lòng tải lại trang.");
+        if (confirm) {
+            for (var line : orders.unshippedLines(orderId))
+                warehouse.sell(
+                        actor.id(),
+                        line.detailId(),
+                        line.quantity(),
+                        line.reserved(),
+                        line.orderItemId(),
+                        "ORDER_OUT:item:" + line.orderItemId(),
+                        "Xuất bán đơn online " + number);
+            orders.markStockDeducted(orderId);
+        }
 
         int customerId = found.userId();
         switch (target) {
@@ -219,11 +338,16 @@ public class OrderService {
             case OrderStatus.REJECTED ->
                     notifyCustomer(customerId, orderId, "Đơn hàng bị từ chối",
                             "Đơn " + number + " bị từ chối: " + finalReason);
-            case OrderStatus.SHIPPING ->
+            case OrderStatus.SHIPPING -> {
+                if (GhnShippingService.CARRIER.equals(safeCarrier))
+                    notifyCustomer(customerId, orderId, "Đơn hàng đã được gửi GHN",
+                            "Đơn " + number + " đã được tạo vận đơn GHN và đang chờ GHN đến lấy hàng.");
+                else
                     notifyCustomer(customerId, orderId, "Đơn hàng đang được giao",
                             "SELF".equals(safeCarrier)
                                     ? "Đơn " + number + " đang được cửa hàng giao đến bạn."
                                     : "Đơn " + number + " đã được giao cho đơn vị vận chuyển.");
+            }
             case OrderStatus.DELIVERED ->
                     notifyCustomer(customerId, orderId, "Đơn hàng đã giao",
                             "Đơn " + number + " đã được giao thành công.");

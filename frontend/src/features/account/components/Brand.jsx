@@ -10,8 +10,8 @@ export function BrandButton({ sx, ...props }) {
       sx={{
         bgcolor: brand.cyan,
         color: brand.inkOnCyan,
-        fontWeight: 600,
-        borderRadius: '10px',
+        fontWeight: 800,
+        borderRadius: '12px',
         textTransform: 'none',
         '&:hover': { bgcolor: brand.cyanHover, boxShadow: 'none' },
         '&.Mui-disabled': { bgcolor: brand.neutralBg, color: brand.muted },
@@ -29,12 +29,12 @@ export function OutlineButton({ sx, ...props }) {
       {...props}
       sx={{
         bgcolor: brand.surface,
-        borderColor: brand.line,
-        color: brand.ink,
-        fontWeight: 600,
-        borderRadius: '10px',
+        border: `1.5px solid ${brand.line}`,
+        color: '#374151',
+        fontWeight: 700,
+        borderRadius: '12px',
         textTransform: 'none',
-        '&:hover': { bgcolor: '#F6F6F1', borderColor: '#D8D9D2' },
+        '&:hover': { bgcolor: '#FAFDFD', border: `1.5px solid ${brand.cyan}` },
         ...sx
       }}
     />

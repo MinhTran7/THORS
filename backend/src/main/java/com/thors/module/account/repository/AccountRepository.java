@@ -279,10 +279,14 @@ public class AccountRepository {
     }
 
     /** Ghi đè các trường hồ sơ; người gọi truyền giá trị cuối cùng (đã chuẩn hóa) cho mọi trường. */
-    public void updateProfile(int id, String name, String phone, String address, String avatarUrl) {
+    public void updateProfile(int id, String name, String phone, String address) {
         ensurePhoneAvailable(phone, id);
-        db.update("UPDATE `user` SET full_name=?,phone=?,address=?,avatar_url=? WHERE user_id=?",
-                name, phone, address, avatarUrl, id);
+        db.update("UPDATE `user` SET full_name=?,phone=?,address=? WHERE user_id=?", name, phone, address, id);
+    }
+
+    /** Chỉ AccountService.setAvatar gọi, với link do backend nhận từ Cloudinary (hoặc null để gỡ). */
+    public void avatar(int id, String avatarUrl) {
+        db.update("UPDATE `user` SET avatar_url=? WHERE user_id=?", avatarUrl, id);
     }
 
     public void name(int id, String name) {

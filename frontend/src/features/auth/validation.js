@@ -39,3 +39,10 @@ export const safeReturn = (path) =>
   !path.startsWith('/auth')
     ? path
     : '/workspace';
+
+/**
+ * Trang mở ra ngay sau khi ĐĂNG NHẬP:
+ *  - Khách hàng: quay lại trang đang xem dở (giỏ hàng, sản phẩm, đặt hàng...).
+ *  - Owner / Family Member / Admin: luôn vào Dashboard (/workspace), không quay lại trang trước.
+ */
+export const landingAfterLogin = (account, path) => (account?.role === 'CUSTOMER' ? safeReturn(path) : '/workspace');

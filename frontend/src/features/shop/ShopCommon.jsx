@@ -222,7 +222,7 @@ export function ShopHeader({ account, initialQuery = '', onSearch }) {
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 'auto' }}>
           <Tooltip title="Đăng nhập để xem giỏ hàng">
-            <IconButton component={RouterLink} to="/login" size="small" aria-label="Giỏ hàng">
+            <IconButton component={RouterLink} to={`/login?returnTo=${encodeURIComponent('/cart')}`} size="small" aria-label="Giỏ hàng">
               <ShoppingCartOutlined />
             </IconButton>
           </Tooltip>

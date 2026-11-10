@@ -20,13 +20,17 @@ Source và schema có thể mâu thuẫn. Khi đó không tự tuyên bố một
 | Tổng tồn khác tồn theo vị trí | `product_detail.stock_quantity` là tổng; `product_location` là phân bổ. Không lấy việc gán kệ làm một lần nhập hàng. |
 | Owner là người duyệt kho | Xác nhận nhập/trả và thay đổi vị trí/bố cục được WarehousePolicy giới hạn. |
 | Kho chỉ OWNER/FAMILY_MEMBER | Yêu cầu mới hơn và code hiện tại đều chặn STAFF/ADMIN/CUSTOMER. Mô tả tháng 9 cho Staff sửa kho là bối cảnh cũ. |
-| Family tạo phiếu nhập của mình | Không tạo phiếu đặt/trả, không tự xác nhận; chỉ sửa/gửi nháp do mình tạo. |
+| Family tạo phiếu nhập/phiếu trả của mình | Không tạo phiếu đặt, không tự duyệt/xác nhận/xuất trả; chỉ sửa/gửi nháp do mình tạo. Phiếu trả NCC cho Family lập từ 04/11/2026. |
+| Trả NCC tách duyệt và xuất trả | `APPROVED` = đã duyệt, chưa trừ tồn; chỉ xác nhận xuất trả (kèm vị trí lấy do người dùng chọn) mới trừ tồn. Không tự trừ vị trí theo thứ tự mã. |
 | Đơn đặt và nhập hàng là hai nghiệp vụ | Đặt không tăng tồn; nhận nhiều đợt; nhập dùng dòng nguồn/giá nguồn. |
 | Excel ở cả bước tạo phiếu đặt và phiếu nhập | Người dùng yêu cầu; DocumentForm đã có tích hợp. Áp dụng Excel chỉ điền form, chưa ghi DB/tăng tồn. |
 | Vị trí cần ảnh thực tế | Lần đầu gán cần mô tả/ảnh; giữ ít nhất một ảnh khi còn hàng. |
 | Tầng FULL vẫn được tra cứu | Trạng thái chặn nhận thêm, không biến dữ liệu vị trí thành không thể xem. |
 | Giữ lịch sử | Phiếu xác nhận không sửa/hủy trực tiếp; kệ/tầng dùng is_active, ảnh dùng deleted_at; auth phụ thuộc audit_log. |
 | DINOv2 dự kiến chạy nội bộ | Đây là định hướng, không được mô tả như External API hoặc tính năng đã hoàn thành. |
+| Giữ hàng dùng `order_item.reserved_quantity` (06/11/2026) | Giữ khi đặt online, đóng giữ về 0 cùng transaction khi xuất/giải phóng; mọi chỗ tính "có thể bán" (giỏ, checkout, shop, tại quầy, trả NCC) dùng Σ reserved_quantity. Xuất bán lấy phần chưa xếp trước rồi vị trí nhiều hàng nhất. **05/11/2026: trong repo team chỉ phần kho áp dụng; phần giỏ/checkout/shop/tại quầy/đơn hàng chưa sửa vì là code của thành viên khác.** |
+| Giá vốn = bình quân gia quyền liên hoàn (05/11/2026, thay bản nháp "bình quân toàn bộ phiếu nhập" chưa từng chạy trên dữ liệu thật) | **Giá vốn** = bình quân gia quyền **liên hoàn** (tính lại sau mỗi lần nhập, phát lại thẻ kho theo đúng thứ tự thời gian, `WarehouseInventory.replay`): nhập mua cộng theo đơn giá dòng phiếu nhập; xuất bán / kiểm kê giảm theo giá bình quân tại thời điểm đó; trả NCC giảm theo đơn giá dòng nhập được trả; khách trả nhập lại theo giá vốn lúc bán dòng đơn đó; kiểm kê thừa theo giá bình quân hiện hành. Tồn có trước lịch sử kho hoặc dòng nhập không có giá → "chưa đủ cơ sở" (không tính 0/giá bán/giá nhập gần nhất) cho đến khi phần đó xuất hết. Giá trị đầu/cuối kỳ của báo cáo là trạng thái bình quân tại đúng thời điểm đó; giá trị tồn hiện tại = giá trị cuối kỳ khi kỳ kết thúc hôm nay. |
+| Ngày báo cáo theo giờ Việt Nam | DB ghi `CURRENT_TIMESTAMP` theo UTC; backend đổi ranh giới ngày theo độ lệch đồng hồ DB. |
 | Không dựa vào barcode/QR cho đặc trưng tìm hàng | Định hướng đã trao đổi là tìm bằng ảnh và sơ đồ vị trí; không tự thay đặc trưng này. |
 
 ## Các điểm đã thay đổi so với tài liệu cũ

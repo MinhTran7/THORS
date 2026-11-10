@@ -15,6 +15,13 @@ export const accountsApi = {
   profile: () => api('/accounts/profile'),
   activity: (limit = 8) => api(`/accounts/profile/activity${query({ limit })}`),
   updateProfile: (body) => patch('/accounts/profile', body),
+  // Đẩy ảnh lên Cloudinary, đặt làm avatar và xóa ảnh cũ (gọi khi bấm Lưu).
+  replaceAvatar: (file) => {
+    const form = new FormData();
+    form.append('file', file);
+    return api('/accounts/profile/avatar', { method: 'PUT', form });
+  },
+  removeAvatar: () => api('/accounts/profile/avatar', { method: 'DELETE' }),
   changePassword: (body) => post('/auth/change-password', body),
   list: (params) => api(`/accounts${query(params)}`),
   summary: () => api('/accounts/summary'),
@@ -26,12 +33,13 @@ export const accountsApi = {
   unlock: (id) => post(`/accounts/${id}/unlock`),
   resetPassword: (id, body) => post(`/accounts/${id}/reset-password`, body),
   resetRequests: () => api('/accounts/password-reset-requests'),
+  linkGoogle: () => post('/auth/google/link'),
   requestReset: (identifier) => post('/auth/password-reset-requests', { identifier })
 };
 
 export const logsApi = {
   list: (params) => api(`/audit-logs${query(params)}`),
-  summary: (offset) => api(`/audit-logs/summary${query({ offset })}`)
+  summary: (params) => api(`/audit-logs/summary${query(params)}`)
 };
 
 // Lấy toàn bộ các trang (tối đa `max` dòng) để xuất CSV.

@@ -130,15 +130,43 @@ try {
           images: []
         });
       if (endpoint === '/api/warehouse/documents' || endpoint === '/api/warehouse/notifications') return json([]);
+      if (endpoint === '/api/warehouse/inventory') {
+        // Inventory list is searched and paged by the backend; this mock filters by q like it does.
+        const q = (url.searchParams.get('q') || '').toLowerCase();
+        const items = variants
+          .filter((v) => !q || `${v.product_name} ${v.barcode || ''}`.toLowerCase().includes(q))
+          .map((v) => ({
+            ...v,
+            product_code: 'SP00010',
+            held_quantity: 0,
+            available_quantity: v.stock_quantity,
+            incoming_quantity: 0,
+            min_stock_quantity: null,
+            stock_state: 'IN',
+            locations: []
+          }));
+        return json({
+          items,
+          total: items.length,
+          page: 0,
+          size: 20,
+          colors: ['Đen'],
+          sizes: ['L', 'M'],
+          categories: [],
+          metrics: { variants: items.length, missing_barcode: variants.filter((v) => !v.barcode).length }
+        });
+      }
       if (endpoint === '/api/warehouse/barcodes/generate') {
         assert.equal(request.method(), 'POST');
         let generated = 0;
+        const codes = [];
         for (const variant of variants)
           if (!variant.barcode) {
             variant.barcode = `TH${String(variant.detail_id).padStart(6, '0')}`;
+            codes.push(variant.barcode);
             generated++;
           }
-        return json({ generated });
+        return json({ generated, codes });
       }
       if (endpoint === '/api/warehouse/barcodes/lookup') {
         const code = url.searchParams.get('code');
@@ -166,23 +194,26 @@ try {
 
   const { context, page } = await open('OWNER');
   await page.getByRole('button', { name: 'Tạo mã còn thiếu (1)', exact: true }).click();
-  await page.getByText('Đã tạo 1 mã vạch còn thiếu.', { exact: true }).waitFor();
+  await page.getByText('Đã tạo 1 mã vạch mới: TH000102.', { exact: true }).waitFor();
   assert.equal(variants[0].barcode, 'TH000101');
   await page.screenshot({ path: path.join(artifacts, 'inventory.png'), fullPage: true });
-  await page.getByRole('checkbox', { name: 'Chọn tất cả kết quả đang lọc', exact: true }).check();
-  await page.getByRole('button', { name: 'In mã vạch (2)', exact: true }).click();
-  await page.getByLabel('Số tem #101', { exact: true }).fill('2');
-  await page.getByLabel('Số tem #102', { exact: true }).fill('3');
-  await page.getByText('Tổng: 5 tem', { exact: true }).waitFor();
+  await page.getByRole('checkbox', { name: 'Chọn tất cả dòng trên trang', exact: true }).check();
+  await page.getByRole('button', { name: 'In tem các dòng đã chọn (2)', exact: true }).click();
+  // Default = hàng chưa xếp (8 and 15); the quick-fill and +/- controls then set exact counts.
+  assert.equal(await page.getByLabel('Số tem TH000101', { exact: true }).inputValue(), '8');
+  await page.getByRole('button', { name: 'Mỗi mã 1 tem', exact: true }).click();
+  await page.getByRole('button', { name: 'Thêm 1 tem TH000101', exact: true }).click();
+  await page.getByLabel('Số tem TH000102', { exact: true }).fill('3');
+  await page.getByRole('button', { name: 'In ngay 5 tem', exact: true }).waitFor();
   await page.screenshot({ path: path.join(artifacts, 'print-dialog.png'), fullPage: true });
-  await page.getByRole('button', { name: 'In / Lưu PDF', exact: true }).click();
+  await page.getByRole('button', { name: 'In ngay 5 tem', exact: true }).click();
   await page.waitForFunction(() => window.__barcodePrints.length === 1);
   const printed = await page.evaluate(() => {
     const html = window.__barcodePrints[0];
     const doc = new DOMParser().parseFromString(html, 'text/html');
     return {
       html,
-      codes: [...doc.querySelectorAll('svg text')].map((node) => node.textContent),
+      codes: [...doc.querySelectorAll('.code')].map((node) => node.textContent),
       count: doc.querySelectorAll('.label').length
     };
   });
@@ -208,9 +239,9 @@ try {
   await printPage.setContent(escaped.html);
   await printPage.pdf({ path: path.join(artifacts, 'roll-label.pdf'), preferCSSPageSize: true, printBackground: true });
   await printPage.close();
-  await page.getByRole('dialog', { name: 'In mã vạch', exact: true }).getByRole('button', { name: 'Đóng', exact: true }).click();
+  await page.getByRole('dialog', { name: 'In tem mã vạch', exact: true }).getByRole('button', { name: 'Đóng', exact: true }).click();
   await page.getByRole('textbox', { name: 'Tìm tồn kho' }).fill('TH000102');
-  assert.equal(await page.getByRole('checkbox', { name: /^Chọn Áo/ }).count(), 1);
+  await page.waitForFunction(() => document.querySelectorAll('input[aria-label^="Chọn Áo"]').length === 1);
   await page.getByRole('textbox', { name: 'Tìm tồn kho' }).fill('');
   await page.getByRole('button', { name: 'Quét mã tìm hàng', exact: true }).click();
   const scanner = page.getByRole('dialog', { name: 'Quét mã tìm hàng', exact: true });

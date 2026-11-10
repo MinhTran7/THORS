@@ -16,6 +16,7 @@ function query(params = {}) {
 
 export const notificationsApi = {
   list: (params) => api(`/notifications${query(params)}`),
+  detail: (id) => api(`/notifications/${id}`),
   unreadCount: () => api('/notifications/unread-count'),
   markRead: (id) => api(`/notifications/${id}/read`, { method: 'PATCH' }),
   markAllRead: () => post('/notifications/read-all')
@@ -30,6 +31,9 @@ const ENTITY_ROUTES = {
 };
 
 export const entityPath = (item) => (item.relatedEntityId != null ? ENTITY_ROUTES[item.relatedEntityType]?.(item.relatedEntityId) : null);
+
+// Khách hàng: thông báo gắn với đơn thì mở đơn, còn lại (vd. bảo mật tài khoản) mở trang chi tiết thông báo
+export const customerNotificationPath = (item) => entityPath(item) ?? `/notifications/${item.id}`;
 
 // Làm mới số chưa đọc, danh sách trong popup và danh sách ở trang Notifications.
 export const refreshNotifications = () =>

@@ -55,6 +55,32 @@ thors:
     sms-account-sid: ${TWILIO_ACCOUNT_SID:}
     sms-auth-token: ${TWILIO_AUTH_TOKEN:}
     sms-from: ${TWILIO_FROM:}
+  shipping:
+    # Vị trí cửa hàng: Bách Hóa Xanh, Đ. Liên Thôn, thôn Trung, xã Bình Minh, TP. Hà Nội
+    # (Google Plus Code 7PH7WP2X+2WJ)
+    store-lat: ${SHOP_LAT:20.900063}
+    store-lng: ${SHOP_LNG:105.749828}
+    self-radius-km: ${SELF_DELIVERY_RADIUS_KM:5}
+    default-carrier: GHN
+    goong-api-key: ${GOONG_API_KEY:}
+  ghn:
+    # Mặc định là môi trường thử nghiệm; chạy thật đổi GHN_BASE_URL sang
+    # https://online-gateway.ghn.vn/shiip/public-api và dùng Token/ShopId của khachhang.ghn.vn
+    base-url: ${GHN_BASE_URL:https://dev-online-gateway.ghn.vn/shiip/public-api}
+    token: ${GHN_TOKEN:}
+    shop-id: ${GHN_SHOP_ID:}
+    service-type-id: 2 # 2 = hàng nhẹ, 5 = hàng nặng
+    required-note: CHOXEMHANGKHONGTHU # CHOTHUHANG / CHOXEMHANGKHONGTHU / KHONGCHOXEMHANG
+    default-weight-g: ${GHN_DEFAULT_WEIGHT_G:500}
+    default-length-cm: 20
+    default-width-cm: 15
+    default-height-cm: 10
+    # Webhook: https://<backend>/api/ghn/webhook/<chuỗi này>; để trống = tắt webhook
+    webhook-secret: ${GHN_WEBHOOK_SECRET:}
+    # Hỏi GHN trạng thái các đơn đang giao định kỳ (dự phòng cho webhook, dùng được ở localhost)
+    poll-enabled: ${GHN_POLL_ENABLED:true}
+    # 30 giây/lần: hủy/giao bên GHN hiện trên THORS chậm nhất ~30 giây (mỗi lần tối đa 100 vận đơn)
+    poll-interval-ms: ${GHN_POLL_INTERVAL_MS:30000}
   google:
     enabled: ${GOOGLE_ENABLED:false}
     client-id: ${GOOGLE_CLIENT_ID:}
@@ -73,3 +99,13 @@ thors:
     client-secret: ${FACEBOOK_CLIENT_SECRET:}
     redirect-uri: ${FACEBOOK_REDIRECT_URI:http://localhost:3000/login/oauth2/code/facebook}
     api-version: ${FACEBOOK_API_VERSION:v23.0}
+    page-id: ${FACEBOOK_PAGE_ID:1375988095602878}
+    page-name: ${FACEBOOK_PAGE_NAME:THORS}
+    page-token: ${FACEBOOK_PAGE_TOKEN:}
+    webhook:
+      verify-token: ${FACEBOOK_VERIFY_TOKEN:thors_secret_webhook_token_2026}
+  payos:
+    enabled: ${PAYOS_ENABLED:false}
+    client-id: ${PAYOS_CLIENT_ID:}
+    api-key: ${PAYOS_API_KEY:}
+    checksum-key: ${PAYOS_CHECKSUM_KEY:}

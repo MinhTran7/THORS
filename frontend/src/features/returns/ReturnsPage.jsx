@@ -12,7 +12,6 @@ import {
   TableHead,
   TableRow,
   Chip,
-  Pagination,
   TextField,
   InputAdornment,
   Alert,
@@ -21,6 +20,7 @@ import {
   Divider,
   Paper
 } from '@mui/material';
+import { Pager } from 'features/account/components/Blocks';
 import {
   SearchOutlined,
   PlusOutlined,
@@ -211,7 +211,7 @@ export default function ReturnsPage() {
               '&:hover': { bgcolor: '#6DDDE9', boxShadow: 'none' }
             }}
           >
-            Tạo yêu cầu hoàn hàng
+            Đổi trả tại quầy
           </Button>
         </Stack>
       </Stack>
@@ -452,22 +452,14 @@ export default function ReturnsPage() {
         <Divider />
 
         {/* PAGINATION */}
-        <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems="center" spacing={2} sx={{ px: 2, py: 1.5 }}>
-          <Typography fontSize={11} color={COLORS.muted}>
-            Tổng cộng: {totalElements} yêu cầu hoàn hàng
-          </Typography>
-
-          <Pagination
-            count={totalPages}
-            page={page}
-            onChange={(_, val) => setPage(val)}
-            size="small"
-            shape="rounded"
-            sx={{
-              '& .Mui-selected': { bgcolor: `${COLORS.cyan} !important`, color: COLORS.text }
-            }}
-          />
-        </Stack>
+        <Pager
+          page={page - 1}
+          totalPages={totalPages}
+          total={totalElements}
+          size={PAGE_SIZE}
+          noun="yêu cầu hoàn hàng"
+          onPage={(p) => setPage(p + 1)}
+        />
       </Card>
 
       {/* DIALOGS */}

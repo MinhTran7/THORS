@@ -7,7 +7,6 @@ import {
   Card,
   CircularProgress,
   Divider,
-  Grid,
   Stack,
   Table,
   TableBody,
@@ -18,21 +17,19 @@ import {
 } from '@mui/material';
 import {
   ArrowLeftOutlined,
-  CheckCircleOutlined,
   CreditCardOutlined,
   DollarOutlined,
-  FileTextOutlined,
+  PictureOutlined,
   PrinterOutlined
 } from '@ant-design/icons';
 import { api } from '../../services/http';
 import { useCrumbs } from '../../layouts/crumbs';
-import { formatLogDate, formatTime } from '../account/format';
 import ReceiptDialog from './ReceiptDialog';
 
-// Bảng màu chuẩn: Cyan #8EECF5 và Cream #FFF7AE kết hợp nền/viền trung tính
 const C = {
-  text: '#1E293B',
+  text: '#0F172A',
   muted: '#64748B',
+  subtle: '#94A3B8',
   border: '#E2E8F0',
   borderLight: '#F1F5F9',
   bg: '#F8FAFC',
@@ -45,7 +42,23 @@ const C = {
   creamText: '#713F12'
 };
 
+function isCashMethod(method) {
+  if (!method) return true;
+  const m = String(method).toUpperCase();
+  return m === 'CASH' || m.includes('TIEN_MAT') || m.includes('TIỀN MẶT');
+}
+
 const money = (value) => `${Number(value || 0).toLocaleString('vi-VN')} đ`;
+
+function formatDetailDate(dateStr) {
+  if (!dateStr) return { date: '—', time: '' };
+  const d = new Date(dateStr);
+  const pad = (n) => String(n).padStart(2, '0');
+  return {
+    date: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`,
+    time: `${pad(d.getHours())}:${pad(d.getMinutes())}`
+  };
+}
 
 export default function InStoreSaleDetailPage() {
   const { orderId } = useParams();
@@ -59,9 +72,18 @@ export default function InStoreSaleDetailPage() {
     () => api(`/sales/in-store/${orderId}`)
   );
 
-  const isCash = data?.paymentMethod === 'CASH';
+  // Lấy danh mục sản phẩm từ hệ thống để làm fallback hình ảnh nếu đơn cũ chưa lưu image_url
+  const { data: productsData } = useSWR('/products', () => api('/products'), {
+    revalidateOnFocus: false
+  });
+  const productList = productsData?.data || (Array.isArray(productsData) ? productsData : []);
 
-  const cartItems = (data?.items || []).map((item) => ({
+  const isCash = isCashMethod(data?.paymentMethod);
+  const { date, time } = formatDetailDate(data?.orderDate);
+
+  const items = data?.items || [];
+
+  const cartItems = items.map((item) => ({
     key: item.orderItemId,
     name: item.productName || 'Sản phẩm',
     size: item.size,
@@ -84,7 +106,7 @@ export default function InStoreSaleDetailPage() {
 
   if (isLoading) {
     return (
-      <Box sx={{ maxWidth: 1200, mx: 'auto', py: 10, textAlign: 'center' }}>
+      <Box sx={{ maxWidth: 1400, mx: 'auto', py: 10, textAlign: 'center' }}>
         <CircularProgress size={38} sx={{ color: C.cyan }} />
         <Typography sx={{ mt: 2, color: C.muted, fontSize: 13.5 }}>
           Đang tải thông tin chi tiết hóa đơn...
@@ -95,7 +117,7 @@ export default function InStoreSaleDetailPage() {
 
   if (error || !data) {
     return (
-      <Box sx={{ maxWidth: 1200, mx: 'auto', py: 8 }}>
+      <Box sx={{ maxWidth: 1400, mx: 'auto', py: 8 }}>
         <Card sx={{ p: 4, textAlign: 'center', borderRadius: 3.5, border: `1px solid ${C.border}` }}>
           <Typography color="error" sx={{ fontWeight: 700, fontSize: 15 }}>
             {error?.message || 'Không tìm thấy thông tin hóa đơn.'}
@@ -122,42 +144,24 @@ export default function InStoreSaleDetailPage() {
   }
 
   return (
-    <Box sx={{ maxWidth: 1200, mx: 'auto', color: C.text, pb: 6 }}>
-      {/* Thanh điều hướng quay lại & Thao tác */}
-      <Stack
-        direction={{ xs: 'column', sm: 'row' }}
-        justifyContent="space-between"
-        alignItems={{ xs: 'stretch', sm: 'center' }}
-        spacing={2}
-        sx={{ mb: 3 }}
+    <Box sx={{ maxWidth: 1400, mx: 'auto', color: C.text, pb: 6 }}>
+      {/* ─── TIÊU ĐỀ & NÚT IN HÓA ĐƠN SANG HẲN BÊN PHẢI ─── */}
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          width: '100%',
+          mb: 3
+        }}
       >
-        <Button
-          startIcon={<ArrowLeftOutlined />}
-          onClick={() => navigate('/in-store-sales/history')}
-          sx={{
-            textTransform: 'none',
-            color: C.text,
-            fontWeight: 700,
-            fontSize: 13.5,
-            width: 'fit-content',
-            px: 2.5,
-            py: 1,
-            borderRadius: 2.5,
-            bgcolor: C.surface,
-            border: `1px solid ${C.border}`,
-            boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
-            '&:hover': {
-              bgcolor: C.bg,
-              borderColor: C.cyan
-            }
-          }}
-        >
-          Quay lại danh sách
-        </Button>
+        <Typography variant="h3" sx={{ fontWeight: 800, color: C.text, fontSize: { xs: 22, sm: 28 } }}>
+          Chi tiết hóa đơn
+        </Typography>
 
         <Button
           variant="contained"
-          startIcon={<PrinterOutlined />}
+          startIcon={<PrinterOutlined style={{ fontSize: 15 }} />}
           onClick={() => setReceiptOpen(true)}
           sx={{
             textTransform: 'none',
@@ -166,7 +170,7 @@ export default function InStoreSaleDetailPage() {
             color: C.text,
             fontWeight: 700,
             fontSize: 13.5,
-            px: 3,
+            px: 2.5,
             py: 1,
             boxShadow: 'none',
             '&:hover': {
@@ -177,288 +181,274 @@ export default function InStoreSaleDetailPage() {
         >
           In hóa đơn
         </Button>
-      </Stack>
+      </Box>
 
-      {/* ─── THẺ TỔNG QUAN HÓA ĐƠN ─── */}
+      {/* ─── CARD 1: THÔNG TIN TỔNG QUAN ─── */}
       <Card
         sx={{
           borderRadius: 3.5,
           border: `1px solid ${C.border}`,
+          boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
           p: 3,
-          mb: 3,
-          boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+          mb: 3
         }}
       >
-        <Stack
-          direction={{ xs: 'column', md: 'row' }}
-          justifyContent="space-between"
-          alignItems={{ xs: 'flex-start', md: 'center' }}
-          spacing={2}
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: {
+              xs: '1fr',
+              sm: 'repeat(2, 1fr)',
+              md: 'repeat(4, 1fr)'
+            },
+            gap: 3
+          }}
         >
-          <Stack direction="row" spacing={2} alignItems="center">
-            <Box
-              sx={{
-                width: 48,
-                height: 48,
-                borderRadius: 2.5,
-                bgcolor: C.cyan,
-                color: C.text,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 22
-              }}
-            >
-              <FileTextOutlined />
-            </Box>
-            <Box>
-              <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap">
-                <Typography variant="h5" sx={{ fontWeight: 800, color: C.text }}>
-                  {data.invoiceNumber ? `Hóa đơn: ${data.invoiceNumber}` : `Mã đơn: ${data.orderNumber}`}
-                </Typography>
-                <Box
-                  sx={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 0.5,
-                    px: 1.5,
-                    py: 0.35,
-                    borderRadius: 3,
-                    bgcolor: C.cyan,
-                    color: C.cyanText,
-                    fontSize: 12,
-                    fontWeight: 700
-                  }}
-                >
-                  <CheckCircleOutlined style={{ fontSize: 13 }} />
-                  <span>Đã thanh toán</span>
-                </Box>
-              </Stack>
-              <Typography sx={{ fontSize: 12.5, color: C.muted, mt: 0.5 }}>
-                Mã đơn hàng: <strong>{data.orderNumber}</strong>
-              </Typography>
-            </Box>
-          </Stack>
-
-          <Box sx={{ textAlign: { xs: 'left', md: 'right' } }}>
-            <Typography sx={{ fontSize: 12, color: C.muted, textTransform: 'uppercase', fontWeight: 600 }}>
-              Tổng thanh toán
+          {/* Mã hóa đơn */}
+          <Box>
+            <Typography sx={{ fontSize: 13, fontWeight: 500, color: C.muted, mb: 0.75 }}>
+              Mã hóa đơn
             </Typography>
-            <Typography sx={{ fontSize: 24, fontWeight: 900, color: C.text, mt: 0.5 }}>
-              {money(data.totalAmount)}
+            <Typography sx={{ fontSize: 14.5, fontWeight: 700, color: C.text }}>
+              {data.invoiceNumber || data.orderNumber}
             </Typography>
           </Box>
-        </Stack>
 
-        <Divider sx={{ my: 2.5, borderColor: C.borderLight }} />
-
-        {/* Grid thông tin chi tiết */}
-        <Grid container spacing={3}>
-          <Grid item xs={12} sm={6} md={3}>
-            <Typography sx={{ fontSize: 11.5, color: C.muted, fontWeight: 600, textTransform: 'uppercase' }}>
+          {/* Thời gian */}
+          <Box>
+            <Typography sx={{ fontSize: 13, fontWeight: 500, color: C.muted, mb: 0.75 }}>
               Thời gian
             </Typography>
-            <Typography sx={{ fontSize: 14, fontWeight: 700, color: C.text, mt: 0.5 }}>
-              {formatLogDate(data.orderDate)}
+            <Typography sx={{ fontSize: 14.5, fontWeight: 700, color: C.text }}>
+              {date} · {time}
             </Typography>
-            <Typography sx={{ fontSize: 12, color: C.muted }}>
-              {formatTime(data.orderDate)}
-            </Typography>
-          </Grid>
+          </Box>
 
-          <Grid item xs={12} sm={6} md={3}>
-            <Typography sx={{ fontSize: 11.5, color: C.muted, fontWeight: 600, textTransform: 'uppercase' }}>
+          {/* Thu ngân */}
+          <Box>
+            <Typography sx={{ fontSize: 13, fontWeight: 500, color: C.muted, mb: 0.75 }}>
               Thu ngân
             </Typography>
-            <Typography sx={{ fontSize: 14, fontWeight: 700, color: C.text, mt: 0.5 }}>
+            <Typography sx={{ fontSize: 14.5, fontWeight: 700, color: C.text }}>
               {data.sellerName || '—'}
             </Typography>
-            <Typography sx={{ fontSize: 12, color: C.muted }}>
-              Bán tại quầy THORS
+            <Typography sx={{ fontSize: 12, color: C.subtle, mt: 0.25 }}>
+              Nhân viên bán hàng
             </Typography>
-          </Grid>
+          </Box>
 
-          <Grid item xs={12} sm={6} md={3}>
-            <Typography sx={{ fontSize: 11.5, color: C.muted, fontWeight: 600, textTransform: 'uppercase' }}>
+          {/* Phương thức - Trả về màu cũ chuẩn */}
+          <Box>
+            <Typography sx={{ fontSize: 13, fontWeight: 500, color: C.muted, mb: 0.75 }}>
               Phương thức
             </Typography>
-            <Box sx={{ mt: 0.5 }}>
-              <Box
-                sx={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 0.75,
-                  px: 1.5,
-                  py: 0.4,
-                  borderRadius: 3,
-                  bgcolor: isCash ? C.cream : C.cyan,
-                  color: isCash ? C.creamText : C.cyanText,
-                  fontSize: 12,
-                  fontWeight: 700
-                }}
-              >
-                {isCash ? <DollarOutlined /> : <CreditCardOutlined />}
-                <span>{isCash ? 'Tiền mặt' : 'Chuyển khoản'}</span>
-              </Box>
+            <Box
+              sx={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 0.75,
+                px: 1.5,
+                py: 0.5,
+                borderRadius: 4,
+                bgcolor: isCash ? C.cream : C.cyan,
+                color: isCash ? C.creamText : C.cyanText,
+                fontSize: 12,
+                fontWeight: 700,
+                letterSpacing: '0.01em'
+              }}
+            >
+              {isCash ? (
+                <DollarOutlined style={{ fontSize: 12 }} />
+              ) : (
+                <CreditCardOutlined style={{ fontSize: 12 }} />
+              )}
+              <span>{isCash ? 'Tiền mặt' : 'Chuyển khoản'}</span>
             </Box>
-          </Grid>
-
-          <Grid item xs={12} sm={6} md={3}>
-            <Typography sx={{ fontSize: 11.5, color: C.muted, fontWeight: 600, textTransform: 'uppercase' }}>
-              Khách hàng
-            </Typography>
-            <Typography sx={{ fontSize: 14, fontWeight: 700, color: C.text, mt: 0.5 }}>
-              {data.customerName || 'Khách mua tại quầy'}
-            </Typography>
-            <Typography sx={{ fontSize: 12, color: C.muted }}>
-              Giao dịch tại quầy
-            </Typography>
-          </Grid>
-        </Grid>
+          </Box>
+        </Box>
       </Card>
 
-      {/* ─── THẺ DANH SÁCH SẢN PHẨM ─── */}
+      {/* ─── CARD 2: SẢN PHẨM ĐÃ MUA ─── */}
       <Card
         sx={{
           borderRadius: 3.5,
           border: `1px solid ${C.border}`,
-          p: 3,
-          mb: 3,
-          boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+          boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+          overflow: 'hidden',
+          mb: 3
         }}
       >
-        <Typography variant="h6" sx={{ fontWeight: 800, color: C.text, mb: 2 }}>
-          Danh sách sản phẩm ({data.items?.length || 0})
-        </Typography>
+        <Box sx={{ p: 3, pb: 2 }}>
+          <Typography sx={{ fontSize: 16, fontWeight: 700, color: C.text }}>
+            Sản phẩm đã mua
+          </Typography>
+        </Box>
 
-        <Box sx={{ border: `1px solid ${C.border}`, borderRadius: 2.5, overflow: 'hidden' }}>
+        <Box sx={{ overflowX: 'auto' }}>
           <Table>
-            <TableHead sx={{ bgcolor: C.bg }}>
-              <TableRow>
-                <TableCell sx={{ fontWeight: 600, fontSize: 12, color: C.muted }}>SẢN PHẨM</TableCell>
-                <TableCell sx={{ fontWeight: 600, fontSize: 12, color: C.muted }}>PHÂN LOẠI</TableCell>
-                <TableCell sx={{ fontWeight: 600, fontSize: 12, color: C.muted }} align="right">
-                  ĐƠN GIÁ
+            <TableHead>
+              <TableRow sx={{ '& th': { borderBottom: `1px solid ${C.borderLight}`, py: 1.5 } }}>
+                <TableCell sx={{ color: C.muted, fontSize: 12.5, fontWeight: 500, pl: 3 }}>
+                  Sản phẩm
                 </TableCell>
-                <TableCell sx={{ fontWeight: 600, fontSize: 12, color: C.muted }} align="center">
-                  SỐ LƯỢNG
+                <TableCell sx={{ color: C.muted, fontSize: 12.5, fontWeight: 500 }} align="center">
+                  Số lượng
                 </TableCell>
-                <TableCell sx={{ fontWeight: 600, fontSize: 12, color: C.muted }} align="right">
-                  THÀNH TIỀN
+                <TableCell sx={{ color: C.muted, fontSize: 12.5, fontWeight: 500 }} align="right">
+                  Đơn giá
+                </TableCell>
+                <TableCell sx={{ color: C.muted, fontSize: 12.5, fontWeight: 500, pr: 3 }} align="right">
+                  Thành tiền
                 </TableCell>
               </TableRow>
             </TableHead>
 
             <TableBody>
-              {data.items?.map((item) => (
-                <TableRow key={item.orderItemId} hover sx={{ '&:hover': { bgcolor: '#FAFCFE' } }}>
-                  <TableCell sx={{ py: 1.75 }}>
-                    <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: C.text }}>
-                      {item.productName || 'Sản phẩm'}
-                    </Typography>
-                  </TableCell>
+              {items.map((item) => {
+                const variantParts = [];
+                if (item.color) variantParts.push(item.color);
+                if (item.size) variantParts.push(`Size ${item.size}`);
+                const variantText = variantParts.length > 0 ? variantParts.join(' · ') : 'Mặc định';
 
-                  <TableCell sx={{ py: 1.75 }}>
-                    <Stack direction="row" spacing={1}>
-                      {item.size && (
+                // Tìm hình ảnh sản phẩm từ item hoặc từ danh mục products
+                const foundProduct = productList.find(
+                  (p) =>
+                    p.productName === item.productName ||
+                    (item.detailId && p.variants?.some((v) => v.detailId === item.detailId))
+                );
+                const resolvedImage =
+                  item.imageUrl ||
+                  foundProduct?.primaryImageUrl ||
+                  foundProduct?.imageUrl ||
+                  foundProduct?.thumbnailUrl ||
+                  foundProduct?.images?.[0]?.imageUrl ||
+                  '';
+
+                return (
+                  <TableRow
+                    key={item.orderItemId}
+                    hover
+                    sx={{
+                      '&:hover': { bgcolor: '#FAFCFE' },
+                      '& td': { borderBottom: `1px solid ${C.borderLight}`, py: 2 }
+                    }}
+                  >
+                    {/* Sản phẩm */}
+                    <TableCell sx={{ pl: 3 }}>
+                      <Stack direction="row" spacing={2} alignItems="center">
                         <Box
                           sx={{
-                            px: 1,
-                            py: 0.25,
-                            borderRadius: 1.5,
-                            bgcolor: C.bg,
-                            border: `1px solid ${C.border}`,
-                            fontSize: 11.5,
-                            fontWeight: 700,
-                            color: C.text
+                            width: 48,
+                            height: 48,
+                            borderRadius: 2,
+                            bgcolor: '#F1F5F9',
+                            overflow: 'hidden',
+                            flexShrink: 0,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            border: `1px solid ${C.borderLight}`
                           }}
                         >
-                          Size: {item.size}
+                          {resolvedImage ? (
+                            <Box
+                              component="img"
+                              src={resolvedImage}
+                              alt={item.productName}
+                              sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                          ) : (
+                            <PictureOutlined style={{ fontSize: 20, color: '#94A3B8' }} />
+                          )}
                         </Box>
-                      )}
-                      {item.color && (
-                        <Box
-                          sx={{
-                            px: 1,
-                            py: 0.25,
-                            borderRadius: 1.5,
-                            bgcolor: C.bg,
-                            border: `1px solid ${C.border}`,
-                            fontSize: 11.5,
-                            fontWeight: 700,
-                            color: C.text
-                          }}
-                        >
-                          Màu: {item.color}
+                        <Box>
+                          <Typography sx={{ fontSize: 14, fontWeight: 700, color: C.text }}>
+                            {item.productName || 'Sản phẩm'}
+                          </Typography>
+                          <Typography sx={{ fontSize: 12.5, color: C.muted, mt: 0.25 }}>
+                            {variantText}
+                          </Typography>
                         </Box>
-                      )}
-                      {!item.size && !item.color && (
-                        <Typography sx={{ fontSize: 12.5, color: C.muted, fontStyle: 'italic' }}>
-                          Mặc định
-                        </Typography>
-                      )}
-                    </Stack>
-                  </TableCell>
+                      </Stack>
+                    </TableCell>
 
-                  <TableCell sx={{ py: 1.75 }} align="right">
-                    <Typography sx={{ fontSize: 13, color: C.text }}>
-                      {money(item.unitPrice)}
-                    </Typography>
-                  </TableCell>
+                    {/* Số lượng */}
+                    <TableCell align="center">
+                      <Typography sx={{ fontSize: 14, color: C.text, fontWeight: 500 }}>
+                        {item.quantity}
+                      </Typography>
+                    </TableCell>
 
-                  <TableCell sx={{ py: 1.75 }} align="center">
-                    <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: C.text }}>
-                      {item.quantity}
-                    </Typography>
-                  </TableCell>
+                    {/* Đơn giá */}
+                    <TableCell align="right">
+                      <Typography sx={{ fontSize: 14, color: C.text }}>
+                        {money(item.unitPrice)}
+                      </Typography>
+                    </TableCell>
 
-                  <TableCell sx={{ py: 1.75 }} align="right">
-                    <Typography sx={{ fontSize: 13.5, fontWeight: 800, color: C.text }}>
-                      {money(item.totalPrice)}
-                    </Typography>
-                  </TableCell>
-                </TableRow>
-              ))}
+                    {/* Thành tiền */}
+                    <TableCell align="right" sx={{ pr: 3 }}>
+                      <Typography sx={{ fontSize: 14, fontWeight: 600, color: C.text }}>
+                        {money(item.totalPrice)}
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </Box>
-
-        {/* Tổng tiền & Chi tiết hóa đơn */}
-        <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end' }}>
-          <Box sx={{ width: { xs: '100%', sm: 340 } }}>
-            <Stack spacing={1.25}>
-              <Stack direction="row" justifyContent="space-between">
-                <Typography sx={{ fontSize: 13, color: C.muted }}>Tạm tính:</Typography>
-                <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text }}>
-                  {money(data.subtotal)}
-                </Typography>
-              </Stack>
-
-              {Number(data.discountAmount || 0) > 0 && (
-                <Stack direction="row" justifyContent="space-between">
-                  <Typography sx={{ fontSize: 13, color: C.muted }}>Giảm giá:</Typography>
-                  <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#DC2626' }}>
-                    -{money(data.discountAmount)}
-                  </Typography>
-                </Stack>
-              )}
-
-              <Divider sx={{ borderColor: C.borderLight, my: 0.5 }} />
-
-              <Stack direction="row" justifyContent="space-between" alignItems="center">
-                <Typography sx={{ fontSize: 15, fontWeight: 800, color: C.text }}>
-                  Tổng thanh toán:
-                </Typography>
-                <Typography sx={{ fontSize: 18, fontWeight: 900, color: C.text }}>
-                  {money(data.totalAmount)}
-                </Typography>
-              </Stack>
-            </Stack>
-          </Box>
-        </Box>
       </Card>
 
-      {/* Mẫu hóa đơn in nhiệt ReceiptDialog chuẩn của quầy THORS */}
+      {/* ─── CARD 3: TỔNG KẾT HÓA ĐƠN ─── */}
+      <Card
+        sx={{
+          borderRadius: 3.5,
+          border: `1px solid ${C.border}`,
+          boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+          p: 3
+        }}
+      >
+        <Typography sx={{ fontSize: 16, fontWeight: 700, color: C.text, mb: 2.5 }}>
+          Tổng kết hóa đơn
+        </Typography>
+
+        <Stack spacing={1.5}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography sx={{ fontSize: 14, color: C.muted }}>
+              Tổng tiền hàng
+            </Typography>
+            <Typography sx={{ fontSize: 14, fontWeight: 600, color: C.text }}>
+              {money(data.subtotal)}
+            </Typography>
+          </Box>
+
+          {Number(data.discountAmount || 0) > 0 && (
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography sx={{ fontSize: 14, color: C.muted }}>
+                Giảm giá hóa đơn
+              </Typography>
+              <Typography sx={{ fontSize: 14, fontWeight: 600, color: C.text }}>
+                -{money(data.discountAmount)}
+              </Typography>
+            </Box>
+          )}
+
+          <Divider sx={{ borderColor: C.borderLight, my: 1 }} />
+
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography sx={{ fontSize: 16, fontWeight: 700, color: C.text }}>
+              Tổng thanh toán
+            </Typography>
+
+            <Typography sx={{ fontSize: 24, fontWeight: 900, color: C.text }}>
+              {money(data.totalAmount)}
+            </Typography>
+          </Box>
+        </Stack>
+      </Card>
+
+      {/* Dialog in hóa đơn nhiệt chuẩn */}
       <ReceiptDialog
         open={receiptOpen}
         onClose={() => setReceiptOpen(false)}
@@ -466,8 +456,6 @@ export default function InStoreSaleDetailPage() {
         cartItems={cartItems}
         customerName={data?.customerName || ''}
         sellerName={data?.sellerName || ''}
-        amountReceived={data?.totalAmount || 0}
-        changeDue={0}
         completedAt={data?.orderDate}
         closeText="Đóng"
       />

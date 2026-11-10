@@ -15,6 +15,8 @@ import { confirmPassword, newPassword } from '../validation';
 import { BrandButton, OutlineButton } from '../components/Brand';
 import { FormField, PasswordInput } from '../components/Form';
 import { NoticeBox, PageHeader } from '../components/Blocks';
+import { C } from 'features/shop/storeTheme';
+import { StoreAccountShell, storeNoticeSx, storePanelSx } from '../components/StoreAccount';
 
 const schema = Yup.object({
   currentPassword: Yup.string().required('Nhập mật khẩu hiện tại của bạn.'),
@@ -71,29 +73,34 @@ export default function ChangePasswordPage() {
   const fieldError = (name) => (form.touched[name] && form.errors[name]) || '';
   const matches = form.values.confirmPassword && form.values.confirmPassword === form.values.password;
 
+  // Khách hàng: khung cửa hàng (khung vuông, nút đen); các vai trò khác giữ giao diện quản trị
+  const isCustomer = account.role === 'CUSTOMER';
+  const card = isCustomer ? storePanelSx : cardSx;
+  const accent = isCustomer ? C.ink : brand.cyan;
+  const Shell = isCustomer ? StoreAccountShell : Box;
+  const header = { back: { to: '/profile', label: 'Hồ sơ cá nhân' }, title: 'Đổi mật khẩu' };
+
   if (!account.passwordEnabled) {
     return (
-      <Box>
-        <PageHeader back={{ to: '/profile', label: 'Hồ sơ cá nhân' }} title="Đổi mật khẩu" />
+      <Shell {...(isCustomer ? header : {})}>
+        {!isCustomer && <PageHeader {...header} />}
         <Alert severity="info">Tài khoản này đăng nhập bằng Google nên không có mật khẩu THORS để đổi.</Alert>
-      </Box>
+      </Shell>
     );
   }
 
+  const fullHeader = { ...header, subtitle: 'Mật khẩu mạnh giúp giữ tài khoản của bạn an toàn.' };
+
   return (
-    <Box>
-      <PageHeader
-        back={{ to: '/profile', label: 'Hồ sơ cá nhân' }}
-        title="Đổi mật khẩu"
-        subtitle="Mật khẩu mạnh giúp giữ tài khoản của bạn an toàn."
-      />
+    <Shell {...(isCustomer ? fullHeader : {})}>
+      {!isCustomer && <PageHeader {...fullHeader} />}
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
           {error}
         </Alert>
       )}
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1fr) 360px' }, gap: 3, alignItems: 'start' }}>
-        <Box component="form" onSubmit={form.handleSubmit} noValidate sx={{ ...cardSx, p: 3.5 }}>
+        <Box component="form" onSubmit={form.handleSubmit} noValidate sx={{ ...card, p: 3.5 }}>
           <Typography variant="h5" sx={{ color: brand.ink, fontSize: fs.cardTitle }}>
             Cập nhật mật khẩu
           </Typography>
@@ -126,7 +133,7 @@ export default function ChangePasswordPage() {
               </FormField>
               <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1, mt: 1.25 }} aria-hidden>
                 {[0, 1, 2, 3].map((index) => (
-                  <Box key={index} sx={{ height: 4, borderRadius: 2, bgcolor: index < met ? brand.cyan : brand.neutralBg }} />
+                  <Box key={index} sx={{ height: 4, borderRadius: isCustomer ? 0 : 2, bgcolor: index < met ? accent : brand.neutralBg }} />
                 ))}
               </Box>
               <Stack direction="row" justifyContent="space-between" sx={{ mt: 0.5 }}>
@@ -151,7 +158,7 @@ export default function ChangePasswordPage() {
                 error={Boolean(fieldError('confirmPassword'))}
               />
             </FormField>
-            <NoticeBox title="Bạn sẽ cần đăng nhập lại" icon={<InfoCircleOutlined />}>
+            <NoticeBox title="Bạn sẽ cần đăng nhập lại" icon={<InfoCircleOutlined />} sx={isCustomer ? storeNoticeSx : undefined}>
               Đổi mật khẩu sẽ đăng xuất bạn khỏi các thiết bị khác. Hãy dùng mật khẩu mới ở lần đăng nhập tiếp theo.
             </NoticeBox>
             <Stack direction="row" spacing={1.5} justifyContent="flex-end">
@@ -166,7 +173,7 @@ export default function ChangePasswordPage() {
         </Box>
 
         <Stack spacing={2.5}>
-          <Box sx={{ ...cardSx, p: 3 }}>
+          <Box sx={{ ...card, p: 3 }}>
             <Stack direction="row" justifyContent="space-between" alignItems="center">
               <Typography variant="h5" sx={{ color: brand.ink, fontSize: fs.cardTitle }}>
                 Hãy chọn mật khẩu mạnh
@@ -176,7 +183,7 @@ export default function ChangePasswordPage() {
             <Stack spacing={1} sx={{ mt: 1.5 }} component="ul" style={{ listStyle: 'none', margin: 0, padding: 0, marginTop: 12 }}>
               {requirements.map((item) => (
                 <Stack key={item.label} component="li" direction="row" spacing={1} alignItems="center">
-                  <CheckCircleFilled style={{ color: item.ok ? '#2BB5C4' : '#D5D7D0', fontSize: 16 }} />
+                  <CheckCircleFilled style={{ color: item.ok ? (isCustomer ? C.ink : '#2BB5C4') : '#D5D7D0', fontSize: 16 }} />
                   <Typography sx={{ color: brand.ink, fontSize: fs.body }}>{item.label}</Typography>
                 </Stack>
               ))}
@@ -215,6 +222,6 @@ export default function ChangePasswordPage() {
           )}
         </Stack>
       </Box>
-    </Box>
+    </Shell>
   );
 }

@@ -142,7 +142,9 @@ export function checkImport(
     sourceItems = [],
     currentItems = [],
     manufacturer = '',
-    mergeDuplicates = false
+    mergeDuplicates = false,
+    existingMode = '',
+    priceMode = ''
   }
 ) {
   const issues = [];
@@ -440,18 +442,63 @@ export function checkImport(
     });
   }
 
-  const updates = new Map(
-    imports.map((i) => [i.detailId, i])
+  // Lines that already exist on the form: never replaced or added silently.
+  const existing = new Map(currentItems.map((i) => [i.detailId, i]));
+  const conflicts = imports.filter((i) => existing.has(i.detailId));
+  const priceConflicts = conflicts.filter(
+    (i) => Number(existing.get(i.detailId).unitPrice) !== Number(i.unitPrice)
   );
 
+  if (conflicts.length && !existingMode) {
+    issues.push(
+      `Có ${conflicts.length} biến thể đã có trên phiếu. Hãy chọn cách xử lý dòng trùng với phiếu.`
+    );
+  }
+
+  if (existingMode === 'add' && priceConflicts.length && !priceMode) {
+    issues.push(
+      `Có ${priceConflicts.length} biến thể cộng thêm nhưng đơn giá trong file khác đơn giá trên phiếu. Hãy chọn giá áp dụng.`
+    );
+  }
+
+  const merged = new Map();
+
+  for (const i of imports) {
+    const old = existing.get(i.detailId);
+
+    if (!old) continue;
+
+    if (existingMode === 'keep') {
+      merged.set(i.detailId, old);
+    } else if (existingMode === 'add') {
+      const quantity = Number(old.quantity || 0) + i.quantity;
+      const limit = i.remaining ?? old.remaining;
+
+      if (quantity > 1000000 || (limit != null && quantity > limit)) {
+        issues.push(
+          `Cộng thêm ${variants.find((v) => v.detail_id === i.detailId)?.product_name || `#${i.detailId}`} vượt giới hạn số lượng cho phép (${limit ?? 1000000}).`
+        );
+      }
+
+      merged.set(i.detailId, {
+        ...old,
+        quantity,
+        unitPrice:
+          type === 'PURCHASE_ORDER' && priceMode === 'file'
+            ? i.unitPrice
+            : old.unitPrice
+      });
+    } else {
+      merged.set(i.detailId, { ...old, ...i });
+    }
+  }
+
   const items = currentItems.map(
-    (i) => updates.get(i.detailId) || i
+    (i) => merged.get(i.detailId) || i
   );
 
   for (const i of imports) {
-    if (!currentItems.some(
-      (old) => old.detailId === i.detailId
-    )) {
+    if (!existing.has(i.detailId)) {
       items.push(i);
     }
   }
@@ -477,13 +524,9 @@ export function checkImport(
     items,
     imports,
     importedManufacturer,
-    replaced: imports.filter((i) =>
-      currentItems.some(
-        (old) =>
-          old.detailId === i.detailId &&
-          Number(old.quantity) > 0
-      )
-    ).length,
+    replaced: conflicts.length,
+    conflicts: conflicts.length,
+    priceConflicts: priceConflicts.length,
     total: imports.reduce(
       (n, r) => n + r.quantity,
       0
