@@ -4,7 +4,7 @@ import { Box } from '@mui/material';
 import { api } from 'services/http';
 import heroImage from 'assets/images/auth/boutique-shopping.png';
 import { money, priceText } from './ShopCommon';
-import { C, SERIF, Icon, btnSx, container, eyebrowSx, focusRing, iconBtnSx, scrollToId } from './storeTheme';
+import { C, SERIF, Icon, btnSx, container, eyebrowSx, focusRing, iconBtnSx } from './storeTheme';
 
 /**
  * Banner lớn đầu trang chủ. Tự chuyển slide mỗi 5 giây, xen kẽ:
@@ -33,18 +33,6 @@ function interleave(a, b) {
   }
   return out;
 }
-
-// Link "Xem tất cả": cuộn xuống lưới sản phẩm
-const toGrid = (e) => {
-  e.preventDefault();
-  scrollToId('tat-ca');
-};
-
-// Nút viền: trên nền đỏ (khuyến mãi) thì viền trắng chữ trắng
-const outlineSx = (kind) =>
-  kind === 'promo'
-    ? { ...btnSx('outline'), bgcolor: 'transparent', color: '#FFFFFF', borderColor: '#FFFFFF', '&:hover': { opacity: 0.85, color: '#FFFFFF' } }
-    : btnSx('outline');
 
 function SlideFrame({ kind, active, children, image }) {
   return (
@@ -124,7 +112,7 @@ function IntroSlide() {
         Những thiết kế tối giản, chất liệu bền đẹp — để tủ đồ của bạn ít hơn nhưng đúng hơn.
       </Box>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, mt: 1 }}>
-        <Box component="a" href="#tat-ca" onClick={toGrid} sx={btnSx('dark')}>
+        <Box component={RouterLink} to="/shop/category/all" sx={btnSx('dark')}>
           MUA NGAY
         </Box>
       </Box>
@@ -176,11 +164,9 @@ function ProductSlide({ p, active }) {
       )}
 
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, mt: 1 }}>
+        {/* Mua ngay: mở trang sản phẩm để khách chọn size, màu rồi đặt hàng */}
         <Box component={RouterLink} to={`/shop/products/${p.productId}`} tabIndex={tab} sx={btnSx(theme.mainBtn)}>
-          {p.kind === 'promo' ? 'MUA ƯU ĐÃI' : 'XEM NGAY'}
-        </Box>
-        <Box component="a" href="#tat-ca" onClick={toGrid} tabIndex={tab} sx={outlineSx(p.kind)}>
-          XEM TẤT CẢ
+          MUA NGAY
         </Box>
       </Box>
     </SlideFrame>
