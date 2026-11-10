@@ -249,7 +249,7 @@ class WarehouseOrderFlowTest {
         assertEquals("WAREHOUSE_FORBIDDEN", fails(() -> docs.confirm(FAMILY, familyDraft)).code);
         assertEquals(30, stock(1), "family can never increase stock");
         assertEquals("WAREHOUSE_FORBIDDEN", fails(() -> docs.submit(FAMILY, order("A", 2, 1, 1000))).code,
-                "family still cannot handle purchase orders");
+                "family cannot submit a purchase order someone else drafted");
         run(() -> docs.confirm(OWNER, familyDraft));
         assertEquals(50, stock(1));
     }
@@ -342,7 +342,7 @@ class WarehouseOrderFlowTest {
 
     @Test
     void permissionsAreEnforcedInBackend() {
-        assertEquals("WAREHOUSE_FORBIDDEN", fails(() -> docs.create(FAMILY,
+        assertEquals("WAREHOUSE_FORBIDDEN", fails(() -> docs.create(STAFF,
                 new Document("PURCHASE_ORDER", null, "A", null, List.of(new Line(1, 1, BigDecimal.ONE, null))))).code);
         assertEquals("WAREHOUSE_FORBIDDEN", fails(() -> orders.list(STAFF, null, null, null, null, 0, 20)).code);
         int po = confirmedOrder("A", 1, 10, 50000);
@@ -354,6 +354,35 @@ class WarehouseOrderFlowTest {
         assertEquals("WAREHOUSE_FORBIDDEN", fails(() -> docs.submit(FAMILY, owners)).code);
         assertEquals("WAREHOUSE_FORBIDDEN", fails(() -> catalog.createProduct(FAMILY,
                 new QuickProduct(1, "Áo mới", null, List.of(new QuickVariant("Đen", "M", BigDecimal.TEN)), false))).code);
+    }
+
+    @Test
+    void familyDraftsPurchaseOrderOwnerReviewsEditsAndConfirms() {
+        int before = stock(1);
+        int po = id(run(() -> docs.create(FAMILY, new Document("PURCHASE_ORDER", null, "NCC Gia đình", null,
+                List.of(new Line(1, 5, BigDecimal.valueOf(1000), null))))));
+        run(() -> docs.edit(FAMILY, po, new Document("PURCHASE_ORDER", null, "NCC Gia đình", "sửa nháp",
+                List.of(new Line(1, 6, BigDecimal.valueOf(1000), null)))));
+        assertEquals("WAREHOUSE_FORBIDDEN", fails(() -> docs.confirm(FAMILY, po)).code);
+        run(() -> docs.submit(FAMILY, po));
+        assertEquals("PENDING_CONFIRMATION",
+                db.queryForObject("SELECT status FROM stock_receipt WHERE receipt_id=?", String.class, po));
+        assertTrue(fails(() -> docs.edit(FAMILY, po, new Document("PURCHASE_ORDER", null, "NCC Gia đình", null,
+                List.of(new Line(1, 99, BigDecimal.valueOf(1000), null))))).getMessage().contains("nháp"),
+                "after sending, the family member can no longer change the order");
+        // The owner adjusts the waiting order, then confirms it; status stays pending until then.
+        run(() -> docs.edit(OWNER, po, new Document("PURCHASE_ORDER", null, "NCC Gia đình", "chủ sửa",
+                List.of(new Line(1, 8, BigDecimal.valueOf(900), null)))));
+        assertEquals("PENDING_CONFIRMATION",
+                db.queryForObject("SELECT status FROM stock_receipt WHERE receipt_id=?", String.class, po));
+        assertEquals(8, db.queryForObject("SELECT SUM(quantity) FROM stock_receipt_item WHERE receipt_id=?", Integer.class, po));
+        run(() -> docs.confirm(OWNER, po));
+        assertEquals("CONFIRMED",
+                db.queryForObject("SELECT status FROM stock_receipt WHERE receipt_id=?", String.class, po));
+        assertEquals(before, stock(1), "a purchase order never changes stock");
+        assertTrue(fails(() -> docs.edit(OWNER, po, new Document("PURCHASE_ORDER", null, "NCC Gia đình", null,
+                List.of(new Line(1, 1, BigDecimal.ONE, null))))).getMessage().contains("nháp"),
+                "a confirmed order is not editable");
     }
 
     @Test

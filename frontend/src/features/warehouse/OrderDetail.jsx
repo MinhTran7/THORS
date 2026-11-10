@@ -36,7 +36,7 @@ const shortfall = (d, line) =>
 
 /** Purchase order detail; every number comes from GET /warehouse/orders/{id}. */
 export default function OrderDetail({ id, onClose, onEdit, onAction, onOpenDocument }) {
-  const { owner, busy, documents } = useWarehouse();
+  const { owner, busy, documents, account } = useWarehouse();
   const { data: d, error } = useSWR(`/warehouse/orders/${id}`, api, { revalidateOnFocus: true });
   const raw = documents.find((x) => x.receipt_id === id);
 
@@ -60,6 +60,7 @@ export default function OrderDetail({ id, onClose, onEdit, onAction, onOpenDocum
   const hasOver = d.items.some((i) => i.over_quantity > 0);
   const hasSub = d.items.some((i) => i.received_substitute > 0);
   const hasReturn = d.items.some((i) => i.returned_quantity > 0);
+  const mine = raw?.created_by === account?.id;
   const act = (kind) => onAction({ ...(raw || {}), ...d, receipt_type: 'PURCHASE_ORDER' }, kind);
 
   return (
@@ -148,12 +149,21 @@ export default function OrderDetail({ id, onClose, onEdit, onAction, onOpenDocum
       </DialogContent>
       <DialogActions sx={{ flexWrap: 'wrap', gap: 1 }}>
         <Button onClick={onClose}>Đóng</Button>
-        {owner && d.status === 'DRAFT' && raw && (
-          <>
-            <Button disabled={busy} onClick={() => onEdit(raw)}>
-              Sửa nháp
-            </Button>
-          </>
+        {(owner || mine) && d.status === 'DRAFT' && raw && (
+          <Button disabled={busy} onClick={() => onEdit(raw)}>
+            Sửa nháp
+          </Button>
+        )}
+        {/* Family drafts the order and sends it; the owner confirms. */}
+        {!owner && mine && d.status === 'DRAFT' && (
+          <Button variant="contained" disabled={busy} onClick={() => act('submit')}>
+            Gửi chủ cửa hàng xác nhận
+          </Button>
+        )}
+        {owner && d.status === 'PENDING_CONFIRMATION' && raw && (
+          <Button disabled={busy} onClick={() => onEdit(raw)}>
+            Sửa trước khi xác nhận
+          </Button>
         )}
         {owner && ['DRAFT', 'PENDING_CONFIRMATION'].includes(d.status) && (
           <Button variant="contained" disabled={busy} onClick={() => act('confirm')}>

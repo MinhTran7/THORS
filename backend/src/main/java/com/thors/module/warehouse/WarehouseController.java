@@ -21,6 +21,7 @@ public class WarehouseController {
     private final WarehouseSettlements settlements;
     private final WarehouseInventory inventory;
     private final WarehouseCounts counts;
+    private final WarehouseMoveRequests moveRequests;
 
     public WarehouseController(
             SessionAccess sessions,
@@ -33,7 +34,8 @@ public class WarehouseController {
             WarehouseCatalog catalog,
             WarehouseSettlements settlements,
             WarehouseInventory inventory,
-            WarehouseCounts counts) {
+            WarehouseCounts counts,
+            WarehouseMoveRequests moveRequests) {
         this.sessions = sessions;
         this.docs = docs;
         this.layout = layout;
@@ -45,6 +47,7 @@ public class WarehouseController {
         this.settlements = settlements;
         this.inventory = inventory;
         this.counts = counts;
+        this.moveRequests = moveRequests;
     }
 
     /** Inventory list with metrics over every matching variant; all=true for the Excel export. */
@@ -334,6 +337,32 @@ public class WarehouseController {
         return layout.move(sessions.current(), r);
     }
 
+    /** Family: shelving/moving waits for the owner. Owner: applied at once (same as /moves). */
+    @PostMapping("/move-requests")
+    public Object requestMove(@Valid @RequestBody Move r) {
+        return moveRequests.submit(sessions.current(), r);
+    }
+
+    @GetMapping("/move-requests")
+    public Object moveRequests(@RequestParam(required = false) String status) {
+        return moveRequests.list(sessions.current(), status);
+    }
+
+    @PostMapping("/move-requests/{id}/approve")
+    public Object approveMove(@PathVariable int id) {
+        return moveRequests.approve(sessions.current(), id);
+    }
+
+    @PostMapping("/move-requests/{id}/reject")
+    public Object rejectMove(@PathVariable int id, @Valid @RequestBody Reason r) {
+        return moveRequests.end(sessions.current(), id, "reject", r.reason());
+    }
+
+    @PostMapping("/move-requests/{id}/cancel")
+    public Object cancelMove(@PathVariable int id) {
+        return moveRequests.end(sessions.current(), id, "cancel", null);
+    }
+
     @PatchMapping("/locations/{id}")
     public Object metadata(
             @PathVariable int id,
@@ -368,7 +397,8 @@ public class WarehouseController {
     @PostMapping("/photos")
     public Object upload(
             @RequestPart("file") MultipartFile file) {
-        policy.owner(sessions.current());
+        // Family members attach photos to the shelving requests they send the owner.
+        policy.view(sessions.current());
         return photos.upload(file);
     }
 

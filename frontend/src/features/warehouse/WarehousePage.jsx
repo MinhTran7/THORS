@@ -1,4 +1,4 @@
-import { Outlet } from 'react-router-dom';
+import { Outlet, useNavigate } from 'react-router-dom';
 import { Alert, Box, Button, Chip, Collapse, Stack, Typography } from '@mui/material';
 import { useState } from 'react';
 import { api } from 'services/http';
@@ -16,6 +16,7 @@ import { when } from './model';
 function Content() {
   const { owner, notices, noticeError, documents, run } = useWarehouse();
   const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
   const [detail, setDetail] = useState(null);
   const [edit, setEdit] = useState(null);
   const [action, setAction] = useState(null);
@@ -44,10 +45,13 @@ function Content() {
                   <Button
                     size="small"
                     onClick={() => {
-                      if (documents.some((d) => d.receipt_id === n.related_entity_id)) setDetail(n.related_entity_id);
+                      if (n.related_entity_type === 'location_move_request') {
+                        setOpen(false);
+                        navigate('/warehouse/locations');
+                      } else if (documents.some((d) => d.receipt_id === n.related_entity_id)) setDetail(n.related_entity_id);
                     }}
                   >
-                    Xem phiếu
+                    {n.related_entity_type === 'location_move_request' ? 'Xem yêu cầu' : 'Xem phiếu'}
                   </Button>
                   {!n.is_read && (
                     <Button

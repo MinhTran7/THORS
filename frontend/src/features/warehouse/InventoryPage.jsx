@@ -187,6 +187,7 @@ export default function InventoryPage() {
         }
       />
       <Metrics
+        loading={!data}
         columns={owner ? 5 : 4}
         items={[
           ['Tổng tồn thực tế', m.stock, 'Bấm để bỏ lọc trạng thái', () => update({ state: '' }), !state],
@@ -221,7 +222,8 @@ export default function InventoryPage() {
         ]}
       />
       <MainCard title="Cảnh báo" sx={{ mb: 2 }}>
-        <Stack spacing={1}>
+        {!data && !error && <Typography color="text.secondary">Đang tải tồn kho…</Typography>}
+        <Stack spacing={1} sx={{ display: data ? undefined : 'none' }}>
           {m.count_out > 0 && (
             <Alert severity="error" action={<Button onClick={() => update({ state: 'out' })}>Xem</Button>}>
               {number(m.count_out)} biến thể hết hàng (căn cứ: tổng tồn = 0).

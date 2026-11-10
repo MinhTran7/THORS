@@ -17,9 +17,10 @@ public class WarehousePolicy {
 
     public void create(Account a, String type) {
         view(a);
-        // Family members draft/submit receipts and supplier returns; approving, dispatching and
-        // purchase orders stay with the owner (checked again in each service method).
-        if (!"RECEIPT".equals(type) && !"SUPPLIER_RETURN".equals(type)) owner(a);
+        // Family members draft/submit purchase orders, receipts and supplier returns; confirming,
+        // approving and dispatching stay with the owner (checked again in each service method).
+        if (!"PURCHASE_ORDER".equals(type) && !"RECEIPT".equals(type) && !"SUPPLIER_RETURN".equals(type))
+            owner(a);
     }
 
     public void edit(Account a, java.util.Map<String, Object> doc) {
