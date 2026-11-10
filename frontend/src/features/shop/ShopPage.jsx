@@ -510,7 +510,6 @@ function PromoBanner({ promos, vouchers }) {
             </Box>
           </Box>
         </Box>
-    </Box>
   );
 }
 
