@@ -961,48 +961,16 @@ export default function ProductPage() {
           </Table>
         </TableContainer>
 
-        {/* Phân trang phía dưới */}
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: { xs: '1fr', sm: '1fr auto 1fr' },
-            alignItems: 'center',
-            gap: 1.5,
-            px: 3,
-            py: 2,
-            borderTop: `1px solid ${C.borderLight}`
-          }}
-        >
-          <Typography sx={{ fontSize: 13, color: C.muted, textAlign: { xs: 'center', sm: 'left' } }}>
-            Hiển thị {filteredProducts.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0}–
-            {Math.min(currentPage * PAGE_SIZE, filteredProducts.length)} / {filteredProducts.length} sản phẩm
-          </Typography>
-          <Pagination
-            count={pageCount}
-            page={currentPage}
-            disabled={busy}
-            onChange={(_, value) => setPage(value)}
-            size="small"
-            shape="rounded"
-            sx={{
-              justifySelf: 'center',
-              '& .MuiPaginationItem-root': {
-                minWidth: 26,
-                height: 26,
-                fontSize: 12.5,
-                borderRadius: 1.5,
-                transition: 'none',
-                '&:hover': { bgcolor: '#F1F5F9' }
-              },
-              '& .MuiTouchRipple-root': { display: 'none' },
-              '& .MuiPaginationItem-root.Mui-selected': {
-                bgcolor: `${C.cyan} !important`,
-                color: `${C.text} !important`,
-                fontWeight: 700
-              }
-            }}
-          />
-        </Box>
+        {/* Phân trang phía dưới (component chung của nhóm) */}
+        <Pager
+          page={currentPage - 1}
+          totalPages={pageCount}
+          total={filteredProducts.length}
+          size={PAGE_SIZE}
+          noun="sản phẩm"
+          onPage={(p) => !busy && setPage(p + 1)}
+          sx={{ borderTop: `1px solid ${C.borderLight}` }}
+        />
       </Box>
 
       <Box sx={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, mt: 2.5 }}>

@@ -310,13 +310,14 @@ public class ProductService {
                 );
             }
 
-            // Validate price: sản phẩm mới phải có giá bán > 0
+            // Validate price: cho phép 0 vì Kho (WarehouseCatalog quick-create) gửi 0 làm giá tạm
+            // khi chưa có giá bán rồi đặt lại NULL; form Thêm sản phẩm tự bắt giá > 0 ở frontend.
             if (price == null
-                    || price.compareTo(BigDecimal.ZERO) <= 0
+                    || price.compareTo(BigDecimal.ZERO) < 0
                     || price.stripTrailingZeros().scale() > 0
                     || price.compareTo(MAX_PRICE) > 0) {
                 throw new IllegalArgumentException(
-                        "Giá bán phải là số nguyên lớn hơn 0 (VNĐ)."
+                        "Giá bán phải là số nguyên không âm (VNĐ)."
                 );
             }
 
