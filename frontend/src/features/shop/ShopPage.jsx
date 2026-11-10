@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link as RouterLink, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import { Box } from '@mui/material';
+import { keyframes } from '@emotion/react';
 import { useAuth } from 'features/auth/AuthProvider';
 import { api } from 'services/http';
+import { getPromotions } from 'services/promotionService';
 import { ColorSwatches, isNewProduct, money, priceText, useProductColors } from './ShopCommon';
 import PendingCartHandler from './PendingCartHandler';
 import ShopBanner from './ShopBanner';
-import { C, SERIF, Icon, btnSx, container, eyebrowSx, focusRing, h2Sx, linkSx, scrollToId, section } from './storeTheme';
+import { C, RADIUS, SERIF, Icon, btnSx, container, eyebrowSx, focusRing, h2Sx, linkSx, scrollToId, section, srOnly } from './storeTheme';
 
 /**
  * Trang chủ cửa hàng (đường dẫn '/'). Header, footer và thanh thông báo nằm ở layouts/StorefrontLayout.
@@ -374,43 +376,140 @@ export function ProductCard({ product, promo, sx }) {
   );
 }
 
-function PromoBanner({ promos }) {
-  if (promos.length === 0) return null;
-  const top = promos[0];
-  const best = promos.reduce((acc, p) => Math.max(acc, parseInt(String(p.discountLabel).replace(/\D/g, ''), 10) || 0), 0);
+/* ---------- Banner sales ---------- */
+
+const rise = keyframes`from { transform: translateY(105%); } to { transform: none; }`;
+const fadeUp = keyframes`from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; }`;
+const drift = keyframes`50% { transform: translate(-1.5%, 1%) rotate(-1deg); }`;
+
+const fade = (delay) => ({ opacity: 0, animation: `${fadeUp} .6s ${delay}s forwards` });
+
+const LETTERS = [
+  ['S', -30, 400, -12],
+  ['A', 300, 520, 8],
+  ['L', 640, 600, -16],
+  ['E', 900, 450, 14]
+];
+
+const discountText = (p) => {
+  const v = Number(p.discountValue) || 0;
+  if (['PERCENT', 'PERCENTAGE'].includes(p.discountType)) return `${v}%`;
+  return v >= 1000 ? `${Math.round(v / 1000)}K` : money(v);
+};
+
+const latestVoucher = (promos, vouchers) => {
+  const now = new Date();
+  const active = vouchers.filter((v) => (!v.status || v.status === 'ACTIVE') && new Date(v.startDate) <= now && now <= new Date(v.endDate));
+  if (active.length > 0) {
+    const v = active.reduce((a, b) => (b.promotionId > a.promotionId ? b : a));
+    const note = [
+      Number(v.minOrderValue) > 0 && `Đơn từ ${money(v.minOrderValue)}`,
+      v.applyScope === 'ALL' ? 'Toàn shop' : 'Một số sản phẩm',
+      `Đến ${new Date(v.endDate).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}`
+    ];
+    return { ...v, note: note.filter(Boolean).join(' · ') };
+  }
+  const p = promos[0];
+  if (!p) return null;
+  const count = promos.filter((x) => x.promotionName === p.promotionName).length;
+  return { ...p, name: p.promotionName, note: count > 1 ? `Áp dụng cho ${count} sản phẩm` : p.productName };
+};
+
+function RiseLine({ children, size, spacing, delay }) {
+  return (
+    <Box component="span" sx={{ display: 'block', overflow: 'hidden', pt: '.16em', fontSize: size, letterSpacing: `${spacing} !important` }}>
+      <Box component="span" sx={{ display: 'inline-block', transform: 'translateY(105%)', animation: `${rise} .8s cubic-bezier(.2,.8,.2,1) ${delay}s forwards` }}>
+        {children}
+      </Box>
+    </Box>
+  );
+}
+
+function PromoBanner({ promos, vouchers }) {
+  const voucher = useMemo(() => latestVoucher(promos, vouchers), [promos, vouchers]);
+  if (!voucher) return null;
+
   return (
     <Box component="section" id="uu-dai" sx={{ ...section, scrollMarginTop: 96 }}>
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', bgcolor: C.accent, color: '#FFFFFF' }}>
-        <Box sx={{ flex: { xs: '1 1 100%', sm: '1 1 480px' }, minHeight: { xs: 360, sm: 420 }, display: 'flex' }}>
-          <ProductPhoto src={top.imageUrl} name={top.productName} dark />
-        </Box>
+      <Box
+        sx={{
+          position: 'relative',
+          height: { xs: 480, md: 560 },
+          borderRadius: RADIUS.card,
+          overflow: 'hidden',
+          bgcolor: '#E98AAB',
+          color: '#FFFFFF',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          textAlign: 'center',
+          px: 3
+        }}
+      >
         <Box
-          sx={{
-            flex: '1 1 420px',
-            p: { xs: '40px 24px', sm: '64px 56px' },
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-            gap: 2.5
-          }}
+          component="svg"
+          viewBox="0 0 1200 560"
+          preserveAspectRatio="xMidYMid slice"
+          aria-hidden="true"
+          sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', animation: `${drift} 14s ease-in-out infinite` }}
         >
-          <Box component="p" sx={eyebrowSx}>
-            Ưu đãi có hạn
+          {LETTERS.map(([ch, x, y, deg]) => (
+            <text key={ch} x={x} y={y} transform={`rotate(${deg} ${x} ${y})`} fontSize="460" fontWeight="800" fill="none" stroke="#C9475F" strokeWidth="3">
+              {ch}
+            </text>
+          ))}
+        </Box>
+<Box
+  sx={{
+    flex: '1 1 420px',
+    p: { xs: '40px 24px', sm: '64px 56px' },
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'center',
+    gap: 2.5
+  }}
+>
+  <Box component="p" sx={{ ...eyebrowSx, fontSize: { xs: 18, md: 24 }, fontWeight: 800, letterSpacing: '.12em', ...fade(0.2) }}>
+    {voucher.name}
+  </Box>
           </Box>
-          <Box component="h2" sx={{ m: 0, fontFamily: SERIF, fontWeight: 400, fontSize: { xs: 38, sm: 52 }, lineHeight: 1.1 }}>
-            {best > 0 ? `Giảm đến ${best}%` : top.promotionName}
+          <Box sx={{ width: 32, height: 3, bgcolor: '#FFFFFF', mx: 'auto', my: 2.5, ...fade(0.3) }} />
+          <Box component="h2" sx={{ m: 0, fontWeight: '800 !important', lineHeight: 0.86 }}>
+            <RiseLine size={{ xs: 22, md: 30 }} spacing=".08em" delay={0.4}>
+              GIẢM ĐẾN
+            </RiseLine>
+            <RiseLine size={{ xs: 110, md: 180 }} spacing="-3px" delay={0.5}>
+              {discountText(voucher)}
+            </RiseLine>
           </Box>
-          <Box component="p" sx={{ m: 0, fontSize: 16, lineHeight: 1.6, maxWidth: 400 }}>
-            {top.promotionName} — áp dụng cho {promos.length} sản phẩm đang khuyến mãi.
+          <Box sx={{ mt: 2.25, fontSize: 14, fontWeight: 700, letterSpacing: '.14em', textTransform: 'uppercase', ...fade(0.8) }}>
+            {voucher.note}
           </Box>
-          <Box>
-            <Box component={RouterLink} to="/shop/sale" sx={btnSx('light')}>
-              MUA ƯU ĐÃI
+<Box
+  sx={{
+    position: 'relative',
+    flex: '1 1 420px',
+    p: { xs: '40px 24px', sm: '64px 56px' },
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'center',
+    gap: 2.5
+  }}
+>
+  <Box component="p" sx={{ ...eyebrowSx, fontSize: { xs: 18, md: 24 }, fontWeight: 800, letterSpacing: '.12em', ...fade(0.2) }}>
+    {voucher.name}
+  </Box>
+
+  {/* ... các phần giữa của phuoc (nằm giữa 2 xung đột, giữ nguyên) ... */}
+
+  <Box sx={{ mt: 3.5, ...fade(1) }}>
+    <Box component={RouterLink} to="/promotions" sx={{ ...btnSx('light'), color: C.ink, '&:hover': { bgcolor: '#FFF3B0', borderColor: '#FFF3B0', color: C.ink } }}>
+      KHÁM PHÁ KHO VOUCHER
+    </Box>
+  </Box>
             </Box>
           </Box>
         </Box>
-      </Box>
-    </Box>
   );
 }
 
@@ -511,6 +610,7 @@ export default function ShopPage() {
   const [params] = useSearchParams();
 
   const [promos, setPromos] = useState([]);
+  const [vouchers, setVouchers] = useState([]);
   const [bestSellers, setBestSellers] = useState([]);
   const [newest, setNewest] = useState([]);
 
@@ -535,6 +635,13 @@ export default function ShopPage() {
       .catch(() => setBestSellers([]));
   }, []);
 
+  useEffect(() => {
+    if (!account) return;
+    getPromotions()
+      .then((d) => setVouchers(Array.isArray(d) ? d : d?.data || []))
+      .catch(() => setVouchers([]));
+  }, [account]);
+
   const promoMap = useMemo(() => new Map(promos.map((p) => [p.productId, p])), [promos]);
 
   // Link dạng /#moi, /#ban-chay, /#uu-dai (từ header/footer): cuộn tới khối tương ứng khi khối đã hiện
@@ -550,11 +657,108 @@ export default function ShopPage() {
 
   return (
     <>
-      <ShopBanner />
-      <Categories categories={categories} onPick={pickCategory} />
-      <ProductShelf id="ban-chay" title="Hàng bán chạy" items={bestSellers} promoMap={promoMap} moreTo="/shop/best-sellers" />
-      <ProductShelf id="moi" title="Hàng mới về" items={newest} promoMap={promoMap} moreTo="/shop/new-arrivals" />
-      <PromoBanner promos={promos} />
+      {!query && (
+        <>
+          <ShopBanner />
+          <Categories categories={categories} onPick={pickCategory} />
+          <ProductShelf id="ban-chay" title="Hàng bán chạy" items={bestSellers} promoMap={promoMap} moreTo="/shop/best-sellers" />
+          <ProductShelf id="moi" title="Hàng mới về" items={newest} promoMap={promoMap} moreTo="/shop/new-arrivals" />
+          <PromoBanner promos={promos} vouchers={vouchers} />
+        </>
+      )}
+
+      <Box component="section" id="tat-ca" sx={{ ...section, scrollMarginTop: 96 }}>
+        <SectionHead title={gridTitle}>
+          {query ? (
+            <Box
+              component="button"
+              type="button"
+              onClick={() => navigate('/')}
+              sx={{ ...linkSx, border: 0, p: 0, bgcolor: 'transparent', font: 'inherit', fontSize: 14, textDecoration: 'underline' }}
+            >
+              Xóa tìm kiếm ({total} kết quả)
+            </Box>
+          ) : (
+            <Box component="label" sx={{ position: 'relative' }}>
+              <Box component="span" sx={srOnly}>
+                Sắp xếp
+              </Box>
+              <Box
+                component="select"
+                value={sort}
+                onChange={(e) => setSort(e.target.value)}
+                sx={{ height: 44, pl: '14px', pr: 4, border: `1px solid ${C.ink}`, bgcolor: '#FFFFFF', font: 'inherit', fontSize: 14, color: C.ink, cursor: 'pointer', ...focusRing }}
+              >
+                {SORTS.map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </Box>
+            </Box>
+          )}
+        </SectionHead>
+
+        {!query && categories.length > 0 && (
+          <Box role="group" aria-label="Lọc theo danh mục" sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: -1.5, mb: 4 }}>
+            <Box component="button" type="button" aria-pressed={categoryId === 0} onClick={() => setCategoryFilter(0)} sx={chipSx(categoryId === 0)}>
+              Tất cả
+            </Box>
+            {categories.map((c) => (
+              <Box
+                key={c.categoryId}
+                component="button"
+                type="button"
+                aria-pressed={categoryId === c.categoryId}
+                onClick={() => setCategoryFilter(c.categoryId)}
+                sx={chipSx(categoryId === c.categoryId)}
+              >
+                {c.categoryName}
+              </Box>
+            ))}
+          </Box>
+        )}
+
+        {error && (
+          <Box component="p" sx={{ color: C.accent }}>
+            {error}
+          </Box>
+        )}
+
+        {!loading && !error && items.length === 0 && (
+          <Box sx={{ textAlign: 'center', py: 6, color: C.muted }}>
+            <Box sx={{ fontFamily: SERIF, fontSize: 24, color: C.ink, mb: 1 }}>Không tìm thấy sản phẩm</Box>
+            <Box>Thử từ khóa khác hoặc chọn danh mục khác.</Box>
+          </Box>
+        )}
+
+        <Box
+          sx={{
+            display: 'grid',
+            gap: { xs: '24px 12px', sm: '32px 20px' },
+            gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', sm: 'repeat(auto-fill, minmax(240px, 1fr))' }
+          }}
+        >
+          {items.map((p) => (
+            <ProductCard key={p.productId} product={p} promo={promoMap.get(p.productId)} />
+          ))}
+        </Box>
+
+        {loading && items.length === 0 && (
+          <Box component="p" sx={{ color: C.muted }}>
+            Đang tải sản phẩm...
+          </Box>
+        )}
+
+        {items.length < total && (
+          <Box sx={{ textAlign: 'center', mt: 6 }}>
+            <Box component="button" type="button" disabled={loading} onClick={() => load(page + 1, false)} sx={btnSx('outline')}>
+              {loading ? 'ĐANG TẢI...' : 'XEM THÊM'}
+            </Box>
+          </Box>
+        )}
+      </Box>
+
       <Benefits />
 
       {account?.role === 'CUSTOMER' && <PendingCartHandler />}

@@ -29,8 +29,6 @@ const SIDEBAR_WIDTH = 256;
 // Màu theo trang Đăng nhập
 const ACCENT = brand.cyan;
 const HOVER_BG = 'rgba(168, 241, 248, 0.32)';
-// Nền sidebar: trắng phía trên, ngả xanh ngọc rất nhạt phía dưới (giống tông form đăng nhập)
-const SIDEBAR_BG = 'linear-gradient(180deg, #FFFFFF 0%, #FFFFFF 40%, #F1FCFD 100%)';
 
 const textProps = { fontSize: 14, fontWeight: 'inherit', noWrap: true };
 const iconBoxSx = {
@@ -61,7 +59,6 @@ const selectedSx = {
 };
 
 const navListSx = {
-  position: 'relative', // nằm trên các đốm trang trí
   px: 1.5,
   pt: 0.5,
   flexGrow: 1,
@@ -72,7 +69,7 @@ const navListSx = {
 };
 
 // Menu sổ xuống: đường dọc xám thẳng hàng với icon mục cha
-const childListSx = { ml: '22px', pl: 1, mb: 0.5, borderLeft: `2px solid ${brand.cardLine}` };
+const childListSx = { ml: '22px', pl: 1, mb: 0.5, borderLeft: `2px solid ${brand.line}` };
 
 function NavLink({ item, selected, nested = false, onClick }) {
   return (
@@ -89,14 +86,15 @@ function NavLink({ item, selected, nested = false, onClick }) {
           minHeight: 40,
           position: 'relative',
           color: brand.muted,
-          // Đoạn đường dọc cạnh mục đang chọn chuyển sang xanh
+          // Vạch xanh bo tròn cạnh mục đang chọn
           '&.Mui-selected::before': {
             content: '""',
             position: 'absolute',
-            left: -10,
-            top: 0,
-            bottom: 0,
-            width: 2,
+            left: -11,
+            top: 8,
+            bottom: 8,
+            width: 4,
+            borderRadius: 2,
             bgcolor: SELECT_MAIN
           }
         })
@@ -140,21 +138,7 @@ export default function ThorsLayout() {
   const closeMobile = () => setMobile(false);
 
   const sidebar = (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', background: SIDEBAR_BG, position: 'relative', overflow: 'hidden' }}>
-      {/* Đốm hồng mờ trang trí, gợi tag hồng ở trang Đăng nhập */}
-      <Box
-        aria-hidden
-        sx={{
-          position: 'absolute',
-          bottom: 60,
-          left: -70,
-          width: 170,
-          height: 170,
-          borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(224, 85, 154, 0.10) 0%, rgba(224, 85, 154, 0) 70%)',
-          pointerEvents: 'none'
-        }}
-      />
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: '#FFFFFF', overflow: 'hidden' }}>
 
       {/* Logo giống trang Đăng nhập và màn khách hàng */}
       <Stack
@@ -164,19 +148,18 @@ export default function ThorsLayout() {
         direction="row"
         alignItems="center"
         spacing={1.25}
-        sx={{ position: 'relative', px: 2.75, pt: 3, pb: 2.5, color: brand.ink, textDecoration: 'none' }}
+        sx={{ px: 2.75, pt: 3, pb: 2.5, mb: 1.5, borderBottom: `1px solid ${brand.yellowLine}`, color: brand.ink, textDecoration: 'none' }}
       >
         <ThorsMark height={34} />
         <Box>
           <Typography component="span" sx={{ display: 'block', color: brand.ink, fontSize: 22, fontWeight: 800, letterSpacing: '3px', lineHeight: 1 }}>
             {STORE_NAME}
           </Typography>
-          <Typography component="span" sx={{ display: 'block', color: brand.pink, fontSize: 11.5, fontWeight: 700, mt: 0.5 }}>
-            Quản lý cửa hàng
+          <Typography component="span" sx={{ display: 'block', color: brand.pink, fontSize: 10, fontWeight: 700, mt: 0.5 }}>
+            TH Omnichannel Retail System
           </Typography>
         </Box>
       </Stack>
-      <Box aria-hidden sx={{ mx: 2.75, mb: 1.5, borderTop: `2px dashed ${brand.cardLine}` }} />
 
       <List component="nav" aria-label="Menu chính" sx={navListSx}>
         {items.map((item) => {
@@ -219,7 +202,6 @@ export default function ThorsLayout() {
         alignItems="center"
         spacing={1.25}
         sx={{
-          position: 'relative',
           // Thẻ người dùng: hình chữ nhật khớp đáy sidebar
           px: 2,
           py: 1.5,

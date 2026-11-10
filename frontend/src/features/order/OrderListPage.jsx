@@ -54,7 +54,6 @@ import {
   StatusText,
   StoreThumb,
   dangerBtnSx,
-  eyebrowSx as storeEyebrowSx,
   pageTitleSx,
   panelSx,
   storeBtnSx,
@@ -617,9 +616,6 @@ export default function OrderListPage() {
     return (
       <Box>
         <Box sx={{ mb: { xs: 4, sm: 5 } }}>
-          <Box component="p" sx={{ ...storeEyebrowSx, mb: 1.5 }}>
-            Tài khoản của tôi
-          </Box>
           <Box component="h1" sx={pageTitleSx}>
             Đơn hàng của tôi
           </Box>

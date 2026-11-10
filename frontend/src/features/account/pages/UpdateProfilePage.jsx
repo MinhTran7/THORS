@@ -5,7 +5,7 @@ import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import { Alert, Box, CircularProgress, Typography } from '@mui/material';
 import { Stack } from '../components/Flex';
-import { ArrowLeftOutlined, CloudUploadOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, CloudUploadOutlined, InfoCircleOutlined, UserOutlined } from '@ant-design/icons';
 import { useAuth } from 'features/auth/AuthProvider';
 import { useCrumbs } from 'layouts/crumbs';
 import { imageError } from 'services/imageUpload';
@@ -76,7 +76,7 @@ export default function UpdateProfilePage() {
   const fieldError = (name) => (form.touched[name] && form.errors[name]) || '';
 
   const header = {
-    back: { to: '/profile', label: 'Hồ sơ cá nhân' },
+    back: { to: '/profile', label: 'Hồ sơ cá nhân', icon: <UserOutlined /> },
     title: 'Cập nhật hồ sơ',
     subtitle: 'Giữ thông tin luôn mới để chúng tôi có thể liên lạc với bạn.'
   };

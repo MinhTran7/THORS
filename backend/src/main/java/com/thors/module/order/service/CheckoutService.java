@@ -4,39 +4,47 @@ import com.thors.module.address.repository.AddressRepository;
 import com.thors.module.cart.repository.CartRepository;
 import com.thors.module.order.dto.CreateOrderRequest;
 import com.thors.module.order.repository.CheckoutRepository;
+import com.thors.module.promotion.entity.Promotion;
+import com.thors.module.promotion.repository.PromotionRepository;
 
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
 @Service
 public class CheckoutService {
 
-    // Phải trùng với SHIPPING_FEE trong CheckoutPage.jsx (0 = miễn phí)
     private static final BigDecimal SHIPPING_FEE = BigDecimal.ZERO;
     private static final Pattern PHONE = Pattern.compile("^(0|\\+84)\\d{9}$");
 
     private final CheckoutRepository checkoutRepository;
     private final CartRepository cartRepository;
     private final AddressRepository addressRepository;
+    private final PromotionRepository promotionRepository;
 
     public CheckoutService(CheckoutRepository checkoutRepository,
                            CartRepository cartRepository,
-                           AddressRepository addressRepository) {
+                           AddressRepository addressRepository,
+                           PromotionRepository promotionRepository) {
         this.checkoutRepository = checkoutRepository;
         this.cartRepository = cartRepository;
         this.addressRepository = addressRepository;
+        this.promotionRepository = promotionRepository;
     }
 
     private record Receiver(String name, String phone, String address) {
@@ -89,9 +97,65 @@ public class CheckoutService {
         for (Line line : lines) {
             itemsAmount = itemsAmount.add(toMoney(line.detail().get("price")).multiply(BigDecimal.valueOf(line.quantity())));
         }
-        BigDecimal total = itemsAmount.add(SHIPPING_FEE);
 
-        // Tạo đơn (thử lại nếu trùng mã đơn)
+        Integer promotionId = null;
+        String promotionName = null;
+        BigDecimal promotionDiscount = BigDecimal.ZERO;
+
+        if (request.promotionId() != null) {
+            Promotion promo = promotionRepository.findById(request.promotionId())
+                    .orElseThrow(() -> new IllegalArgumentException("Khuyến mãi không tồn tại."));
+            if (!"ACTIVE".equalsIgnoreCase(promo.status())) {
+                throw new IllegalArgumentException("Khuyến mãi hiện không khả dụng.");
+            }
+            LocalDateTime now = LocalDateTime.now();
+            if (promo.startDate() != null && now.isBefore(promo.startDate())) {
+                throw new IllegalArgumentException("Chương trình khuyến mãi chưa bắt đầu.");
+            }
+            if (promo.endDate() != null && now.isAfter(promo.endDate())) {
+                throw new IllegalArgumentException("Khuyến mãi đã hết hạn sử dụng.");
+            }
+            if (promo.usageLimit() != null && promo.usedCount() != null && promo.usedCount() >= promo.usageLimit()) {
+                throw new IllegalArgumentException("Khuyến mãi đã hết lượt sử dụng.");
+            }
+
+            BigDecimal eligibleSubtotal = BigDecimal.ZERO;
+            if ("SELECTED".equalsIgnoreCase(promo.applyScope())) {
+                List<Integer> productIds = promotionRepository.findProductIds(promo.promotionId());
+                Set<Integer> allowedProductIds = new HashSet<>(productIds);
+                for (Line line : lines) {
+                    Object pId = line.detail().get("productId");
+                    if (pId != null && allowedProductIds.contains(((Number) pId).intValue())) {
+                        eligibleSubtotal = eligibleSubtotal.add(toMoney(line.detail().get("price")).multiply(BigDecimal.valueOf(line.quantity())));
+                    }
+                }
+                if (eligibleSubtotal.compareTo(BigDecimal.ZERO) == 0) {
+                    throw new IllegalArgumentException("Đơn hàng không có sản phẩm nào thuộc phạm vi áp dụng khuyến mãi.");
+                }
+            } else {
+                eligibleSubtotal = itemsAmount;
+            }
+
+            if (promo.minOrderValue() != null && eligibleSubtotal.compareTo(promo.minOrderValue()) < 0) {
+                throw new IllegalArgumentException("Đơn hàng chưa đạt giá trị tối thiểu để áp dụng khuyến mãi.");
+            }
+
+            if ("PERCENT".equalsIgnoreCase(promo.discountType()) || "PERCENTAGE".equalsIgnoreCase(promo.discountType())) {
+                promotionDiscount = eligibleSubtotal.multiply(promo.discountValue())
+                        .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP);
+                if (promo.maxDiscountAmount() != null && promo.maxDiscountAmount().compareTo(BigDecimal.ZERO) > 0) {
+                    promotionDiscount = promotionDiscount.min(promo.maxDiscountAmount());
+                }
+            } else {
+                promotionDiscount = promo.discountValue().min(eligibleSubtotal);
+            }
+
+            promotionId = promo.promotionId();
+            promotionName = promo.name();
+        }
+
+        BigDecimal total = itemsAmount.subtract(promotionDiscount).max(BigDecimal.ZERO).add(SHIPPING_FEE);
+
         int orderId = 0;
         String orderNumber = null;
         for (int attempt = 0; attempt < 3 && orderId == 0; attempt++) {
@@ -99,7 +163,8 @@ public class CheckoutService {
             try {
                 orderId = checkoutRepository.insertOrder(orderNumber, userId,
                         receiver.name(), receiver.phone(), receiver.address(),
-                        itemsAmount, SHIPPING_FEE, total, paymentMethod);
+                        itemsAmount, SHIPPING_FEE, total, paymentMethod,
+                        promotionId, promotionName, promotionDiscount);
             } catch (DuplicateKeyException ex) {
                 if (attempt == 2) throw ex;
             }
@@ -111,7 +176,6 @@ public class CheckoutService {
                     String.valueOf(d.get("productName")), String.valueOf(d.get("size")), String.valueOf(d.get("color")));
         }
 
-        // Mua từ giỏ thì xóa các dòng đã đặt khỏi giỏ
         for (Integer cartItemId : cartItemIds) {
             cartRepository.deleteItem(userId, cartItemId);
         }
@@ -121,10 +185,13 @@ public class CheckoutService {
         result.put("orderNumber", orderNumber);
         result.put("totalAmount", total);
         result.put("paymentMethod", paymentMethod);
+        if (promotionDiscount.compareTo(BigDecimal.ZERO) > 0) {
+            result.put("discountAmount", promotionDiscount);
+            result.put("promotionName", promotionName);
+        }
         return result;
     }
 
-    /** Kiểm tra biến thể còn bán online và đủ tồn kho. */
     private Line loadLine(int detailId, int quantity) {
         Map<String, Object> detail = checkoutRepository.findDetailForOrder(detailId);
         if (detail == null) {
@@ -167,7 +234,6 @@ public class CheckoutService {
         return new Receiver(limit(name, 100), limit(phone, 15), limit(joinAddress(detail, ward, province), 255));
     }
 
-    /** Mã đơn dạng ORD-20261031-A1B2C3 (19 ký tự, cột order_number tối đa 30). */
     private String newOrderNumber() {
         String date = LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).format(DateTimeFormatter.BASIC_ISO_DATE);
         String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 6).toUpperCase();
