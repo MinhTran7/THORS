@@ -571,14 +571,25 @@ function Benefits() {
 
 /* ---------- Trang ---------- */
 
-// Một hàng sản phẩm trên trang chủ (Hàng bán chạy / Hàng mới về) kèm link "Xem tất cả"
-const shelfArrowSx = (dark) => ({
+// Nút mũi tên tròn nằm 2 bên dòng sản phẩm, canh giữa theo chiều cao ảnh (ảnh tỉ lệ 4:5).
+// margin-top theo % được tính theo bề rộng khung, nên tính được nửa chiều cao ảnh của mỗi thẻ.
+const shelfArrowSx = (side) => ({
   ...iconBtnSx,
-  border: `1px solid ${C.ink}`,
-  bgcolor: dark ? C.ink : '#FFFFFF',
-  color: dark ? '#FFFFFF' : C.ink,
-  '&:hover': { opacity: 0.85, color: dark ? '#FFFFFF' : C.ink },
-  '&:disabled': { opacity: 0.3, cursor: 'default' }
+  position: 'absolute',
+  top: 0,
+  [side]: { xs: 4, md: -22 },
+  mt: {
+    xs: 'calc((100% - 12px) / 2 * 0.625 - 22px)',
+    sm: 'calc((100% - 40px) / 3 * 0.625 - 22px)',
+    md: 'calc((100% - 60px) / 4 * 0.625 - 22px)'
+  },
+  zIndex: 2,
+  borderRadius: '50%',
+  border: `1px solid ${C.line}`,
+  bgcolor: '#FFFFFF',
+  color: C.ink,
+  boxShadow: '0 2px 12px rgba(0,0,0,.15)',
+  '&:hover': { bgcolor: C.ink, color: '#FFFFFF', borderColor: C.ink }
 });
 
 // Một hàng sản phẩm trên trang chủ (Hàng bán chạy / Hàng mới về): 1 dòng, cuộn ngang bằng 2 nút mũi tên
@@ -605,69 +616,57 @@ function ProductShelf({ id, title, items, promoMap, moreTo }) {
   return (
     <Box component="section" id={id} sx={{ ...section, scrollMarginTop: 96 }}>
       <SectionHead title={title}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          {moreTo && (
-            <Box component={RouterLink} to={moreTo} sx={{ ...linkSx, fontSize: 14, textDecoration: 'underline' }}>
-              Xem tất cả
-            </Box>
-          )}
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            <Box
-              component="button"
-              type="button"
-              aria-label={`${title}: trước`}
-              disabled={!edge.left}
-              onClick={() => scroll(-1)}
-              sx={shelfArrowSx(false)}
-            >
-              <Icon size={18}>
-                <path d="M15 5l-7 7 7 7" />
-              </Icon>
-            </Box>
-            <Box
-              component="button"
-              type="button"
-              aria-label={`${title}: tiếp theo`}
-              disabled={!edge.right}
-              onClick={() => scroll(1)}
-              sx={shelfArrowSx(true)}
-            >
-              <Icon size={18}>
-                <path d="M9 5l7 7-7 7" />
-              </Icon>
-            </Box>
+        {moreTo && (
+          <Box component={RouterLink} to={moreTo} sx={{ ...linkSx, fontSize: 14, textDecoration: 'underline' }}>
+            Xem tất cả
           </Box>
-        </Box>
+        )}
       </SectionHead>
-      <Box
-        ref={trackRef}
-        onScroll={updateEdge}
-        sx={{
-          display: 'flex',
-          gap: { xs: '12px', sm: '20px' },
-          overflowX: 'auto',
-          scrollSnapType: 'x mandatory',
-          scrollbarWidth: 'none',
-          '&::-webkit-scrollbar': { display: 'none' }
-        }}
-      >
-        {items.map((p) => (
-          <ProductCard
-            key={p.productId}
-            product={p}
-            promo={promoMap.get(p.productId)}
-            // Điện thoại 2 thẻ, tablet 3 thẻ, máy tính 4 thẻ trên một dòng
-            sx={{
-              flex: {
-                xs: '0 0 calc((100% - 12px) / 2)',
-                sm: '0 0 calc((100% - 40px) / 3)',
-                md: '0 0 calc((100% - 60px) / 4)'
-              },
-              minWidth: 0,
-              scrollSnapAlign: 'start'
-            }}
-          />
-        ))}
+      <Box sx={{ position: 'relative' }}>
+        {edge.left && (
+          <Box component="button" type="button" aria-label={`${title}: trước`} onClick={() => scroll(-1)} sx={shelfArrowSx('left')}>
+            <Icon size={18}>
+              <path d="M15 5l-7 7 7 7" />
+            </Icon>
+          </Box>
+        )}
+        {edge.right && (
+          <Box component="button" type="button" aria-label={`${title}: tiếp theo`} onClick={() => scroll(1)} sx={shelfArrowSx('right')}>
+            <Icon size={18}>
+              <path d="M9 5l7 7-7 7" />
+            </Icon>
+          </Box>
+        )}
+        <Box
+          ref={trackRef}
+          onScroll={updateEdge}
+          sx={{
+            display: 'flex',
+            gap: { xs: '12px', sm: '20px' },
+            overflowX: 'auto',
+            scrollSnapType: 'x mandatory',
+            scrollbarWidth: 'none',
+            '&::-webkit-scrollbar': { display: 'none' }
+          }}
+        >
+          {items.map((p) => (
+            <ProductCard
+              key={p.productId}
+              product={p}
+              promo={promoMap.get(p.productId)}
+              // Điện thoại 2 thẻ, tablet 3 thẻ, máy tính 4 thẻ trên một dòng
+              sx={{
+                flex: {
+                  xs: '0 0 calc((100% - 12px) / 2)',
+                  sm: '0 0 calc((100% - 40px) / 3)',
+                  md: '0 0 calc((100% - 60px) / 4)'
+                },
+                minWidth: 0,
+                scrollSnapAlign: 'start'
+              }}
+            />
+          ))}
+        </Box>
       </Box>
     </Box>
   );

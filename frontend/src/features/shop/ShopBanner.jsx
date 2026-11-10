@@ -22,7 +22,14 @@ const HEIGHT = { xs: 660, md: 600 };
 // Mỗi loại slide một tông màu
 const THEME = {
   new: { bg: C.sand, text: C.ink, sub: '#3F3A34', eyebrow: '#5A544C', tag: 'Hàng mới về', mainBtn: 'dark' },
-  promo: { bg: C.accent, text: '#FFFFFF', sub: 'rgba(255,255,255,.85)', eyebrow: 'rgba(255,255,255,.85)', tag: 'Đang khuyến mãi', mainBtn: 'light' }
+  promo: {
+    bg: C.accent,
+    text: '#FFFFFF',
+    sub: 'rgba(255,255,255,.85)',
+    eyebrow: 'rgba(255,255,255,.85)',
+    tag: 'Đang khuyến mãi',
+    mainBtn: 'light'
+  }
 };
 
 function interleave(a, b) {
@@ -64,7 +71,15 @@ function SlideFrame({ kind, active, children, image }) {
       >
         {children}
       </Box>
-      <Box sx={{ flex: { xs: '1 1 0', md: '1.15 1 0' }, minHeight: 0, position: 'relative', overflow: 'hidden', bgcolor: kind === 'promo' ? '#3A1212' : '#CFC6BA' }}>
+      <Box
+        sx={{
+          flex: { xs: '1 1 0', md: '1.15 1 0' },
+          minHeight: 0,
+          position: 'relative',
+          overflow: 'hidden',
+          bgcolor: kind === 'promo' ? '#3A1212' : '#CFC6BA'
+        }}
+      >
         {image}
       </Box>
     </Box>
@@ -73,11 +88,21 @@ function SlideFrame({ kind, active, children, image }) {
 
 function SlideImage({ src, name, kind }) {
   if (src) {
-    return <Box component="img" src={src} alt={name} sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />;
+    return (
+      <Box
+        component="img"
+        src={src}
+        alt={name}
+        sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+      />
+    );
   }
   return (
     <Box sx={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}>
-      <Box component="span" sx={{ fontFamily: SERIF, fontSize: 120, color: kind === 'promo' ? 'rgba(255,255,255,.3)' : 'rgba(17,17,17,.25)' }}>
+      <Box
+        component="span"
+        sx={{ fontFamily: SERIF, fontSize: 120, color: kind === 'promo' ? 'rgba(255,255,255,.3)' : 'rgba(17,17,17,.25)' }}
+      >
         {name?.charAt(0)}
       </Box>
     </Box>
@@ -99,7 +124,18 @@ const titleSx = {
 // Banner giới thiệu khi chưa có sản phẩm để chạy slide
 function IntroSlide() {
   return (
-    <SlideFrame kind="new" active image={<Box component="img" src={heroImage} alt="" sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}>
+    <SlideFrame
+      kind="new"
+      active
+      image={
+        <Box
+          component="img"
+          src={heroImage}
+          alt=""
+          sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+        />
+      }
+    >
       <Box component="p" sx={{ ...eyebrowSx, color: THEME.new.eyebrow }}>
         Bộ sưu tập mới
       </Box>
@@ -130,7 +166,10 @@ function ProductSlide({ p, active }) {
           {theme.tag}
         </Box>
         {p.kind === 'promo' && (
-          <Box component="span" sx={{ bgcolor: '#FFFFFF', color: C.accent, fontSize: 12, fontWeight: 600, letterSpacing: '0.08em', px: 1, py: '4px' }}>
+          <Box
+            component="span"
+            sx={{ bgcolor: '#FFFFFF', color: C.accent, fontSize: 12, fontWeight: 600, letterSpacing: '0.08em', px: 1, py: '4px' }}
+          >
             {p.discountLabel}
           </Box>
         )}
@@ -181,23 +220,50 @@ const arrowSx = (dark) => ({
   '&:hover': { opacity: 0.85 }
 });
 
+// Lưu tạm slide đã tải để lần sau quay lại trang chủ hiện ngay, không phải chờ tải lại
+let cachedSlides = null;
+
+// Khung chờ trong lúc đang tải (cùng kích thước banner, không nháy sang banner giới thiệu)
+function LoadingSlide() {
+  return (
+    <Box
+      aria-hidden
+      sx={{
+        position: 'absolute',
+        inset: 0,
+        bgcolor: C.sand,
+        '@keyframes bannerPulse': { '0%, 100%': { opacity: 1 }, '50%': { opacity: 0.6 } },
+        animation: 'bannerPulse 1.4s ease-in-out infinite',
+        '@media (prefers-reduced-motion: reduce)': { animation: 'none' }
+      }}
+    />
+  );
+}
+
 export default function ShopBanner() {
-  const [slides, setSlides] = useState([]);
+  const [slides, setSlides] = useState(cachedSlides || []);
+  const [loaded, setLoaded] = useState(Boolean(cachedSlides));
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
 
   useEffect(() => {
     let alive = true;
     Promise.all([
-      api(`/shop/products?page=0&size=${PER_KIND}&sort=newest`).then((d) => d.items || []).catch(() => []),
-      api(`/shop/promotions?size=${PER_KIND}`).then((d) => d.items || []).catch(() => [])
+      api(`/shop/products?page=0&size=${PER_KIND}&sort=newest`)
+        .then((d) => d.items || [])
+        .catch(() => []),
+      api(`/shop/promotions?size=${PER_KIND}`)
+        .then((d) => d.items || [])
+        .catch(() => [])
     ]).then(([news, promos]) => {
       if (!alive) return;
       const promoIds = new Set(promos.map((p) => p.productId));
       const newSlides = news.filter((p) => !promoIds.has(p.productId)).map((p) => ({ ...p, kind: 'new' }));
       const promoSlides = promos.map((p) => ({ ...p, kind: 'promo' }));
-      setSlides(interleave(newSlides, promoSlides));
-      setIndex(0);
+      const next = interleave(newSlides, promoSlides);
+      cachedSlides = next;
+      setSlides(next);
+      setLoaded(true);
     });
     return () => {
       alive = false;
@@ -229,7 +295,14 @@ export default function ShopBanner() {
       sx={{ ...container, pt: 4 }}
     >
       <Box sx={{ position: 'relative', height: HEIGHT, overflow: 'hidden' }}>
-        {count === 0 ? <IntroSlide /> : slides.map((p, i) => <ProductSlide key={`${p.kind}-${p.productId}`} p={p} active={i === index} />)}
+        {/* Đang tải: khung chờ; tải xong mà chưa có sản phẩm: banner giới thiệu; có sản phẩm: chạy slide */}
+        {!loaded ? (
+          <LoadingSlide />
+        ) : count === 0 ? (
+          <IntroSlide />
+        ) : (
+          slides.map((p, i) => <ProductSlide key={`${p.kind}-${p.productId}`} p={p} active={i === index} />)
+        )}
       </Box>
 
       {count > 1 && (
