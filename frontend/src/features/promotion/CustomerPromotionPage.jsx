@@ -54,9 +54,20 @@ const discountParts = (p) => {
   return v >= 1000 ? [Math.round(v / 1000), 'K'] : [v, 'đ'];
 };
 
-const sandBoxSx = { bgcolor: C.sand, boxShadow: 'inset 0 0 0 1px #F2E3B0', borderRadius: '18px' };
+const CYAN = '#A7F2FA';
+const CYAN_HOVER = '#8EECF5';
 
-const ticketBtnSx = { px: 2, height: 38, fontSize: 12 };
+const noClickFx = { '&::after': { display: 'none !important' } };
+
+const cyanBtnSx = {
+  ...noClickFx,
+  bgcolor: `${CYAN} !important`,
+  color: `${C.cyanInk} !important`,
+  boxShadow: 'none !important',
+  '&:hover': { bgcolor: `${CYAN_HOVER} !important`, color: `${C.cyanInk} !important` }
+};
+
+const ticketBtnSx = { ...cyanBtnSx, px: 2, height: 38, fontSize: 12 };
 
 const notch = (x, y) => `radial-gradient(circle at ${x} ${y}, #0000 10px, #000 10.5px) ${x} ${y} / 20px 50% no-repeat`;
 const teeth = (x) => `radial-gradient(circle at ${x} 50%, #0000 5px, #000 5.5px) ${x} 0 / 8px 14px repeat-y`;
@@ -96,10 +107,10 @@ function VoucherTicket({ promotion, onUse, onViewCondition }) {
           {left || `HSD ${formatDate(promotion.endDate)}`}
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 'auto', pt: 1.5 }}>
-          <Button variant="text" onClick={() => onViewCondition(promotion)} sx={{ fontSize: 12.5, minWidth: 0, px: 0 }}>
+          <Button variant="text" disableRipple onClick={() => onViewCondition(promotion)} sx={{ ...noClickFx, fontSize: 12.5, minWidth: 0, px: 0, color: `${CYAN_HOVER} !important`, '&:hover': { bgcolor: 'transparent' } }}>
             Điều kiện
           </Button>
-          <Button variant="contained" onClick={() => onUse(promotion)} sx={ticketBtnSx}>
+          <Button variant="contained" disableRipple onClick={() => onUse(promotion)} sx={ticketBtnSx}>
             DÙNG NGAY
           </Button>
         </Box>
@@ -134,57 +145,62 @@ function VoucherTicket({ promotion, onUse, onViewCondition }) {
 function ConditionDialog({ promotion, onClose, onUse }) {
   const [value, unit] = discountParts(promotion);
   const rows = [
-    ['Đơn tối thiểu', money(promotion.minOrderValue)],
+    ['Đơn tối thiểu', Number(promotion.minOrderValue) > 0 ? money(promotion.minOrderValue) : 'Không yêu cầu'],
     isPercent(promotion) && promotion.maxDiscountAmount && ['Giảm tối đa', money(promotion.maxDiscountAmount)],
-    promotion.usageLimit && ['Giới hạn lượt dùng', `${promotion.usageLimit} lượt`],
-    ['Thời gian áp dụng', `${formatDateTime(promotion.startDate)} – ${formatDateTime(promotion.endDate)}`],
+    ['Bắt đầu', formatDateTime(promotion.startDate)],
+    ['Kết thúc', formatDateTime(promotion.endDate)],
     ['Sản phẩm áp dụng', promotion.applyScope === 'ALL' ? 'Toàn bộ cửa hàng' : 'Một số sản phẩm']
   ].filter(Boolean);
 
   return (
-    <Dialog open onClose={onClose} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: RADIUS.card, p: 3.5, color: C.ink, fontFamily: SANS } }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2 }}>
-        <Box>
-          <Box sx={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.14em', color: C.muted }}>CHI TIẾT ƯU ĐÃI</Box>
-          <Box component="h2" sx={{ m: 0, mt: 0.5, fontSize: 22, fontWeight: 800, letterSpacing: '-0.3px' }}>
-            {promotion.name}
-          </Box>
-        </Box>
-        <IconButton onClick={onClose} sx={{ border: `1.5px solid ${C.line}`, width: 36, height: 36 }}>
-          <CloseOutlined style={{ fontSize: 13, color: C.muted }} />
+    <Dialog
+      open
+      onClose={onClose}
+      maxWidth="xs"
+      fullWidth
+      slotProps={{ paper: { sx: { borderRadius: RADIUS.card, overflowY: 'auto', scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' }, color: C.ink, fontFamily: SANS } } }}
+    >
+      <Box sx={{ position: 'relative', bgcolor: C.sand, textAlign: 'center', p: '32px 28px 24px' }}>
+        <IconButton onClick={onClose} sx={{ position: 'absolute', top: 14, right: 14, width: 34, height: 34, bgcolor: '#FFFFFF', '&:hover': { bgcolor: '#FFFFFF' } }}>
+          <CloseOutlined style={{ fontSize: 12, color: C.muted }} />
         </IconButton>
-      </Box>
-
-      <Box sx={{ ...sandBoxSx, display: 'flex', alignItems: 'center', gap: 2, p: '18px 20px', my: 2.25 }}>
-        <Box sx={{ fontSize: 40, fontWeight: 800, letterSpacing: '-1px', whiteSpace: 'nowrap' }}>
+        <Box sx={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.16em', color: C.muted }}>{isPercent(promotion) ? 'GIẢM GIÁ' : 'GIẢM TIỀN'}</Box>
+        <Box sx={{ fontSize: 56, fontWeight: 800, letterSpacing: '-2px', lineHeight: 1.1 }}>
           {value}
           {unit}
         </Box>
-        {promotion.description && <Box sx={{ fontSize: 13.5, color: '#4B5563', lineHeight: 1.5 }}>{promotion.description}</Box>}
+        <Box component="h2" sx={{ m: 0, mt: 0.5, fontSize: 18, fontWeight: 700 }}>
+          {promotion.name}
+        </Box>
+        {promotion.description && <Box sx={{ mt: 0.75, fontSize: 13.5, color: C.muted, lineHeight: 1.5 }}>{promotion.description}</Box>}
       </Box>
 
-      {rows.map(([label, val]) => (
-        <Box key={label} sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, py: 1.5, borderTop: `1px solid ${C.line}`, fontSize: 14 }}>
-          <Box component="span" sx={{ color: C.muted }}>
-            {label}
-          </Box>
-          <Box component="span" sx={{ fontWeight: 600, textAlign: 'right' }}>
-            {val}
-          </Box>
-        </Box>
-      ))}
+      <Box sx={{ borderTop: '2px dashed #E7CF8A' }} />
 
-      <Button
-        variant="contained"
-        fullWidth
-        onClick={() => {
-          onClose();
-          onUse(promotion);
-        }}
-        sx={{ ...primaryButtonSx, mt: 2.25, height: 50, fontSize: 14 }}
-      >
-        ÁP DỤNG VÀ MUA SẮM NGAY
-      </Button>
+      <Box sx={{ p: '8px 28px 28px' }}>
+        {rows.map(([label, val], i) => (
+          <Box key={label} sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, py: 1.5, borderTop: i ? `1px solid ${C.line}` : 0, fontSize: 14 }}>
+            <Box component="span" sx={{ color: C.muted }}>
+              {label}
+            </Box>
+            <Box component="span" sx={{ fontWeight: 600, textAlign: 'right' }}>
+              {val}
+            </Box>
+          </Box>
+        ))}
+
+        <Button
+          fullWidth
+          disableRipple
+          onClick={() => {
+            onClose();
+            onUse(promotion);
+          }}
+          sx={{ ...primaryButtonSx, ...cyanBtnSx, mt: 2, height: 50, fontSize: 14 }}
+        >
+          ÁP DỤNG VÀ MUA SẮM NGAY
+        </Button>
+      </Box>
     </Dialog>
   );
 }
@@ -223,15 +239,17 @@ export default function CustomerPromotionPage() {
       try {
         sessionStorage.setItem('thors:applied_voucher', JSON.stringify(promo));
       } catch {}
-      api('/cart')
-        .then((cartData) => navigate(cartData?.items?.length > 0 ? '/cart' : '/'))
-        .catch(() => navigate('/'));
+      if (promo.applyScope === 'SELECTED') {
+        navigate(`/promotions/${promo.promotionId}/products`);
+      } else {
+        navigate('/');
+      }
     },
     [navigate]
   );
 
   return (
-    <StoreAccountShell title="Kho khuyến mãi">
+    <StoreAccountShell title="Kho khuyến mãi" subtitle="Khám phá nhiều ưu đãi cùng THORS">
       <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 2, borderBottom: `1px solid ${C.line}`, mb: 3.5 }}>
         <Tabs
           value={tab}
@@ -242,7 +260,7 @@ export default function CustomerPromotionPage() {
           sx={{
             minHeight: 48,
             minWidth: 0,
-            '& .MuiTabs-indicator': { bgcolor: '#48EFFE', height: 3, borderRadius: '3px' },
+            '& .MuiTabs-indicator': { bgcolor: CYAN, height: 3, borderRadius: '3px' },
             '& .MuiTab-root': {
               minHeight: 48,
               minWidth: 0,

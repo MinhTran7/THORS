@@ -7,7 +7,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-/** Truy vấn công khai cho trang cửa hàng: chỉ trả sản phẩm đang bán online. */
 @Repository
 public class ShopRepository {
 
@@ -38,8 +37,12 @@ public class ShopRepository {
     }
 
     public List<Map<String, Object>> findProducts(String q, Integer categoryId, String sort, int page, int size) {
+        return findProducts(q, categoryId, null, sort, page, size);
+    }
+
+    public List<Map<String, Object>> findProducts(String q, Integer categoryId, Integer promotionId, String sort, int page, int size) {
         List<Object> args = new ArrayList<>();
-        String filter = buildFilter(q, categoryId, args);
+        String filter = buildFilter(q, categoryId, promotionId, args);
 
         String orderBy = switch (sort == null ? "" : sort) {
             case "price_asc" -> "MIN(pd.price) ASC, p.product_id DESC";
@@ -67,14 +70,17 @@ public class ShopRepository {
     }
 
     public int countProducts(String q, Integer categoryId) {
+        return countProducts(q, categoryId, null);
+    }
+
+    public int countProducts(String q, Integer categoryId, Integer promotionId) {
         List<Object> args = new ArrayList<>();
-        String filter = buildFilter(q, categoryId, args);
+        String filter = buildFilter(q, categoryId, promotionId, args);
         Integer total = jdbcTemplate.queryForObject(
                 "SELECT COUNT(DISTINCT p.product_id) " + FROM_WHERE + filter, Integer.class, args.toArray());
         return total == null ? 0 : total;
     }
 
-    /** Null nếu sản phẩm không tồn tại hoặc không được bán online. */
     public Map<String, Object> findProduct(int productId) {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
             SELECT p.product_id AS productId,
@@ -94,7 +100,6 @@ public class ShopRepository {
             """, String.class, productId);
     }
 
-    /** Tồn có thể bán = tồn vật lý trừ lượng đang giữ cho đơn hàng. */
     public List<Map<String, Object>> findVariants(int productId) {
         return jdbcTemplate.queryForList("""
             SELECT pd.detail_id AS detailId,
@@ -119,7 +124,7 @@ public class ShopRepository {
             """, productId);
     }
 
-    private String buildFilter(String q, Integer categoryId, List<Object> args) {
+    private String buildFilter(String q, Integer categoryId, Integer promotionId, List<Object> args) {
         StringBuilder sb = new StringBuilder();
         if (q != null && !q.isBlank()) {
             String text = q.trim();
@@ -131,6 +136,11 @@ public class ShopRepository {
         if (categoryId != null && categoryId > 0) {
             sb.append(" AND p.category_id = ? ");
             args.add(categoryId);
+        }
+        if (promotionId != null && promotionId > 0) {
+            sb.append(" AND ((SELECT apply_scope FROM promotion WHERE promotion_id = ?) = 'ALL' OR p.product_id IN (SELECT product_id FROM promotion_product WHERE promotion_id = ?)) ");
+            args.add(promotionId);
+            args.add(promotionId);
         }
         return sb.toString();
     }

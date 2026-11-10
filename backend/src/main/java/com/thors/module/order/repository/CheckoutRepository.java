@@ -20,15 +20,11 @@ public class CheckoutRepository {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    /**
-     * Thông tin một biến thể để đặt hàng: tên, size, màu, giá, tồn kho còn bán và có được bán online không.
-     * Tồn kho tính giống CartRepository (trừ lượng đang giữ của các đơn TEMPORARY / PAID).
-     * Trả về null nếu không tồn tại.
-     */
     public Map<String, Object> findDetailForOrder(int detailId) {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
             SELECT
                 pd.detail_id AS detailId,
+                p.product_id AS productId,
                 p.product_name AS productName,
                 pd.size AS size,
                 pd.color AS color,
@@ -53,7 +49,6 @@ public class CheckoutRepository {
         return rows.isEmpty() ? null : rows.get(0);
     }
 
-    /** Tạo đơn online COD hoặc ONLINE. Trả về order_id. */
     public int insertOrder(String orderNumber, int userId,
                            String deliveryName, String deliveryPhone, String deliveryAddress,
                            BigDecimal itemsAmount, BigDecimal shippingFee, BigDecimal totalAmount) {
@@ -64,6 +59,14 @@ public class CheckoutRepository {
                            String deliveryName, String deliveryPhone, String deliveryAddress,
                            BigDecimal itemsAmount, BigDecimal shippingFee, BigDecimal totalAmount,
                            String paymentMethod) {
+        return insertOrder(orderNumber, userId, deliveryName, deliveryPhone, deliveryAddress,
+                itemsAmount, shippingFee, totalAmount, paymentMethod, null, null, BigDecimal.ZERO);
+    }
+
+    public int insertOrder(String orderNumber, int userId,
+                           String deliveryName, String deliveryPhone, String deliveryAddress,
+                           BigDecimal itemsAmount, BigDecimal shippingFee, BigDecimal totalAmount,
+                           String paymentMethod, Integer promotionId, String promotionName, BigDecimal promotionDiscount) {
         String method = "ONLINE".equalsIgnoreCase(paymentMethod) ? "ONLINE" : "COD";
         String status = "ONLINE".equals(method) ? "AWAITING_PAYMENT" : "PENDING_CONFIRMATION";
         KeyHolder keyHolder = new GeneratedKeyHolder();
@@ -72,10 +75,10 @@ public class CheckoutRepository {
                 INSERT INTO orders
                     (order_number, order_type, user_id, delivery_name, delivery_phone, delivery_address,
                      order_status, total_amount, created_by, payment_method, payment_status,
-                     items_amount, shipping_fee)
+                     items_amount, shipping_fee, promotion_id, promotion_name_snapshot, promotion_discount_amount)
                 VALUES (?, 'Online', ?, ?, ?, ?,
                         ?, ?, ?, ?, 'UNPAID',
-                        ?, ?)
+                        ?, ?, ?, ?, ?)
                 """, Statement.RETURN_GENERATED_KEYS);
             ps.setString(1, orderNumber);
             ps.setInt(2, userId);
@@ -88,13 +91,19 @@ public class CheckoutRepository {
             ps.setString(9, method);
             ps.setBigDecimal(10, itemsAmount);
             ps.setBigDecimal(11, shippingFee);
+            if (promotionId != null) {
+                ps.setInt(12, promotionId);
+            } else {
+                ps.setNull(12, java.sql.Types.INTEGER);
+            }
+            ps.setString(13, promotionName);
+            ps.setBigDecimal(14, promotionDiscount != null ? promotionDiscount : BigDecimal.ZERO);
             return ps;
         }, keyHolder);
         Number key = keyHolder.getKey();
         return key == null ? 0 : key.intValue();
     }
 
-    /** Thêm một dòng sản phẩm vào đơn, chốt giá và tên tại thời điểm đặt. */
     public void insertItem(int orderId, int detailId, int quantity, BigDecimal unitPrice,
                            String productName, String size, String color) {
         jdbcTemplate.update("""

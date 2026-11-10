@@ -9,21 +9,19 @@ export function checkoutFromCart(navigate, itemIds) {
 }
 
 // Mua ngay 1 sản phẩm (không qua giỏ hàng)
-export function buyNow(navigate, { variantId, productName, imageUrl, size, color, unitPrice, quantity = 1 }) {
+export function buyNow(navigate, { productId, variantId, productName, imageUrl, size, color, unitPrice, quantity = 1 }) {
   navigate('/checkout', {
-    state: { buyNow: { variantId, productName, imageUrl, size, color, unitPrice, quantity } }
+    state: { buyNow: { productId, variantId, productName, imageUrl, size, color, unitPrice, quantity } }
   });
 }
 
 // Khách chưa đăng nhập bấm "Mua ngay": nhớ sản phẩm lại để sau khi đăng nhập
 // trang /checkout tự đọc và hiển thị đúng sản phẩm này.
-export function stashBuyNow({ variantId, productName, imageUrl, size, color, unitPrice, quantity = 1 }) {
+export function stashBuyNow({ productId, variantId, productName, imageUrl, size, color, unitPrice, quantity = 1 }) {
   try {
     sessionStorage.setItem(
       CHECKOUT_STORAGE_KEY,
-      JSON.stringify({ buyNow: { variantId, productName, imageUrl, size, color, unitPrice, quantity } })
+      JSON.stringify({ buyNow: { productId, variantId, productName, imageUrl, size, color, unitPrice, quantity } })
     );
-  } catch {
-    // bỏ qua nếu trình duyệt chặn sessionStorage
-  }
+  } catch {}
 }

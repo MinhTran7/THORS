@@ -72,6 +72,7 @@ export default function ShopProductPage() {
       return;
     }
     const item = {
+      productId: Number(data?.product?.productId || productId),
       variantId: variant.detailId,
       productName: data.product.productName,
       imageUrl: data.images?.[0],

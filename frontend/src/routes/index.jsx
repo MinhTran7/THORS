@@ -62,6 +62,7 @@ import EditAddressPage from 'features/customer/EditAddressPage';
 // Shop management
 import ShopPage from 'features/shop/ShopPage';
 import ShopProductPage from 'features/shop/ShopProductPage';
+import PromotionProductsPage from 'features/promotion/PromotionProductsPage';
 
 // Cart (Giỏ hàng)
 import CartPage from 'features/cart/CartPage';
@@ -92,6 +93,7 @@ export default createBrowserRouter([
     children: [
       { path: '/', element: <ShopPage /> },
       { path: '/shop/products/:productId', element: <ShopProductPage /> },
+      { path: '/promotions/:promotionId/products', element: <PromotionProductsPage /> },
       { path: '/tracking/:orderNumber', element: <OrderTrackingPage /> },
       {
         element: <RequireAuth />,

@@ -148,7 +148,7 @@ export default function ThorsLayout() {
         direction="row"
         alignItems="center"
         spacing={1.25}
-        sx={{ px: 2.75, pt: 3, pb: 2.5, color: brand.ink, textDecoration: 'none' }}
+        sx={{ px: 2.75, pt: 3, pb: 2.5, mb: 1.5, borderBottom: `1px solid ${brand.yellowLine}`, color: brand.ink, textDecoration: 'none' }}
       >
         <ThorsMark height={34} />
         <Box>
@@ -160,7 +160,6 @@ export default function ThorsLayout() {
           </Typography>
         </Box>
       </Stack>
-      <Box aria-hidden sx={{ mx: 2.75, mb: 1.5, borderTop: `2px dashed ${brand.cardLine}` }} />
 
       <List component="nav" aria-label="Menu chính" sx={navListSx}>
         {items.map((item) => {

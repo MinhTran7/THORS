@@ -48,7 +48,7 @@ function useCartCount(enabled) {
   const refresh = useCallback(async () => {
     try {
       const data = await api('/cart');
-      setCount((data.items || []).length);
+      setCount((data.items || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0));
     } catch {
       // Không lấy được giỏ hàng thì giữ nguyên số hiện tại
     }
@@ -260,13 +260,36 @@ const footerLinkSx = { color: '#D9D6D0', textDecoration: 'none', '&:hover': { co
 const footerColSx = { flex: '1 1 160px', display: 'flex', flexDirection: 'column', gap: 1.25, fontSize: 14 };
 const footerTitleSx = { color: '#FFFFFF', fontWeight: 600, mb: 0.5 };
 
+const CONTACTS = [
+  {
+    label: 'Hotline',
+    value: 'Đang cập nhật',
+    icon: <path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2" />
+  },
+  {
+    label: 'Địa chỉ',
+    value: 'Đang cập nhật',
+    icon: (
+      <>
+        <path d="M12 21s-7-6-7-11a7 7 0 0 1 14 0c0 5-7 11-7 11z" />
+        <circle cx="12" cy="10" r="2.5" />
+      </>
+    )
+  }
+];
+
 function StoreFooter({ categories }) {
   return (
     <Box component="footer" sx={{ bgcolor: C.ink, color: '#D9D6D0', mt: 'auto' }}>
       <Box sx={{ ...container, pt: 9, pb: 4, display: 'flex', flexDirection: 'column', gap: 6 }}>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
           <Box sx={{ flex: '2 1 280px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <Box sx={{ fontSize: 24, fontWeight: 700, letterSpacing: '3px', color: '#FFFFFF' }}>{STORE_NAME.toUpperCase()}</Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, fontSize: 24, fontWeight: 700, letterSpacing: '3px', color: '#FFFFFF' }}>
+              <Box sx={{ display: 'flex', p: 0.75, bgcolor: C.cream, borderRadius: '12px' }}>
+                <ThorsLogo size={28} />
+              </Box>
+              {STORE_NAME.toUpperCase()}
+            </Box>
             <Box component="p" sx={{ m: 0, fontSize: 14, lineHeight: 1.7, maxWidth: 320 }}>
               Thời trang tối giản, chất liệu bền đẹp — giao tận nhà.
             </Box>
@@ -282,14 +305,25 @@ function StoreFooter({ categories }) {
               </Box>
             ))}
           </Box>
+          <Box sx={footerColSx}>
+            <Box sx={footerTitleSx}>Liên hệ</Box>
+            {CONTACTS.map((c) => (
+              <Box key={c.label} sx={{ display: 'flex', gap: 1.25, alignItems: 'flex-start', '& svg': { flexShrink: 0, mt: '2px' } }}>
+                <Icon size={16}>{c.icon}</Icon>
+                <span>
+                  {c.label}: {c.value}
+                </span>
+              </Box>
+            ))}
+          </Box>
         </Box>
         <Box
-          sx={{ borderTop: '1px solid #3A3A3A', pt: 3, display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: 1.5, fontSize: 13, color: '#B5B1AA' }}
+          sx={{ borderTop: '1px solid #3A3A3A', pt: 3, display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: 1.5, fontSize: 13, fontWeight: 600, color: '#A7F2FA' }}
         >
           <span>
-            © {new Date().getFullYear()} {STORE_NAME}. Bảo lưu mọi quyền.
+            © {new Date().getFullYear()} {STORE_NAME}
           </span>
-          <span>Điều khoản · Chính sách bảo mật</span>
+          <span>{STORE_NAME} luôn đồng hành cùng bạn!</span>
         </Box>
       </Box>
     </Box>
@@ -335,7 +369,13 @@ export default function StorefrontLayout() {
         '& main h1, & main h2': { fontWeight: '800 !important', letterSpacing: '-0.5px' }
       }}
     >
-      <Box sx={{ bgcolor: C.ink, color: '#FFFFFF', fontSize: 13, letterSpacing: '0.04em', textAlign: 'center', py: '11px', px: 2 }}>
+      <Box sx={{ bgcolor: C.ink, color: '#FFFFFF', fontSize: 13, letterSpacing: '0.04em', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, textAlign: 'center', py: '11px', px: 2 }}>
+        <Icon size={18}>
+          <path d="M3 7h11v9H3z" />
+          <path d="M14 10h4l3 3v3h-7" />
+          <circle cx="7" cy="17.5" r="1.5" />
+          <circle cx="17" cy="17.5" r="1.5" />
+        </Icon>
         Giao hàng toàn quốc — Thanh toán khi nhận hàng hoặc chuyển khoản
       </Box>
       <StoreHeader categories={categories} />
