@@ -68,7 +68,8 @@ public class WarehouseBarcodes {
             throw new ApiException(400, "INVALID_BARCODE", "Mã vạch không hợp lệ.");
         }
         var rows = s.jdbc().queryForList("""
-                SELECT d.detail_id,d.product_id,d.barcode,d.color,d.size,d.stock_quantity,d.status,p.product_name,
+                SELECT d.detail_id,d.product_id,d.barcode,d.color,d.size,d.price,d.stock_quantity,d.status,p.product_name,
+                  p.status AS product_status,
                   COALESCE(l.assigned,0) AS assigned_quantity,
                   GREATEST(0,d.stock_quantity-COALESCE(l.assigned,0)) AS unassigned_quantity,
                   (SELECT pi.image_url FROM product_image pi

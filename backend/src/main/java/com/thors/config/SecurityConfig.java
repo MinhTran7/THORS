@@ -178,6 +178,11 @@ public class SecurityConfig {
                                         })
                                                         .failureHandler(
                                                                         (req, res, e) -> {
+                                                                                // Log the real cause (e.g. invalid_token_response, redirect_uri mismatch);
+                                                                                // the user only sees a generic "failed" message.
+                                                                                org.slf4j.LoggerFactory.getLogger(SecurityConfig.class)
+                                                                                                .warn("OAuth2 login failed at {}: {}", req.getRequestURI(),
+                                                                                                                e.getMessage(), e);
                                                                                 var session = req.getSession(false);
                                                                                 if (session != null) {
                                                                                         session.removeAttribute(

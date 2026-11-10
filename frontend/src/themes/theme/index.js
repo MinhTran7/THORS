@@ -1,7 +1,7 @@
 // ==============================|| PRESET THEME - DEFAULT ||============================== //
 
 export default function Default(colors) {
-  const { blue, red, gold, cyan, green, grey } = colors;
+  const { red, gold, cyan, green, grey } = colors;
   const greyColors = {
     0: grey[0],
     50: grey[1],
@@ -23,18 +23,19 @@ export default function Default(colors) {
   };
   const contrastText = '#fff';
 
+  // Màu chính đồng bộ với trang Đăng nhập: xanh ngọc (link, viền, ô chọn) — nút đặc dùng xanh nhạt, xem overrides/Button.js
   return {
     primary: {
-      lighter: blue[0],
-      100: blue[1],
-      200: blue[2],
-      light: blue[3],
-      400: blue[4],
-      main: blue[5],
-      dark: blue[6],
-      700: blue[7],
-      darker: blue[8],
-      900: blue[9],
+      lighter: '#E6F9FB',
+      100: '#CFF4F8',
+      200: '#B6EEF4',
+      light: '#A8F1F8',
+      400: '#5CCAD6',
+      main: '#1BA3B3',
+      dark: '#158A98',
+      700: '#117480',
+      darker: '#0E5E68',
+      900: '#0E3A41',
       contrastText
     },
     secondary: {

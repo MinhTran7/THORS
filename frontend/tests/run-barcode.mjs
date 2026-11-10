@@ -198,19 +198,22 @@ try {
   assert.equal(variants[0].barcode, 'TH000101');
   await page.screenshot({ path: path.join(artifacts, 'inventory.png'), fullPage: true });
   await page.getByRole('checkbox', { name: 'Chọn tất cả dòng trên trang', exact: true }).check();
-  await page.getByRole('button', { name: 'In tem (2)', exact: true }).click();
-  await page.getByLabel('Số tem #101', { exact: true }).fill('2');
-  await page.getByLabel('Số tem #102', { exact: true }).fill('3');
-  await page.getByText('Tổng: 5 tem', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'In tem các dòng đã chọn (2)', exact: true }).click();
+  // Default = hàng chưa xếp (8 and 15); the quick-fill and +/- controls then set exact counts.
+  assert.equal(await page.getByLabel('Số tem TH000101', { exact: true }).inputValue(), '8');
+  await page.getByRole('button', { name: 'Mỗi mã 1 tem', exact: true }).click();
+  await page.getByRole('button', { name: 'Thêm 1 tem TH000101', exact: true }).click();
+  await page.getByLabel('Số tem TH000102', { exact: true }).fill('3');
+  await page.getByRole('button', { name: 'In ngay 5 tem', exact: true }).waitFor();
   await page.screenshot({ path: path.join(artifacts, 'print-dialog.png'), fullPage: true });
-  await page.getByRole('button', { name: 'In / Lưu PDF', exact: true }).click();
+  await page.getByRole('button', { name: 'In ngay 5 tem', exact: true }).click();
   await page.waitForFunction(() => window.__barcodePrints.length === 1);
   const printed = await page.evaluate(() => {
     const html = window.__barcodePrints[0];
     const doc = new DOMParser().parseFromString(html, 'text/html');
     return {
       html,
-      codes: [...doc.querySelectorAll('svg text')].map((node) => node.textContent),
+      codes: [...doc.querySelectorAll('.code')].map((node) => node.textContent),
       count: doc.querySelectorAll('.label').length
     };
   });
@@ -236,7 +239,7 @@ try {
   await printPage.setContent(escaped.html);
   await printPage.pdf({ path: path.join(artifacts, 'roll-label.pdf'), preferCSSPageSize: true, printBackground: true });
   await printPage.close();
-  await page.getByRole('dialog', { name: 'In mã vạch', exact: true }).getByRole('button', { name: 'Đóng', exact: true }).click();
+  await page.getByRole('dialog', { name: 'In tem mã vạch', exact: true }).getByRole('button', { name: 'Đóng', exact: true }).click();
   await page.getByRole('textbox', { name: 'Tìm tồn kho' }).fill('TH000102');
   await page.waitForFunction(() => document.querySelectorAll('input[aria-label^="Chọn Áo"]').length === 1);
   await page.getByRole('textbox', { name: 'Tìm tồn kho' }).fill('');

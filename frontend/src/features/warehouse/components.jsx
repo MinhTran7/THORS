@@ -14,12 +14,13 @@ import {
   TableCell,
   TableContainer,
   TableHead,
-  TablePagination,
   TableRow,
+  Skeleton,
   TextField,
   Typography
 } from '@mui/material';
 import MainCard from 'components/MainCard';
+import { Pager } from 'features/account/components/Blocks';
 import { statusText, number } from './model';
 import { api } from 'services/http';
 import { useWarehouse } from './WarehouseContext';
@@ -58,7 +59,8 @@ export function Title({ title, subtitle, action }) {
   );
 }
 // items: [title, value, hint, onClick?, active?, display?]; onClick makes the card a filter toggle.
-export function Metrics({ items, columns }) {
+// loading: data not arrived yet → show a placeholder instead of a misleading 0.
+export function Metrics({ items, columns, loading = false }) {
   return (
     <Box
       sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', lg: `repeat(${columns || items.length},1fr)` }, gap: 2, mb: 3 }}
@@ -81,7 +83,7 @@ export function Metrics({ items, columns }) {
         >
           <Typography color="text.secondary">{title}</Typography>
           <Typography variant="h2" sx={{ my: 1 }}>
-            {display ?? number(val)}
+            {loading ? <Skeleton width={72} aria-label="Đang tải" /> : (display ?? number(val))}
           </Typography>
           <Typography variant="caption" color="text.secondary">
             {hint}
@@ -163,21 +165,18 @@ export function DataTable({ columns, rows, empty = 'Chưa có dữ liệu.', onR
           </TableBody>
         </Table>
       </TableContainer>
-      <TablePagination
-        component="div"
-        count={server ? server.total : rows.length}
-        rowsPerPage={size}
+      <Pager
         page={current}
-        onPageChange={(_, p) => (server ? server.onPage(p) : setPage(p))}
-        onRowsPerPageChange={(e) => {
-          if (server) return server.onSize(Number(e.target.value));
-          setSize(Number(e.target.value));
+        total={server ? server.total : rows.length}
+        size={size}
+        noun="dòng"
+        onPage={(p) => (server ? server.onPage(p) : setPage(p))}
+        onSize={(value) => {
+          if (server) return server.onSize(value);
+          setSize(value);
           setPage(0);
         }}
-        rowsPerPageOptions={[20, 50, 100]}
-        labelRowsPerPage="Số dòng"
-        labelDisplayedRows={({ from, to, count }) => `${from}–${to} / ${count}`}
-        getItemAriaLabel={(type) => (type === 'next' ? 'Trang sau' : 'Trang trước')}
+        sizeOptions={[20, 50, 100]}
       />
     </>
   );

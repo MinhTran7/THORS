@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Box, Typography, TextField, MenuItem, Button, Divider, IconButton } from '@mui/material';
-import { ArrowLeftOutlined, StarFilled, StarOutlined } from '@ant-design/icons';
+import { StarFilled, StarOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
+import { StoreAccountShell } from 'features/account/components/StoreAccount';
 import { fetchProvinces, fetchWards } from '../cart/vnAddress';
 import { C, cardSx, outlineButtonSx, primaryButtonSx } from './theme';
 import AddressMap, { fullAddress } from './AddressMap';
@@ -11,13 +12,17 @@ const EMPTY = { recipientName: '', phone: '', provinceCode: '', wardCode: '', ad
 const menuProps = {
   autoFocus: false,
   disableAutoFocusItem: true,
-  PaperProps: { sx: { maxHeight: 280, borderRadius: 2.5, mt: 0.5 } }
+  PaperProps: { sx: { maxHeight: 280, borderRadius: '14px', mt: 0.5 } }
 };
 
+// Ô nhập giống trang Đăng nhập: bo 14px, nền xanh rất nhạt, viền xanh khi đang nhập
 const inputSx = (hasError) => ({
   '& .MuiOutlinedInput-root': {
-    borderRadius: 2.5,
-    minHeight: 44,
+    borderRadius: '14px',
+    minHeight: 46,
+    bgcolor: '#FAFDFD',
+    '& fieldset': { borderWidth: '1.5px' },
+    '&.Mui-focused fieldset': { borderWidth: '1.5px' },
     '& fieldset': { borderColor: hasError ? C.error : C.border },
     '&:hover fieldset, &.Mui-focused fieldset': { borderColor: hasError ? C.error : C.cyan }
   }
@@ -38,7 +43,7 @@ function validate(form, province, ward) {
 function Field({ label, error, children, ...props }) {
   return (
     <Box>
-      <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>{label}</Typography>
+      <Typography sx={{ fontSize: 14, fontWeight: 700, color: '#374151', mb: 0.75 }}>{label}</Typography>
       <TextField
         fullWidth
         size="small"
@@ -127,22 +132,8 @@ export default function AddressForm({ title, subtitle, submitLabel, initial, loc
   }
 
   return (
-    <Box sx={{ maxWidth: 880, mx: 'auto', color: C.text, pb: 6 }}>
-      <Box sx={{ mb: 3 }}>
-        <Button
-          startIcon={<ArrowLeftOutlined />}
-          onClick={() => navigate('/addresses')}
-          sx={{ textTransform: 'none', fontSize: 13, color: C.muted, mb: 1.5, p: 0, '&:hover': { bgcolor: 'transparent', color: C.text } }}
-        >
-          Quay lại danh sách địa chỉ
-        </Button>
-        <Typography variant="h3" sx={{ fontWeight: 800, fontSize: { xs: 24, sm: 28 } }}>
-          {title}
-        </Typography>
-        <Typography sx={{ color: C.muted, mt: 0.5, fontSize: 14 }}>{subtitle}</Typography>
-      </Box>
-
-      <Box component="form" noValidate onSubmit={handleSubmit} sx={{ ...cardSx, p: { xs: 2.5, sm: 4 } }}>
+    <StoreAccountShell back={{ to: '/addresses', label: 'Địa chỉ giao hàng' }} title={title} subtitle={subtitle}>
+      <Box component="form" noValidate onSubmit={handleSubmit} sx={{ ...cardSx, maxWidth: 880, p: { xs: 2.5, sm: 4 } }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5 }}>
           <Typography sx={{ fontWeight: 800, fontSize: 16 }}>Thông tin giao hàng</Typography>
           <Typography sx={{ fontSize: 12.5, color: C.muted }}>* Thông tin bắt buộc</Typography>
@@ -229,12 +220,12 @@ export default function AddressForm({ title, subtitle, submitLabel, initial, loc
           sx={{
             my: 4,
             p: 2,
-            borderRadius: 2.5,
+            borderRadius: '14px',
             display: 'flex',
             alignItems: 'center',
             gap: 1.5,
-            border: form.isDefault ? '1.5px solid #FDE047' : `1px solid ${C.border}`,
-            bgcolor: form.isDefault ? '#FFFDE7' : '#F8FAFC'
+            border: form.isDefault ? '1.5px solid #F2E3B0' : `1.5px solid ${C.border}`,
+            bgcolor: form.isDefault ? '#FFF6DA' : '#FAFDFD'
           }}
         >
           <IconButton size="small" disabled={lockDefault} onClick={() => change('isDefault', !form.isDefault)}>
@@ -278,6 +269,6 @@ export default function AddressForm({ title, subtitle, submitLabel, initial, loc
           </Box>
         </Box>
       </Box>
-    </Box>
+    </StoreAccountShell>
   );
 }

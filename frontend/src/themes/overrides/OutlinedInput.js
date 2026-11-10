@@ -26,7 +26,9 @@ export default function OutlinedInput(theme) {
         notchedOutline: {
           borderColor: theme.vars.palette.grey[300]
         },
+        // Bo góc như ô nhập trang Đăng nhập
         root: {
+          borderRadius: 12,
           ...getColor({ variant: 'primary', theme }),
           '&.Mui-error': { ...getColor({ variant: 'error', theme }) }
         },

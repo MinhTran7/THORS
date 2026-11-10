@@ -20,7 +20,7 @@ export function WarehouseProvider({ children }) {
       // Order list/detail/picker, per-document history/settlements and supplier credit views are
       // computed by the backend; refresh them as well.
       mutateGlobal(
-        (key) => typeof key === 'string' && /^\/warehouse\/(orders|order-variants|suppliers|supplier-credits|documents\/\d+\/|inventory|counts|history)/.test(key)
+        (key) => typeof key === 'string' && /^\/warehouse\/(orders|order-variants|suppliers|supplier-credits|documents\/\d+\/|inventory|counts|history|move-requests)/.test(key)
       )
     ]);
   };

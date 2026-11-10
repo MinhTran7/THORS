@@ -17,6 +17,10 @@ import {
 import { getProducts, getProductById } from '../../services/productService';
 import { api } from '../../services/http';
 import { useAuth } from '../auth/AuthProvider';
+// Quét mã vạch (phần kho/mã vạch): máy quét USB/Bluetooth, ô tìm kiếm hoặc camera → thêm vào hóa đơn.
+import useBarcodeScanner from '../warehouse/useBarcodeScanner';
+import { addScannedLine, scanToCartLine } from '../warehouse/scanToCart';
+import CameraScanDialog from '../warehouse/CameraScanDialog';
 import { useCrumbs } from '../../layouts/crumbs';
 import ReceiptDialog from './ReceiptDialog';
 
@@ -329,6 +333,37 @@ export default function InStoreSalesPage() {
     closeDialog();
   }
 
+  // ---- Quét mã vạch → thêm vào hóa đơn đang mở (quét lại cùng mã thì +1, không vượt tồn kho) ----
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const searchInputRef = useRef(null);
+  const cartRef = useRef(cart);
+  cartRef.current = cart;
+
+  async function addScanned(code) {
+    setError('');
+    setSuccess('');
+    try {
+      const line = await scanToCartLine(code);
+      const result = addScannedLine(cartRef.current, line);
+      if (result.error) {
+        setError(result.error);
+        return { ok: false, message: result.error };
+      }
+      cartRef.current = result.cart; // several fast scans before the next render still add up
+      setCart(result.cart);
+      const quantity = result.cart.find((item) => item.key === line.key)?.quantity ?? 1;
+      const message = `Đã thêm ${line.name} · ${line.color} · ${line.size} (SL: ${quantity})`;
+      setSuccess(message);
+      return { ok: true, message };
+    } catch (err) {
+      setError(err.message);
+      return { ok: false, message: err.message };
+    }
+  }
+
+  // Máy quét cắm vào là dùng: bóp cò ở bất kỳ đâu trên trang (trừ khi đang mở hộp thoại khác).
+  useBarcodeScanner(addScanned, !variantDialogOpen && !receiptOpen && !discountOpen && !cameraOpen);
+
   function updateQuantity(key, delta) {
     setCart((current) =>
       current
@@ -462,13 +497,26 @@ export default function InStoreSalesPage() {
                   fullWidth
                   size="small"
                   placeholder="Tìm theo tên sản phẩm hoặc mã SKU"
+                  inputRef={searchInputRef}
                   value={search}
                   onFocus={() => setSearchOpen(true)}
                   onChange={(e) => {
                     setSearch(e.target.value);
                     setSearchOpen(true);
                   }}
-                  InputProps={{
+                  onKeyDown={async (e) => {
+                    // Máy quét gõ mã vào ô này rồi Enter (hoặc người gõ mã vạch TH… rồi Enter) → thêm vào hóa đơn.
+                    const code = search.trim();
+                    if (e.key !== 'Enter' || !/^TH\d{6,}(-\d+)?$/i.test(code)) return;
+                    e.preventDefault();
+                    const result = await addScanned(code);
+                    if (result.ok) {
+                      setSearch('');
+                      setSearchOpen(false);
+                    }
+                  }}
+                  slotProps={{
+                    input: {
                     startAdornment: (
                       <InputAdornment position="start">
                         <SearchOutlined style={{ color: '#94A3B8', fontSize: 16 }} />
@@ -476,9 +524,17 @@ export default function InStoreSalesPage() {
                     ),
                     endAdornment: (
                       <InputAdornment position="end">
-                        <ScanOutlined style={{ color: '#64748B', fontSize: 18, cursor: 'pointer' }} />
+                        <IconButton
+                          size="small"
+                          aria-label="Quét mã bằng camera"
+                          title="Có máy quét: cứ bóp cò là thêm vào hóa đơn. Không có máy quét: bấm để quét bằng camera."
+                          onClick={() => setCameraOpen(true)}
+                        >
+                          <ScanOutlined style={{ color: '#64748B', fontSize: 18 }} />
+                        </IconButton>
                       </InputAdornment>
                     )
+                    }
                   }}
                   sx={{
                     bgcolor: '#FFFFFF',
@@ -765,6 +821,34 @@ export default function InStoreSalesPage() {
               ))
             )}
           </Box>
+
+          {/* Nút + góc dưới bên phải: thêm món khác vào hóa đơn này (đưa con trỏ lên ô tìm kiếm) */}
+          {cart.length > 0 && (
+            <Box sx={{ position: 'sticky', bottom: 0, display: 'flex', justifyContent: 'flex-end', pt: 1.5, pointerEvents: 'none' }}>
+              <IconButton
+                aria-label="Thêm sản phẩm vào hóa đơn"
+                title="Thêm sản phẩm vào hóa đơn này (hoặc cứ quét mã bằng máy quét)"
+                onClick={() => {
+                  // Đợi ClickAwayListener của ô tìm kiếm xử lý cú click này xong rồi mới mở danh sách.
+                  setTimeout(() => {
+                    searchInputRef.current?.focus();
+                    setSearchOpen(true);
+                  }, 0);
+                }}
+                sx={{
+                  pointerEvents: 'auto',
+                  width: 44,
+                  height: 44,
+                  bgcolor: '#8EECF5',
+                  color: '#0F172A',
+                  boxShadow: '0 4px 12px rgba(15, 23, 42, 0.15)',
+                  '&:hover': { bgcolor: '#5FDDEA' }
+                }}
+              >
+                <PlusOutlined style={{ fontSize: 18 }} />
+              </IconButton>
+            </Box>
+          )}
           </Box>
         </Box>
 
@@ -1428,6 +1512,8 @@ export default function InStoreSalesPage() {
           </Box>
         </Box>
       </Dialog>
+
+      {cameraOpen && <CameraScanDialog title="Quét mã thêm vào hóa đơn" onDetected={addScanned} onClose={() => setCameraOpen(false)} />}
 
       <Snackbar
         open={Boolean(error || success)}

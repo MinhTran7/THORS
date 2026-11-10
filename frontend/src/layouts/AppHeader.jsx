@@ -1,3 +1,4 @@
+import { Link as RouterLink, useLocation } from 'react-router-dom';
 import { IconButton, Typography } from '@mui/material';
 import { MenuOutlined } from '@ant-design/icons';
 import { Stack } from 'features/account/components/Flex';
@@ -7,6 +8,7 @@ import NotificationBell from 'features/notification/NotificationBell';
 import CartButton from 'components/CartButton';
 import UserMenu from './UserMenu';
 import PendingCartHandler from 'features/shop/PendingCartHandler';
+import { crumbPath } from './routeCrumbs';
 
 // Ví dụ: "Chủ Nhật, 1 tháng 11, 2026"
 function formatTodayVi() {
@@ -18,6 +20,7 @@ function formatTodayVi() {
 // Nút riêng của từng trang (Add, Export...) đặt ở PageHeader của trang đó, không đặt ở đây.
 export default function AppHeader({ crumbs, onOpenMenu, onSignOut }) {
   const { account } = useAuth();
+  const { pathname } = useLocation();
   return (
     <Stack
       component="header"
@@ -27,8 +30,8 @@ export default function AppHeader({ crumbs, onOpenMenu, onSignOut }) {
       sx={{
         height: 56,
         px: { xs: 2, md: 4 },
-        borderBottom: `1px solid ${brand.line}`,
-        bgcolor: brand.surface,
+        borderBottom: `1px solid ${brand.cardLine}`,
+        bgcolor: brand.page,
         position: 'sticky',
         top: 0,
         zIndex: (theme) => theme.zIndex.appBar
@@ -39,27 +42,40 @@ export default function AppHeader({ crumbs, onOpenMenu, onSignOut }) {
       </IconButton>
 
       <Stack direction="row" spacing={0.75} alignItems="center" component="nav" aria-label="Đường dẫn trang" sx={{ flexGrow: 1, minWidth: 0 }}>
-        {crumbs.map((label, index) => (
-          <Stack key={`${label}-${index}`} direction="row" spacing={0.75} alignItems="center" sx={{ minWidth: 0 }}>
-            {index > 0 && (
-              <Typography variant="caption" sx={{ color: brand.muted, fontSize: 14 }}>
-                /
+        {crumbs.map((label, index) => {
+          const last = index === crumbs.length - 1;
+          // Mục trước mục cuối là link để quay lại trang cha (không còn nút "Quay lại" trên trang)
+          const to = last ? null : crumbPath(label, account?.role);
+          const linked = to && to !== pathname;
+          return (
+            <Stack key={`${label}-${index}`} direction="row" spacing={0.75} alignItems="center" sx={{ minWidth: 0 }}>
+              {index > 0 && (
+                <Typography variant="caption" sx={{ color: brand.muted, fontSize: 14 }}>
+                  /
+                </Typography>
+              )}
+              <Typography
+                variant="caption"
+                noWrap
+                {...(linked ? { component: RouterLink, to } : {})}
+                aria-current={last ? 'page' : undefined}
+                sx={{
+                  color: last ? brand.ink : linked ? brand.teal : brand.muted,
+                  fontWeight: last ? 700 : linked ? 600 : 400,
+                  fontSize: 14,
+                  textDecoration: 'none',
+                  ...(linked && {
+                    borderRadius: '6px',
+                    '&:hover': { color: '#158A98', textDecoration: 'underline' },
+                    '&:focus-visible': { outline: `2px solid ${brand.teal}`, outlineOffset: 2 }
+                  })
+                }}
+              >
+                {label}
               </Typography>
-            )}
-            <Typography
-              variant="caption"
-              noWrap
-              aria-current={index === crumbs.length - 1 ? 'page' : undefined}
-              sx={{
-                color: index === crumbs.length - 1 ? brand.ink : brand.muted,
-                fontWeight: index === crumbs.length - 1 ? 600 : 400,
-                fontSize: 14
-              }}
-            >
-              {label}
-            </Typography>
-          </Stack>
-        ))}
+            </Stack>
+          );
+        })}
       </Stack>
 
       <Typography variant="caption" sx={{ color: brand.muted, fontSize: 14, display: { xs: 'none', sm: 'block' } }}>

@@ -15,8 +15,9 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Quick catalogue creation from a purchase-order form. Reuses the product module as-is (its public
  * createProduct validation and insert with stock_quantity=0 and online_sales_enabled=0), so the
- * product, cart, shop and sales modules need no change. The sale price is required and written as
- * the catalogue price of the variant; the purchase price stays on the order line only.
+ * product, cart, shop and sales modules need no change. The sale price is optional: when given it is
+ * written as the catalogue price of the variant, when empty product_detail.price stays NULL (never 0
+ * and never the purchase price). The purchase price stays on the order line only.
  *
  * <p>Duplicate protection without extra schema: the warehouse lock serialises calls; a product with
  * the same normalised name requires an explicit allowSimilar=true (so a retry after a lost response
@@ -92,8 +93,8 @@ public class WarehouseCatalog {
                 throw new ApiException(400, "CATALOG_INVALID", "Màu và size không được để trống.");
             if (!seen.add(variantKey(v.color(), v.size())))
                 throw new ApiException(400, "CATALOG_INVALID", "Có màu/size bị lặp trong danh sách tạo mới.");
-            if (v.salePrice() == null)
-                throw new ApiException(400, "CATALOG_INVALID", "Hãy nhập giá bán cho biến thể mới.");
+            if (v.salePrice() != null && (v.salePrice().signum() < 0 || v.salePrice().scale() > 0))
+                throw new ApiException(400, "CATALOG_INVALID", "Giá bán phải là số tiền VNĐ hợp lệ.");
             cleaned.add(new QuickVariant(clean(v.color()), clean(v.size()), v.salePrice()));
         }
         return cleaned;
@@ -126,7 +127,9 @@ public class WarehouseCatalog {
                                     var x = new CreateProductRequest.VariantRequest();
                                     x.setColor(v.color());
                                     x.setSize(v.size());
-                                    x.setPrice(v.salePrice()); // sale price only (required)
+                                    // The product module requires a price; a missing sale price passes its
+                                    // check as 0 here and is reset to NULL below in the same transaction.
+                                    x.setPrice(v.salePrice() == null ? java.math.BigDecimal.ZERO : v.salePrice());
                                     return x;
                                 })
                         .toList());
@@ -136,6 +139,15 @@ public class WarehouseCatalog {
         } catch (IllegalArgumentException e) {
             throw new ApiException(400, "CATALOG_INVALID", "Thông tin sản phẩm không hợp lệ: " + e.getMessage());
         }
+        for (var v : variants)
+            if (v.salePrice() == null)
+                s.jdbc()
+                        .update(
+                                "UPDATE product_detail SET price=NULL WHERE product_id=? AND LOWER(color)=LOWER(?)"
+                                        + " AND LOWER(size)=LOWER(?)",
+                                productId,
+                                v.color(),
+                                v.size());
         s.audit(a.id(), "CATALOG_QUICK_CREATE", productId, "product with " + variants.size() + " variants");
         return result(productId, variants, Set.of());
     }
@@ -159,8 +171,6 @@ public class WarehouseCatalog {
                 existing.add(color.toLowerCase(Locale.ROOT) + "\u0000" + size.toLowerCase(Locale.ROOT));
                 continue;
             }
-            if (v.salePrice().signum() < 0 || v.salePrice().scale() > 0)
-                throw new ApiException(400, "CATALOG_INVALID", "Giá bán phải là số tiền VNĐ hợp lệ.");
             productRepository.insertNewVariant(productId, size, color, v.salePrice());
             created++;
         }

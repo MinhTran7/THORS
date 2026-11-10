@@ -372,7 +372,9 @@ export function DocumentAction({ action, onClose, onDone }) {
               ? 'Tạo phiếu đặt nháp mới với cùng nhà cung cấp, dòng hàng, số lượng và đơn giá. Không mang theo lịch sử nhận hoặc duyệt.'
               : kind === 'cancel' && confirmedOrder
                 ? 'Hủy đơn đặt đã xác nhận nhưng chưa có hàng nhập thực tế. Các phiếu nhập nháp/chờ duyệt phải được xử lý trước.'
-                : 'Thao tác sẽ được lưu vào lịch sử chứng từ.'
+                : kind === 'submit' && doc.receipt_type === 'PURCHASE_ORDER'
+                  ? 'Gửi phiếu đặt cho chủ cửa hàng xác nhận. Sau khi gửi bạn không sửa được nữa; chủ cửa hàng có thể sửa trước khi xác nhận.'
+                  : 'Thao tác sẽ được lưu vào lịch sử chứng từ.'
       }
       onClose={onClose}
       onConfirm={async (reason) => {

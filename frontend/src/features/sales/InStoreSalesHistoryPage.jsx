@@ -9,7 +9,6 @@ import {
   InputAdornment,
   MenuItem,
   Select,
-  Stack,
   Table,
   TableBody,
   TableCell,
@@ -25,12 +24,11 @@ import {
   BankOutlined,
   DollarOutlined,
   EyeOutlined,
-  LeftOutlined,
   ReloadOutlined,
-  RightOutlined,
   SearchOutlined,
   ShoppingCartOutlined
 } from '@ant-design/icons';
+import { Pager } from 'features/account/components/Blocks';
 import { api } from '../../services/http';
 import { useCrumbs } from '../../layouts/crumbs';
 import { useDebounced } from '../account/hooks';
@@ -161,28 +159,6 @@ export default function InStoreSalesHistoryPage() {
     setPaymentMethod('');
     setPage(0);
   }
-
-  // Tạo mảng số trang hiển thị
-  function renderPaginationPages() {
-    const pages = [];
-    if (totalPages <= 6) {
-      for (let i = 0; i < totalPages; i++) pages.push(i);
-    } else {
-      pages.push(0);
-      if (page > 2) pages.push('...');
-      const start = Math.max(1, page - 1);
-      const end = Math.min(totalPages - 2, page + 1);
-      for (let i = start; i <= end; i++) {
-        if (!pages.includes(i)) pages.push(i);
-      }
-      if (page < totalPages - 3) pages.push('...');
-      pages.push(totalPages - 1);
-    }
-    return pages;
-  }
-
-  const startRecord = total === 0 ? 0 : page * PAGE_SIZE + 1;
-  const endRecord = Math.min((page + 1) * PAGE_SIZE, total);
 
   return (
     <Box sx={{ maxWidth: 1400, mx: 'auto', color: C.text, pb: 4 }}>
@@ -592,99 +568,15 @@ export default function InStoreSalesHistoryPage() {
         </Box>
 
         {/* ─── PHÂN TRANG PHÍA DƯỚI ─── */}
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: { xs: '1fr', sm: '1fr auto 1fr' },
-            alignItems: 'center',
-            gap: 1.5,
-            px: 3,
-            py: 2,
-            borderTop: `1px solid ${C.borderLight}`
-          }}
-        >
-          <Typography sx={{ fontSize: 13, color: C.muted, textAlign: { xs: 'center', sm: 'left' } }}>
-            Hiển thị {startRecord}–{endRecord} trong {total} hóa đơn
-          </Typography>
-
-          <Stack direction="row" spacing={0.75} alignItems="center" justifyContent="center">
-            {/* Nút lùi trang */}
-            <IconButton
-              size="small"
-              disableRipple
-              onClick={() => setPage((p) => Math.max(0, p - 1))}
-              disabled={page === 0}
-              sx={{
-                width: 28,
-                height: 28,
-                borderRadius: 1.5,
-                '&:hover': { bgcolor: '#F1F5F9' },
-                border: `1px solid ${C.border}`,
-                color: C.text,
-                '&.Mui-disabled': { borderColor: C.borderLight, color: '#CBD5E1' }
-              }}
-            >
-              <LeftOutlined style={{ fontSize: 11 }} />
-            </IconButton>
-
-            {/* Các số trang */}
-            {renderPaginationPages().map((p, idx) => {
-              if (p === '...') {
-                return (
-                  <Typography key={`dots-${idx}`} sx={{ px: 0.5, color: C.muted, fontSize: 13 }}>
-                    ...
-                  </Typography>
-                );
-              }
-              const isActive = p === page;
-              return (
-                <Button
-                  key={p}
-                  disableRipple
-                  disableElevation
-                  onClick={() => setPage(p)}
-                  sx={{
-                    minWidth: 28,
-                    height: 28,
-                    p: 0,
-                    borderRadius: 1.5,
-                    fontSize: 12.5,
-                    transition: 'none',
-                    '&::after': { display: 'none' },
-                    fontWeight: isActive ? 800 : 500,
-                    bgcolor: isActive ? C.cyan : 'transparent',
-                    color: isActive ? C.text : C.muted,
-                    border: isActive ? `1px solid ${C.cyanHover}` : 'none',
-                    '&:hover': {
-                      bgcolor: isActive ? C.cyanHover : '#F1F5F9'
-                    }
-                  }}
-                >
-                  {p + 1}
-                </Button>
-              );
-            })}
-
-            {/* Nút tiến trang */}
-            <IconButton
-              size="small"
-              disableRipple
-              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-              disabled={page >= totalPages - 1}
-              sx={{
-                width: 28,
-                height: 28,
-                borderRadius: 1.5,
-                '&:hover': { bgcolor: '#F1F5F9' },
-                border: `1px solid ${C.border}`,
-                color: C.text,
-                '&.Mui-disabled': { borderColor: C.borderLight, color: '#CBD5E1' }
-              }}
-            >
-              <RightOutlined style={{ fontSize: 11 }} />
-            </IconButton>
-          </Stack>
-        </Box>
+        <Pager
+          page={page}
+          totalPages={totalPages}
+          total={total}
+          size={PAGE_SIZE}
+          noun="hóa đơn"
+          onPage={setPage}
+          sx={{ borderTop: `1px solid ${C.borderLight}` }}
+        />
       </Box>
     </Box>
   );

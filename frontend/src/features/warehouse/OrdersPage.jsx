@@ -12,11 +12,11 @@ import {
   TableCell,
   TableContainer,
   TableHead,
-  TablePagination,
   TableRow,
   TextField,
   Typography
 } from '@mui/material';
+import { Pager } from 'features/account/components/Blocks';
 import MainCard from 'components/MainCard';
 import { api } from 'services/http';
 import { useWarehouse } from './WarehouseContext';
@@ -62,11 +62,9 @@ export default function OrdersPage() {
         title="Đặt hàng nhập"
         subtitle="Đặt theo từng màu/size với nhà cung cấp; theo dõi trạng thái chứng từ và tiến độ nhận hàng riêng."
         action={
-          owner && (
-            <Button variant="contained" onClick={() => setForm({})}>
-              Tạo phiếu đặt hàng
-            </Button>
-          )
+          <Button variant="contained" onClick={() => setForm({})}>
+            Tạo phiếu đặt hàng
+          </Button>
         }
       />
       <MainCard>
@@ -172,24 +170,25 @@ export default function OrdersPage() {
             </TableBody>
           </Table>
         </TableContainer>
-        <TablePagination
-          component="div"
-          count={data?.total || 0}
+        <Pager
           page={Math.min(page, Math.max(0, Math.ceil((data?.total || 0) / size) - 1))}
-          rowsPerPage={size}
-          onPageChange={(_, p) => setPage(p)}
-          onRowsPerPageChange={(e) => {
-            setSize(Number(e.target.value));
+          total={data?.total || 0}
+          size={size}
+          noun="phiếu đặt"
+          onPage={setPage}
+          onSize={(value) => {
+            setSize(value);
             setPage(0);
           }}
-          rowsPerPageOptions={[20, 50, 100]}
-          labelRowsPerPage="Số dòng"
-          labelDisplayedRows={({ from, to, count }) => `${from}–${to} / ${count}`}
+          sizeOptions={[20, 50, 100]}
         />
       </MainCard>
       {!owner && (
         <Box sx={{ mt: 2 }}>
-          <Alert severity="info">Bạn được xem phiếu đặt và lập phiếu nhập nháp từ phiếu đặt đã xác nhận. Chủ cửa hàng tạo và duyệt phiếu đặt.</Alert>
+          <Alert severity="info">
+            Bạn lập phiếu đặt nháp rồi bấm “Gửi chủ cửa hàng xác nhận”. Chủ cửa hàng có thể sửa trước khi xác nhận. Hàng chưa có trong hệ
+            thống: ghi vào ghi chú để chủ cửa hàng tạo sản phẩm.
+          </Alert>
         </Box>
       )}
       {detail && (
@@ -207,7 +206,7 @@ export default function OrdersPage() {
       {otherDoc && (
         <DocumentDetail id={otherDoc} readOnly onClose={() => setOtherDoc(null)} />
       )}
-      {form && owner && <DocumentForm type="PURCHASE_ORDER" document={form.document} onClose={() => setForm(null)} />}
+      {form && <DocumentForm type="PURCHASE_ORDER" document={form.document} onClose={() => setForm(null)} />}
       {action && (
         <DocumentAction
           action={action}

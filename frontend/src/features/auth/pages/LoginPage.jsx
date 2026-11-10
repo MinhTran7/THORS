@@ -7,7 +7,7 @@ import * as Yup from 'yup';
 import { FieldsForm } from '../components/AuthForm';
 import { useCapabilities } from '../components/ChannelPicker';
 import { useAuth } from '../AuthProvider';
-import { identity, safeReturn } from '../validation';
+import { identity, landingAfterLogin, safeReturn } from '../validation';
 import { post } from 'services/http';
 import { useState } from 'react';
 const googleMessages = {
@@ -41,7 +41,7 @@ export default function LoginPage() {
     }
     setAccount(result.account);
     sessionStorage.removeItem('thorsReturnTo');
-    navigate(returnTo, { replace: true });
+    navigate(landingAfterLogin(result.account, returnTo), { replace: true });
   }
   return (
     <ShopAuthShell
@@ -105,6 +105,7 @@ export default function LoginPage() {
             disabled={!capabilities?.google}
             onClick={() => {
               sessionStorage.setItem('thorsReturnTo', returnTo);
+              sessionStorage.removeItem('thorsLinking'); // đây là đăng nhập, không phải liên kết tài khoản
               window.location.assign('/oauth2/authorization/google');
             }}
           >
@@ -117,6 +118,7 @@ export default function LoginPage() {
             disabled={!capabilities?.facebook}
             onClick={() => {
               sessionStorage.setItem('thorsReturnTo', returnTo);
+              sessionStorage.removeItem('thorsLinking'); // đây là đăng nhập, không phải liên kết tài khoản
               window.location.assign('/oauth2/authorization/facebook');
             }}
           >

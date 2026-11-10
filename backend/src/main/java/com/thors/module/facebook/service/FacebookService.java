@@ -270,7 +270,7 @@ public class FacebookService {
                 Map<String, Object> sentRecord = new HashMap<>();
                 sentRecord.put("mid", finalMid);
                 sentRecord.put("senderPsid", recipientPsid);
-                sentRecord.put("senderName", "THORS Studio");
+                sentRecord.put("senderName", "THORS");
                 sentRecord.put("text", text);
                 sentRecord.put("rawTime", nowIso);
                 sentRecord.put("timestamp", formattedTime);
@@ -359,7 +359,7 @@ public class FacebookService {
                 Map<String, Object> sentRecord = new HashMap<>();
                 sentRecord.put("mid", finalMid);
                 sentRecord.put("senderPsid", recipientPsid);
-                sentRecord.put("senderName", "THORS Studio");
+                sentRecord.put("senderName", "THORS");
                 sentRecord.put("text", "[Hình ảnh mã QR VietQR]");
                 sentRecord.put("imageUrl", imageUrl);
                 sentRecord.put("rawTime", nowIso);
@@ -510,7 +510,7 @@ public class FacebookService {
                                 Map<String, Object> record = new HashMap<>();
                                 record.put("mid", mid);
                                 record.put("senderPsid", customerPsid);
-                                record.put("senderName", isShop ? "THORS Studio" : finalCustomerName);
+                                record.put("senderName", isShop ? "THORS" : finalCustomerName);
                                 record.put("senderAvatar", isShop ? "" : finalCustomerAvatar);
                                 record.put("text", text);
                                 record.put("rawTime", rawTime);

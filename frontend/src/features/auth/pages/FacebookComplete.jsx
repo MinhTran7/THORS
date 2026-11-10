@@ -4,7 +4,7 @@ import { Alert, Button, Typography } from '@mui/material';
 import * as Yup from 'yup';
 import { AuthShell, FieldsForm, Field } from '../components/AuthForm';
 import { useAuth } from '../AuthProvider';
-import { safeReturn } from '../validation';
+import { landingAfterLogin } from '../validation';
 import { api, post, clearCsrf } from 'services/http';
 
 export default function FacebookComplete() {
@@ -54,7 +54,7 @@ export default function FacebookComplete() {
             const r = await post('/auth/facebook/verify', v);
             clearCsrf();
             setAccount(r.account);
-            const target = safeReturn(sessionStorage.getItem('thorsReturnTo'));
+            const target = landingAfterLogin(r.account, sessionStorage.getItem('thorsReturnTo'));
             sessionStorage.removeItem('thorsReturnTo');
             navigate(target, { replace: true });
           }}>
