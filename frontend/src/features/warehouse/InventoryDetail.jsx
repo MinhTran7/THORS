@@ -21,6 +21,7 @@ import useSWR from 'swr';
 import { api } from 'services/http';
 import { useWarehouse } from './WarehouseContext';
 import { DataTable } from './components';
+import BarcodePrintDialog from './BarcodePrintDialog';
 import { docLink, money, movementLabel, number, orderCode, skuLabel, stockStateColor, stockStateLabel, when } from './model';
 
 function Figure({ label, value, hint }) {
@@ -198,15 +199,28 @@ function StockCard({ id, kind }) {
 export default function InventoryDetail({ id, onClose, onChanged }) {
   const { owner } = useWarehouse();
   const [tab, setTab] = useState(0);
+  const [printing, setPrinting] = useState(false);
   const { data: v, error, mutate } = useSWR(`/warehouse/inventory/${id}`, api);
   return (
+    <>
     <Dialog open onClose={onClose} fullWidth maxWidth="lg">
       <DialogTitle>
         {v ? `${v.product_name} · ${v.color} · ${v.size}` : 'Chi tiết biến thể'}
         {v && (
-          <Typography variant="body2" color="text.secondary">
-            {skuLabel(v)} · Mã vạch {v.barcode || 'chưa có'} · {v.category_name || 'Chưa có danh mục'}
-          </Typography>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+            <Typography variant="body2" color="text.secondary">
+              {skuLabel(v)} · Mã vạch {v.barcode || 'chưa có'} · {v.category_name || 'Chưa có danh mục'}
+            </Typography>
+            <Button
+              size="small"
+              variant="outlined"
+              disabled={!v.barcode}
+              title={v.barcode ? undefined : 'Biến thể chưa có mã vạch. Owner bấm “Tạo mã còn thiếu” ở trang Tồn kho.'}
+              onClick={() => setPrinting(true)}
+            >
+              In tem
+            </Button>
+          </Stack>
         )}
       </DialogTitle>
       <DialogContent>
@@ -386,5 +400,8 @@ export default function InventoryDetail({ id, onClose, onChanged }) {
         <Button onClick={onClose}>Đóng</Button>
       </DialogActions>
     </Dialog>
+    {/* Rendered after the detail dialog so it opens on top of it. */}
+    {printing && v && <BarcodePrintDialog variants={[v]} onClose={() => setPrinting(false)} />}
+    </>
   );
 }

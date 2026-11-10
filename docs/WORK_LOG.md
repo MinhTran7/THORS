@@ -6,7 +6,7 @@
 
 - Chỉ đưa phần kho: `backend/.../module/warehouse`, test kho, `frontend/src/features/warehouse`, test UI kho, docs kho, `database/SQL_v2.sql` (thay `SQL_v1.sql`) và `database/migrations/`. Thêm 2 icon menu kho trong `layouts/navigation.jsx` (đoạn `warehouseIcons`).
 - **Không** sửa code module khác (đơn hàng, giỏ, checkout, shop, bán tại quầy, sản phẩm, danh mục, hoàn hàng). Vì vậy: giữ hàng/trừ tồn khi xác nhận đơn online, chặn bán phần đang giữ ở POS, giá bán NULL và chặn tạo danh mục cho non-OWNER **chưa** có trong bản này.
-- Tạo nhanh hàng mới: giá bán **bắt buộc**, dùng `ProductService.createProduct(request)` có sẵn.
+- Tạo nhanh hàng mới: giá bán **không bắt buộc** (để trống thì `product_detail.price` = NULL, không ghi 0), dùng `ProductService.createProduct(request)` có sẵn.
 - SQL_v2 đã gồm migration 04/11; cần chạy thêm `2026-11-05_supplier_settlement.sql` và `2026-11-06_inventory.sql` để dùng công nợ NCC, tồn kho, kiểm kê, báo cáo.
 - Kiểm chứng: `mvn -o test` 315 test pass (55 test kho); `node tests/run-*.mjs` 4/4 pass; `vite build` thành công.
 

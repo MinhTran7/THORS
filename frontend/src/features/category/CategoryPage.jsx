@@ -17,7 +17,6 @@ import {
   InputAdornment,
   Menu,
   MenuItem,
-  Pagination,
   Select,
   Stack,
   Switch,
@@ -31,6 +30,7 @@ import {
   Tooltip,
   Typography
 } from '@mui/material';
+import { Pager } from 'features/account/components/Blocks';
 
 import {
   AppstoreOutlined,
@@ -442,15 +442,6 @@ export default function CategoryPage() {
           : [])
       ]);
   }, [filteredCategories, currentPage, expanded, isFiltering]);
-
-  const showingFrom = filteredCategories.length
-    ? (currentPage - 1) * PAGE_SIZE + 1
-    : 0;
-
-  const showingTo = Math.min(
-    currentPage * PAGE_SIZE,
-    filteredCategories.length
-  );
 
   function handleSearchChange(value) {
     setSearch(value);

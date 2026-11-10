@@ -15,7 +15,6 @@ import {
   DialogTitle,
   IconButton,
   InputAdornment,
-  Pagination,
   Select,
   Stack,
   Switch,
@@ -30,6 +29,7 @@ import {
   Typography,
   MenuItem
 } from '@mui/material';
+import { Pager } from 'features/account/components/Blocks';
 
 import {
   EditOutlined,

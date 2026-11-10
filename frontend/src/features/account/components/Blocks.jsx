@@ -20,7 +20,7 @@ export function PageHeader({ back, title, subtitle, action }) {
       )}
       <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'flex-start' }} spacing={2}>
         <Box>
-          <Typography variant="h3" sx={{ color: brand.ink, fontWeight: 500, fontSize: fs.pageTitle }}>
+          <Typography variant="h3" sx={{ color: brand.ink, fontWeight: 800, letterSpacing: '-0.5px', fontSize: fs.pageTitle }}>
             {title}
           </Typography>
           {subtitle && <Typography sx={{ color: brand.muted, mt: 0.75, fontSize: fs.body }}>{subtitle}</Typography>}
@@ -160,12 +160,36 @@ function pageItems(page, totalPages) {
   return items;
 }
 
-export function Pager({ page, totalPages, total, size, noun, onPage }) {
+/**
+ * Thanh phân trang dùng chung cho MỌI trang danh sách (đồng bộ giao diện).
+ * page bắt đầu từ 0. totalPages bỏ trống thì tự tính từ total / size.
+ * Truyền onSize (và sizeOptions) nếu muốn cho người dùng chọn số dòng mỗi trang.
+ */
+export function Pager({ page, totalPages: pagesProp, total, size, noun = 'mục', onPage, onSize, sizeOptions = [10, 20, 50], sx }) {
+  const totalPages = pagesProp ?? Math.ceil(total / Math.max(size, 1));
   const from = total === 0 ? 0 : page * size + 1;
   const to = Math.min(total, (page + 1) * size);
   return (
-    <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} spacing={1.5} sx={{ p: 2 }}>
-      <Typography sx={{ color: brand.muted, fontSize: fs.caption }}>{`Hiển thị ${from}–${to} trong ${total} ${noun}`}</Typography>
+    <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} spacing={1.5} sx={{ p: 2, ...sx }}>
+      <Stack direction="row" spacing={1.5} alignItems="center">
+        <Typography sx={{ color: brand.muted, fontSize: fs.caption }}>{`Hiển thị ${from}–${to} trong ${total} ${noun}`}</Typography>
+        {onSize && (
+          <TextField
+            select
+            size="small"
+            value={size}
+            onChange={(event) => onSize(Number(event.target.value))}
+            slotProps={{ htmlInput: { 'aria-label': 'Số dòng mỗi trang' } }}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', fontSize: fs.caption, bgcolor: brand.surface } }}
+          >
+            {sizeOptions.map((option) => (
+              <MenuItem key={option} value={option} sx={{ fontSize: fs.caption }}>
+                {`${option} / trang`}
+              </MenuItem>
+            ))}
+          </TextField>
+        )}
+      </Stack>
       <Stack direction="row" spacing={1} alignItems="center">
         <OutlineButton size="small" disabled={page <= 0} onClick={() => onPage(page - 1)}>
           Trước

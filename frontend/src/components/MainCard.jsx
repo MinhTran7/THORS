@@ -30,8 +30,9 @@ export default function MainCard({
       elevation={elevation || 0}
       sx={(theme) => ({
         position: 'relative',
-        ...(border && { border: `1px solid ${theme.vars.palette.grey['A800']}` }),
-        borderRadius: 1,
+        // Bo góc + viền kem giống khung form Đăng nhập
+        ...(border && { border: '1px solid #F2EBD3' }),
+        borderRadius: '20px',
         boxShadow: boxShadow && !border ? shadow || theme.vars.customShadows.z1 : 'inherit',
         ':hover': { boxShadow: boxShadow ? shadow || theme.vars.customShadows.z1 : 'inherit' },
         ...(codeHighlight && {

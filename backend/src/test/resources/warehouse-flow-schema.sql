@@ -13,7 +13,7 @@ CREATE TABLE product (
   description CLOB, status VARCHAR(20) NOT NULL);
 CREATE TABLE product_detail (
   detail_id INT AUTO_INCREMENT PRIMARY KEY, product_id INT NOT NULL, size VARCHAR(10) NOT NULL,
-  color VARCHAR(30) NOT NULL, price DECIMAL(12,0) NOT NULL, stock_quantity INT NOT NULL DEFAULT 0, min_stock_quantity INT,
+  color VARCHAR(30) NOT NULL, price DECIMAL(12,0), stock_quantity INT NOT NULL DEFAULT 0, min_stock_quantity INT,
   barcode VARCHAR(32) UNIQUE,
   online_sales_enabled TINYINT NOT NULL DEFAULT 0, status VARCHAR(20) NOT NULL,
   CONSTRAINT uq_product_detail_1 UNIQUE (product_id, size, color),

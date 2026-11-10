@@ -4,6 +4,7 @@ import { PhoneOutlined, PlusOutlined, EditOutlined, DeleteOutlined, EnvironmentO
 import { useNavigate } from 'react-router-dom';
 import { useCrumbs } from '../../layouts/crumbs';
 import { getShippingAddresses, deleteShippingAddress } from '../../services/shippingAddressService';
+import { StoreAccountShell } from 'features/account/components/StoreAccount';
 import { C, cardSx, outlineButtonSx, primaryButtonSx } from './theme';
 
 const MAX_ADDRESSES = 5;
@@ -61,25 +62,21 @@ export default function CustomerAddressPage() {
   const full = addresses.length >= MAX_ADDRESSES;
 
   return (
-    <Box sx={{ maxWidth: 880, mx: 'auto', color: C.text, pb: 6 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2, mb: 3 }}>
-        <Box>
-          <Typography variant="h3" sx={{ fontWeight: 800, color: '#0F172A', fontSize: { xs: 22, sm: 26 } }}>
-            Địa chỉ của tôi
-          </Typography>
-          {full && (
-            <Typography sx={{ fontSize: 13, color: C.muted, mt: 0.5 }}>
-              Bạn đã lưu tối đa {MAX_ADDRESSES} địa chỉ. Hãy xóa bớt để thêm địa chỉ mới.
-            </Typography>
-          )}
-        </Box>
-        {addresses.length > 0 && (
+    <StoreAccountShell
+      title="Địa chỉ giao hàng"
+      subtitle={
+        full
+          ? `Bạn đã lưu tối đa ${MAX_ADDRESSES} địa chỉ. Hãy xóa bớt để thêm địa chỉ mới.`
+          : 'Lưu địa chỉ nhận hàng để thanh toán nhanh hơn.'
+      }
+      action={
+        addresses.length > 0 && (
           <Button startIcon={<PlusOutlined />} disabled={full} onClick={() => navigate('/addresses/new')} sx={primaryButtonSx}>
             Thêm địa chỉ mới
           </Button>
-        )}
-      </Box>
-
+        )
+      }
+    >
       {error && <Typography sx={{ color: C.error, fontSize: 13.5, fontWeight: 600, mb: 2 }}>{error}</Typography>}
 
       {loading ? (
@@ -95,13 +92,13 @@ export default function CustomerAddressPage() {
               mx: 'auto',
               mb: 2.5,
               borderRadius: '50%',
-              bgcolor: '#F0FDFA',
+              bgcolor: '#E6F9FB',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center'
             }}
           >
-            <EnvironmentOutlined style={{ fontSize: 40, color: '#0D9488' }} />
+            <EnvironmentOutlined style={{ fontSize: 40, color: C.teal }} />
           </Box>
           <Typography sx={{ fontSize: 18, fontWeight: 800, mb: 1 }}>Bạn chưa lưu địa chỉ giao hàng nào</Typography>
           <Typography sx={{ fontSize: 13.5, color: C.muted, maxWidth: 420, mx: 'auto', mb: 3, lineHeight: 1.6 }}>
@@ -118,9 +115,9 @@ export default function CustomerAddressPage() {
               key={a.addressId}
               sx={{
                 ...cardSx,
-                borderRadius: 3,
-                border: `1.5px solid ${a.isDefault ? C.cyan : C.border}`,
-                p: { xs: 2.5, sm: 3 }
+                // Địa chỉ mặc định có viền xanh ngọc nhạt
+                ...(a.isDefault && { boxShadow: `0 24px 50px -30px rgba(31, 41, 55, 0.25), 0 0 0 2px ${C.cyan}` }),
+                p: { xs: 2.5, sm: 3.5 }
               }}
             >
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2 }}>
@@ -187,7 +184,7 @@ export default function CustomerAddressPage() {
         onClose={() => !deleting && setTarget(null)}
         maxWidth="xs"
         fullWidth
-        PaperProps={{ sx: { borderRadius: 3.5, p: 1 } }}
+        PaperProps={{ sx: { borderRadius: '24px', p: 1 } }}
       >
         <DialogTitle sx={{ fontWeight: 800, fontSize: 17 }}>Xóa địa chỉ giao hàng?</DialogTitle>
         <DialogContent>
@@ -202,12 +199,12 @@ export default function CustomerAddressPage() {
           <Button
             onClick={confirmDelete}
             disabled={deleting}
-            sx={{ ...outlineButtonSx, border: 'none', bgcolor: '#FEE2E2', color: '#DC2626', fontWeight: 700, '&:hover': { bgcolor: '#FCA5A5' } }}
+            sx={{ ...outlineButtonSx, borderColor: '#F2A3A3', color: C.error, '&:hover': { bgcolor: '#FEF2F2', borderColor: C.error } }}
           >
             {deleting ? 'Đang xóa...' : 'Xóa địa chỉ'}
           </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </StoreAccountShell>
   );
 }

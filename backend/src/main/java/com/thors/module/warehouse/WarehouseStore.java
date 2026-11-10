@@ -40,7 +40,8 @@ public class WarehouseStore {
                     Map.entry("product_location_image", "product_location_image_id"),
                     Map.entry("supplier_settlement", "settlement_id"),
                     Map.entry("stock_count", "count_id"),
-                    Map.entry("stock_count_item", "count_item_id"));
+                    Map.entry("stock_count_item", "count_item_id"),
+                    Map.entry("location_move_request", "request_id"));
 
     public int insert(String sql, Object... args) {
         var match =
@@ -227,6 +228,11 @@ public class WarehouseStore {
             return action.get();
         } catch (org.springframework.jdbc.BadSqlGrammarException e) {
             String m = String.valueOf(e.getMostSpecificCause().getMessage()).toLowerCase(Locale.ROOT);
+            if (m.contains("location_move_request"))
+                throw new ApiException(
+                        503,
+                        "MIGRATION_REQUIRED",
+                        "Database chưa có bảng yêu cầu xếp kệ. Cần chạy database/migrations/2026-11-10_location_move_request.sql.");
             if (m.contains("min_stock_quantity") || m.contains("stock_count"))
                 throw new ApiException(
                         503,
