@@ -28,14 +28,14 @@ class WarehouseBarcodesTest {
         transaction = new TransactionTemplate(new DataSourceTransactionManager(database));
         db.execute("CREATE TABLE `role`(role_id INT PRIMARY KEY,role_name VARCHAR(30))");
         db.execute("INSERT INTO `role` VALUES(1,'OWNER')");
-        db.execute("CREATE TABLE product(product_id INT PRIMARY KEY,product_name VARCHAR(200))");
-        db.execute("CREATE TABLE product_detail(detail_id INT PRIMARY KEY,product_id INT,barcode VARCHAR(32) UNIQUE,color VARCHAR(30),size VARCHAR(10),stock_quantity INT,status VARCHAR(20))");
+        db.execute("CREATE TABLE product(product_id INT PRIMARY KEY,product_name VARCHAR(200),status VARCHAR(20) DEFAULT 'ACTIVE')");
+        db.execute("CREATE TABLE product_detail(detail_id INT PRIMARY KEY,product_id INT,barcode VARCHAR(32) UNIQUE,color VARCHAR(30),size VARCHAR(10),stock_quantity INT,status VARCHAR(20),price DECIMAL(12,0))");
         db.execute("CREATE TABLE product_image(image_id INT PRIMARY KEY,product_id INT,image_url VARCHAR(500),is_primary INT,deleted_at TIMESTAMP)");
         db.execute("CREATE TABLE rack(rack_id INT PRIMARY KEY,rack_code VARCHAR(20))");
         db.execute("CREATE TABLE shelf_level(shelf_level_id INT PRIMARY KEY,rack_id INT,level_number INT)");
         db.execute("CREATE TABLE product_location(product_location_id INT PRIMARY KEY,detail_id INT,shelf_level_id INT,quantity INT,description VARCHAR(255))");
         db.execute("CREATE TABLE audit_log(user_id INT,action_type VARCHAR(50),entity_affected VARCHAR(100),entity_id INT,new_value VARCHAR(500),actor_type VARCHAR(20))");
-        db.execute("INSERT INTO product VALUES(10,'Áo kiểm thử')");
+        db.execute("INSERT INTO product(product_id,product_name) VALUES(10,'Áo kiểm thử')");
         barcodes = new WarehouseBarcodes(new WarehouseStore(db), new WarehousePolicy());
     }
 
@@ -49,7 +49,7 @@ class WarehouseBarcodesTest {
     }
 
     private void variant(int id, String code) {
-        db.update("INSERT INTO product_detail VALUES(?,10,?,'Đen','M',20,'ACTIVE')", id, code);
+        db.update("INSERT INTO product_detail VALUES(?,10,?,'Đen','M',20,'ACTIVE',150000)", id, code);
     }
 
     private Map<String, Object> generate() {
@@ -117,6 +117,9 @@ class WarehouseBarcodesTest {
         var item = (Map<?, ?>) found.get("variant");
         assertEquals(1, ((Number) item.get("detail_id")).intValue());
         assertEquals(8, ((Number) item.get("unassigned_quantity")).intValue());
+        // The in-store sales page adds a scanned item to the bill: it needs the sale price and product status.
+        assertEquals(150000, ((Number) item.get("price")).intValue());
+        assertEquals("ACTIVE", item.get("product_status"));
         assertEquals(2, ((java.util.List<?>) found.get("locations")).size());
         assertEquals(20, db.queryForObject("SELECT stock_quantity FROM product_detail WHERE detail_id=1", Integer.class));
     }

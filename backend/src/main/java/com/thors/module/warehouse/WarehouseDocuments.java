@@ -304,7 +304,12 @@ public class WarehouseDocuments {
         s.lock();
         var old = header(id);
         policy.edit(a, old);
-        if (!is(old, "status", "DRAFT")) throw invalid("Chỉ được sửa phiếu nháp.");
+        // The owner may still adjust a purchase order a family member sent for confirmation.
+        boolean ownerReview =
+                "OWNER".equals(a.role())
+                        && is(old, "status", "PENDING_CONFIRMATION")
+                        && is(old, "receipt_type", "PURCHASE_ORDER");
+        if (!is(old, "status", "DRAFT") && !ownerReview) throw invalid("Chỉ được sửa phiếu nháp.");
         if (!is(old, "receipt_type", r.type())
                 || !Objects.equals(old.get("source_receipt_id"), r.sourceId()))
             throw invalid("Không được đổi loại hoặc phiếu nguồn khi sửa.");

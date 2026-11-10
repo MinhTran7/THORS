@@ -8,6 +8,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
   MenuItem,
   Stack,
   TextField,
@@ -25,8 +26,15 @@ function cameraError(error) {
   return error.message || 'Không mở được camera. Bạn có thể nhập mã để tìm hàng.';
 }
 
-export default function BarcodeScannerDialog({ onClose }) {
+/**
+ * Look up a variant by its barcode. A USB/Bluetooth scanner is the main input: the code box is
+ * focused on open and after each result (text selected), so the next scan simply replaces it.
+ * `scanRequest` ({ code, n }) lets the page pass a code scanned while this dialog was closed.
+ * The camera is a fallback for when there is no scanner.
+ */
+export default function BarcodeScannerDialog({ onClose, scanRequest }) {
   const video = useRef(null);
+  const input = useRef(null);
   const stream = useRef(null);
   const controls = useRef(null);
   const session = useRef(0);
@@ -85,11 +93,19 @@ export default function BarcodeScannerDialog({ onClose }) {
       } catch (err) {
         if (current === lookupRequest.current) setError(err.message);
       } finally {
-        if (current === lookupRequest.current) setLoading(false);
+        if (current === lookupRequest.current) {
+          setLoading(false);
+          // Ready for the next scan: the scanner's keystrokes replace the selected code.
+          window.setTimeout(() => input.current?.select(), 0);
+        }
       }
     },
     [releaseCamera]
   );
+
+  useEffect(() => {
+    if (scanRequest?.code) void lookupCode(scanRequest.code);
+  }, [scanRequest, lookupCode]);
 
   const startCamera = async () => {
     releaseCamera();
@@ -145,47 +161,11 @@ export default function BarcodeScannerDialog({ onClose }) {
       <DialogTitle>Quét mã tìm hàng</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ pt: 1 }}>
-          <Typography>Đưa tem mã vạch vào camera. Có thể dùng camera điện thoại hoặc webcam máy tính.</Typography>
-          <Box
-            component="video"
-            ref={video}
-            autoPlay
-            muted
-            playsInline
-            aria-label="Camera quét mã vạch"
-            sx={{
-              display: result ? 'none' : 'block',
-              width: '100%',
-              aspectRatio: '16 / 9',
-              bgcolor: 'grey.900',
-              borderRadius: 1,
-              objectFit: 'contain'
-            }}
-          />
-          <TextField
-            select
-            label="Camera"
-            size="small"
-            value={deviceId}
-            disabled={starting || scanning}
-            slotProps={{ select: { displayEmpty: true }, inputLabel: { shrink: true } }}
-            onChange={(event) => setDeviceId(event.target.value)}
-          >
-            <MenuItem value="">Tự động — ưu tiên camera sau</MenuItem>
-            {devices.map((device, index) => (
-              <MenuItem key={device.deviceId} value={device.deviceId}>
-                {device.label || `Camera ${index + 1}`}
-              </MenuItem>
-            ))}
-          </TextField>
-          <Stack direction="row" spacing={1}>
-            <Button variant="outlined" disabled={starting || scanning || loading} onClick={startCamera}>
-              {starting ? 'Đang mở camera…' : 'Bật camera'}
-            </Button>
-            <Button disabled={!starting && !scanning} onClick={stopCamera}>
-              Dừng camera
-            </Button>
-          </Stack>
+          <Alert severity="info" icon={false}>
+            <b>Máy quét mã vạch (USB/Bluetooth):</b> cắm vào là dùng, bóp cò vào tem là ra kết quả — không cần bấm gì thêm.
+            <br />
+            Không có máy quét: gõ mã vào ô bên dưới, hoặc bật camera ở cuối hộp thoại.
+          </Alert>
           <Box
             component="form"
             onSubmit={(event) => {
@@ -198,9 +178,12 @@ export default function BarcodeScannerDialog({ onClose }) {
                 label="Mã vạch"
                 size="small"
                 fullWidth
+                autoFocus
+                inputRef={input}
+                placeholder="Quét hoặc nhập mã, ví dụ TH000054"
                 value={code}
                 onChange={(event) => setCode(event.target.value)}
-                slotProps={{ htmlInput: { maxLength: 32 } }}
+                slotProps={{ htmlInput: { maxLength: 32, autoComplete: 'off', spellCheck: false } }}
               />
               <Button type="submit" variant="contained" disabled={loading || !code.trim()} sx={{ flexShrink: 0 }}>
                 {loading ? 'Đang tìm…' : 'Tìm hàng'}
@@ -242,6 +225,51 @@ export default function BarcodeScannerDialog({ onClose }) {
               </Button>
             </Stack>
           )}
+          <Divider textAlign="left">
+            <Typography variant="caption" color="text.secondary">
+              Không có máy quét? Dùng camera máy tính / điện thoại
+            </Typography>
+          </Divider>
+          <Box
+            component="video"
+            ref={video}
+            autoPlay
+            muted
+            playsInline
+            aria-label="Camera quét mã vạch"
+            sx={{
+              display: starting || scanning ? 'block' : 'none',
+              width: '100%',
+              aspectRatio: '16 / 9',
+              bgcolor: 'grey.900',
+              borderRadius: 1,
+              objectFit: 'contain'
+            }}
+          />
+          <TextField
+            select
+            label="Camera"
+            size="small"
+            value={deviceId}
+            disabled={starting || scanning}
+            slotProps={{ select: { displayEmpty: true }, inputLabel: { shrink: true } }}
+            onChange={(event) => setDeviceId(event.target.value)}
+          >
+            <MenuItem value="">Tự động — ưu tiên camera sau</MenuItem>
+            {devices.map((device, index) => (
+              <MenuItem key={device.deviceId} value={device.deviceId}>
+                {device.label || `Camera ${index + 1}`}
+              </MenuItem>
+            ))}
+          </TextField>
+          <Stack direction="row" spacing={1}>
+            <Button variant="outlined" disabled={starting || scanning || loading} onClick={startCamera}>
+              {starting ? 'Đang mở camera…' : 'Bật camera'}
+            </Button>
+            <Button disabled={!starting && !scanning} onClick={stopCamera}>
+              Dừng camera
+            </Button>
+          </Stack>
         </Stack>
       </DialogContent>
       <DialogActions>

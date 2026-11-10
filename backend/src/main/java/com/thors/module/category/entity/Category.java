@@ -8,6 +8,14 @@ public class Category {
     private String description;
     private String status;
 
+    // Danh mục 2 cấp: parentId = null -> danh mục gốc
+    private Integer parentId;
+    private String parentName;
+    // Đối tượng: MEN / WOMEN / KIDS / UNISEX; null = không áp dụng
+    private String targetGroup;
+    // Số danh mục con (chỉ có ý nghĩa với danh mục gốc)
+    private int childCount;
+
     public Category() {
     }
 
@@ -41,5 +49,37 @@ public class Category {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public Integer getParentId() {
+        return parentId;
+    }
+
+    public void setParentId(Integer parentId) {
+        this.parentId = parentId;
+    }
+
+    public String getParentName() {
+        return parentName;
+    }
+
+    public void setParentName(String parentName) {
+        this.parentName = parentName;
+    }
+
+    public String getTargetGroup() {
+        return targetGroup;
+    }
+
+    public void setTargetGroup(String targetGroup) {
+        this.targetGroup = targetGroup;
+    }
+
+    public int getChildCount() {
+        return childCount;
+    }
+
+    public void setChildCount(int childCount) {
+        this.childCount = childCount;
     }
 }

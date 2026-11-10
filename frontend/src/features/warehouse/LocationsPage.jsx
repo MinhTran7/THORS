@@ -49,6 +49,7 @@ import {
   RACK_TIER_GAP,
   MAX_COORDINATE
 } from './rackLayout';
+import MoveRequestsPanel from './MoveRequestsPanel';
 
 function RackForm({ rack, tier, rackId, onClose }) {
   const { data, run } = useWarehouse();
@@ -436,7 +437,7 @@ const UNASSIGNED = 'UNASSIGNED';
  * Không truyền mode: form chung, được chọn nguồn.
  */
 function MoveForm({ variant, selectedShelf, from, mode, onClose }) {
-  const { data, run } = useWarehouse();
+  const { data, run, owner } = useWarehouse();
   const [error, setError] = useState('');
   const requestKey = useRef(crypto.randomUUID());
   const lockSource = mode === 'place' || mode === 'move';
@@ -495,7 +496,8 @@ function MoveForm({ variant, selectedShelf, from, mode, onClose }) {
       try {
         await run(
           () =>
-            api('/warehouse/moves', {
+            // Owner: saved at once. Family: becomes a request the owner confirms.
+            api(owner ? '/warehouse/moves' : '/warehouse/move-requests', {
               method: 'POST',
               body: {
                 detailId: variant.detail_id,
@@ -512,7 +514,7 @@ function MoveForm({ variant, selectedShelf, from, mode, onClose }) {
                 requestKey: requestKey.current
               }
             }),
-          'Đã sắp xếp vị trí.'
+          owner ? 'Đã sắp xếp vị trí.' : 'Đã gửi yêu cầu. Kho sẽ cập nhật khi chủ cửa hàng xác nhận.'
         );
 
         onClose();
@@ -571,6 +573,7 @@ function MoveForm({ variant, selectedShelf, from, mode, onClose }) {
           <Stack spacing={2} sx={{ pt: 1 }}>
             <Alert severity="info">
               Thao tác chỉ đổi vị trí lưu hàng. Tổng tồn không thay đổi.
+              {!owner && ' Bấm “Gửi yêu cầu” sau khi đã xếp/chuyển hàng: kho chỉ cập nhật khi chủ cửa hàng xác nhận.'}
             </Alert>
 
             <Choice
@@ -710,7 +713,7 @@ function MoveForm({ variant, selectedShelf, from, mode, onClose }) {
               )
             }
           >
-            Lưu vị trí
+            {owner ? 'Lưu vị trí' : 'Gửi yêu cầu'}
           </Button>
         </DialogActions>
       </Box>
@@ -873,7 +876,7 @@ export default function LocationsPage({ editLayout = false }) {
   // ?variant=..&move=1 (from Tồn kho) opens the existing place/move form for that variant.
   // ?variant=..&place=1 opens "Xếp lên kệ" with source = hàng chưa xếp of that variant.
   useEffect(() => {
-    if (!owner || !variant) return;
+    if (!variant) return;
     const place = params.get('place') === '1';
     if (!place && params.get('move') !== '1') return;
     setMove(
@@ -885,7 +888,7 @@ export default function LocationsPage({ editLayout = false }) {
     next.delete('move');
     next.delete('place');
     setParams(next, { replace: true });
-  }, [owner, variant, params, setParams]);
+  }, [variant, params, setParams]);
 
   const unplaced = data.variants.filter(
     (v) => Number(v.unassigned_quantity) > 0
@@ -1179,6 +1182,8 @@ export default function LocationsPage({ editLayout = false }) {
         ]}
       />
 
+      {!editLayout && <MoveRequestsPanel />}
+
       <Box
         sx={{
           display: 'grid',
@@ -1245,7 +1250,7 @@ export default function LocationsPage({ editLayout = false }) {
               {' '}· Tổng tồn {number(variant.stock_quantity)}
               {' '}· Chưa xếp {number(variant.unassigned_quantity)}
 
-              {owner && Number(variant.unassigned_quantity) > 0 && (
+              {Number(variant.unassigned_quantity) > 0 && (
                 <Button
                   size="small"
                   onClick={() =>
@@ -1256,7 +1261,8 @@ export default function LocationsPage({ editLayout = false }) {
                 </Button>
               )}
 
-              {owner && (
+              {/* Family can shelve too; the owner confirms the request. */}
+              {(
                 <Button
                   size="small"
                   onClick={() => setMove({ variant })}
@@ -1673,7 +1679,7 @@ export default function LocationsPage({ editLayout = false }) {
                           ))}
                       </Stack>
 
-                      {owner && (
+                      {(
                         <Stack
                           direction="row"
                           sx={{ flexWrap: 'wrap' }}
@@ -1693,20 +1699,21 @@ export default function LocationsPage({ editLayout = false }) {
                             </Button>
                           )}
 
-                          <Button
-                            size="small"
-                            onClick={() => setMetadata(l)}
-                          >
-                            Sửa mô tả / ảnh
-                          </Button>
+                          {owner && (
+                            <Button
+                              size="small"
+                              onClick={() => setMetadata(l)}
+                            >
+                              Sửa mô tả / ảnh
+                            </Button>
+                          )}
                         </Stack>
                       )}
                     </Box>
                   );
                 })}
 
-                {owner &&
-                  variant &&
+                {variant &&
                   tier.status === 'AVAILABLE' && (
                     <Button
                       variant="contained"
@@ -1768,7 +1775,7 @@ export default function LocationsPage({ editLayout = false }) {
                     {' '}/ tổng tồn {number(v.stock_quantity)}
                   </Typography>
 
-                  {owner && (
+                  {(
                     <Button
                       size="small"
                       variant="outlined"
@@ -1793,7 +1800,7 @@ export default function LocationsPage({ editLayout = false }) {
         />
       )}
 
-      {move && owner && (
+      {move && (
         <MoveForm
           {...move}
           onClose={() => setMove(null)}

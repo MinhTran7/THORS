@@ -1,6 +1,8 @@
 
 package com.thors.module.product.controller;
 
+import com.thors.common.ApiException;
+
 import com.thors.module.product.dto.CreateProductRequest;
 import com.thors.module.product.dto.BatchCreateProductRequest;
 import com.thors.module.product.entity.Product;
@@ -79,6 +81,17 @@ public class ProductController {
                 productService.getProductById(productId);
 
         return ResponseEntity.ok(productDetail);
+    }
+
+    // ==========================================
+    // GỢI Ý MÃ SẢN PHẨM (SKU) THEO DANH MỤC
+    // ==========================================
+
+    @GetMapping("/sku-suggestion")
+    public Map<String, String> suggestSku(
+            @org.springframework.web.bind.annotation.RequestParam(required = false) Integer categoryId
+    ) {
+        return Map.of("sku", productService.suggestSku(categoryId));
     }
 
     // ==========================================
@@ -198,6 +211,78 @@ public class ProductController {
                         "productId", productId,
                         "status", request.getStatus()
                 )
+        );
+    }
+
+    // ==========================================
+    // BÁN ONLINE — body: { "enabled": true | false }
+    // ==========================================
+
+    @PatchMapping(
+            value = "/{productId}/online",
+            consumes = MediaType.APPLICATION_JSON_VALUE
+    )
+    public ResponseEntity<Map<String, Object>> setProductOnline(
+            @PathVariable int productId,
+            @RequestBody Map<String, Object> body
+    ) {
+        return ResponseEntity.ok(productService.setProductOnline(productId, enabledFlag(body)));
+    }
+
+    @PatchMapping(
+            value = "/{productId}/variants/{detailId}/online",
+            consumes = MediaType.APPLICATION_JSON_VALUE
+    )
+    public ResponseEntity<Map<String, Object>> setVariantOnline(
+            @PathVariable int productId,
+            @PathVariable int detailId,
+            @RequestBody Map<String, Object> body
+    ) {
+        return ResponseEntity.ok(productService.setVariantOnline(productId, detailId, enabledFlag(body)));
+    }
+
+    private static boolean enabledFlag(Map<String, Object> body) {
+        Object value = body == null ? null : body.get("enabled");
+        if (!(value instanceof Boolean flag)) {
+            throw new ApiException(400, "ENABLED_REQUIRED", "Thiếu giá trị bật/tắt bán online (enabled).");
+        }
+        return flag;
+    }
+
+    // ==========================================
+    // PRODUCT IMAGES (màn hình chỉnh sửa)
+    // ==========================================
+
+    @PostMapping(
+            value = "/{productId}/images",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
+    )
+    public ResponseEntity<Map<String, Object>> addProductImages(
+            @PathVariable int productId,
+            @RequestPart("images") List<MultipartFile> images
+    ) throws IOException {
+        return ResponseEntity.ok(
+                Map.of("images", productService.addProductImages(productId, images))
+        );
+    }
+
+    @DeleteMapping("/{productId}/images/{imageId}")
+    public ResponseEntity<Map<String, Object>> deleteProductImage(
+            @PathVariable int productId,
+            @PathVariable int imageId
+    ) {
+        return ResponseEntity.ok(
+                Map.of("images", productService.deleteProductImage(productId, imageId))
+        );
+    }
+
+    @PatchMapping("/{productId}/images/{imageId}/primary")
+    public ResponseEntity<Map<String, Object>> setPrimaryProductImage(
+            @PathVariable int productId,
+            @PathVariable int imageId
+    ) {
+        return ResponseEntity.ok(
+                Map.of("images", productService.setPrimaryProductImage(productId, imageId))
         );
     }
 

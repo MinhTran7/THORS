@@ -8,6 +8,7 @@ import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import java.util.ArrayList;
 import com.thors.security.*;
 import org.springframework.context.annotation.*;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.*;
@@ -77,7 +78,9 @@ public class SecurityConfig {
                                 c -> c.csrfTokenRepository(new HttpSessionCsrfTokenRepository())
                                                 .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
                                                 .ignoringRequestMatchers("/api/payment/payos/webhook",
-                                                                "/api/facebook/webhook/**",
+                                                                // Chỉ endpoint gốc do Meta gọi (không có cookie/CSRF); các
+                                                                // endpoint con của màn hình POS vẫn phải gửi CSRF
+                                                                "/api/facebook/webhook",
                                                                 "/api/returns/public",
                                                                 "/api/returns/upload-evidence",
                                                                 // GHN gọi webhook từ máy chủ của họ, không có cookie/CSRF; được bảo vệ
@@ -102,7 +105,8 @@ public class SecurityConfig {
                                                 "/oauth2/**",
                                                 "/login/oauth2/**",
                                                 "/api/payment/payos/webhook",
-                                                "/api/facebook/webhook/**",
+                                                // Meta xác thực (GET) và đẩy sự kiện (POST) vào đúng đường dẫn gốc này
+                                                "/api/facebook/webhook",
                                                 "/api/returns/track/**",
                                                 "/api/returns/public",
                                                 "/api/returns/upload-evidence",
@@ -111,6 +115,30 @@ public class SecurityConfig {
                                                 .permitAll()
                                                 .requestMatchers("/api/warehouse", "/api/warehouse/**")
                                                 .hasAnyRole("OWNER", "FAMILY_MEMBER")
+                                                // Màn hình Social POS: đọc chat, gửi tin, tạo đơn — cùng quyền với route /facebook
+                                                .requestMatchers("/api/facebook/webhook/**")
+                                                .hasAnyRole("OWNER", "FAMILY_MEMBER")
+                                                // Thêm/sửa/xóa sản phẩm và danh mục: chỉ Owner (cùng quyền với route
+                                                // /products, /categories). Đọc (GET) vẫn mở cho POS, Facebook, kho...
+                                                // Bảng điều khiển: Owner (toàn cửa hàng), Family Member (doanh số của mình)
+                                                .requestMatchers("/api/dashboard/**")
+                                                .hasAnyRole("OWNER", "FAMILY_MEMBER")
+                                                // Xem danh sách/chi tiết sản phẩm quản trị (gồm sản phẩm ẩn, tồn thật):
+                                                // Owner, Family Member (POS, Facebook, khuyến mãi). Khách dùng /api/shop/**
+                                                .requestMatchers(HttpMethod.GET, "/api/products", "/api/products/**")
+                                                .hasAnyRole("OWNER", "FAMILY_MEMBER")
+                                                // Tạo danh mục: cả Family Member (hộp thoại tạo nhanh khi lập phiếu kho)
+                                                .requestMatchers(HttpMethod.POST, "/api/categories")
+                                                .hasAnyRole("OWNER", "FAMILY_MEMBER")
+                                                .requestMatchers(HttpMethod.POST, "/api/products", "/api/products/**",
+                                                                "/api/categories/**")
+                                                .hasRole("OWNER")
+                                                .requestMatchers(HttpMethod.PUT, "/api/products/**", "/api/categories/**")
+                                                .hasRole("OWNER")
+                                                .requestMatchers(HttpMethod.PATCH, "/api/products/**", "/api/categories/**")
+                                                .hasRole("OWNER")
+                                                .requestMatchers(HttpMethod.DELETE, "/api/products/**", "/api/categories/**")
+                                                .hasRole("OWNER")
                                                 .anyRequest()
                                                 .authenticated());
                 http.requestCache(c -> c.disable())
@@ -150,6 +178,11 @@ public class SecurityConfig {
                                         })
                                                         .failureHandler(
                                                                         (req, res, e) -> {
+                                                                                // Log the real cause (e.g. invalid_token_response, redirect_uri mismatch);
+                                                                                // the user only sees a generic "failed" message.
+                                                                                org.slf4j.LoggerFactory.getLogger(SecurityConfig.class)
+                                                                                                .warn("OAuth2 login failed at {}: {}", req.getRequestURI(),
+                                                                                                                e.getMessage(), e);
                                                                                 var session = req.getSession(false);
                                                                                 if (session != null) {
                                                                                         session.removeAttribute(
