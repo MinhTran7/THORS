@@ -32,7 +32,7 @@ const overridesSx = {
     fontWeight: 700,
     letterSpacing: 0
   },
-  '& .MuiButton-contained': { bgcolor: C.cyan, color: C.cyanInk, fontWeight: 800, '&:hover': { bgcolor: '#8FE6EF', boxShadow: 'none' } },
+  '& .MuiButton-contained': { bgcolor: C.cyan, color: C.cyanInk, fontWeight: 800, '&:hover': { bgcolor: '#3A3A3A', boxShadow: 'none' } },
   '& .MuiButton-contained.Mui-disabled': { bgcolor: '#E5E7EB', color: '#9CA3AF' },
   '& .MuiButton-outlined': {
     bgcolor: '#FFFFFF',

@@ -95,6 +95,6 @@ export const textLinkSx = {
   display: 'inline-flex',
   alignItems: 'center',
   gap: 1,
-  '&:hover': { color: '#158A98' },
+  '&:hover': { color: '#5E1D1D' },
   ...focusRing
 };
