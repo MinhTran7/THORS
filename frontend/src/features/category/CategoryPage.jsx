@@ -149,7 +149,9 @@ function CategoryIcon({ category }) {
 function iconTone(category) {
   const tone = category.isChild && TARGET_BADGE[category.targetGroup];
   if (tone) return { bgcolor: tone.bg, color: tone.color, borderColor: tone.border };
-  return { bgcolor: category.isChild ? C.surface : '#F0FCFE', color: '#0F172A', borderColor: C.border };
+  // Danh mục gốc: ô icon xanh cyan đậm hơn để nổi bật so với danh mục con
+  if (!category.isChild) return { bgcolor: '#E3FAFD', color: '#0E7490', borderColor: C.cyan };
+  return { bgcolor: C.surface, color: C.muted, borderColor: C.border };
 }
 
 function TargetBadge({ value }) {
@@ -435,7 +437,9 @@ export default function CategoryPage() {
       .slice(start, start + PAGE_SIZE)
       .flatMap((group) => [
         { ...group.root, visibleChildren: group.children.length },
-        ...(isFiltering || expanded.has(group.root.categoryId) ? group.children : [])
+        ...(isFiltering || expanded.has(group.root.categoryId)
+          ? group.children.map((child, index) => ({ ...child, isLastChild: index === group.children.length - 1 }))
+          : [])
       ]);
   }, [filteredCategories, currentPage, expanded, isFiltering]);
 
@@ -948,7 +952,9 @@ export default function CategoryPage() {
                       key={category.categoryId}
                       hover
                       sx={{
-                        bgcolor: category.isChild ? '#FAFCFE' : 'inherit',
+                        // Cha đang mở: nền xanh nhạt + vạch trái; con: nền xám rất nhạt
+                        bgcolor: category.isChild ? '#FAFBFC' : open ? '#F5FDFE' : '#FFFFFF',
+                        boxShadow: !category.isChild && open ? `inset 3px 0 0 ${C.cyanHover}` : 'none',
                         '&:hover': { bgcolor: '#F5FAFC' }
                       }}
                     >
@@ -956,8 +962,7 @@ export default function CategoryPage() {
                       <TableCell
                         onClick={canToggle && !isFiltering ? () => toggleExpanded(category.categoryId) : undefined}
                         sx={{
-                          pl: category.isChild ? 9 : 2,
-                          py: category.isChild ? 1.5 : 2,
+                          py: category.isChild ? 1.25 : 1.75,
                           opacity: category.contextOnly ? 0.6 : 1,
                           cursor: canToggle && !isFiltering ? 'pointer' : 'default',
                           userSelect: 'none'
@@ -966,18 +971,23 @@ export default function CategoryPage() {
                         <Stack
                           direction="row"
                           spacing={1.5}
-                          sx={{ alignItems: 'center' }}
+                          sx={{ alignItems: 'center', ml: category.isChild ? '58px' : 0 }}
                         >
                           {!category.isChild && (
                             <Box
                               aria-label={open ? 'Thu gọn danh mục con' : 'Xem danh mục con'}
                               sx={{
-                                width: 20,
+                                width: 22,
+                                height: 22,
                                 flexShrink: 0,
                                 display: 'flex',
+                                alignItems: 'center',
                                 justifyContent: 'center',
-                                color: canToggle ? C.muted : 'transparent',
-                                fontSize: 11
+                                borderRadius: '50%',
+                                bgcolor: canToggle ? (open ? '#CFF6FB' : '#F1F5F9') : 'transparent',
+                                color: canToggle ? '#0F172A' : 'transparent',
+                                fontSize: 10,
+                                transition: 'background-color .15s'
                               }}
                             >
                               {open ? <DownOutlined /> : <RightOutlined />}
@@ -985,8 +995,9 @@ export default function CategoryPage() {
                           )}
                           <Box
                             sx={{
-                              width: category.isChild ? 32 : 38,
-                              height: category.isChild ? 32 : 38,
+                              width: category.isChild ? 28 : 36,
+                              height: category.isChild ? 28 : 36,
+                              fontSize: category.isChild ? 13 : 16,
                               bgcolor: iconTone(category).bgcolor,
                               border: `1px solid ${iconTone(category).borderColor}`,
                               borderRadius: 2,
@@ -1003,18 +1014,14 @@ export default function CategoryPage() {
                           <Box>
                             <Typography
                               sx={{
-                                fontSize: 13.5,
-                                fontWeight: 800,
-                                color: '#0F172A'
+                                fontSize: category.isChild ? 13 : 14,
+                                fontWeight: category.isChild ? 500 : 700,
+                                color: category.isChild ? '#334155' : '#0F172A'
                               }}
                             >
                               {category.categoryName}
                             </Typography>
-                            <Typography sx={{ fontSize: 12, color: '#94A3B8', mt: 0.25 }}>
-                              Mã: #{category.categoryId}
-                              {category.isChild && category.parentName ? ` · Thuộc ${category.parentName}` : ''}
-                              {isParent ? ` · ${category.childCount} danh mục con` : ''}
-                            </Typography>
+                            {/* Chỉ hiện tên cho gọn; mã danh mục xem ở nút Xem chi tiết */}
                           </Box>
                         </Stack>
                       </TableCell>
