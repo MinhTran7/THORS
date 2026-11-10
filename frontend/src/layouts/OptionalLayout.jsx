@@ -5,7 +5,18 @@ import ThorsLayout from './ThorsLayout';
 import StorefrontLayout from './StorefrontLayout';
 
 // Các trang mua sắm của khách dùng chung giao diện cửa hàng (header + footer kiểu thời trang)
-const STOREFRONT_PATHS = ['/', '/shop/category/:categoryId', '/shop/best-sellers', '/shop/new-arrivals', '/shop/sale', '/shop/products/:productId', '/cart', '/checkout', '/order-success'];
+const STOREFRONT_PATHS = [
+  '/',
+  '/shop/category/:categoryId',
+  '/shop/best-sellers',
+  '/shop/new-arrivals',
+  '/shop/sale',
+  '/shop/products/:productId',
+  '/promotions/:promotionId/products',
+  '/cart',
+  '/checkout',
+  '/order-success'
+];
 
 // Các trang tài khoản chỉ dùng giao diện cửa hàng khi người xem là KHÁCH HÀNG;
 // Owner / Family Member / Admin mở cùng đường dẫn vẫn thấy giao diện quản trị (sidebar).
@@ -19,7 +30,8 @@ const CUSTOMER_STOREFRONT_PATHS = [
   '/notifications/:id',
   '/addresses',
   '/addresses/new',
-  '/addresses/:id/edit'
+  '/addresses/:id/edit',
+  '/promotions'
 ];
 
 /**

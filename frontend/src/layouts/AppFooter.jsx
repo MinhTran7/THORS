@@ -3,7 +3,6 @@ import { Stack } from 'features/account/components/Flex';
 import { PROFILE_TAGLINE } from 'features/account/constants';
 import { brand } from 'features/account/tokens';
 
-// Footer cố định ở cuối màn hình, chỉ hiển thị slogan.
 export default function AppFooter() {
   return (
     <Stack
@@ -18,7 +17,9 @@ export default function AppFooter() {
         bgcolor: brand.surface,
         position: 'sticky',
         bottom: 0,
-        zIndex: (theme) => theme.zIndex.appBar
+        zIndex: (theme) => theme.zIndex.appBar,
+        flexShrink: 0,
+        boxSizing: 'border-box'
       }}
     >
       <Typography variant="caption" sx={{ color: brand.muted, letterSpacing: 0.8 }}>

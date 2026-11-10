@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
+import { BellOutlined } from '@ant-design/icons';
 import useSWR from 'swr';
 import { Alert, Box, Button, Typography } from '@mui/material';
 import { useCrumbs } from 'layouts/crumbs';
@@ -11,7 +12,7 @@ import { C, SERIF } from 'features/shop/storeTheme';
 import { notificationTypeLabel } from './constants';
 import { entityPath, notificationsApi, refreshNotifications } from './api';
 
-const BACK = { to: '/notifications', label: 'Tất cả thông báo' };
+const BACK = { to: '/notifications', label: 'Tất cả thông báo', icon: <BellOutlined /> };
 
 const RELATED_LABEL = { ORDER: 'Xem đơn hàng', USER: 'Mở trang tài khoản' };
 

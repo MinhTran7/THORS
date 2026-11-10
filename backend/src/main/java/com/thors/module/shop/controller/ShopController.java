@@ -11,7 +11,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** API công khai (khách chưa đăng nhập vẫn xem và tìm kiếm được). Chỉ đọc, không có thao tác ghi. */
 @RestController
 @RequestMapping("/api/shop")
 public class ShopController {
@@ -31,6 +30,7 @@ public class ShopController {
     public ResponseEntity<Map<String, Object>> products(
             @RequestParam(required = false) String q,
             @RequestParam(required = false) Integer categoryId,
+            @RequestParam(required = false) Integer promotionId,
             @RequestParam(defaultValue = "newest") String sort,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
@@ -39,8 +39,8 @@ public class ShopController {
         int safeSize = Math.min(Math.max(size, 1), 40);
 
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("items", shopRepository.findProducts(q, categoryId, sort, safePage, safeSize));
-        result.put("total", shopRepository.countProducts(q, categoryId));
+        result.put("items", shopRepository.findProducts(q, categoryId, promotionId, sort, safePage, safeSize));
+        result.put("total", shopRepository.countProducts(q, categoryId, promotionId));
         result.put("page", safePage);
         result.put("size", safeSize);
         return ResponseEntity.ok(result);

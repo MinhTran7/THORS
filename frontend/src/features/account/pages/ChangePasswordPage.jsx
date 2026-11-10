@@ -4,7 +4,7 @@ import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import { Alert, Box, Typography } from '@mui/material';
 import { Stack } from '../components/Flex';
-import { CheckCircleFilled, SafetyCertificateOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import { CheckCircleFilled, SafetyCertificateOutlined, InfoCircleOutlined, UserOutlined } from '@ant-design/icons';
 import { useAuth } from 'features/auth/AuthProvider';
 import { useCrumbs } from 'layouts/crumbs';
 import { clearCsrf } from 'services/http';
@@ -78,7 +78,7 @@ export default function ChangePasswordPage() {
   const card = isCustomer ? storePanelSx : cardSx;
   const accent = isCustomer ? C.ink : brand.cyan;
   const Shell = isCustomer ? StoreAccountShell : Box;
-  const header = { back: { to: '/profile', label: 'Hồ sơ cá nhân' }, title: 'Đổi mật khẩu' };
+  const header = { back: { to: '/profile', label: 'Hồ sơ cá nhân', icon: <UserOutlined /> }, title: 'Đổi mật khẩu' };
 
   if (!account.passwordEnabled) {
     return (
