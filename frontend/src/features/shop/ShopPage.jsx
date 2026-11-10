@@ -710,7 +710,55 @@ export default function ShopPage() {
                 component="button"
                 type="button"
                 aria-pressed={categoryId === c.categoryId}
-                onClick={() =>
+                onClick={() => setCategoryFilter(c.categoryId)}
+                sx={chipSx(categoryId === c.categoryId)}
+              >
+                {c.categoryName}
+              </Box>
+            ))}
+          </Box>
+        )}
+
+        {error && (
+          <Box component="p" sx={{ color: C.accent }}>
+            {error}
+          </Box>
+        )}
+
+        {!loading && !error && items.length === 0 && (
+          <Box sx={{ textAlign: 'center', py: 6, color: C.muted }}>
+            <Box sx={{ fontFamily: SERIF, fontSize: 24, color: C.ink, mb: 1 }}>Không tìm thấy sản phẩm</Box>
+            <Box>Thử từ khóa khác hoặc chọn danh mục khác.</Box>
+          </Box>
+        )}
+
+        <Box
+          sx={{
+            display: 'grid',
+            gap: { xs: '24px 12px', sm: '32px 20px' },
+            gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', sm: 'repeat(auto-fill, minmax(240px, 1fr))' }
+          }}
+        >
+          {items.map((p) => (
+            <ProductCard key={p.productId} product={p} promo={promoMap.get(p.productId)} />
+          ))}
+        </Box>
+
+        {loading && items.length === 0 && (
+          <Box component="p" sx={{ color: C.muted }}>
+            Đang tải sản phẩm...
+          </Box>
+        )}
+
+        {items.length < total && (
+          <Box sx={{ textAlign: 'center', mt: 6 }}>
+            <Box component="button" type="button" disabled={loading} onClick={() => load(page + 1, false)} sx={btnSx('outline')}>
+              {loading ? 'ĐANG TẢI...' : 'XEM THÊM'}
+            </Box>
+          </Box>
+        )}
+      </Box>
+
       <Benefits />
 
       {account?.role === 'CUSTOMER' && <PendingCartHandler />}
