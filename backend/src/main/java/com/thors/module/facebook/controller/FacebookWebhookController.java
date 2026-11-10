@@ -127,6 +127,15 @@ public class FacebookWebhookController {
     }
 
     /**
+     * Kiểm tra địa chỉ giao trên bản đồ trước khi chốt đơn (cùng dịch vụ bước Owner xác nhận đơn dùng).
+     * Trả về status FOUND / NOT_FOUND / UNAVAILABLE, kèm precision (HOUSE / STREET / AREA) khi tìm thấy.
+     */
+    @GetMapping("/address-check")
+    public ResponseEntity<Map<String, Object>> checkAddress(@RequestParam("address") String address) {
+        return ResponseEntity.ok(facebookService.checkAddress(address));
+    }
+
+    /**
      * Tạo đơn hàng Facebook lưu trực tiếp vào Quản lý Đơn hàng (orders)
      */
     @PostMapping("/order")

@@ -1,9 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState
-} from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useNavigate } from 'react-router-dom';
 
@@ -12,15 +7,12 @@ import {
   Avatar,
   Box,
   Button,
-  Card,
-  Chip,
   CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
   DialogContentText,
   DialogTitle,
-  Divider,
   IconButton,
   InputAdornment,
   Select,
@@ -40,56 +32,90 @@ import {
 import { Pager } from 'features/account/components/Blocks';
 
 import {
-  CameraOutlined,
-  CheckOutlined,
-  CloseOutlined,
-  DeleteOutlined,
   EditOutlined,
+  EyeOutlined,
   FileExcelOutlined,
-  PictureOutlined,
   PlusOutlined,
-  SearchOutlined,
-  UploadOutlined
+  ReloadOutlined,
+  SearchOutlined
 } from '@ant-design/icons';
 
-import {
-  getProducts,
-  getProductById,
-  updateProduct,
-  changeProductStatus,
-  deleteProduct
-} from '../../services/productService';
+import { getProducts, changeProductStatus, setProductOnline } from '../../services/productService';
 
-import { getCategories } from '../../services/categoryService';
+import { categoryFullName, getCategories, sortCategoriesAsTree } from '../../services/categoryService';
+import { primaryButtonSx, outlineButtonSx } from '../customer/theme';
 import ProductExcelDialog from './ProductExcelDialog';
 
-// ==========================================
-// CONFIGURATION
-// ==========================================
-
-const COLORS = {
-  text: '#202D42',
-  muted: '#75869F',
-  border: '#E5EBF2',
-  cyan: '#8DE9F2',
-  cyanLight: '#EAFBFD',
-  green: '#25856A',
-  red: '#D04D4D'
+const C = {
+  text: '#1E293B',
+  muted: '#64748B',
+  subtle: '#94A3B8',
+  border: '#E2E8F0',
+  borderLight: '#F1F5F9',
+  bg: '#F8FAFC',
+  surface: '#FFFFFF',
+  cyan: '#8EECF5',
+  cyanHover: '#76E5EF',
+  cyanText: '#0E7490',
+  cream: '#FFF7AE',
+  creamHover: '#FFF294',
+  creamText: '#713F12',
+  error: '#EF4444'
 };
 
-const PAGE_SIZE = 6;
-const LOW_STOCK_THRESHOLD = 5;
+const PAGE_SIZE = 8;
 
-const cardSx = {
-  border: `1px solid ${COLORS.border}`,
-  borderRadius: 2,
-  boxShadow: 'none',
-  bgcolor: '#FFFFFF'
+// Switch thu nhỏ theo Design System (34x18, track #BAF2F8 khi bật, #CBD5E1 khi tắt)
+const switchSx = {
+  width: 34,
+  height: 18,
+  p: 0,
+  '& .MuiSwitch-switchBase': {
+    p: '2px',
+    transitionDuration: '200ms',
+    '&.Mui-checked': {
+      transform: 'translateX(16px)',
+      color: '#67E8F9',
+      '& + .MuiSwitch-track': {
+        bgcolor: '#BAF2F8',
+        opacity: 1,
+        border: 0
+      }
+    }
+  },
+  '& .MuiSwitch-thumb': {
+    boxShadow: '0 1px 2px rgba(0,0,0,0.15)',
+    width: 14,
+    height: 14
+  },
+  '& .MuiSwitch-track': {
+    borderRadius: 9,
+    bgcolor: '#CBD5E1',
+    opacity: 1
+  }
 };
 
-// ==========================================
-// HELPERS
-// ==========================================
+const chipSx = (bg, color) => ({
+  display: 'inline-flex',
+  alignItems: 'center',
+  px: 1.5,
+  py: 0.35,
+  borderRadius: 1.75,
+  fontSize: 13,
+  fontWeight: 600,
+  bgcolor: bg,
+  color
+});
+
+const filterSelectSx = {
+  bgcolor: C.surface,
+  borderRadius: 2.5,
+  height: 44,
+  fontSize: 13.5,
+  '& .MuiOutlinedInput-notchedOutline': { borderColor: C.border },
+  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: C.cyan },
+  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: C.cyan }
+};
 
 function formatPrice(price) {
   if (price === null || price === undefined) {
@@ -112,10 +138,7 @@ function displayPrice(product) {
     return '—';
   }
 
-  if (
-    maxPrice == null ||
-    Number(minPrice) === Number(maxPrice)
-  ) {
+  if (maxPrice == null || Number(minPrice) === Number(maxPrice)) {
     return formatPrice(minPrice);
   }
 
@@ -123,17 +146,36 @@ function displayPrice(product) {
 }
 
 function isOnlineProduct(product) {
-  return (
-    product.status === 'ACTIVE' &&
-    Number(product.onlineVariantCount || 0) > 0
-  );
+  return product.status === 'ACTIVE' && Number(product.onlineVariantCount || 0) > 0;
 }
 
-function isLowStockProduct(product) {
-  return (
-    product.status === 'ACTIVE' &&
-    Number(product.totalStock || 0) < LOW_STOCK_THRESHOLD
-  );
+// Cảnh báo tồn theo từng biến thể, cùng công thức màn hình Tồn kho:
+// hết hàng = tồn 0; sắp hết = có thể bán (tồn − đang giữ) ≤ ngưỡng tối thiểu của biến thể
+function stockAlert(product) {
+  const active = Number(product.activeVariantCount || 0);
+  const out = Number(product.outOfStockVariantCount || 0);
+  const low = Number(product.lowStockVariantCount || 0);
+
+  if (product.status !== 'ACTIVE' || active === 0) return null;
+  if (out === active) return { level: 'OUT', label: 'Hết hàng' };
+  if (out > 0 || low > 0) {
+    const parts = [];
+    if (out > 0) parts.push(`${out} hết`);
+    if (low > 0) parts.push(`${low} sắp hết`);
+    return { level: 'LOW', label: parts.join(' · ') };
+  }
+  return null;
+}
+
+// Bỏ dấu tiếng Việt để tìm "ao thun" ra "Áo thun"
+function normalizeText(value) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase()
+    .trim();
 }
 
 function normalizeCategories(response) {
@@ -152,10 +194,6 @@ function normalizeCategories(response) {
   return [];
 }
 
-// ==========================================
-// PRODUCT PAGE
-// ==========================================
-
 export default function ProductPage() {
   const navigate = useNavigate();
 
@@ -169,6 +207,7 @@ export default function ProductPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [loadedAt, setLoadedAt] = useState(null);
 
   // ==========================================
   // STATES - SEARCH AND FILTER
@@ -177,7 +216,6 @@ export default function ProductPage() {
   const [activeTab, setActiveTab] = useState('ACTIVE');
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
-  const [statusFilter, setStatusFilter] = useState('ALL');
 
   // ==========================================
   // STATES - PAGINATION
@@ -186,60 +224,39 @@ export default function ProductPage() {
   const [page, setPage] = useState(1);
 
   // ==========================================
-  // STATES - INLINE EDIT
-  // ==========================================
-
-  const [editingProductId, setEditingProductId] = useState(null);
-
-  const [editForm, setEditForm] = useState({
-    productName: '',
-    categoryId: ''
-  });
-
-  const [saving, setSaving] = useState(false);
-
-  // ==========================================
-  // STATES - CHANGE PRODUCT STATUS
+  // STATES - CHANGE PRODUCT STATUS / ONLINE
   // ==========================================
 
   const [statusDialogProduct, setStatusDialogProduct] = useState(null);
   const [statusSaving, setStatusSaving] = useState(false);
+  const [onlineDialogProduct, setOnlineDialogProduct] = useState(null);
+  const [onlineSaving, setOnlineSaving] = useState(false);
   const [excelDialogOpen, setExcelDialogOpen] = useState(false);
 
-  // ==========================================
-  // STATES - DELETE PRODUCT
-  // ==========================================
-
-  const [deleteDialogProduct, setDeleteDialogProduct] = useState(null);
-  const [deleteSaving, setDeleteSaving] = useState(false);
-
-  const busy = editingProductId !== null || saving || statusSaving || deleteSaving;
+  // Không xóa sản phẩm từ danh sách: sản phẩm ngừng bán thì chuyển sang "Đã ẩn" để giữ lịch sử
+  const busy = statusSaving || onlineSaving;
 
   // ==========================================
   // LOAD PRODUCTS
   // ==========================================
 
-  const loadProducts = useCallback(async () => {
+  const loadProducts = useCallback(async ({ silent = false } = {}) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       setError('');
 
       const data = await getProducts();
 
       if (!Array.isArray(data)) {
-        throw new Error('Invalid product data returned by server.');
+        throw new Error('Dữ liệu sản phẩm trả về không hợp lệ.');
       }
 
       setProducts(data);
+      setLoadedAt(new Date());
     } catch (err) {
-      console.error('Failed to load products:', err);
-
-      setError(
-        err?.message ||
-        'Unable to load products. Please try again.'
-      );
+      setError(err?.message || 'Không thể tải danh sách sản phẩm. Vui lòng thử lại.');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
@@ -250,10 +267,9 @@ export default function ProductPage() {
   const loadCategories = useCallback(async () => {
     try {
       const response = await getCategories();
-      setCategories(normalizeCategories(response));
+      setCategories(sortCategoriesAsTree(normalizeCategories(response)));
     } catch (err) {
-      console.error('Failed to load categories:', err);
-      setError(err?.message || 'Unable to load categories.');
+      setError(err?.message || 'Không thể tải danh mục sản phẩm.');
     }
   }, []);
 
@@ -266,60 +282,58 @@ export default function ProductPage() {
   // STATISTICS
   // ==========================================
 
-  const activeProducts = useMemo(
-    () => products.filter((product) => product.status === 'ACTIVE'),
-    [products]
+  const tabMatchers = useMemo(
+    () => ({
+      ACTIVE: (product) => product.status === 'ACTIVE',
+      INACTIVE: (product) => product.status === 'INACTIVE',
+      ONLINE: isOnlineProduct,
+      LOW_STOCK: (product) => stockAlert(product) !== null,
+      ALL: () => true
+    }),
+    []
   );
 
-  const inactiveProducts = useMemo(
-    () => products.filter((product) => product.status === 'INACTIVE'),
-    [products]
-  );
-
-  const onlineProducts = useMemo(
-    () => products.filter(isOnlineProduct),
-    [products]
-  );
-
-  const lowStockProducts = useMemo(
-    () => products.filter(isLowStockProduct),
-    [products]
-  );
+  const tabCounts = useMemo(() => {
+    const counts = {};
+    Object.entries(tabMatchers).forEach(([key, match]) => {
+      counts[key] = products.filter(match).length;
+    });
+    return counts;
+  }, [products, tabMatchers]);
 
   // ==========================================
   // SEARCH AND FILTER
   // ==========================================
 
+  // categoryId (chuỗi) -> id danh mục cha
+  const categoryParentMap = useMemo(
+    () => new Map(categories.filter((c) => c.parentId).map((c) => [String(c.categoryId), c.parentId])),
+    [categories]
+  );
+
   const filteredProducts = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
+    const keyword = normalizeText(search);
+    // "#12" hoặc "12": khớp đúng mã sản phẩm (không khớp 112, 120...)
+    const idMatch = keyword.match(/^#?(\d+)$/);
+    const matchTab = tabMatchers[activeTab] ?? tabMatchers.ALL;
 
     return products.filter((product) => {
       const matchesSearch =
-        String(product.productName || '').toLowerCase().includes(keyword) ||
-        String(product.productId).toLowerCase().includes(keyword);
+        !keyword ||
+        (idMatch && String(product.productId) === idMatch[1]) ||
+        normalizeText(product.productName).includes(keyword) ||
+        normalizeText(product.sku).includes(keyword) ||
+        normalizeText(product.searchText).includes(keyword);
 
+      // Lọc theo danh mục cha thì lấy cả sản phẩm của các danh mục con
       const matchesCategory =
         categoryFilter === 'ALL' ||
-        String(product.categoryId) === categoryFilter;
+        String(product.categoryId) === categoryFilter ||
+        String(categoryParentMap.get(String(product.categoryId)) ?? '') === categoryFilter;
 
-      const matchesStatus =
-        statusFilter === 'ALL' || product.status === statusFilter;
-
-      let matchesTab = true;
-
-      if (activeTab === 'ACTIVE') {
-        matchesTab = product.status === 'ACTIVE';
-      } else if (activeTab === 'INACTIVE') {
-        matchesTab = product.status === 'INACTIVE';
-      } else if (activeTab === 'ONLINE') {
-        matchesTab = isOnlineProduct(product);
-      } else if (activeTab === 'LOW_STOCK') {
-        matchesTab = isLowStockProduct(product);
-      }
-
-      return matchesSearch && matchesCategory && matchesStatus && matchesTab;
+      return matchesSearch && matchesCategory && matchTab(product);
     });
-  }, [products, search, categoryFilter, statusFilter, activeTab]);
+  }, [products, search, categoryFilter, activeTab, tabMatchers, categoryParentMap]);
 
   // ==========================================
   // PAGINATION
@@ -333,7 +347,6 @@ export default function ProductPage() {
     return filteredProducts.slice(start, start + PAGE_SIZE);
   }, [filteredProducts, currentPage]);
 
-
   function resetPage() {
     setPage(1);
   }
@@ -344,6 +357,14 @@ export default function ProductPage() {
     resetPage();
   }
 
+  function clearFilters() {
+    // Về đúng trạng thái mặc định khi mở trang
+    setSearch('');
+    setCategoryFilter('ALL');
+    setActiveTab('ACTIVE');
+    resetPage();
+  }
+
   // ==========================================
   // NAVIGATION
   // ==========================================
@@ -351,123 +372,6 @@ export default function ProductPage() {
   function viewProduct(productId) {
     if (busy) return;
     navigate(`/products/${productId}`);
-  }
-
-  // ==========================================
-  // INLINE EDIT - START
-  // ==========================================
-
-  function startInlineEdit(product) {
-    if (busy) return;
-
-    setError('');
-    setSuccess('');
-    setEditingProductId(product.productId);
-    setEditForm({
-      productName: product.productName || '',
-      categoryId: String(product.categoryId ?? '')
-    });
-  }
-
-  // ==========================================
-  // INLINE EDIT - CANCEL
-  // ==========================================
-
-  function cancelInlineEdit() {
-    if (saving) return;
-
-    setEditingProductId(null);
-    setEditForm({ productName: '', categoryId: '' });
-    setError('');
-  }
-
-  // ==========================================
-  // INLINE EDIT - SAVE
-  // ==========================================
-
-  async function saveInlineEdit(productId) {
-    if (saving || statusSaving) return;
-
-    setError('');
-    setSuccess('');
-
-    const productName = editForm.productName.trim();
-    const categoryId = Number(editForm.categoryId);
-
-    if (!productName) {
-      setError('Product name is required.');
-      return;
-    }
-
-    if (productName.length > 200) {
-      setError('Product name must not exceed 200 characters.');
-      return;
-    }
-
-    if (!Number.isInteger(categoryId) || categoryId <= 0) {
-      setError('Please select a category.');
-      return;
-    }
-
-    const selectedCategory = categories.find(
-      (category) => Number(category.categoryId) === categoryId
-    );
-
-    if (!selectedCategory) {
-      setError('Selected category does not exist.');
-      return;
-    }
-
-    if (selectedCategory.status !== 'ACTIVE') {
-      setError('Please select an active category.');
-      return;
-    }
-
-    try {
-      setSaving(true);
-
-      const productDetail = await getProductById(productId);
-
-      if (!productDetail?.product || !Array.isArray(productDetail.variants)) {
-        throw new Error('Unable to retrieve product details.');
-      }
-
-      const { product, variants } = productDetail;
-
-      if (variants.length === 0) {
-        throw new Error('Product must have at least one variant.');
-      }
-
-      const payload = {
-        categoryId,
-        productName,
-        description: product.description ?? '',
-        variants: variants.map((variant) => ({
-          detailId: Number(variant.detailId),
-          size: variant.size,
-          color: variant.color,
-          price: Number(variant.price)
-        }))
-      };
-
-      await updateProduct(productId, payload);
-
-      const updatedProducts = await getProducts();
-
-      if (!Array.isArray(updatedProducts)) {
-        throw new Error('Product saved, but unable to refresh the list.');
-      }
-
-      setProducts(updatedProducts);
-      setEditingProductId(null);
-      setEditForm({ productName: '', categoryId: '' });
-      setSuccess('Product updated successfully.');
-    } catch (err) {
-      console.error('Inline update failed:', err);
-      setError(err?.message || 'Unable to update product. Please try again.');
-    } finally {
-      setSaving(false);
-    }
   }
 
   // ==========================================
@@ -501,91 +405,67 @@ export default function ProductPage() {
 
       await changeProductStatus(productId, newStatus);
 
-      setProducts((previous) =>
-        previous.map((product) =>
-          product.productId === productId
-            ? { ...product, status: newStatus }
-            : product
-        )
-      );
+      setProducts((previous) => previous.map((product) => (product.productId === productId ? { ...product, status: newStatus } : product)));
 
       setStatusDialogProduct(null);
-      setSuccess(
-        newStatus === 'ACTIVE'
-          ? 'Product activated successfully.'
-          : 'Product deactivated successfully.'
-      );
+      setSuccess(newStatus === 'ACTIVE' ? 'Đã kích hoạt sản phẩm thành công.' : 'Đã ẩn sản phẩm thành công.');
 
-      try {
-        const updatedProducts = await getProducts();
-        if (Array.isArray(updatedProducts)) {
-          setProducts(updatedProducts);
-        }
-      } catch (refreshError) {
-        console.error('Product status saved but refresh failed:', refreshError);
-      }
+      await loadProducts({ silent: true });
     } catch (err) {
-      console.error('Change product status failed:', err);
-      setError(err?.message || 'Unable to change product status. Please try again.');
+      setError(err?.message || 'Không thể đổi trạng thái sản phẩm. Vui lòng thử lại.');
+      setStatusDialogProduct(null);
     } finally {
       setStatusSaving(false);
     }
   }
 
   // ==========================================
-  // DELETE PRODUCT (SAFE DELETE)
+  // BÁN ONLINE (bật/tắt cho mọi biến thể đang hoạt động)
   // ==========================================
 
-  function openDeleteDialog(product) {
+  function openOnlineDialog(product) {
     if (busy || !product) return;
 
     setError('');
     setSuccess('');
-    setDeleteDialogProduct(product);
+    setOnlineDialogProduct(product);
   }
 
-  function closeDeleteDialog() {
-    if (deleteSaving) return;
-    setDeleteDialogProduct(null);
+  function closeOnlineDialog() {
+    if (onlineSaving) return;
+    setOnlineDialogProduct(null);
   }
 
-  async function confirmDeleteProduct() {
-    if (!deleteDialogProduct || deleteSaving) return;
+  async function confirmToggleOnline() {
+    if (!onlineDialogProduct || onlineSaving) return;
 
-    const productId = deleteDialogProduct.productId;
-    const productName = deleteDialogProduct.productName;
+    const product = onlineDialogProduct;
+    const enable = !isOnlineProduct(product);
 
     try {
-      setDeleteSaving(true);
+      setOnlineSaving(true);
       setError('');
       setSuccess('');
 
-      await deleteProduct(productId);
+      const result = await setProductOnline(product.productId, enable);
 
       setProducts((previous) =>
-        previous.filter((product) => product.productId !== productId)
+        previous.map((item) =>
+          item.productId === product.productId ? { ...item, onlineVariantCount: Number(result?.onlineVariantCount ?? 0) } : item
+        )
       );
 
-      setDeleteDialogProduct(null);
-      setSuccess(`Đã xóa vĩnh viễn sản phẩm "${productName}" (ID: ${productId}).`);
-
-      try {
-        const updatedProducts = await getProducts();
-        if (Array.isArray(updatedProducts)) {
-          setProducts(updatedProducts);
-        }
-      } catch (refreshError) {
-        console.error('Delete succeeded but refresh failed:', refreshError);
-      }
+      setOnlineDialogProduct(null);
+      setSuccess(
+        enable
+          ? `Đã bật bán online cho "${product.productName}" (${result?.onlineVariantCount ?? 0}/${result?.variantCount ?? 0} biến thể).`
+          : `Đã tắt bán online cho "${product.productName}".`
+      );
     } catch (err) {
-      console.error('Delete product failed:', err);
-      setError(
-        err?.message ||
-        'Không thể xóa sản phẩm. Sản phẩm có thể đã có lịch sử giao dịch trong hệ thống.'
-      );
-      setDeleteDialogProduct(null);
+      setError(err?.message || 'Không thể đổi trạng thái bán online. Vui lòng thử lại.');
+      setOnlineDialogProduct(null);
     } finally {
-      setDeleteSaving(false);
+      setOnlineSaving(false);
     }
   }
 
@@ -593,337 +473,243 @@ export default function ProductPage() {
   // RENDER
   // ==========================================
 
+  const onlineTarget = onlineDialogProduct;
+  const enablingOnline = onlineTarget ? !isOnlineProduct(onlineTarget) : false;
+
   return (
-    <Box sx={{ maxWidth: 1440, mx: 'auto' }}>
-
-      {/* ======================================
-          HEADER
-      ====================================== */}
-
-      <Stack
-        direction={{ xs: 'column', sm: 'row' }}
-        justifyContent="space-between"
-        alignItems={{ xs: 'flex-start', sm: 'center' }}
-        spacing={2}
-        sx={{ mb: 2.5 }}
+    <Box sx={{ maxWidth: 1440, mx: 'auto', pb: 6, color: C.text }}>
+      {/* HEADER */}
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 2,
+          mb: 3.5
+        }}
       >
         <Box>
           <Typography
+            variant="h3"
             sx={{
-              fontSize: { xs: 24, md: 29 },
-              fontWeight: 500,
-              color: COLORS.text
+              fontWeight: 800,
+              color: '#0F172A',
+              fontSize: { xs: 22, sm: 26 }
             }}
           >
-            Product List
+            Danh sách sản phẩm
           </Typography>
-
-          <Typography
-            fontSize={12}
-            color={COLORS.muted}
-            sx={{ mt: 0.5 }}
-          >
-            Your inventory, organized. Manage stock,
-            pricing and online visibility.
+          <Typography sx={{ fontSize: 13.5, color: C.muted, mt: 0.5, lineHeight: 1.6 }}>
+            Quản lý tồn kho, giá bán và trạng thái mở bán online cho các sản phẩm
           </Typography>
         </Box>
 
         <Stack direction="row" spacing={1.5} alignItems="center">
-          <Button
-            variant="outlined"
-            startIcon={<FileExcelOutlined />}
-            disabled={busy}
-            onClick={() => setExcelDialogOpen(true)}
-            sx={{
-              borderColor: COLORS.green,
-              color: COLORS.green,
-              textTransform: 'none',
-              fontWeight: 600,
-              '&:hover': {
-                borderColor: '#1e6b55',
-                bgcolor: '#F0F9F6'
-              }
-            }}
-          >
+          <Tooltip title={loadedAt ? `Tải lúc ${loadedAt.toLocaleTimeString('vi-VN')} · Nhấn để làm mới` : 'Làm mới'}>
+            <span>
+              <IconButton
+                disabled={busy || loading}
+                onClick={() => loadProducts()}
+                sx={{ width: 44, height: 44, border: `1px solid ${C.border}`, borderRadius: 2.5, color: C.muted }}
+              >
+                <ReloadOutlined spin={loading} style={{ fontSize: 16 }} />
+              </IconButton>
+            </span>
+          </Tooltip>
+
+          <Button startIcon={<FileExcelOutlined />} disabled={busy} onClick={() => setExcelDialogOpen(true)} sx={outlineButtonSx}>
             Nhập từ Excel
           </Button>
 
-          <Button
-            variant="contained"
-            startIcon={<PlusOutlined />}
-            disabled={busy}
-            onClick={() => navigate('/products/add')}
-            sx={{
-              bgcolor: COLORS.cyan,
-              color: COLORS.text,
-              textTransform: 'none',
-              fontWeight: 600,
-              boxShadow: 'none',
-              '&:hover': {
-                bgcolor: '#6DDDE9',
-                boxShadow: 'none'
-              }
-            }}
-          >
-            Add Product
+          <Button startIcon={<PlusOutlined />} disabled={busy} onClick={() => navigate('/products/add')} sx={primaryButtonSx}>
+            Thêm sản phẩm
           </Button>
         </Stack>
-      </Stack>
+      </Box>
 
-      {/* ======================================
-          ERROR MESSAGE
-      ====================================== */}
-
+      {/* ERROR MESSAGE */}
       {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
+        <Alert severity="error" sx={{ mb: 2.5, borderRadius: 2.5, fontSize: 13.5, fontWeight: 600 }} onClose={() => setError('')}>
           {error}
         </Alert>
       )}
 
-      {/* ======================================
-          SUCCESS MESSAGE
-      ====================================== */}
-
+      {/* SUCCESS MESSAGE */}
       {success && (
-        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess('')}>
+        <Alert severity="success" sx={{ mb: 2.5, borderRadius: 2.5, fontSize: 13.5, fontWeight: 600 }} onClose={() => setSuccess('')}>
           {success}
         </Alert>
       )}
 
-      {/* ======================================
-          QUICK FILTER TABS
-      ====================================== */}
-
-      <Stack
-        direction="row"
-        spacing={1}
-        flexWrap="wrap"
-        useFlexGap
-        sx={{ mb: 2.5 }}
-      >
+      {/* QUICK FILTER TABS */}
+      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 3 }}>
         {[
-          { key: 'ACTIVE', label: 'Đang hoạt động', count: activeProducts.length },
-          { key: 'INACTIVE', label: 'Đã ẩn', count: inactiveProducts.length },
-          { key: 'ONLINE', label: 'Bán online', count: onlineProducts.length },
-          { key: 'LOW_STOCK', label: 'Sắp hết hàng', count: lowStockProducts.length },
-          { key: 'ALL', label: 'Tất cả sản phẩm', count: products.length }
+          { key: 'ACTIVE', label: 'Đang hoạt động' },
+          { key: 'INACTIVE', label: 'Đã ẩn' },
+          { key: 'ONLINE', label: 'Bán online' },
+          { key: 'LOW_STOCK', label: 'Hết / sắp hết hàng' },
+          { key: 'ALL', label: 'Tất cả sản phẩm' }
         ].map((tab) => {
           const selected = activeTab === tab.key;
 
           return (
             <Button
               key={tab.key}
-              variant="outlined"
               disabled={busy}
               onClick={() => changeTab(tab.key)}
               sx={{
                 textTransform: 'none',
-                borderColor: selected ? COLORS.cyan : COLORS.border,
-                bgcolor: selected ? COLORS.cyan : '#FFFFFF',
-                color: COLORS.text,
-                fontWeight: selected ? 700 : 500,
-                fontSize: 12,
-                px: 2,
+                height: 40,
+                px: 2.25,
+                borderRadius: 2.5,
+                fontSize: 13,
+                fontWeight: selected ? 800 : 600,
+                bgcolor: selected ? C.cyan : C.surface,
+                color: '#0F172A',
+                border: `1px solid ${selected ? C.cyanHover : C.border}`,
+                boxShadow: selected ? '0 2px 8px rgba(142, 236, 245, 0.4)' : 'none',
                 '&:hover': {
-                  bgcolor: COLORS.cyanLight,
-                  borderColor: COLORS.cyan
+                  bgcolor: selected ? C.cyanHover : C.borderLight,
+                  borderColor: selected ? C.cyanHover : '#CBD5E1'
                 }
               }}
             >
-              {tab.label} {loading ? '—' : tab.count}
+              {tab.label} ({loading ? '—' : tabCounts[tab.key]})
             </Button>
           );
         })}
       </Stack>
 
-      {/* ======================================
-          AI IMAGE SEARCH
-      ====================================== */}
-
+      {/* SEARCH AND FILTER — trạng thái lọc bằng các tab phía trên */}
       <Box
         sx={{
-          bgcolor: COLORS.cyanLight,
-          borderRadius: 2,
-          p: 2,
-          mb: 2.5
+          mb: 3,
+          display: 'grid',
+          gridTemplateColumns: {
+            xs: '1fr',
+            sm: '1fr 1fr',
+            md: 'minmax(200px, 1.8fr) 220px auto'
+          },
+          gap: { xs: 1.5, lg: 2 },
+          alignItems: 'flex-end'
         }}
       >
-        <Stack
-          direction={{ xs: 'column', md: 'row' }}
-          alignItems={{ xs: 'flex-start', md: 'center' }}
-          justifyContent="space-between"
-          spacing={2}
-        >
-          <Stack direction="row" spacing={1.5} alignItems="center">
-            <Box
-              sx={{
-                width: 42,
-                height: 42,
-                bgcolor: '#FFFFFF',
-                borderRadius: 1.5,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: COLORS.text
-              }}
-            >
-              <PictureOutlined style={{ fontSize: 19 }} />
-            </Box>
-
-            <Box>
-              <Typography fontSize={13} fontWeight={700} color={COLORS.text}>
-                AI Image Search
-              </Typography>
-              <Typography fontSize={11} color={COLORS.muted}>
-                Find a product in your inventory with a photo. Upload an image or use your camera.
-              </Typography>
-            </Box>
-          </Stack>
-
-          <Stack direction="row" spacing={1}>
-            <Tooltip title="AI image search API is not connected yet">
-              <span>
-                <Button
-                  disabled
-                  variant="outlined"
-                  startIcon={<UploadOutlined />}
-                  sx={{ textTransform: 'none', fontSize: 11 }}
-                >
-                  Upload Image
-                </Button>
-              </span>
-            </Tooltip>
-
-            <Tooltip title="Camera search is not connected yet">
-              <span>
-                <Button
-                  disabled
-                  variant="outlined"
-                  startIcon={<CameraOutlined />}
-                  sx={{ textTransform: 'none', fontSize: 11 }}
-                >
-                  Use Camera
-                </Button>
-              </span>
-            </Tooltip>
-          </Stack>
-        </Stack>
-      </Box>
-
-      {/* ======================================
-          SEARCH AND FILTER
-      ====================================== */}
-
-      <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} sx={{ mb: 2.5 }}>
         {/* SEARCH */}
-        <TextField
-          fullWidth
-          size="small"
-          disabled={busy}
-          placeholder="Search products by name or ID"
-          value={search}
-          onChange={(event) => {
-            setSearch(event.target.value);
-            resetPage();
-          }}
-          slotProps={{
-            input: {
+        <Box sx={{ minWidth: 0 }}>
+          <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>Tìm kiếm sản phẩm</Typography>
+          <TextField
+            fullWidth
+            size="small"
+            disabled={busy}
+            placeholder="Tên sản phẩm, mã #ID, mã vạch, size hoặc màu..."
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              resetPage();
+            }}
+            InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
-                  <SearchOutlined />
+                  <SearchOutlined style={{ color: '#94A3B8', fontSize: 16 }} />
                 </InputAdornment>
               )
-            }
-          }}
-          sx={{
-            bgcolor: '#FFFFFF',
-            '& .MuiOutlinedInput-root': { borderRadius: 1.5 }
-          }}
-        />
+            }}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                bgcolor: C.surface,
+                borderRadius: 2.5,
+                height: 44,
+                fontSize: 13.5,
+                '& fieldset': { borderColor: C.border },
+                '&:hover fieldset': { borderColor: C.cyan },
+                '&.Mui-focused fieldset': { borderColor: C.cyan }
+              }
+            }}
+          />
+        </Box>
 
         {/* CATEGORY FILTER */}
-        <Select
-          size="small"
-          disabled={busy}
-          value={categoryFilter}
-          onChange={(event) => {
-            setCategoryFilter(event.target.value);
-            resetPage();
-          }}
-          sx={{
-            minWidth: 160,
-            bgcolor: '#FFFFFF',
-            borderRadius: 1.5,
-            fontSize: 12
-          }}
-        >
-          <MenuItem value="ALL">All categories</MenuItem>
-          {categories.map((category) => (
-            <MenuItem key={category.categoryId} value={String(category.categoryId)}>
-              {category.categoryName}
-            </MenuItem>
-          ))}
-        </Select>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>Danh mục</Typography>
+          <Select
+            fullWidth
+            size="small"
+            disabled={busy}
+            value={categoryFilter}
+            onChange={(event) => {
+              setCategoryFilter(event.target.value);
+              resetPage();
+            }}
+            sx={filterSelectSx}
+          >
+            <MenuItem value="ALL">Tất cả danh mục</MenuItem>
+            {categories.map((category) => (
+              <MenuItem key={category.categoryId} value={String(category.categoryId)} sx={{ pl: category.parentId ? 4 : 2 }}>
+                {category.parentId ? categoryFullName(category) : category.categoryName}
+                {category.childCount > 0 ? ' (tất cả)' : ''}
+                {category.status !== 'ACTIVE' ? ' (Đã ngưng)' : ''}
+              </MenuItem>
+            ))}
+          </Select>
+        </Box>
 
-        {/* STATUS FILTER */}
-        <Select
-          size="small"
-          disabled={busy}
-          value={statusFilter}
-          onChange={(event) => {
-            setStatusFilter(event.target.value);
-            resetPage();
-          }}
-          sx={{
-            minWidth: 145,
-            bgcolor: '#FFFFFF',
-            borderRadius: 1.5,
-            fontSize: 12
-          }}
-        >
-          <MenuItem value="ALL">All statuses</MenuItem>
-          <MenuItem value="ACTIVE">Active</MenuItem>
-          <MenuItem value="INACTIVE">Disabled</MenuItem>
-        </Select>
-      </Stack>
+        {/* Nút Bỏ lọc */}
+        <Box sx={{ minWidth: 0, display: 'flex' }}>
+          <Button
+            onClick={clearFilters}
+            disabled={busy}
+            sx={{ ...outlineButtonSx, height: 44, px: 2, fontSize: 13, whiteSpace: 'nowrap', bgcolor: C.surface }}
+          >
+            Bỏ lọc
+          </Button>
+        </Box>
+      </Box>
 
-      {/* ======================================
-          PRODUCT TABLE
-      ====================================== */}
-
-      <Card sx={cardSx}>
+      {/* ─── KHỐI BẢNG DANH SÁCH SẢN PHẨM ─── */}
+      <Box
+        sx={{
+          bgcolor: C.surface,
+          borderRadius: 3.5,
+          border: `1px solid ${C.border}`,
+          boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+          overflow: 'hidden'
+        }}
+      >
         <TableContainer sx={{ overflowX: 'auto' }}>
           <Table
             sx={{
-              minWidth: 1100,
-              '& .MuiTableCell-root': { borderColor: COLORS.border }
+              minWidth: 950,
+              '& th': {
+                bgcolor: C.surface,
+                color: C.muted,
+                fontSize: 12,
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: 0.5,
+                py: 1.75,
+                borderBottom: `1px solid ${C.borderLight}`
+              },
+              '& td': {
+                borderColor: C.borderLight,
+                py: 2,
+                fontSize: 13.5,
+                color: C.text
+              }
             }}
           >
             {/* TABLE HEADER */}
             <TableHead>
-              <TableRow sx={{ bgcolor: '#F7F9FC' }}>
-                {[
-                  'Product',
-                  'Category',
-                  'Selling price',
-                  'Stock',
-                  'Status',
-                  'Online sale',
-                  'Actions'
-                ].map((label) => (
-                  <TableCell
-                    key={label}
-                    align={label === 'Actions' ? 'center' : 'left'}
-                    sx={{
-                      fontSize: 11,
-                      fontWeight: 600,
-                      color: COLORS.muted,
-                      py: 1.75
-                    }}
-                  >
-                    {label.toUpperCase()}
-                  </TableCell>
-                ))}
+              <TableRow>
+                <TableCell sx={{ pl: 3 }}>SẢN PHẨM</TableCell>
+                <TableCell>DANH MỤC</TableCell>
+                <TableCell>GIÁ BÁN</TableCell>
+                <TableCell>TỒN KHO</TableCell>
+                <TableCell>TRẠNG THÁI</TableCell>
+                <TableCell>BÁN ONLINE</TableCell>
+                <TableCell align="center" sx={{ pr: 3 }}>
+                  THAO TÁC
+                </TableCell>
               </TableRow>
             </TableHead>
 
@@ -932,10 +718,10 @@ export default function ProductPage() {
               {loading && (
                 <TableRow>
                   <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
-                    <Stack alignItems="center" spacing={1}>
-                      <CircularProgress size={28} />
-                      <Typography fontSize={12} color={COLORS.muted}>
-                        Loading products...
+                    <Stack alignItems="center" spacing={1.5}>
+                      <CircularProgress size={32} sx={{ color: C.cyan }} />
+                      <Typography fontSize={13.5} color={C.muted}>
+                        Đang tải danh sách sản phẩm...
                       </Typography>
                     </Stack>
                   </TableCell>
@@ -946,8 +732,11 @@ export default function ProductPage() {
                 paginatedProducts.map((product) => {
                   const isActive = product.status === 'ACTIVE';
                   const isOnline = isOnlineProduct(product);
-                  const lowStock = isLowStockProduct(product);
-                  const isEditing = editingProductId === product.productId;
+                  const alert = stockAlert(product);
+                  const totalStock = Number(product.totalStock ?? 0);
+                  const sellable = Number(product.sellableStock ?? totalStock);
+                  const onlineCount = Number(product.onlineVariantCount ?? 0);
+                  const activeVariants = Number(product.activeVariantCount ?? product.variantCount ?? 0);
 
                   return (
                     <TableRow
@@ -958,21 +747,24 @@ export default function ProductPage() {
                       }}
                       sx={{
                         cursor: busy ? 'default' : 'pointer',
-                        bgcolor: isEditing ? '#F0FCFE' : '#FFFFFF',
-                        '&:last-child td': { borderBottom: 0 }
+                        bgcolor: C.surface,
+                        '&:hover': { bgcolor: '#FAFCFE' }
                       }}
                     >
                       {/* PRODUCT NAME */}
-                      <TableCell>
-                        <Stack direction="row" spacing={1.5} alignItems="center">
+                      <TableCell sx={{ pl: 3, py: 2 }}>
+                        <Stack direction="row" spacing={1.75} alignItems="center">
                           <Avatar
                             src={product.primaryImageUrl || undefined}
                             variant="rounded"
                             sx={{
-                              width: 42,
-                              height: 42,
-                              bgcolor: COLORS.cyanLight,
-                              color: COLORS.text,
+                              width: 44,
+                              height: 44,
+                              borderRadius: 2,
+                              bgcolor: '#F0FCFE',
+                              color: '#0F172A',
+                              fontWeight: 800,
+                              border: `1px solid ${C.border}`,
                               flexShrink: 0
                             }}
                           >
@@ -980,39 +772,11 @@ export default function ProductPage() {
                           </Avatar>
 
                           <Box sx={{ minWidth: 0 }}>
-                            {isEditing ? (
-                              <TextField
-                                autoFocus
-                                size="small"
-                                value={editForm.productName}
-                                disabled={saving}
-                                onClick={(event) => event.stopPropagation()}
-                                onChange={(event) =>
-                                  setEditForm((previous) => ({
-                                    ...previous,
-                                    productName: event.target.value
-                                  }))
-                                }
-                                onKeyDown={(event) => {
-                                  event.stopPropagation();
-                                  if (event.key === 'Enter') {
-                                    event.preventDefault();
-                                    saveInlineEdit(product.productId);
-                                  }
-                                  if (event.key === 'Escape') {
-                                    cancelInlineEdit();
-                                  }
-                                }}
-                                slotProps={{ htmlInput: { maxLength: 200 } }}
-                                sx={{ minWidth: 180, bgcolor: '#FFFFFF' }}
-                              />
-                            ) : (
-                              <Typography fontSize={12} fontWeight={700} color={COLORS.text} noWrap>
-                                {product.productName}
-                              </Typography>
-                            )}
-                            <Typography fontSize={10} color={COLORS.muted} sx={{ mt: 0.5 }}>
-                              ID: {product.productId}
+                            <Typography sx={{ fontSize: 13.5, fontWeight: 800, color: '#0F172A' }} noWrap>
+                              {product.productName}
+                            </Typography>
+                            <Typography sx={{ fontSize: 12, color: '#94A3B8', mt: 0.25 }}>
+                              {product.sku ? `${product.sku} · ` : ''}#{product.productId} · {activeVariants} biến thể
                             </Typography>
                           </Box>
                         </Stack>
@@ -1020,65 +784,58 @@ export default function ProductPage() {
 
                       {/* CATEGORY */}
                       <TableCell>
-                        {isEditing ? (
-                          <Select
-                            size="small"
-                            fullWidth
-                            disabled={saving}
-                            value={editForm.categoryId}
-                            onClick={(event) => event.stopPropagation()}
-                            onChange={(event) =>
-                              setEditForm((previous) => ({
-                                ...previous,
-                                categoryId: event.target.value
-                              }))
-                            }
-                            sx={{ minWidth: 145, bgcolor: '#FFFFFF', fontSize: 12 }}
-                          >
-                            {categories.map((category) => {
-                              const isCurrent = String(category.categoryId) === editForm.categoryId;
-                              return (
-                                <MenuItem
-                                  key={category.categoryId}
-                                  value={String(category.categoryId)}
-                                  disabled={category.status !== 'ACTIVE' && !isCurrent}
-                                >
-                                  {category.categoryName}
-                                  {category.status !== 'ACTIVE' ? ' (Inactive)' : ''}
-                                </MenuItem>
-                              );
-                            })}
-                          </Select>
-                        ) : (
-                          <Typography fontSize={11} color={COLORS.text}>
-                            {product.categoryName || '—'}
-                          </Typography>
-                        )}
+                        <Typography sx={{ fontSize: 13.5, color: '#334155', fontWeight: 500 }}>{product.categoryName || '—'}</Typography>
                       </TableCell>
 
                       {/* SELLING PRICE */}
                       <TableCell>
-                        <Typography fontSize={11} color={COLORS.text}>
-                          {displayPrice(product)}
-                        </Typography>
+                        <Typography sx={{ fontSize: 13.5, fontWeight: 800, color: '#0F172A' }}>{displayPrice(product)}</Typography>
                       </TableCell>
 
-                      {/* STOCK */}
+                      {/* STOCK — tồn của biến thể đang hoạt động; có thể bán = tồn − đang giữ cho đơn */}
                       <TableCell>
-                        <Typography fontSize={12} color={COLORS.text}>
-                          {product.totalStock ?? 0}
-                        </Typography>
-                        {lowStock && (
-                          <Typography fontSize={10} color="warning.main">
-                            Low stock
+                        <Tooltip
+                          title={
+                            sellable !== totalStock
+                              ? `Tồn ${totalStock}, đang giữ cho đơn ${totalStock - sellable}, có thể bán ${sellable}`
+                              : 'Tổng tồn của các biến thể đang hoạt động'
+                          }
+                        >
+                          <Typography component="span" sx={{ fontSize: 13.5, fontWeight: 700, color: C.text }}>
+                            {totalStock}
+                            {sellable !== totalStock && (
+                              <Box component="span" sx={{ fontSize: 12, fontWeight: 600, color: C.muted, ml: 0.75 }}>
+                                (bán được {sellable})
+                              </Box>
+                            )}
                           </Typography>
+                        </Tooltip>
+                        {alert && (
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              width: 'fit-content',
+                              alignItems: 'center',
+                              px: 1.25,
+                              py: 0.3,
+                              borderRadius: 4,
+                              bgcolor: alert.level === 'OUT' ? '#FEE2E2' : C.cream,
+                              color: alert.level === 'OUT' ? '#B91C1C' : C.creamText,
+                              fontSize: 11,
+                              fontWeight: 700,
+                              letterSpacing: '0.01em',
+                              mt: 0.5
+                            }}
+                          >
+                            {alert.label}
+                          </Box>
                         )}
                       </TableCell>
 
                       {/* PRODUCT STATUS */}
                       <TableCell>
-                        <Stack direction="row" spacing={0.5} alignItems="center">
-                          <Tooltip title={isActive ? 'Deactivate Product' : 'Activate Product'}>
+                        <Stack direction="row" alignItems="center" spacing={1.25} sx={{ pt: 0.5 }}>
+                          <Tooltip title={isActive ? 'Nhấn để ẩn sản phẩm' : 'Nhấn để kích hoạt sản phẩm'}>
                             <span>
                               <Switch
                                 checked={isActive}
@@ -1089,88 +846,58 @@ export default function ProductPage() {
                                   event.stopPropagation();
                                   openStatusDialog(product);
                                 }}
-                                sx={{
-                                  '& .MuiSwitch-switchBase.Mui-checked': { color: COLORS.green },
-                                  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: COLORS.green }
-                                }}
+                                sx={switchSx}
                               />
                             </span>
                           </Tooltip>
 
-                          <Chip
-                            size="small"
-                            label={isActive ? 'Active' : 'Disabled'}
-                            sx={{
-                              height: 23,
-                              fontSize: 10,
-                              bgcolor: isActive ? '#E8F6F0' : '#F0F2F5',
-                              color: isActive ? COLORS.green : COLORS.muted
-                            }}
-                          />
+                          <Box sx={chipSx(isActive ? '#E7F6F1' : '#F0F2F4', isActive ? '#168B70' : '#75869F')}>
+                            {isActive ? 'Hoạt động' : 'Đã ẩn'}
+                          </Box>
                         </Stack>
                       </TableCell>
 
                       {/* ONLINE SALE */}
                       <TableCell>
-                        <Stack direction="row" spacing={0.5} alignItems="center">
-                          <Tooltip title={`${product.onlineVariantCount ?? 0}/${product.variantCount ?? 0} variants enabled for online sales`}>
+                        <Stack direction="row" alignItems="center" spacing={1.25} sx={{ pt: 0.5 }}>
+                          <Tooltip
+                            title={
+                              !isActive
+                                ? 'Sản phẩm đang ẩn — kích hoạt trước khi bật bán online'
+                                : isOnline
+                                  ? `${onlineCount}/${activeVariants} biến thể đang bán online · Nhấn để tắt`
+                                  : 'Nhấn để bật bán online cho mọi biến thể đang hoạt động'
+                            }
+                          >
                             <span>
-                              <Switch checked={isOnline} disabled size="small" />
+                              <Switch
+                                checked={isOnline}
+                                size="small"
+                                disabled={busy || !isActive}
+                                onClick={(event) => event.stopPropagation()}
+                                onChange={(event) => {
+                                  event.stopPropagation();
+                                  openOnlineDialog(product);
+                                }}
+                                sx={switchSx}
+                              />
                             </span>
                           </Tooltip>
-                          <Typography fontSize={11} color={COLORS.muted}>
-                            {isOnline ? 'On' : 'Off'}
-                          </Typography>
+                          <Box sx={chipSx(isOnline ? '#E7F6F1' : '#F0F2F4', isOnline ? '#168B70' : '#75869F')}>
+                            {isOnline
+                              ? onlineCount < activeVariants
+                                ? `${onlineCount}/${activeVariants} biến thể`
+                                : 'Đang bật'
+                              : 'Đang tắt'}
+                          </Box>
                         </Stack>
                       </TableCell>
 
                       {/* ACTIONS */}
-                      <TableCell align="center">
-                        {isEditing ? (
-                          <Stack direction="row" alignItems="center" justifyContent="center" spacing={1}>
-                            <Tooltip title="Save Changes">
-                              <span>
-                                <IconButton
-                                  size="small"
-                                  disabled={saving}
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    saveInlineEdit(product.productId);
-                                  }}
-                                  sx={{
-                                    color: COLORS.green,
-                                    bgcolor: '#E8F6F0',
-                                    '&:hover': { bgcolor: '#D4F0E4' }
-                                  }}
-                                >
-                                  {saving ? <CircularProgress size={16} /> : <CheckOutlined />}
-                                </IconButton>
-                              </span>
-                            </Tooltip>
-
-                            <Tooltip title="Cancel">
-                              <span>
-                                <IconButton
-                                  size="small"
-                                  disabled={saving}
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    cancelInlineEdit();
-                                  }}
-                                  sx={{
-                                    color: COLORS.red,
-                                    bgcolor: '#FCECEC',
-                                    '&:hover': { bgcolor: '#FADADA' }
-                                  }}
-                                >
-                                  <CloseOutlined />
-                                </IconButton>
-                              </span>
-                            </Tooltip>
-                          </Stack>
-                        ) : (
-                          <Stack direction="row" alignItems="center" justifyContent="center" spacing={1}>
-                            <Button
+                      <TableCell align="center" sx={{ pr: 3 }}>
+                        <Stack direction="row" alignItems="center" justifyContent="center" spacing={0.5}>
+                          <Tooltip title="Xem chi tiết">
+                            <IconButton
                               size="small"
                               disabled={busy}
                               onClick={(event) => {
@@ -1178,61 +905,39 @@ export default function ProductPage() {
                                 viewProduct(product.productId);
                               }}
                               sx={{
-                                minWidth: 0,
-                                px: 1,
-                                fontSize: 11,
-                                textTransform: 'none',
-                                color: COLORS.text
+                                color: '#64748B',
+                                p: 0.75,
+                                '&:hover': {
+                                  color: '#0F172A',
+                                  bgcolor: 'transparent'
+                                }
                               }}
                             >
-                              View
-                            </Button>
+                              <EyeOutlined style={{ fontSize: 17 }} />
+                            </IconButton>
+                          </Tooltip>
 
-                            <Tooltip title="Quick Edit">
-                              <span>
-                                <IconButton
-                                  size="small"
-                                  disabled={busy}
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    startInlineEdit(product);
-                                  }}
-                                  sx={{
-                                    color: COLORS.muted,
-                                    '&:hover': {
-                                      color: COLORS.text,
-                                      bgcolor: COLORS.cyanLight
-                                    }
-                                  }}
-                                >
-                                  <EditOutlined style={{ fontSize: 14 }} />
-                                </IconButton>
-                              </span>
-                            </Tooltip>
-
-                            <Tooltip title="Xóa vĩnh viễn sản phẩm">
-                              <span>
-                                <IconButton
-                                  size="small"
-                                  disabled={busy}
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    openDeleteDialog(product);
-                                  }}
-                                  sx={{
-                                    color: COLORS.red,
-                                    '&:hover': {
-                                      color: '#B83D3D',
-                                      bgcolor: '#FCECEC'
-                                    }
-                                  }}
-                                >
-                                  <DeleteOutlined style={{ fontSize: 14 }} />
-                                </IconButton>
-                              </span>
-                            </Tooltip>
-                          </Stack>
-                        )}
+                          <Tooltip title="Chỉnh sửa sản phẩm">
+                            <IconButton
+                              size="small"
+                              disabled={busy}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                navigate(`/products/${product.productId}/edit`);
+                              }}
+                              sx={{
+                                color: '#64748B',
+                                p: 0.75,
+                                '&:hover': {
+                                  color: '#0F172A',
+                                  bgcolor: 'transparent'
+                                }
+                              }}
+                            >
+                              <EditOutlined style={{ fontSize: 17 }} />
+                            </IconButton>
+                          </Tooltip>
+                        </Stack>
                       </TableCell>
                     </TableRow>
                   );
@@ -1241,15 +946,13 @@ export default function ProductPage() {
               {!loading && filteredProducts.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
-                    <Typography fontSize={13} fontWeight={600} color={COLORS.text}>
-                      {products.length === 0
-                        ? 'No products available'
-                        : 'No matching products found'}
+                    <Typography sx={{ fontSize: 14, fontWeight: 800, color: '#0F172A' }}>
+                      {products.length === 0 ? 'Chưa có sản phẩm nào trong kho' : 'Không tìm thấy sản phẩm phù hợp'}
                     </Typography>
-                    <Typography fontSize={11} color={COLORS.muted} sx={{ mt: 1 }}>
+                    <Typography sx={{ fontSize: 13, color: C.muted, mt: 0.5 }}>
                       {products.length === 0
-                        ? 'Products will appear here after they are added.'
-                        : 'Try changing your search or filters.'}
+                        ? 'Hãy thêm sản phẩm mới hoặc nhập tệp danh sách từ file Excel.'
+                        : 'Hãy thử thay đổi từ khóa tìm kiếm, chọn tab khác hoặc bấm "Bỏ lọc".'}
                     </Typography>
                   </TableCell>
                 </TableRow>
@@ -1258,125 +961,176 @@ export default function ProductPage() {
           </Table>
         </TableContainer>
 
-        <Divider />
+        {/* Phân trang phía dưới */}
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', sm: '1fr auto 1fr' },
+            alignItems: 'center',
+            gap: 1.5,
+            px: 3,
+            py: 2,
+            borderTop: `1px solid ${C.borderLight}`
+          }}
+        >
+          <Typography sx={{ fontSize: 13, color: C.muted, textAlign: { xs: 'center', sm: 'left' } }}>
+            Hiển thị {filteredProducts.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0}–
+            {Math.min(currentPage * PAGE_SIZE, filteredProducts.length)} / {filteredProducts.length} sản phẩm
+          </Typography>
+          <Pagination
+            count={pageCount}
+            page={currentPage}
+            disabled={busy}
+            onChange={(_, value) => setPage(value)}
+            size="small"
+            shape="rounded"
+            sx={{
+              justifySelf: 'center',
+              '& .MuiPaginationItem-root': {
+                minWidth: 26,
+                height: 26,
+                fontSize: 12.5,
+                borderRadius: 1.5,
+                transition: 'none',
+                '&:hover': { bgcolor: '#F1F5F9' }
+              },
+              '& .MuiTouchRipple-root': { display: 'none' },
+              '& .MuiPaginationItem-root.Mui-selected': {
+                bgcolor: `${C.cyan} !important`,
+                color: `${C.text} !important`,
+                fontWeight: 700
+              }
+            }}
+          />
+        </Box>
+      </Box>
 
-        <Pager
-          page={currentPage - 1}
-          totalPages={pageCount}
-          total={filteredProducts.length}
-          size={PAGE_SIZE}
-          noun="sản phẩm"
-          onPage={(p) => !busy && setPage(p + 1)}
-        />
-      </Card>
-
-      <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" spacing={1} sx={{ mt: 2.5 }}>
-        <Typography fontSize={11} color={COLORS.muted}>
-          Online product counts reflect variants enabled for online sales.
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, mt: 2.5 }}>
+        <Typography sx={{ fontSize: 12.5, color: C.muted }}>
+          Tồn kho và giá chỉ tính biến thể đang hoạt động. "Hết / sắp hết" dùng ngưỡng tối thiểu đặt ở màn hình Tồn kho.
         </Typography>
-        <Typography fontSize={11} color={COLORS.muted}>
-          Inventory data loaded from THORS.
+        <Typography sx={{ fontSize: 12.5, color: C.muted }}>
+          {loadedAt ? `Dữ liệu tải lúc ${loadedAt.toLocaleTimeString('vi-VN')}` : ''}
         </Typography>
-      </Stack>
+      </Box>
 
-      {/* ======================================
-          CHANGE PRODUCT STATUS DIALOG
-      ====================================== */}
-
-      <Dialog open={Boolean(statusDialogProduct)} onClose={closeStatusDialog} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ fontWeight: 700, color: COLORS.text }}>
-          {statusDialogProduct?.status === 'ACTIVE' ? 'Deactivate Product' : 'Activate Product'}
+      {/* CHANGE PRODUCT STATUS DIALOG */}
+      <Dialog
+        open={Boolean(statusDialogProduct)}
+        onClose={closeStatusDialog}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 3.5, p: 1 } }}
+      >
+        <DialogTitle sx={{ fontWeight: 800, color: '#0F172A', fontSize: 18 }}>
+          {statusDialogProduct?.status === 'ACTIVE' ? 'Ẩn sản phẩm' : 'Kích hoạt sản phẩm'}
         </DialogTitle>
 
         <DialogContent>
-          <DialogContentText>
-            Are you sure you want to {statusDialogProduct?.status === 'ACTIVE' ? 'deactivate' : 'activate'}{' '}
+          <DialogContentText sx={{ fontSize: 14, color: C.text, lineHeight: 1.6 }}>
+            Bạn có chắc chắn muốn {statusDialogProduct?.status === 'ACTIVE' ? 'ẩn' : 'kích hoạt lại'}{' '}
             <strong>{statusDialogProduct?.productName}</strong>?
           </DialogContentText>
 
           {statusDialogProduct?.status === 'ACTIVE' && (
-            <Alert severity="warning" sx={{ mt: 2 }}>
-              This product will no longer be available for customers to purchase online.
-              Existing product data and inventory will be preserved.
-            </Alert>
+            <Box sx={{ bgcolor: C.cream, borderRadius: 2.5, p: 2, mt: 2 }}>
+              <Typography sx={{ fontSize: 12.5, color: C.creamText, lineHeight: 1.6 }}>
+                Sản phẩm này sẽ không còn hiển thị để khách hàng mua online. Dữ liệu kho và thông tin sản phẩm vẫn được bảo lưu an toàn.
+              </Typography>
+            </Box>
           )}
 
           {statusDialogProduct?.status === 'INACTIVE' && (
-            <Alert severity="info" sx={{ mt: 2 }}>
-              This product will become active again. Online availability still depends on the settings of its variants.
-            </Alert>
+            <Box sx={{ bgcolor: '#F0FCFE', border: `1px solid ${C.cyan}`, borderRadius: 2.5, p: 2, mt: 2 }}>
+              <Typography sx={{ fontSize: 12.5, color: C.cyanText, lineHeight: 1.6 }}>
+                Sản phẩm sẽ hoạt động trở lại trong hệ thống quản lý. Trạng thái bán online vẫn phụ thuộc vào cấu hình biến thể của sản
+                phẩm.
+              </Typography>
+            </Box>
           )}
         </DialogContent>
 
-        <DialogActions sx={{ px: 3, pb: 2.5 }}>
-          <Button onClick={closeStatusDialog} disabled={statusSaving} sx={{ textTransform: 'none', color: COLORS.muted }}>
-            Cancel
-          </Button>
-
-          <Button
-            variant="contained"
-            disabled={statusSaving}
-            onClick={confirmChangeProductStatus}
-            startIcon={statusSaving ? <CircularProgress size={16} color="inherit" /> : null}
-            sx={{
-              textTransform: 'none',
-              bgcolor: statusDialogProduct?.status === 'ACTIVE' ? COLORS.red : COLORS.green,
-              '&:hover': {
-                bgcolor: statusDialogProduct?.status === 'ACTIVE' ? '#B83D3D' : '#1B6B54'
-              }
-            }}
-          >
-            {statusSaving ? 'Saving...' : statusDialogProduct?.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* ======================================
-          DELETE PRODUCT DIALOG
-      ====================================== */}
-      <Dialog open={Boolean(deleteDialogProduct)} onClose={closeDeleteDialog} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ fontWeight: 700, color: COLORS.red }}>
-          Xác nhận xóa vĩnh viễn sản phẩm
-        </DialogTitle>
-
-        <DialogContent>
-          <DialogContentText>
-            Bạn có chắc chắn muốn xóa sản phẩm{' '}
-            <strong>{deleteDialogProduct?.productName}</strong> (ID: {deleteDialogProduct?.productId})?
-          </DialogContentText>
-
-          <Alert severity="warning" sx={{ mt: 2 }}>
-            Hành động này sẽ xóa hoàn toàn sản phẩm, các biến thể và hình ảnh liên quan khỏi hệ thống nếu sản phẩm chưa phát sinh lịch sử giao dịch.
-            Nếu sản phẩm đã từng có đơn hàng hoặc phiếu kho, hệ thống sẽ ngăn chặn việc xóa để đảm bảo toàn vẹn dữ liệu.
-          </Alert>
-        </DialogContent>
-
-        <DialogActions sx={{ px: 3, pb: 2.5 }}>
-          <Button onClick={closeDeleteDialog} disabled={deleteSaving} sx={{ textTransform: 'none', color: COLORS.muted }}>
+        <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+          <Button onClick={closeStatusDialog} disabled={statusSaving} sx={outlineButtonSx}>
             Hủy
           </Button>
 
           <Button
-            variant="contained"
-            disabled={deleteSaving}
-            onClick={confirmDeleteProduct}
-            startIcon={deleteSaving ? <CircularProgress size={16} color="inherit" /> : null}
+            disabled={statusSaving}
+            onClick={confirmChangeProductStatus}
             sx={{
-              textTransform: 'none',
-              bgcolor: COLORS.red,
+              ...outlineButtonSx,
+              border: 'none',
+              bgcolor: statusDialogProduct?.status === 'ACTIVE' ? C.cream : C.cyan,
+              color: statusDialogProduct?.status === 'ACTIVE' ? C.creamText : '#0F172A',
+              fontWeight: 800,
               '&:hover': {
-                bgcolor: '#B83D3D'
+                bgcolor: statusDialogProduct?.status === 'ACTIVE' ? C.creamHover : C.cyanHover
               }
             }}
           >
-            {deleteSaving ? 'Đang xóa...' : 'Xác nhận xóa'}
+            {statusSaving ? 'Đang lưu...' : statusDialogProduct?.status === 'ACTIVE' ? 'Ẩn sản phẩm' : 'Kích hoạt'}
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* ======================================
-          EXCEL BATCH IMPORT DIALOG
-      ====================================== */}
+      {/* ONLINE SALE DIALOG */}
+      <Dialog
+        open={Boolean(onlineTarget)}
+        onClose={closeOnlineDialog}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 3.5, p: 1 } }}
+      >
+        <DialogTitle sx={{ fontWeight: 800, color: '#0F172A', fontSize: 18 }}>
+          {enablingOnline ? 'Bật bán online' : 'Tắt bán online'}
+        </DialogTitle>
+
+        <DialogContent>
+          <DialogContentText sx={{ fontSize: 14, color: C.text, lineHeight: 1.6 }}>
+            {enablingOnline ? 'Mở bán' : 'Ngừng bán'} <strong>{onlineTarget?.productName}</strong> trên website?
+          </DialogContentText>
+
+          <Box
+            sx={{
+              bgcolor: enablingOnline ? '#F0FCFE' : C.cream,
+              border: enablingOnline ? `1px solid ${C.cyan}` : 'none',
+              borderRadius: 2.5,
+              p: 2,
+              mt: 2
+            }}
+          >
+            <Typography sx={{ fontSize: 12.5, color: enablingOnline ? C.cyanText : C.creamText, lineHeight: 1.6 }}>
+              {enablingOnline
+                ? 'Mọi biến thể đang hoạt động và đã có giá sẽ hiển thị trên cửa hàng online. Muốn bật/tắt từng size, màu hãy vào trang chi tiết sản phẩm.'
+                : 'Mọi biến thể sẽ bị ẩn khỏi cửa hàng online; khách không thể thêm vào giỏ hay đặt mới. Bán tại quầy và Facebook không bị ảnh hưởng.'}
+            </Typography>
+          </Box>
+        </DialogContent>
+
+        <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+          <Button onClick={closeOnlineDialog} disabled={onlineSaving} sx={outlineButtonSx}>
+            Hủy
+          </Button>
+
+          <Button
+            disabled={onlineSaving}
+            onClick={confirmToggleOnline}
+            sx={{
+              ...outlineButtonSx,
+              border: 'none',
+              bgcolor: enablingOnline ? C.cyan : C.cream,
+              color: enablingOnline ? '#0F172A' : C.creamText,
+              fontWeight: 800,
+              '&:hover': { bgcolor: enablingOnline ? C.cyanHover : C.creamHover }
+            }}
+          >
+            {onlineSaving ? 'Đang lưu...' : enablingOnline ? 'Bật bán online' : 'Tắt bán online'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* EXCEL BATCH IMPORT DIALOG */}
       <ProductExcelDialog
         open={excelDialogOpen}
         onClose={() => setExcelDialogOpen(false)}

@@ -1,4 +1,3 @@
-
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -8,13 +7,12 @@ import {
   Button,
   Card,
   CardContent,
-  Chip,
   CircularProgress,
   Divider,
   Grid,
   IconButton,
-  MenuItem,
   Stack,
+  Switch,
   Table,
   TableBody,
   TableCell,
@@ -22,6 +20,7 @@ import {
   TableHead,
   TableRow,
   TextField,
+  Tooltip,
   Typography
 } from '@mui/material';
 
@@ -33,11 +32,18 @@ import {
   InfoCircleOutlined,
   PlusOutlined,
   StarFilled,
-  StarOutlined
+  StarOutlined,
+  ThunderboltOutlined
 } from '@ant-design/icons';
 
-import { createProductWithImages } from '../../services/productService';
-import { getCategories } from '../../services/categoryService';
+import { createProductWithImages, suggestProductSku } from '../../services/productService';
+import {
+  getCategories,
+  isAssignableCategory,
+  sortCategoriesAsTree
+} from '../../services/categoryService';
+import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../customer/theme';
+import CategoryPicker from './CategoryPicker';
 
 const MAX_IMAGES = 10;
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
@@ -47,55 +53,92 @@ const ALLOWED_TYPES = [
   'image/webp'
 ];
 
-const COLORS = {
-  text: '#202D42',
-  muted: '#75869F',
-  border: '#E5EBF2',
-  cyan: '#8DE9F2',
-  cyanLight: '#EAFBFD',
-  yellowLight: '#FFFBE7',
-  green: '#25856A'
-};
-
-const cardSx = {
-  border: `1px solid ${COLORS.border}`,
-  borderRadius: 2,
-  boxShadow: 'none',
-  bgcolor: '#FFFFFF'
-};
-
-const fieldSx = {
+const inputSx = (hasError) => ({
   '& .MuiOutlinedInput-root': {
-    borderRadius: 1.5,
-    fontSize: 13
+    borderRadius: 2.5,
+    minHeight: 44,
+    fontSize: 13.5,
+    '& fieldset': { borderColor: hasError ? C.error : C.border },
+    '&:hover fieldset, &.Mui-focused fieldset': { borderColor: hasError ? C.error : C.cyan }
   }
-};
+});
+
+const linkButtonSx = (color, hoverBg) => ({
+  textTransform: 'none',
+  fontSize: 13,
+  fontWeight: 600,
+  color,
+  borderRadius: 1.5,
+  px: 1.25,
+  py: 0.5,
+  '&:hover': { bgcolor: hoverBg }
+});
+
+const badgeSx = (bg, color, border) => ({
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 0.6,
+  bgcolor: bg,
+  color: color,
+  border: `1px solid ${border}`,
+  borderRadius: 99,
+  px: 1.4,
+  py: 0.35,
+  fontSize: 12,
+  fontWeight: 700,
+  flexShrink: 0
+});
 
 function createEmptyVariant() {
   return {
     id: crypto.randomUUID(),
     size: '',
     color: '',
-    price: ''
+    price: '',
+    code: ''
   };
 }
 
+// Mã sản phẩm / mã biến thể: chữ in hoa, số, dấu "-" (giống kiểm tra ở backend)
+const CODE_PATTERN = /^[A-Z0-9](?:[A-Z0-9-]*[A-Z0-9])?$/;
+const cleanCode = (value) => value.toUpperCase().replace(/[^A-Z0-9-]/g, '');
+
+// Bỏ dấu + viết thường: "Đen" và "Den" là cùng một màu (DB so trùng như vậy)
+const fold = (value) =>
+  (value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/đ/g, 'd')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+// "Xanh lá" -> "XANH-LA" (phần mã biến thể gợi ý)
+const slug = (value) =>
+  fold(value)
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
 function SectionTitle({ title, subtitle }) {
   return (
-    <Box sx={{ mb: 2 }}>
+    <Box sx={{ mb: 2.5 }}>
       <Typography
-        fontSize={15}
-        fontWeight={700}
-        color={COLORS.text}
+        sx={{
+          fontSize: 16,
+          fontWeight: 800,
+          color: '#0F172A'
+        }}
       >
         {title}
       </Typography>
 
       {subtitle && (
         <Typography
-          fontSize={11}
-          color={COLORS.muted}
-          sx={{ mt: 0.5 }}
+          sx={{
+            fontSize: 13,
+            color: C.muted,
+            mt: 0.5
+          }}
         >
           {subtitle}
         </Typography>
@@ -107,14 +150,16 @@ function SectionTitle({ title, subtitle }) {
 function FieldLabel({ children, required }) {
   return (
     <Typography
-      fontSize={11}
-      fontWeight={600}
-      color={COLORS.text}
-      sx={{ mb: 0.75 }}
+      sx={{
+        fontSize: 13,
+        fontWeight: 600,
+        color: C.text,
+        mb: 0.75
+      }}
     >
       {children}
       {required && (
-        <Box component="span" sx={{ color: 'error.main' }}>
+        <Box component="span" sx={{ color: C.error }}>
           {' '}*
         </Box>
       )}
@@ -134,6 +179,13 @@ export default function AddProductPage() {
   const [productName, setProductName] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [description, setDescription] = useState('');
+  // Mã sản phẩm (SKU): để trống => backend tự tạo theo danh mục (vd GN-0001)
+  const [sku, setSku] = useState('');
+  const [suggestingSku, setSuggestingSku] = useState(false);
+  // Mã gợi ý theo danh mục đang chọn (hiện ở placeholder; để trống ô SKU thì backend dùng mã kế tiếp)
+  const [skuHint, setSkuHint] = useState('');
+  // Mở bán online ngay sau khi tạo (mặc định tắt)
+  const [onlineSalesEnabled, setOnlineSalesEnabled] = useState(false);
 
   // ==========================================
   // PRODUCT VARIANTS
@@ -154,8 +206,7 @@ export default function AddProductPage() {
   // ==========================================
 
   const [categories, setCategories] = useState([]);
-  const [loadingCategories, setLoadingCategories] =
-    useState(true);
+  const [loadingCategories, setLoadingCategories] = useState(true);
 
   // ==========================================
   // UI STATE
@@ -176,20 +227,17 @@ export default function AddProductPage() {
         const data = await getCategories();
 
         if (!Array.isArray(data)) {
-          throw new Error('Invalid category data.');
+          throw new Error('Dữ liệu danh mục không hợp lệ.');
         }
 
         if (active) {
-          setCategories(
-            data.filter(
-              (category) => category.status === 'ACTIVE'
-            )
-          );
+          // Chỉ danh mục đang hoạt động và không phải danh mục cha (vd chọn "Giày › Giày nam", không chọn "Giày")
+          setCategories(sortCategoriesAsTree(data).filter(isAssignableCategory));
         }
       } catch (err) {
         if (active) {
           setError(
-            err?.message || 'Unable to load categories.'
+            err?.message || 'Không thể tải danh sách danh mục.'
           );
         }
       } finally {
@@ -271,29 +319,23 @@ export default function AddProductPage() {
     if (files.length === 0) return;
 
     if (images.length + files.length > MAX_IMAGES) {
-      setError(
-        `Maximum ${MAX_IMAGES} images per product.`
-      );
+      setError(`Chỉ được tải lên tối đa ${MAX_IMAGES} hình ảnh cho mỗi sản phẩm.`);
       return;
     }
 
     for (const file of files) {
       if (!ALLOWED_TYPES.includes(file.type)) {
-        setError(
-          'Only JPG, PNG and WebP images are allowed.'
-        );
+        setError('Chỉ chấp nhận tệp hình ảnh định dạng JPG, PNG hoặc WebP.');
         return;
       }
 
       if (file.size === 0) {
-        setError(`Image "${file.name}" is empty.`);
+        setError(`Tệp ảnh "${file.name}" rỗng.`);
         return;
       }
 
       if (file.size > MAX_IMAGE_SIZE) {
-        setError(
-          `Image "${file.name}" exceeds 5 MB.`
-        );
+        setError(`Hình ảnh "${file.name}" vượt quá dung lượng cho phép (tối đa 5 MB).`);
         return;
       }
     }
@@ -344,35 +386,74 @@ export default function AddProductPage() {
   }
 
   // ==========================================
+  // GỢI Ý MÃ SẢN PHẨM (SKU)
+  // ==========================================
+
+  useEffect(() => {
+    let active = true;
+    setSkuHint('');
+    if (!categoryId) return undefined;
+    suggestProductSku(categoryId)
+      .then((data) => {
+        if (active) setSkuHint(data?.sku || '');
+      })
+      .catch(() => {
+        // DB chưa có cột SKU hoặc lỗi mạng: không gợi ý, vẫn tạo sản phẩm bình thường
+      });
+    return () => {
+      active = false;
+    };
+  }, [categoryId]);
+
+  async function handleSuggestSku() {
+    if (!categoryId) return;
+    setError('');
+    setSuggestingSku(true);
+    try {
+      const data = await suggestProductSku(categoryId);
+      setSku(data?.sku || '');
+    } catch (err) {
+      setError(err?.message || 'Không tạo được mã sản phẩm.');
+    } finally {
+      setSuggestingSku(false);
+    }
+  }
+
+  // ==========================================
   // FORM VALIDATION
   // ==========================================
 
   function validateForm() {
     if (!productName.trim()) {
-      return 'Product name is required.';
+      return 'Vui lòng nhập tên sản phẩm.';
     }
 
     if (productName.trim().length > 200) {
-      return 'Product name must not exceed 200 characters.';
+      return 'Tên sản phẩm không được vượt quá 200 ký tự.';
     }
 
     if (!categoryId) {
-      return 'Please select a category.';
+      return 'Vui lòng chọn danh mục cho sản phẩm.';
+    }
+
+    if (sku && (sku.length < 3 || sku.length > 30 || !CODE_PATTERN.test(sku))) {
+      return 'Mã sản phẩm (SKU) chỉ gồm chữ in hoa, số và dấu "-", dài 3–30 ký tự, không bắt đầu/kết thúc bằng "-".';
     }
 
     if (images.length === 0) {
-      return 'Please upload at least one product image.';
+      return 'Vui lòng tải lên ít nhất một hình ảnh đại diện cho sản phẩm.';
     }
 
     if (images.length > MAX_IMAGES) {
-      return `Maximum ${MAX_IMAGES} images per product.`;
+      return `Chỉ được tải lên tối đa ${MAX_IMAGES} hình ảnh cho mỗi sản phẩm.`;
     }
 
     if (variants.length === 0) {
-      return 'At least one product variant is required.';
+      return 'Sản phẩm phải có ít nhất một biến thể kích thước và màu sắc.';
     }
 
     const combinations = new Set();
+    const codes = new Set();
 
     for (const variant of variants) {
       const size = variant.size.trim();
@@ -380,35 +461,44 @@ export default function AddProductPage() {
       const price = Number(variant.price);
 
       if (!size || !color || variant.price === '') {
-        return 'Size, color and selling price are required for every variant.';
+        return 'Vui lòng điền đầy đủ kích thước, màu sắc và giá bán cho từng biến thể.';
       }
 
       if (size.length > 10) {
-        return 'Size must not exceed 10 characters.';
+        return 'Kích thước (size) không được vượt quá 10 ký tự.';
       }
 
       if (color.length > 30) {
-        return 'Color must not exceed 30 characters.';
+        return 'Màu sắc không được vượt quá 30 ký tự.';
       }
 
       if (
         !Number.isSafeInteger(price) ||
-        price < 0 ||
+        price <= 0 ||
         price > 999999999999
       ) {
-        return 'Please enter a valid selling price in VND.';
+        return 'Giá bán phải là số nguyên lớn hơn 0 (VNĐ).';
       }
 
-      const key = JSON.stringify([
-        size.toLowerCase(),
-        color.toLowerCase()
-      ]);
+      // Không phân biệt hoa/thường và dấu: "Đen" trùng "Den"
+      const key = JSON.stringify([fold(size), fold(color)]);
 
       if (combinations.has(key)) {
-        return 'Duplicate size and color combination.';
+        return `Biến thể kích thước "${size}" và màu "${color}" bị trùng (không phân biệt hoa/thường và dấu).`;
       }
 
       combinations.add(key);
+
+      const code = variant.code.trim();
+      if (code) {
+        if (code.length < 3 || code.length > 32 || !CODE_PATTERN.test(code)) {
+          return `Mã biến thể "${code}" chỉ gồm chữ in hoa, số và dấu "-", dài 3–32 ký tự.`;
+        }
+        if (codes.has(code)) {
+          return `Mã biến thể "${code}" bị trùng.`;
+        }
+        codes.add(code);
+      }
     }
 
     return '';
@@ -438,10 +528,13 @@ export default function AddProductPage() {
       categoryId: Number(categoryId),
       productName: productName.trim(),
       description: description.trim(),
+      sku: sku.trim() || null,
+      onlineSalesEnabled,
       variants: variants.map((variant) => ({
         size: variant.size.trim(),
         color: variant.color.trim(),
-        price: Number(variant.price)
+        price: Number(variant.price),
+        code: variant.code.trim() || null
       }))
     };
 
@@ -455,14 +548,10 @@ export default function AddProductPage() {
 
       navigate('/products');
     } catch (err) {
-      console.error(
-        'Failed to create product:',
-        err
-      );
+      console.error('Không thể tạo sản phẩm:', err);
 
       setError(
-        err?.message ||
-        'Unable to create product. Please try again.'
+        err?.message || 'Không thể tạo sản phẩm. Vui lòng thử lại.'
       );
 
       window.scrollTo({
@@ -482,6 +571,7 @@ export default function AddProductPage() {
     Boolean(productName.trim()) ||
     Boolean(categoryId) ||
     Boolean(description.trim()) ||
+    Boolean(sku.trim()) ||
     images.length > 0 ||
     variants.length > 1 ||
     variants.some(
@@ -505,7 +595,7 @@ export default function AddProductPage() {
             ? ` – ${Math.max(...prices).toLocaleString('vi-VN')} ₫`
             : ''
         }`
-      : 'Not specified';
+      : 'Chưa xác định';
 
   // ==========================================
   // RENDER
@@ -516,300 +606,289 @@ export default function AddProductPage() {
       sx={{
         maxWidth: 1440,
         mx: 'auto',
-        pb: 3
+        pb: 6,
+        color: C.text
       }}
     >
-      {/* ======================================
-          PAGE HEADER
-      ====================================== */}
+      {/* PAGE HEADER */}
+      <Box sx={{ mb: 3.5 }}>
+        <Button
+          startIcon={<ArrowLeftOutlined />}
+          onClick={() => navigate('/products')}
+          sx={{
+            textTransform: 'none',
+            fontSize: 13,
+            color: C.muted,
+            mb: 1.5,
+            p: 0,
+            '&:hover': { bgcolor: 'transparent', color: '#0F172A' }
+          }}
+        >
+          Quay lại danh sách sản phẩm
+        </Button>
 
-      <Stack
-        direction={{ xs: 'column', sm: 'row' }}
-        justifyContent="space-between"
-        alignItems={{
-          xs: 'flex-start',
-          sm: 'center'
-        }}
-        spacing={2}
-        sx={{ mb: 3 }}
-      >
-        <Box>
-          <Button
-            size="small"
-            startIcon={<ArrowLeftOutlined />}
-            onClick={() => navigate('/products')}
-            disabled={saving}
-            sx={{
-              px: 0,
-              mb: 0.75,
-              color: COLORS.muted,
-              fontSize: 10,
-              textTransform: 'uppercase'
-            }}
-          >
-            Product List / Add Product
-          </Button>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
+          <Box>
+            <Typography
+              variant="h3"
+              sx={{
+                fontWeight: 800,
+                color: '#0F172A',
+                fontSize: { xs: 22, sm: 26 }
+              }}
+            >
+              Thêm sản phẩm mới
+            </Typography>
 
-          <Typography
-            sx={{
-              fontSize: { xs: 24, md: 29 },
-              fontWeight: 500,
-              color: COLORS.text
-            }}
-          >
-            Add Product
-          </Typography>
+            <Typography
+              sx={{
+                fontSize: 13.5,
+                color: C.muted,
+                mt: 0.5,
+                lineHeight: 1.6
+              }}
+            >
+              Nhập thông tin sản phẩm, tải ảnh minh họa và thiết lập bảng biến thể kích thước / màu sắc
+            </Typography>
+          </Box>
 
-          <Typography
-            fontSize={12}
-            color={COLORS.muted}
-            sx={{ mt: 0.5 }}
-          >
-            Create a new product with images,
-            categories and size/color variants.
-          </Typography>
+          {hasChanges && (
+            <Box sx={badgeSx('#FEF9C3', '#854D0E', '#FDE047')}>
+              Có thay đổi chưa lưu
+            </Box>
+          )}
         </Box>
+      </Box>
 
-        {hasChanges && (
-          <Chip
-            label="Unsaved changes"
-            size="small"
-            sx={{
-              bgcolor: COLORS.yellowLight,
-              color: COLORS.text,
-              fontSize: 11,
-              fontWeight: 600
-            }}
-          />
-        )}
-      </Stack>
-
-      {/* ======================================
-          ERROR MESSAGE
-      ====================================== */}
-
+      {/* ERROR MESSAGE */}
       {error && (
         <Alert
           severity="error"
           onClose={() => setError('')}
-          sx={{ mb: 2.5 }}
+          sx={{ mb: 2.5, borderRadius: 2.5, fontSize: 13.5, fontWeight: 600 }}
         >
           {error}
         </Alert>
       )}
 
-      {/* ======================================
-          TWO COLUMN LAYOUT
-      ====================================== */}
-
+      {/* TWO COLUMN LAYOUT */}
       <Grid container spacing={2.5}>
         {/* LEFT COLUMN */}
-
         <Grid size={{ xs: 12, lg: 8 }}>
           <Stack spacing={2.5}>
-
             {/* BASIC INFORMATION */}
-
             <Card sx={cardSx}>
               <CardContent
                 sx={{
-                  p: 2.5,
-                  '&:last-child': { pb: 2.5 }
+                  p: { xs: 2.5, sm: 3.5 },
+                  '&:last-child': { pb: { xs: 2.5, sm: 3.5 } }
                 }}
               >
                 <SectionTitle
-                  title="Basic information"
-                  subtitle="Enter the essential details of your product."
+                  title="Thông tin cơ bản"
+                  subtitle="Nhập tên gọi, danh mục phân loại và mô tả chi tiết của sản phẩm."
                 />
 
                 <Stack spacing={2.5}>
                   <Box>
                     <FieldLabel required>
-                      Product Name
+                      Tên sản phẩm
                     </FieldLabel>
 
                     <TextField
                       fullWidth
                       size="small"
-                      placeholder="Enter product name"
+                      placeholder="Ví dụ: Áo thun Oversize Cotton Compact"
                       value={productName}
-                      onChange={(event) =>
-                        setProductName(
-                          event.target.value
-                        )
-                      }
+                      onChange={(event) => setProductName(event.target.value)}
                       disabled={saving}
                       slotProps={{
                         htmlInput: {
                           maxLength: 200
                         }
                       }}
-                      sx={fieldSx}
+                      sx={inputSx(false)}
                     />
                   </Box>
 
                   <Box>
                     <FieldLabel required>
-                      Category
+                      Danh mục sản phẩm
                     </FieldLabel>
 
-                    <TextField
-                      select
-                      fullWidth
-                      size="small"
+                    <CategoryPicker
+                      categories={categories}
                       value={categoryId}
-                      onChange={(event) =>
-                        setCategoryId(
-                          event.target.value
-                        )
-                      }
-                      disabled={
-                        saving ||
-                        loadingCategories ||
-                        categories.length === 0
-                      }
-                      sx={fieldSx}
-                    >
-                      <MenuItem value="" disabled>
-                        Select category
-                      </MenuItem>
-
-                      {categories.map((category) => (
-                        <MenuItem
-                          key={category.categoryId}
-                          value={category.categoryId}
-                        >
-                          {category.categoryName}
-                        </MenuItem>
-                      ))}
-                    </TextField>
+                      onChange={setCategoryId}
+                      disabled={saving || loadingCategories || categories.length === 0}
+                      inputSx={inputSx(false)}
+                    />
 
                     <Typography
-                      fontSize={10}
-                      color={COLORS.muted}
-                      sx={{ mt: 0.75 }}
+                      sx={{
+                        fontSize: 12,
+                        color: C.muted,
+                        mt: 0.75
+                      }}
                     >
                       {loadingCategories
-                        ? 'Loading categories...'
+                        ? 'Đang tải danh sách danh mục...'
                         : categories.length === 0
-                          ? 'No active categories available.'
-                          : 'Only active categories are available.'}
+                          ? 'Chưa có danh mục hoạt động nào.'
+                          : 'Gõ để tìm, không dấu cũng được. Danh mục có danh mục con thì chọn danh mục con.'}
                     </Typography>
                   </Box>
 
                   <Box>
                     <FieldLabel>
-                      Description
+                      Mã sản phẩm (SKU)
+                    </FieldLabel>
+
+                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        placeholder={
+                          skuHint
+                            ? `Để trống sẽ dùng ${skuHint}`
+                            : categoryId
+                              ? 'Để trống để tự tạo theo danh mục'
+                              : 'Chọn danh mục để gợi ý mã (ví dụ: GN-0001)'
+                        }
+                        value={sku}
+                        onChange={(event) => setSku(cleanCode(event.target.value))}
+                        disabled={saving}
+                        slotProps={{
+                          htmlInput: {
+                            maxLength: 30
+                          }
+                        }}
+                        sx={inputSx(false)}
+                      />
+                      <Tooltip title={categoryId ? 'Điền mã gợi ý theo danh mục' : 'Hãy chọn danh mục trước'}>
+                        <span>
+                          <Button
+                            startIcon={suggestingSku ? <CircularProgress size={14} color="inherit" /> : <ThunderboltOutlined />}
+                            onClick={handleSuggestSku}
+                            disabled={saving || suggestingSku || !categoryId}
+                            sx={{ ...outlineButtonSx, height: 44, whiteSpace: 'nowrap', flexShrink: 0 }}
+                          >
+                            Tạo tự động
+                          </Button>
+                        </span>
+                      </Tooltip>
+                    </Box>
+
+                    <Typography sx={{ fontSize: 12, color: C.muted, mt: 0.75 }}>
+                      Chỉ gồm chữ in hoa, số và dấu &quot;-&quot;. Mỗi biến thể sẽ có mã riêng dạng SKU-SIZE-MÀU (ví dụ GN-0001-42-DEN).
+                    </Typography>
+                  </Box>
+
+                  <Box>
+                    <FieldLabel>
+                      Mô tả sản phẩm
                     </FieldLabel>
 
                     <TextField
                       fullWidth
                       multiline
                       rows={4}
-                      placeholder="Describe your product, materials, style and other details..."
+                      placeholder="Mô tả chất liệu, kiểu dáng, hướng dẫn sử dụng và bảo quản..."
                       value={description}
-                      onChange={(event) =>
-                        setDescription(
-                          event.target.value
-                        )
-                      }
+                      onChange={(event) => setDescription(event.target.value)}
                       disabled={saving}
-                      sx={fieldSx}
+                      sx={inputSx(false)}
                     />
 
                     <Typography
-                      fontSize={10}
-                      color={COLORS.muted}
-                      sx={{ mt: 0.75 }}
+                      sx={{
+                        fontSize: 12,
+                        color: C.muted,
+                        mt: 0.75
+                      }}
                     >
-                      Provide a clear description
-                      to help your team identify
-                      the product.
+                      Mô tả chi tiết giúp nhân viên tư vấn và khách hàng nắm rõ đặc điểm sản phẩm.
                     </Typography>
                   </Box>
                 </Stack>
               </CardContent>
             </Card>
 
-            {/* PRICING */}
-
+            {/* PRICING PREVIEW */}
             <Card sx={cardSx}>
               <CardContent
                 sx={{
-                  p: 2.5,
-                  '&:last-child': { pb: 2.5 }
+                  p: { xs: 2.5, sm: 3.5 },
+                  '&:last-child': { pb: { xs: 2.5, sm: 3.5 } }
                 }}
               >
                 <SectionTitle
-                  title="Pricing"
-                  subtitle="Selling prices are configured for each size/color variant."
+                  title="Khoảng giá bán"
+                  subtitle="Giá bán được tự động tính toán dựa trên cấu hình giá từng biến thể."
                 />
 
                 <Stack
                   direction={{ xs: 'column', sm: 'row' }}
                   justifyContent="space-between"
+                  alignItems={{ xs: 'flex-start', sm: 'center' }}
                   spacing={1}
                 >
                   <Box>
                     <Typography
-                      fontSize={11}
-                      color={COLORS.muted}
+                      sx={{
+                        fontSize: 13,
+                        color: C.muted
+                      }}
                     >
-                      Price range
+                      Khoảng giá hiển thị:
                     </Typography>
 
                     <Typography
-                      fontSize={18}
-                      fontWeight={600}
-                      color={COLORS.text}
-                      sx={{ mt: 0.5 }}
+                      sx={{
+                        fontSize: 24,
+                        fontWeight: 800,
+                        color: '#0F172A',
+                        mt: 0.5
+                      }}
                     >
                       {priceRange}
                     </Typography>
                   </Box>
 
-                  <Chip
-                    size="small"
-                    label="Currency: VND"
-                    sx={{
-                      alignSelf: 'flex-start',
-                      bgcolor: COLORS.cyanLight,
-                      color: COLORS.text
-                    }}
-                  />
+                  <Box sx={badgeSx('#F0FDFA', '#0F766E', '#99F6E4')}>
+                    Đơn vị tiền tệ: VNĐ
+                  </Box>
                 </Stack>
 
                 <Typography
-                  fontSize={10}
-                  color={COLORS.muted}
-                  sx={{ mt: 1.5 }}
+                  sx={{
+                    fontSize: 12.5,
+                    color: C.muted,
+                    mt: 1.5,
+                    lineHeight: 1.5
+                  }}
                 >
-                  Set the selling price for each
-                  variant in the table below.
+                  Bạn có thể nhập giá chi tiết cho từng kích thước / màu sắc ở bảng bên dưới.
                 </Typography>
               </CardContent>
             </Card>
-
           </Stack>
         </Grid>
 
         {/* RIGHT COLUMN */}
-
         <Grid size={{ xs: 12, lg: 4 }}>
           <Stack spacing={2.5}>
-
             {/* IMAGE UPLOAD */}
-
             <Card sx={cardSx}>
               <CardContent
                 sx={{
-                  p: 2.5,
-                  '&:last-child': { pb: 2.5 }
+                  p: { xs: 2.5, sm: 3 },
+                  '&:last-child': { pb: { xs: 2.5, sm: 3 } }
                 }}
               >
                 <SectionTitle
-                  title="Image Upload"
-                  subtitle="The first image appears in the product catalog."
+                  title="Hình ảnh sản phẩm"
+                  subtitle="Ảnh đầu tiên sẽ hiển thị làm ảnh đại diện chính của sản phẩm."
                 />
 
                 <input
@@ -832,10 +911,10 @@ export default function AddProductPage() {
                     }
                   }}
                   sx={{
-                    border: `1px dashed ${COLORS.cyan}`,
-                    borderRadius: 1.5,
-                    bgcolor: '#FAFCFE',
-                    py: 3,
+                    border: `2px dashed ${C.cyan}`,
+                    borderRadius: 3,
+                    bgcolor: '#F0FCFE',
+                    py: 3.5,
                     px: 2,
                     textAlign: 'center',
                     cursor:
@@ -843,46 +922,54 @@ export default function AddProductPage() {
                       images.length >= MAX_IMAGES
                         ? 'not-allowed'
                         : 'pointer',
+                    transition: 'all 0.2s',
                     '&:hover': {
-                      bgcolor: COLORS.cyanLight
+                      bgcolor: '#E4F9FD',
+                      borderColor: C.cyanHover
                     }
                   }}
                 >
                   <CloudUploadOutlined
                     style={{
-                      fontSize: 27,
-                      color: COLORS.text
+                      fontSize: 34,
+                      color: '#0F172A'
                     }}
                   />
 
                   <Typography
-                    fontSize={12}
-                    fontWeight={600}
-                    color={COLORS.text}
-                    sx={{ mt: 1 }}
+                    sx={{
+                      fontSize: 13.5,
+                      fontWeight: 800,
+                      color: '#0F172A',
+                      mt: 1
+                    }}
                   >
-                    Upload product images
+                    Tải ảnh sản phẩm lên
                   </Typography>
 
                   <Typography
-                    fontSize={10}
-                    color={COLORS.muted}
-                    sx={{ mt: 0.5 }}
+                    sx={{
+                      fontSize: 12,
+                      color: C.muted,
+                      mt: 0.5
+                    }}
                   >
-                    JPG, PNG, WebP · Up to 5 MB
+                    Hỗ trợ JPG, PNG, WebP · Tối đa 5 MB/ảnh
                   </Typography>
 
                   <Typography
-                    fontSize={10}
-                    color={COLORS.muted}
-                    sx={{ mt: 0.5 }}
+                    sx={{
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: '#0D9488',
+                      mt: 0.5
+                    }}
                   >
-                    {images.length}/{MAX_IMAGES} images
+                    Đã chọn: {images.length}/{MAX_IMAGES} ảnh
                   </Typography>
                 </Box>
 
                 {/* IMAGE PREVIEWS */}
-
                 {images.length > 0 && (
                   <Grid
                     container
@@ -896,13 +983,14 @@ export default function AddProductPage() {
                       >
                         <Box
                           sx={{
-                            border: `1px solid ${
+                            border: `1.5px solid ${
                               index === 0
-                                ? COLORS.cyan
-                                : COLORS.border
+                                ? C.cyan
+                                : C.border
                             }`,
-                            borderRadius: 1.5,
-                            p: 0.75
+                            borderRadius: 2.5,
+                            p: 0.75,
+                            bgcolor: C.surface
                           }}
                         >
                           <Box
@@ -913,16 +1001,18 @@ export default function AddProductPage() {
                               width: '100%',
                               height: 110,
                               objectFit: 'cover',
-                              borderRadius: 1
+                              borderRadius: 2
                             }}
                           />
 
                           <Typography
-                            fontSize={10}
-                            color={COLORS.muted}
+                            sx={{
+                              fontSize: 11,
+                              color: C.muted,
+                              mt: 0.5
+                            }}
                             noWrap
                             title={image.file.name}
-                            sx={{ mt: 0.5 }}
                           >
                             {image.file.name}
                           </Typography>
@@ -934,39 +1024,36 @@ export default function AddProductPage() {
                             sx={{ mt: 0.5 }}
                           >
                             {index === 0 ? (
-                              <Chip
-                                label="Primary"
-                                size="small"
-                                icon={<StarFilled />}
-                                sx={{
-                                  height: 22,
-                                  fontSize: 9,
-                                  bgcolor: COLORS.cyanLight
-                                }}
-                              />
+                              <Box sx={badgeSx('#FEF9C3', '#854D0E', '#FDE047')}>
+                                <StarFilled style={{ fontSize: 11, color: '#EAB308' }} />
+                                Ảnh chính
+                              </Box>
                             ) : (
                               <IconButton
                                 size="small"
-                                title="Set as primary"
+                                title="Đặt làm ảnh chính"
                                 disabled={saving}
                                 onClick={() =>
                                   setPrimaryImage(image.id)
                                 }
                               >
-                                <StarOutlined />
+                                <StarOutlined style={{ fontSize: 13 }} />
                               </IconButton>
                             )}
 
                             <IconButton
                               size="small"
-                              color="error"
-                              title="Remove image"
+                              title="Xóa ảnh"
                               disabled={saving}
                               onClick={() =>
                                 removeImage(image.id)
                               }
+                              sx={{
+                                color: '#DC2626',
+                                '&:hover': { bgcolor: '#FEE2E2' }
+                              }}
                             >
-                              <DeleteOutlined />
+                              <DeleteOutlined style={{ fontSize: 13 }} />
                             </IconButton>
                           </Stack>
                         </Box>
@@ -978,17 +1065,16 @@ export default function AddProductPage() {
             </Card>
 
             {/* PRODUCT AVAILABILITY */}
-
             <Card sx={cardSx}>
               <CardContent
                 sx={{
-                  p: 2.5,
-                  '&:last-child': { pb: 2.5 }
+                  p: { xs: 2.5, sm: 3 },
+                  '&:last-child': { pb: { xs: 2.5, sm: 3 } }
                 }}
               >
                 <SectionTitle
-                  title="Product availability"
-                  subtitle="Initial availability for newly created products."
+                  title="Trạng thái khởi tạo"
+                  subtitle="Quy định mặc định khi sản phẩm mới được tạo."
                 />
 
                 <Stack spacing={2}>
@@ -998,25 +1084,22 @@ export default function AddProductPage() {
                     alignItems="center"
                   >
                     <Typography
-                      fontSize={12}
-                      color={COLORS.text}
+                      sx={{
+                        fontSize: 13.5,
+                        fontWeight: 600,
+                        color: C.text
+                      }}
                     >
-                      Product status
+                      Trạng thái sản phẩm
                     </Typography>
 
-                    <Chip
-                      label="Active"
-                      size="small"
-                      icon={<CheckCircleOutlined />}
-                      sx={{
-                        bgcolor: '#E8F6F0',
-                        color: COLORS.green,
-                        fontSize: 10
-                      }}
-                    />
+                    <Box sx={badgeSx('#F0FDF4', '#166534', '#BBF7D0')}>
+                      <CheckCircleOutlined />
+                      Hoạt động
+                    </Box>
                   </Stack>
 
-                  <Divider />
+                  <Divider sx={{ borderColor: C.borderLight }} />
 
                   <Stack
                     direction="row"
@@ -1024,24 +1107,21 @@ export default function AddProductPage() {
                     alignItems="center"
                   >
                     <Typography
-                      fontSize={12}
-                      color={COLORS.text}
+                      sx={{
+                        fontSize: 13.5,
+                        fontWeight: 600,
+                        color: C.text
+                      }}
                     >
-                      Online sale
+                      Bán online
                     </Typography>
 
-                    <Chip
-                      label="Off"
-                      size="small"
-                      sx={{
-                        bgcolor: '#F0F2F5',
-                        color: COLORS.muted,
-                        fontSize: 10
-                      }}
-                    />
+                    <Box sx={badgeSx('#F1F5F9', '#475569', '#E2E8F0')}>
+                      Đang tắt
+                    </Box>
                   </Stack>
 
-                  <Divider />
+                  <Divider sx={{ borderColor: C.borderLight }} />
 
                   <Stack
                     direction="row"
@@ -1049,48 +1129,55 @@ export default function AddProductPage() {
                     alignItems="center"
                   >
                     <Typography
-                      fontSize={12}
-                      color={COLORS.text}
+                      sx={{
+                        fontSize: 13.5,
+                        fontWeight: 600,
+                        color: C.text
+                      }}
                     >
-                      Initial stock
+                      Tồn kho ban đầu
                     </Typography>
 
                     <Typography
-                      fontSize={13}
-                      fontWeight={700}
-                      color={COLORS.text}
+                      sx={{
+                        fontSize: 14.5,
+                        fontWeight: 800,
+                        color: '#0F172A'
+                      }}
                     >
-                      0 units
+                      0 sản phẩm
                     </Typography>
                   </Stack>
 
-                  <Alert
-                    severity="info"
-                    icon={<InfoCircleOutlined />}
+                  {/* NOTE BOX IN PHUOC'S TEAL STYLE */}
+                  <Box
                     sx={{
-                      '& .MuiAlert-message': {
-                        fontSize: 11
-                      }
+                      bgcolor: '#F0FDFA',
+                      border: '1px solid #99F6E4',
+                      borderRadius: 2.5,
+                      p: 2,
+                      mt: 1
                     }}
                   >
-                    New products start with zero stock.
-                    Stock is updated through inventory
-                    operations. Online sales are
-                    initially disabled.
-                  </Alert>
+                    <Typography
+                      sx={{
+                        fontSize: 12.5,
+                        color: '#115E59',
+                        lineHeight: 1.6
+                      }}
+                    >
+                      Sản phẩm mới tạo sẽ có tồn kho ban đầu là 0. Bạn có thể lập Phiếu Nhập Kho để nhập tồn vật lý.
+                    </Typography>
+                  </Box>
                 </Stack>
               </CardContent>
             </Card>
-
           </Stack>
         </Grid>
       </Grid>
 
-      {/* ======================================
-          SIZE / COLOR VARIANT MATRIX
-      ====================================== */}
-
-      <Box sx={{ mt: 2.5 }}>
+      {/* SIZE / COLOR VARIANT MATRIX */}
+      <Box sx={{ mt: 3.5 }}>
         <Stack
           direction={{ xs: 'column', sm: 'row' }}
           justifyContent="space-between"
@@ -1099,73 +1186,76 @@ export default function AddProductPage() {
             sm: 'center'
           }}
           spacing={1.5}
-          sx={{ mb: 1.5 }}
+          sx={{ mb: 2 }}
         >
           <SectionTitle
-            title="Size / color variant matrix"
-            subtitle="Create a unique size and color combination with its own selling price."
+            title="Ma trận biến thể (Size & Màu sắc)"
+            subtitle="Mỗi cặp kích thước và màu sắc tạo thành một biến thể riêng có giá bán tương ứng."
           />
 
           <Button
-            variant="outlined"
             startIcon={<PlusOutlined />}
             onClick={addVariant}
             disabled={saving}
             sx={{
-              borderColor: COLORS.border,
-              color: COLORS.text,
-              textTransform: 'none',
-              fontSize: 12,
-              bgcolor: '#FFFFFF'
+              ...outlineButtonSx,
+              height: 40,
+              fontSize: 13
             }}
           >
-            Add Variant
+            Thêm biến thể
           </Button>
         </Stack>
 
-        <Card sx={cardSx}>
+        <Box
+          sx={{
+            bgcolor: C.surface,
+            borderRadius: 3.5,
+            border: `1px solid ${C.border}`,
+            boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+            overflow: 'hidden'
+          }}
+        >
           <TableContainer>
             <Table
               sx={{
-                minWidth: 650,
-                '& .MuiTableCell-root': {
-                  borderColor: COLORS.border
+                minWidth: 860,
+                '& th': {
+                  bgcolor: C.surface,
+                  color: C.muted,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: 0.5,
+                  py: 1.75,
+                  borderBottom: `1px solid ${C.borderLight}`
+                },
+                '& td': {
+                  borderColor: C.borderLight,
+                  py: 2,
+                  fontSize: 13.5,
+                  color: C.text
                 }
               }}
             >
               <TableHead>
-                <TableRow
-                  sx={{ bgcolor: '#F7F9FC' }}
-                >
-                  {[
-                    'Size',
-                    'Color',
-                    'Selling Price (VND)',
-                    'Action'
-                  ].map((label) => (
-                    <TableCell
-                      key={label}
-                      sx={{
-                        fontSize: 11,
-                        fontWeight: 600,
-                        color: COLORS.muted,
-                        py: 1.5
-                      }}
-                    >
-                      {label}
-                    </TableCell>
-                  ))}
+                <TableRow>
+                  <TableCell sx={{ pl: 3 }}>KÍCH THƯỚC (SIZE)</TableCell>
+                  <TableCell>MÀU SẮC (COLOR)</TableCell>
+                  <TableCell>GIÁ BÁN (VNĐ)</TableCell>
+                  <TableCell>MÃ BIẾN THỂ</TableCell>
+                  <TableCell align="center" sx={{ pr: 3 }}>THAO TÁC</TableCell>
                 </TableRow>
               </TableHead>
 
               <TableBody>
                 {variants.map((variant) => (
-                  <TableRow key={variant.id}>
-                    <TableCell sx={{ width: '22%' }}>
+                  <TableRow key={variant.id} hover sx={{ '&:hover': { bgcolor: '#FAFCFE' } }}>
+                    <TableCell sx={{ width: '18%', pl: 3 }}>
                       <TextField
                         fullWidth
                         size="small"
-                        placeholder="e.g. M"
+                        placeholder="Ví dụ: S, M, L, XL..."
                         value={variant.size}
                         disabled={saving}
                         onChange={(event) =>
@@ -1180,15 +1270,15 @@ export default function AddProductPage() {
                             maxLength: 10
                           }
                         }}
-                        sx={fieldSx}
+                        sx={inputSx(false)}
                       />
                     </TableCell>
 
-                    <TableCell sx={{ width: '28%' }}>
+                    <TableCell sx={{ width: '22%' }}>
                       <TextField
                         fullWidth
                         size="small"
-                        placeholder="e.g. Black"
+                        placeholder="Ví dụ: Đen, Trắng, Xanh Navy..."
                         value={variant.color}
                         disabled={saving}
                         onChange={(event) =>
@@ -1203,16 +1293,16 @@ export default function AddProductPage() {
                             maxLength: 30
                           }
                         }}
-                        sx={fieldSx}
+                        sx={inputSx(false)}
                       />
                     </TableCell>
 
-                    <TableCell sx={{ width: '35%' }}>
+                    <TableCell sx={{ width: '22%' }}>
                       <TextField
                         fullWidth
                         size="small"
                         type="number"
-                        placeholder="e.g. 250000"
+                        placeholder="Ví dụ: 250000"
                         value={variant.price}
                         disabled={saving}
                         onChange={(event) =>
@@ -1224,20 +1314,45 @@ export default function AddProductPage() {
                         }
                         slotProps={{
                           htmlInput: {
-                            min: 0,
+                            min: 1,
                             max: 999999999999,
-                            step: 1
+                            step: 1000
                           }
                         }}
-                        sx={fieldSx}
+                        sx={inputSx(false)}
+                      />
+                      {Number(variant.price) > 0 && (
+                        <Typography sx={{ fontSize: 12, color: C.muted, mt: 0.5 }}>
+                          {Number(variant.price).toLocaleString('vi-VN')} ₫
+                        </Typography>
+                      )}
+                    </TableCell>
+
+                    <TableCell sx={{ width: '28%' }}>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        placeholder={
+                          variant.size.trim()
+                            ? [sku.trim() || 'SKU', slug(variant.size), slug(variant.color)].filter(Boolean).join('-')
+                            : 'Tự tạo'
+                        }
+                        value={variant.code}
+                        disabled={saving}
+                        onChange={(event) => updateVariant(variant.id, 'code', cleanCode(event.target.value))}
+                        slotProps={{
+                          htmlInput: {
+                            maxLength: 32
+                          }
+                        }}
+                        sx={inputSx(false)}
                       />
                     </TableCell>
 
-                    <TableCell sx={{ width: '15%' }}>
-                      <Button
-                        color="error"
+                    <TableCell align="center" sx={{ width: '10%', pr: 3 }}>
+                      <IconButton
                         size="small"
-                        startIcon={<DeleteOutlined />}
+                        title="Xóa biến thể này"
                         disabled={
                           saving ||
                           variants.length === 1
@@ -1246,12 +1361,16 @@ export default function AddProductPage() {
                           removeVariant(variant.id)
                         }
                         sx={{
-                          textTransform: 'none',
-                          fontSize: 11
+                          color: '#64748B',
+                          p: 0.75,
+                          '&:hover': {
+                            color: '#EF4444',
+                            bgcolor: 'transparent'
+                          }
                         }}
                       >
-                        Remove
-                      </Button>
+                        <DeleteOutlined style={{ fontSize: 16 }} />
+                      </IconButton>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -1259,77 +1378,93 @@ export default function AddProductPage() {
             </Table>
           </TableContainer>
 
-          <Divider />
+          <Divider sx={{ borderColor: C.borderLight }} />
 
-          <Box sx={{ px: 2, py: 1.5 }}>
+          <Box
+            sx={{
+              px: 3,
+              py: 2,
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 1.5
+            }}
+          >
             <Typography
-              fontSize={11}
-              color={COLORS.muted}
+              sx={{
+                fontSize: 12.5,
+                color: C.muted
+              }}
             >
-              {variants.length} variant
-              {variants.length !== 1 ? 's' : ''}
-              {' '}· Stock will start at 0 units
+              Tổng cộng: <strong>{variants.length}</strong> biến thể · Tồn kho ban đầu là <strong>0</strong>, được cộng khi tạo
+              phiếu nhập hàng. Để trống mã biến thể thì hệ thống tự tạo.
             </Typography>
+
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+              <Switch
+                size="small"
+                checked={onlineSalesEnabled}
+                disabled={saving}
+                onChange={(event) => setOnlineSalesEnabled(event.target.checked)}
+              />
+              <Box>
+                <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text }}>Mở bán online ngay</Typography>
+                <Typography sx={{ fontSize: 12, color: C.muted }}>
+                  {onlineSalesEnabled ? 'Hiện trên website khi có hàng' : 'Tắt: chỉ bán tại quầy, bật sau ở danh sách sản phẩm'}
+                </Typography>
+              </Box>
+            </Box>
           </Box>
-        </Card>
+        </Box>
       </Box>
 
-      {/* ======================================
-          FOOTER ACTIONS
-      ====================================== */}
-
+      {/* FOOTER ACTIONS */}
       <Card
         sx={{
           ...cardSx,
-          mt: 2.5
+          mt: 3.5
         }}
       >
         <CardContent
           sx={{
-            p: 2,
-            '&:last-child': { pb: 2 }
+            p: { xs: 2.5, sm: 3 },
+            '&:last-child': { pb: { xs: 2.5, sm: 3 } }
           }}
         >
-          <Stack
-            direction={{ xs: 'column', sm: 'row' }}
-            justifyContent="space-between"
-            alignItems={{
-              xs: 'stretch',
-              sm: 'center'
+          <Box
+            sx={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 2
             }}
-            spacing={2}
           >
             <Typography
-              fontSize={11}
-              color={COLORS.muted}
+              sx={{
+                fontSize: 13,
+                color: C.muted
+              }}
             >
-              Product details and images will be
-              saved to your store inventory.
+              Thông tin sản phẩm và hình ảnh sẽ được lưu trữ an toàn trong kho dữ liệu.
             </Typography>
 
-            <Stack
-              direction="row"
-              spacing={1}
-              justifyContent="flex-end"
+            <Box
+              sx={{
+                display: 'flex',
+                gap: 1.5
+              }}
             >
               <Button
-                variant="outlined"
                 disabled={saving}
-                onClick={() =>
-                  navigate('/products')
-                }
-                sx={{
-                  color: COLORS.text,
-                  borderColor: COLORS.border,
-                  textTransform: 'none',
-                  fontSize: 12
-                }}
+                onClick={() => navigate('/products')}
+                sx={outlineButtonSx}
               >
-                Cancel
+                Hủy bỏ
               </Button>
 
               <Button
-                variant="contained"
                 disabled={
                   saving ||
                   loadingCategories ||
@@ -1338,28 +1473,17 @@ export default function AddProductPage() {
                 onClick={handleSaveProduct}
                 startIcon={
                   saving
-                    ? <CircularProgress size={14} />
+                    ? <CircularProgress size={16} color="inherit" />
                     : <PlusOutlined />
                 }
-                sx={{
-                  bgcolor: COLORS.cyan,
-                  color: COLORS.text,
-                  textTransform: 'none',
-                  fontWeight: 600,
-                  boxShadow: 'none',
-                  fontSize: 12,
-                  '&:hover': {
-                    bgcolor: '#6DDDE9',
-                    boxShadow: 'none'
-                  }
-                }}
+                sx={primaryButtonSx}
               >
                 {saving
-                  ? 'Creating...'
-                  : 'Create Product'}
+                  ? 'Đang tạo sản phẩm...'
+                  : 'Tạo sản phẩm'}
               </Button>
-            </Stack>
-          </Stack>
+            </Box>
+          </Box>
         </CardContent>
       </Card>
     </Box>

@@ -18,6 +18,10 @@ import org.springframework.transaction.support.TransactionTemplate;
  * <p>Chỉ ghi khi thấy tồn thật sự đã bị trừ mà chưa có thẻ kho (tồn − tổng thẻ kho ≤ −số lượng): câu
  * lệnh trừ của code Facebook có điều kiện {@code stock_quantity >= ?} nên có thể không trừ gì; khi đó
  * dòng đó để nguyên, Owner xác nhận đơn sẽ trừ và ghi thẻ kho như đơn online thường.
+ *
+ * <p>Từ 08/11/2026 màn hình Facebook không trừ kho khi chốt đơn nữa mà chỉ GIỮ hàng
+ * (order_item.reserved_quantity &gt; 0); các dòng đang giữ được bỏ qua ở đây để không đoán nhầm "đã trừ"
+ * khi dữ liệu cũ bị lệch giữa tồn và thẻ kho. Lớp này chỉ còn tác dụng với đơn kiểu cũ.
  */
 @Service
 public class FacebookOrderLedger {
@@ -49,6 +53,7 @@ public class FacebookOrderLedger {
                     .queryForList(
                             """
                 SELECT oi.order_item_id,oi.detail_id,oi.quantity FROM order_item oi WHERE oi.order_id=?
+                  AND oi.reserved_quantity=0
                   AND NOT EXISTS (SELECT 1 FROM stock_adjustment m
                     WHERE m.order_item_id=oi.order_item_id AND m.movement_type='ORDER_OUT')
                 ORDER BY oi.order_item_id

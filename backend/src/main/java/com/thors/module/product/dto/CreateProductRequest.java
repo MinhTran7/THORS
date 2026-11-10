@@ -12,6 +12,27 @@ public class CreateProductRequest {
     private String imageUrl;
     private List<VariantRequest> variants;
 
+    // Mã sản phẩm (SKU). Để trống => tự tạo theo danh mục (vd GN-0001)
+    private String sku;
+    // Mở bán online ngay cho mọi biến thể (mặc định tắt)
+    private Boolean onlineSalesEnabled;
+
+    public String getSku() {
+        return sku;
+    }
+
+    public void setSku(String sku) {
+        this.sku = sku;
+    }
+
+    public Boolean getOnlineSalesEnabled() {
+        return onlineSalesEnabled;
+    }
+
+    public void setOnlineSalesEnabled(Boolean onlineSalesEnabled) {
+        this.onlineSalesEnabled = onlineSalesEnabled;
+    }
+
     public String getImageUrl() {
         return imageUrl;
     }
@@ -57,6 +78,16 @@ public class CreateProductRequest {
         private String size;
         private String color;
         private BigDecimal price;
+        // Mã biến thể (lưu vào cột barcode). Để trống => tự tạo SKU-SIZE-MÀU
+        private String code;
+
+        public String getCode() {
+            return code;
+        }
+
+        public void setCode(String code) {
+            this.code = code;
+        }
 
         public String getSize() {
             return size;

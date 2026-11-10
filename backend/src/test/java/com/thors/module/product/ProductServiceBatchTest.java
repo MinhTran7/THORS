@@ -55,6 +55,9 @@ class ProductServiceBatchTest {
         // Arrange
         when(jdbcTemplate.queryForObject(anyString(), eq(Integer.class), eq(1)))
                 .thenReturn(1);
+        // Danh mục 1 là danh mục lá (không có danh mục con)
+        when(jdbcTemplate.queryForObject(contains("parent_id"), eq(Integer.class), eq(1)))
+                .thenReturn(0);
         when(productRepository.insertProduct(any())).thenReturn(101, 102);
 
         BatchCreateProductRequest batchRequest = new BatchCreateProductRequest();
@@ -112,7 +115,7 @@ class ProductServiceBatchTest {
                 IllegalArgumentException.class,
                 () -> productService.createProductsBatch(batchRequest)
         );
-        assertTrue(ex.getMessage().contains("must not be empty"));
+        assertTrue(ex.getMessage().contains("trống"));
     }
 
     @Test
@@ -136,7 +139,7 @@ class ProductServiceBatchTest {
                 IllegalArgumentException.class,
                 () -> productService.createProductsBatch(batchRequest)
         );
-        assertTrue(ex.getMessage().contains("active category"));
+        assertTrue(ex.getMessage().contains("ngưng hoạt động"));
         verify(productRepository, never()).insertProduct(any());
     }
 
@@ -144,6 +147,8 @@ class ProductServiceBatchTest {
     void createProductsBatch_duplicateVariantCombination_throwsException() {
         when(jdbcTemplate.queryForObject(anyString(), eq(Integer.class), eq(1)))
                 .thenReturn(1);
+        when(jdbcTemplate.queryForObject(contains("parent_id"), eq(Integer.class), eq(1)))
+                .thenReturn(0);
 
         BatchCreateProductRequest batchRequest = new BatchCreateProductRequest();
         CreateProductRequest p = new CreateProductRequest();
@@ -164,7 +169,7 @@ class ProductServiceBatchTest {
                 IllegalArgumentException.class,
                 () -> productService.createProductsBatch(batchRequest)
         );
-        assertTrue(ex.getMessage().contains("Duplicate size and color"));
+        assertTrue(ex.getMessage().contains("bị trùng"));
         verify(productRepository, never()).insertProduct(any());
     }
 
@@ -173,7 +178,7 @@ class ProductServiceBatchTest {
         Product mockProduct = new Product();
         mockProduct.setProductId(10);
         when(productRepository.findById(10)).thenReturn(mockProduct);
-        when(productRepository.countTransactionsByProductId(10)).thenReturn(0);
+        when(productRepository.findDeleteBlockers(10)).thenReturn(List.of());
         when(productRepository.findCloudinaryPublicIds(10)).thenReturn(List.of("cloud-id-1"));
 
         productService.deleteProduct(10);
@@ -186,13 +191,15 @@ class ProductServiceBatchTest {
         Product mockProduct = new Product();
         mockProduct.setProductId(10);
         when(productRepository.findById(10)).thenReturn(mockProduct);
-        when(productRepository.countTransactionsByProductId(10)).thenReturn(2);
+        // Đã có đơn hàng / phiếu kho => chặn xóa, trả 409 kèm lý do tiếng Việt
+        when(productRepository.findDeleteBlockers(10)).thenReturn(List.of("đơn hàng", "phiếu nhập / đặt hàng nhập"));
 
-        IllegalArgumentException ex = assertThrows(
-                IllegalArgumentException.class,
+        com.thors.common.ApiException ex = assertThrows(
+                com.thors.common.ApiException.class,
                 () -> productService.deleteProduct(10)
         );
-        assertTrue(ex.getMessage().contains("lịch sử giao dịch"));
+        assertEquals(409, ex.status);
+        assertTrue(ex.getMessage().contains("không thể xóa vĩnh viễn"));
         verify(productRepository, never()).deleteProductCascaded(anyInt());
     }
 }
