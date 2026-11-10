@@ -57,6 +57,9 @@ public class ProductMapper implements RowMapper<Product> {
 
         // Các cột chỉ có ở truy vấn danh sách (findAll); truy vấn chi tiết không có thì bỏ qua
         Set<String> columns = columns(rs);
+        if (columns.contains("sku")) {
+            product.setSku(rs.getString("sku"));
+        }
         if (columns.contains("active_variant_count")) {
             product.setActiveVariantCount(rs.getInt("active_variant_count"));
             product.setSellableStock(rs.getInt("sellable_stock"));

@@ -85,7 +85,8 @@ export default function ProductExcelDialog({ open, onClose, categories = [], onS
 
     // Sheet 1: Dữ liệu mẫu (Bổ sung cột Link ảnh)
     const sampleHeaders = ['Tên danh mục', 'Tên sản phẩm', 'Mô tả', 'Kích cỡ', 'Màu sắc', 'Giá bán (VNĐ)', 'Link ảnh (Tùy chọn)'];
-    const activeCats = categories.filter((c) => c.status === 'ACTIVE');
+    // Danh mục cha (có danh mục con) không gắn trực tiếp sản phẩm
+    const activeCats = categories.filter((c) => c.status === 'ACTIVE' && !(c.childCount > 0));
     const firstCatName = activeCats.length > 0 ? activeCats[0].categoryName : 'Áo Nam';
     const secondCatName = activeCats.length > 1 ? activeCats[1].categoryName : 'Quần Nam';
 
@@ -195,7 +196,7 @@ export default function ProductExcelDialog({ open, onClose, categories = [], onS
       // Xây dựng map danh mục để tra cứu nhanh
       const activeCatMap = new Map();
       categories.forEach((c) => {
-        if (c.status === 'ACTIVE') {
+        if (c.status === 'ACTIVE' && !(c.childCount > 0)) {
           activeCatMap.set(c.categoryName.trim().toLowerCase(), c);
         }
       });

@@ -11,8 +11,8 @@ import {
   Divider,
   Grid,
   IconButton,
-  MenuItem,
   Stack,
+  Switch,
   Table,
   TableBody,
   TableCell,
@@ -20,6 +20,7 @@ import {
   TableHead,
   TableRow,
   TextField,
+  Tooltip,
   Typography
 } from '@mui/material';
 
@@ -31,12 +32,18 @@ import {
   InfoCircleOutlined,
   PlusOutlined,
   StarFilled,
-  StarOutlined
+  StarOutlined,
+  ThunderboltOutlined
 } from '@ant-design/icons';
 
-import { createProductWithImages } from '../../services/productService';
-import { getCategories } from '../../services/categoryService';
+import { createProductWithImages, suggestProductSku } from '../../services/productService';
+import {
+  getCategories,
+  isAssignableCategory,
+  sortCategoriesAsTree
+} from '../../services/categoryService';
 import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../customer/theme';
+import CategoryPicker from './CategoryPicker';
 
 const MAX_IMAGES = 10;
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
@@ -87,9 +94,30 @@ function createEmptyVariant() {
     id: crypto.randomUUID(),
     size: '',
     color: '',
-    price: ''
+    price: '',
+    code: ''
   };
 }
+
+// Mã sản phẩm / mã biến thể: chữ in hoa, số, dấu "-" (giống kiểm tra ở backend)
+const CODE_PATTERN = /^[A-Z0-9](?:[A-Z0-9-]*[A-Z0-9])?$/;
+const cleanCode = (value) => value.toUpperCase().replace(/[^A-Z0-9-]/g, '');
+
+// Bỏ dấu + viết thường: "Đen" và "Den" là cùng một màu (DB so trùng như vậy)
+const fold = (value) =>
+  (value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/đ/g, 'd')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+// "Xanh lá" -> "XANH-LA" (phần mã biến thể gợi ý)
+const slug = (value) =>
+  fold(value)
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 
 function SectionTitle({ title, subtitle }) {
   return (
@@ -151,6 +179,13 @@ export default function AddProductPage() {
   const [productName, setProductName] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [description, setDescription] = useState('');
+  // Mã sản phẩm (SKU): để trống => backend tự tạo theo danh mục (vd GN-0001)
+  const [sku, setSku] = useState('');
+  const [suggestingSku, setSuggestingSku] = useState(false);
+  // Mã gợi ý theo danh mục đang chọn (hiện ở placeholder; để trống ô SKU thì backend dùng mã kế tiếp)
+  const [skuHint, setSkuHint] = useState('');
+  // Mở bán online ngay sau khi tạo (mặc định tắt)
+  const [onlineSalesEnabled, setOnlineSalesEnabled] = useState(false);
 
   // ==========================================
   // PRODUCT VARIANTS
@@ -196,11 +231,8 @@ export default function AddProductPage() {
         }
 
         if (active) {
-          setCategories(
-            data.filter(
-              (category) => category.status === 'ACTIVE'
-            )
-          );
+          // Chỉ danh mục đang hoạt động và không phải danh mục cha (vd chọn "Giày › Giày nam", không chọn "Giày")
+          setCategories(sortCategoriesAsTree(data).filter(isAssignableCategory));
         }
       } catch (err) {
         if (active) {
@@ -354,6 +386,40 @@ export default function AddProductPage() {
   }
 
   // ==========================================
+  // GỢI Ý MÃ SẢN PHẨM (SKU)
+  // ==========================================
+
+  useEffect(() => {
+    let active = true;
+    setSkuHint('');
+    if (!categoryId) return undefined;
+    suggestProductSku(categoryId)
+      .then((data) => {
+        if (active) setSkuHint(data?.sku || '');
+      })
+      .catch(() => {
+        // DB chưa có cột SKU hoặc lỗi mạng: không gợi ý, vẫn tạo sản phẩm bình thường
+      });
+    return () => {
+      active = false;
+    };
+  }, [categoryId]);
+
+  async function handleSuggestSku() {
+    if (!categoryId) return;
+    setError('');
+    setSuggestingSku(true);
+    try {
+      const data = await suggestProductSku(categoryId);
+      setSku(data?.sku || '');
+    } catch (err) {
+      setError(err?.message || 'Không tạo được mã sản phẩm.');
+    } finally {
+      setSuggestingSku(false);
+    }
+  }
+
+  // ==========================================
   // FORM VALIDATION
   // ==========================================
 
@@ -370,6 +436,10 @@ export default function AddProductPage() {
       return 'Vui lòng chọn danh mục cho sản phẩm.';
     }
 
+    if (sku && (sku.length < 3 || sku.length > 30 || !CODE_PATTERN.test(sku))) {
+      return 'Mã sản phẩm (SKU) chỉ gồm chữ in hoa, số và dấu "-", dài 3–30 ký tự, không bắt đầu/kết thúc bằng "-".';
+    }
+
     if (images.length === 0) {
       return 'Vui lòng tải lên ít nhất một hình ảnh đại diện cho sản phẩm.';
     }
@@ -383,6 +453,7 @@ export default function AddProductPage() {
     }
 
     const combinations = new Set();
+    const codes = new Set();
 
     for (const variant of variants) {
       const size = variant.size.trim();
@@ -403,22 +474,31 @@ export default function AddProductPage() {
 
       if (
         !Number.isSafeInteger(price) ||
-        price < 0 ||
+        price <= 0 ||
         price > 999999999999
       ) {
-        return 'Giá bán phải là số nguyên dương hợp lệ (VNĐ).';
+        return 'Giá bán phải là số nguyên lớn hơn 0 (VNĐ).';
       }
 
-      const key = JSON.stringify([
-        size.toLowerCase(),
-        color.toLowerCase()
-      ]);
+      // Không phân biệt hoa/thường và dấu: "Đen" trùng "Den"
+      const key = JSON.stringify([fold(size), fold(color)]);
 
       if (combinations.has(key)) {
-        return `Biến thể kích thước "${size}" và màu "${color}" đã bị trùng lặp.`;
+        return `Biến thể kích thước "${size}" và màu "${color}" bị trùng (không phân biệt hoa/thường và dấu).`;
       }
 
       combinations.add(key);
+
+      const code = variant.code.trim();
+      if (code) {
+        if (code.length < 3 || code.length > 32 || !CODE_PATTERN.test(code)) {
+          return `Mã biến thể "${code}" chỉ gồm chữ in hoa, số và dấu "-", dài 3–32 ký tự.`;
+        }
+        if (codes.has(code)) {
+          return `Mã biến thể "${code}" bị trùng.`;
+        }
+        codes.add(code);
+      }
     }
 
     return '';
@@ -448,10 +528,13 @@ export default function AddProductPage() {
       categoryId: Number(categoryId),
       productName: productName.trim(),
       description: description.trim(),
+      sku: sku.trim() || null,
+      onlineSalesEnabled,
       variants: variants.map((variant) => ({
         size: variant.size.trim(),
         color: variant.color.trim(),
-        price: Number(variant.price)
+        price: Number(variant.price),
+        code: variant.code.trim() || null
       }))
     };
 
@@ -488,6 +571,7 @@ export default function AddProductPage() {
     Boolean(productName.trim()) ||
     Boolean(categoryId) ||
     Boolean(description.trim()) ||
+    Boolean(sku.trim()) ||
     images.length > 0 ||
     variants.length > 1 ||
     variants.some(
@@ -632,32 +716,13 @@ export default function AddProductPage() {
                       Danh mục sản phẩm
                     </FieldLabel>
 
-                    <TextField
-                      select
-                      fullWidth
-                      size="small"
+                    <CategoryPicker
+                      categories={categories}
                       value={categoryId}
-                      onChange={(event) => setCategoryId(event.target.value)}
-                      disabled={
-                        saving ||
-                        loadingCategories ||
-                        categories.length === 0
-                      }
-                      sx={inputSx(false)}
-                    >
-                      <MenuItem value="" disabled>
-                        -- Chọn danh mục sản phẩm --
-                      </MenuItem>
-
-                      {categories.map((category) => (
-                        <MenuItem
-                          key={category.categoryId}
-                          value={category.categoryId}
-                        >
-                          {category.categoryName}
-                        </MenuItem>
-                      ))}
-                    </TextField>
+                      onChange={setCategoryId}
+                      disabled={saving || loadingCategories || categories.length === 0}
+                      inputSx={inputSx(false)}
+                    />
 
                     <Typography
                       sx={{
@@ -670,7 +735,52 @@ export default function AddProductPage() {
                         ? 'Đang tải danh sách danh mục...'
                         : categories.length === 0
                           ? 'Chưa có danh mục hoạt động nào.'
-                          : 'Chỉ hiển thị các danh mục đang hoạt động.'}
+                          : 'Gõ để tìm, không dấu cũng được. Danh mục có danh mục con thì chọn danh mục con.'}
+                    </Typography>
+                  </Box>
+
+                  <Box>
+                    <FieldLabel>
+                      Mã sản phẩm (SKU)
+                    </FieldLabel>
+
+                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        placeholder={
+                          skuHint
+                            ? `Để trống sẽ dùng ${skuHint}`
+                            : categoryId
+                              ? 'Để trống để tự tạo theo danh mục'
+                              : 'Chọn danh mục để gợi ý mã (ví dụ: GN-0001)'
+                        }
+                        value={sku}
+                        onChange={(event) => setSku(cleanCode(event.target.value))}
+                        disabled={saving}
+                        slotProps={{
+                          htmlInput: {
+                            maxLength: 30
+                          }
+                        }}
+                        sx={inputSx(false)}
+                      />
+                      <Tooltip title={categoryId ? 'Điền mã gợi ý theo danh mục' : 'Hãy chọn danh mục trước'}>
+                        <span>
+                          <Button
+                            startIcon={suggestingSku ? <CircularProgress size={14} color="inherit" /> : <ThunderboltOutlined />}
+                            onClick={handleSuggestSku}
+                            disabled={saving || suggestingSku || !categoryId}
+                            sx={{ ...outlineButtonSx, height: 44, whiteSpace: 'nowrap', flexShrink: 0 }}
+                          >
+                            Tạo tự động
+                          </Button>
+                        </span>
+                      </Tooltip>
+                    </Box>
+
+                    <Typography sx={{ fontSize: 12, color: C.muted, mt: 0.75 }}>
+                      Chỉ gồm chữ in hoa, số và dấu &quot;-&quot;. Mỗi biến thể sẽ có mã riêng dạng SKU-SIZE-MÀU (ví dụ GN-0001-42-DEN).
                     </Typography>
                   </Box>
 
@@ -1109,7 +1219,7 @@ export default function AddProductPage() {
           <TableContainer>
             <Table
               sx={{
-                minWidth: 650,
+                minWidth: 860,
                 '& th': {
                   bgcolor: C.surface,
                   color: C.muted,
@@ -1133,6 +1243,7 @@ export default function AddProductPage() {
                   <TableCell sx={{ pl: 3 }}>KÍCH THƯỚC (SIZE)</TableCell>
                   <TableCell>MÀU SẮC (COLOR)</TableCell>
                   <TableCell>GIÁ BÁN (VNĐ)</TableCell>
+                  <TableCell>MÃ BIẾN THỂ</TableCell>
                   <TableCell align="center" sx={{ pr: 3 }}>THAO TÁC</TableCell>
                 </TableRow>
               </TableHead>
@@ -1140,7 +1251,7 @@ export default function AddProductPage() {
               <TableBody>
                 {variants.map((variant) => (
                   <TableRow key={variant.id} hover sx={{ '&:hover': { bgcolor: '#FAFCFE' } }}>
-                    <TableCell sx={{ width: '25%', pl: 3 }}>
+                    <TableCell sx={{ width: '18%', pl: 3 }}>
                       <TextField
                         fullWidth
                         size="small"
@@ -1163,7 +1274,7 @@ export default function AddProductPage() {
                       />
                     </TableCell>
 
-                    <TableCell sx={{ width: '25%' }}>
+                    <TableCell sx={{ width: '22%' }}>
                       <TextField
                         fullWidth
                         size="small"
@@ -1186,7 +1297,7 @@ export default function AddProductPage() {
                       />
                     </TableCell>
 
-                    <TableCell sx={{ width: '35%' }}>
+                    <TableCell sx={{ width: '22%' }}>
                       <TextField
                         fullWidth
                         size="small"
@@ -1203,16 +1314,42 @@ export default function AddProductPage() {
                         }
                         slotProps={{
                           htmlInput: {
-                            min: 0,
+                            min: 1,
                             max: 999999999999,
                             step: 1000
                           }
                         }}
                         sx={inputSx(false)}
                       />
+                      {Number(variant.price) > 0 && (
+                        <Typography sx={{ fontSize: 12, color: C.muted, mt: 0.5 }}>
+                          {Number(variant.price).toLocaleString('vi-VN')} ₫
+                        </Typography>
+                      )}
                     </TableCell>
 
-                    <TableCell align="center" sx={{ width: '15%', pr: 3 }}>
+                    <TableCell sx={{ width: '28%' }}>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        placeholder={
+                          variant.size.trim()
+                            ? [sku.trim() || 'SKU', slug(variant.size), slug(variant.color)].filter(Boolean).join('-')
+                            : 'Tự tạo'
+                        }
+                        value={variant.code}
+                        disabled={saving}
+                        onChange={(event) => updateVariant(variant.id, 'code', cleanCode(event.target.value))}
+                        slotProps={{
+                          htmlInput: {
+                            maxLength: 32
+                          }
+                        }}
+                        sx={inputSx(false)}
+                      />
+                    </TableCell>
+
+                    <TableCell align="center" sx={{ width: '10%', pr: 3 }}>
                       <IconButton
                         size="small"
                         title="Xóa biến thể này"
@@ -1243,15 +1380,41 @@ export default function AddProductPage() {
 
           <Divider sx={{ borderColor: C.borderLight }} />
 
-          <Box sx={{ px: 3, py: 2 }}>
+          <Box
+            sx={{
+              px: 3,
+              py: 2,
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 1.5
+            }}
+          >
             <Typography
               sx={{
                 fontSize: 12.5,
                 color: C.muted
               }}
             >
-              Tổng cộng: <strong>{variants.length}</strong> biến thể · Tồn kho ban đầu sẽ là <strong>0</strong>
+              Tổng cộng: <strong>{variants.length}</strong> biến thể · Tồn kho ban đầu là <strong>0</strong>, được cộng khi tạo
+              phiếu nhập hàng. Để trống mã biến thể thì hệ thống tự tạo.
             </Typography>
+
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+              <Switch
+                size="small"
+                checked={onlineSalesEnabled}
+                disabled={saving}
+                onChange={(event) => setOnlineSalesEnabled(event.target.checked)}
+              />
+              <Box>
+                <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text }}>Mở bán online ngay</Typography>
+                <Typography sx={{ fontSize: 12, color: C.muted }}>
+                  {onlineSalesEnabled ? 'Hiện trên website khi có hàng' : 'Tắt: chỉ bán tại quầy, bật sau ở danh sách sản phẩm'}
+                </Typography>
+              </Box>
+            </Box>
           </Box>
         </Box>
       </Box>

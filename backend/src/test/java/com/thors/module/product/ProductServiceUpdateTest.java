@@ -5,11 +5,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.thors.common.ApiException;
@@ -112,7 +112,7 @@ class ProductServiceUpdateTest {
         productService.updateProduct(PRODUCT_ID, request(CURRENT_CATEGORY, variant(1, "M", "Đen", 120000)));
 
         // Không kiểm tra trạng thái danh mục khi giữ nguyên danh mục cũ
-        verifyNoInteractions(jdbcTemplate);
+        verify(jdbcTemplate, never()).queryForObject(contains("FROM category"), eq(Integer.class), any());
         verify(productRepository).updateVariant(PRODUCT_ID, 1, "M", "Đen", BigDecimal.valueOf(120000));
     }
 

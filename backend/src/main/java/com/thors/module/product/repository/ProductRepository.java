@@ -32,11 +32,15 @@ public class ProductRepository {
 
     public List<Product> findAll() {
         try {
-            return jdbcTemplate.query(listSql(true), new ProductMapper());
+            return jdbcTemplate.query(listSql(true, true), new ProductMapper());
         } catch (org.springframework.jdbc.BadSqlGrammarException e) {
-            // Database chưa chạy migration 2026-11-06_inventory.sql (chưa có min_stock_quantity):
-            // vẫn trả danh sách, chỉ không tính được "sắp hết"
-            return jdbcTemplate.query(listSql(false), new ProductMapper());
+            // Database chưa chạy migration 2026-11-10_product_sku.sql (chưa có product.sku)
+            // và/hoặc 2026-11-06_inventory.sql (chưa có min_stock_quantity): lùi dần, vẫn trả danh sách
+            try {
+                return jdbcTemplate.query(listSql(true, false), new ProductMapper());
+            } catch (org.springframework.jdbc.BadSqlGrammarException e2) {
+                return jdbcTemplate.query(listSql(false, false), new ProductMapper());
+            }
         }
     }
 
@@ -45,7 +49,7 @@ public class ProductRepository {
      * "sắp hết" dùng cùng công thức màn hình Tồn kho (WarehouseInventory): có thể bán = tồn − đang giữ
      * cho đơn; hết hàng khi tồn = 0; sắp hết khi có ngưỡng tối thiểu và có thể bán ≤ ngưỡng.
      */
-    private static String listSql(boolean withThreshold) {
+    private static String listSql(boolean withThreshold, boolean withSku) {
         String lowExpr = withThreshold
                 ? """
                   SUM(CASE WHEN d.status = 'ACTIVE' AND d.stock_quantity > 0
@@ -57,6 +61,7 @@ public class ProductRepository {
         return """
             SELECT
                 p.product_id,
+                %s
                 p.category_id,
                 c.category_name,
                 p.product_name,
@@ -122,7 +127,7 @@ public class ProductRepository {
                 ON p.product_id = stats.product_id
 
             ORDER BY p.product_id DESC
-            """.formatted(lowExpr);
+            """.formatted(withSku ? "p.sku," : "", lowExpr);
     }
 
     // ==========================================
@@ -227,10 +232,20 @@ public class ProductRepository {
     // ==========================================
 
     public Product findById(int productId) {
+        try {
+            return findById(productId, true);
+        } catch (org.springframework.jdbc.BadSqlGrammarException e) {
+            // DB chưa có cột product.sku
+            return findById(productId, false);
+        }
+    }
+
+    private Product findById(int productId, boolean withSku) {
 
         String sql = """
             SELECT
                 p.product_id,
+                %s
                 p.category_id,
                 c.category_name,
                 p.product_name,
@@ -279,7 +294,7 @@ public class ProductRepository {
                 ON p.product_id = stats.product_id
 
             WHERE p.product_id = ?
-            """;
+            """.formatted(withSku ? "p.sku," : "");
 
         List<Product> products = jdbcTemplate.query(
                 sql,
@@ -303,6 +318,7 @@ public class ProductRepository {
         String sql = """
             SELECT
                 detail_id AS detailId,
+                barcode AS code,
                 size,
                 color,
                 price,
@@ -365,7 +381,22 @@ public class ProductRepository {
 
     public int insertProduct(CreateProductRequest request) {
 
-        String sql = """
+        // sku = null khi DB chưa có cột product.sku (ProductService đã kiểm tra) -> câu lệnh cũ
+        boolean withSku = request.getSku() != null;
+
+        String sql = withSku
+            ? """
+            INSERT INTO product
+                (
+                    category_id,
+                    product_name,
+                    description,
+                    status,
+                    sku
+                )
+            VALUES (?, ?, ?, 'ACTIVE', ?)
+            """
+            : """
             INSERT INTO product
                 (
                     category_id,
@@ -400,6 +431,10 @@ public class ProductRepository {
                     request.getDescription()
             );
 
+            if (withSku) {
+                ps.setString(4, request.getSku());
+            }
+
             return ps;
 
         }, keyHolder);
@@ -428,9 +463,10 @@ public class ProductRepository {
                     price,
                     stock_quantity,
                     online_sales_enabled,
-                    status
+                    status,
+                    barcode
                 )
-            VALUES (?, ?, ?, ?, 0, 0, 'ACTIVE')
+            VALUES (?, ?, ?, ?, 0, 0, 'ACTIVE', ?)
             """;
 
         jdbcTemplate.update(
@@ -438,7 +474,8 @@ public class ProductRepository {
                 productId,
                 variant.getSize(),
                 variant.getColor(),
-                variant.getPrice()
+                variant.getPrice(),
+                variant.getCode()
         );
     }
 
@@ -549,6 +586,17 @@ public class ProductRepository {
             String color,
             java.math.BigDecimal price
     ) {
+        insertNewVariant(productId, size, color, price, null);
+    }
+
+    /** Thêm biến thể mới khi sửa sản phẩm, kèm mã biến thể (cột barcode; null = chưa có). */
+    public void insertNewVariant(
+            int productId,
+            String size,
+            String color,
+            java.math.BigDecimal price,
+            String code
+    ) {
         String sql = """
             INSERT INTO product_detail (
                 product_id,
@@ -557,9 +605,10 @@ public class ProductRepository {
                 price,
                 stock_quantity,
                 online_sales_enabled,
-                status
+                status,
+                barcode
             )
-            VALUES (?, ?, ?, ?, 0, 0, 'ACTIVE')
+            VALUES (?, ?, ?, ?, 0, 0, 'ACTIVE', ?)
             """;
 
         jdbcTemplate.update(
@@ -567,8 +616,14 @@ public class ProductRepository {
                 productId,
                 size,
                 color,
-                price
+                price,
+                code
         );
+    }
+
+    /** Đổi mã sản phẩm (SKU). */
+    public int updateProductSku(int productId, String sku) {
+        return jdbcTemplate.update("UPDATE product SET sku = ? WHERE product_id = ?", sku, productId);
     }
 
     public int updateProductStatus(int productId, String status) {

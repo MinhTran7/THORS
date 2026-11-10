@@ -42,7 +42,7 @@ import {
 
 import { getProducts, changeProductStatus, setProductOnline } from '../../services/productService';
 
-import { getCategories } from '../../services/categoryService';
+import { categoryFullName, getCategories, sortCategoriesAsTree } from '../../services/categoryService';
 import { primaryButtonSx, outlineButtonSx } from '../customer/theme';
 import ProductExcelDialog from './ProductExcelDialog';
 
@@ -267,7 +267,7 @@ export default function ProductPage() {
   const loadCategories = useCallback(async () => {
     try {
       const response = await getCategories();
-      setCategories(normalizeCategories(response));
+      setCategories(sortCategoriesAsTree(normalizeCategories(response)));
     } catch (err) {
       setError(err?.message || 'Không thể tải danh mục sản phẩm.');
     }
@@ -305,6 +305,12 @@ export default function ProductPage() {
   // SEARCH AND FILTER
   // ==========================================
 
+  // categoryId (chuỗi) -> id danh mục cha
+  const categoryParentMap = useMemo(
+    () => new Map(categories.filter((c) => c.parentId).map((c) => [String(c.categoryId), c.parentId])),
+    [categories]
+  );
+
   const filteredProducts = useMemo(() => {
     const keyword = normalizeText(search);
     // "#12" hoặc "12": khớp đúng mã sản phẩm (không khớp 112, 120...)
@@ -316,13 +322,18 @@ export default function ProductPage() {
         !keyword ||
         (idMatch && String(product.productId) === idMatch[1]) ||
         normalizeText(product.productName).includes(keyword) ||
+        normalizeText(product.sku).includes(keyword) ||
         normalizeText(product.searchText).includes(keyword);
 
-      const matchesCategory = categoryFilter === 'ALL' || String(product.categoryId) === categoryFilter;
+      // Lọc theo danh mục cha thì lấy cả sản phẩm của các danh mục con
+      const matchesCategory =
+        categoryFilter === 'ALL' ||
+        String(product.categoryId) === categoryFilter ||
+        String(categoryParentMap.get(String(product.categoryId)) ?? '') === categoryFilter;
 
       return matchesSearch && matchesCategory && matchTab(product);
     });
-  }, [products, search, categoryFilter, activeTab, tabMatchers]);
+  }, [products, search, categoryFilter, activeTab, tabMatchers, categoryParentMap]);
 
   // ==========================================
   // PAGINATION
@@ -634,8 +645,9 @@ export default function ProductPage() {
           >
             <MenuItem value="ALL">Tất cả danh mục</MenuItem>
             {categories.map((category) => (
-              <MenuItem key={category.categoryId} value={String(category.categoryId)}>
-                {category.categoryName}
+              <MenuItem key={category.categoryId} value={String(category.categoryId)} sx={{ pl: category.parentId ? 4 : 2 }}>
+                {category.parentId ? categoryFullName(category) : category.categoryName}
+                {category.childCount > 0 ? ' (tất cả)' : ''}
                 {category.status !== 'ACTIVE' ? ' (Đã ngưng)' : ''}
               </MenuItem>
             ))}
@@ -764,7 +776,7 @@ export default function ProductPage() {
                               {product.productName}
                             </Typography>
                             <Typography sx={{ fontSize: 12, color: '#94A3B8', mt: 0.25 }}>
-                              Mã ID: #{product.productId} · {activeVariants} biến thể
+                              {product.sku ? `${product.sku} · ` : ''}#{product.productId} · {activeVariants} biến thể
                             </Typography>
                           </Box>
                         </Stack>

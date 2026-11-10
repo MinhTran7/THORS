@@ -16,6 +16,11 @@ export async function createProduct(productData) {
   });
 }
 
+// Gợi ý mã sản phẩm (SKU) kế tiếp theo danh mục, vd { sku: 'GN-0004' }
+export async function suggestProductSku(categoryId) {
+  return api(`/products/sku-suggestion?categoryId=${encodeURIComponent(categoryId)}`);
+}
+
 export async function createProductWithImages(productData, images) {
   const formData = new FormData();
 

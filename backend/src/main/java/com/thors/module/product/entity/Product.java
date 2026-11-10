@@ -17,6 +17,17 @@ public class Product {
     private Integer variantCount;
     private Integer onlineVariantCount;
 
+    // Mã sản phẩm (SKU); null nếu DB chưa chạy migration 2026-11-10_product_sku.sql
+    private String sku;
+
+    public String getSku() {
+        return sku;
+    }
+
+    public void setSku(String sku) {
+        this.sku = sku;
+    }
+
     public Integer getProductId() {
         return productId;
     }

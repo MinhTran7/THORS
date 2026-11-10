@@ -84,6 +84,17 @@ public class ProductController {
     }
 
     // ==========================================
+    // GỢI Ý MÃ SẢN PHẨM (SKU) THEO DANH MỤC
+    // ==========================================
+
+    @GetMapping("/sku-suggestion")
+    public Map<String, String> suggestSku(
+            @org.springframework.web.bind.annotation.RequestParam(required = false) Integer categoryId
+    ) {
+        return Map.of("sku", productService.suggestSku(categoryId));
+    }
+
+    // ==========================================
     // ADD PRODUCT - JSON
     // ==========================================
 

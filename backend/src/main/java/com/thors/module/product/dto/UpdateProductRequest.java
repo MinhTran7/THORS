@@ -15,6 +15,17 @@ public class UpdateProductRequest {
     // Khác phiên bản hiện tại => người khác đã sửa trong lúc này => từ chối (409). null = không kiểm tra.
     private String version;
 
+    // Mã sản phẩm (SKU). null/rỗng => giữ nguyên (sản phẩm chưa có SKU thì tự tạo)
+    private String sku;
+
+    public String getSku() {
+        return sku;
+    }
+
+    public void setSku(String sku) {
+        this.sku = sku;
+    }
+
     public String getVersion() {
         return version;
     }

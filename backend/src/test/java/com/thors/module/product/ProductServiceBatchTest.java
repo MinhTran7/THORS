@@ -55,6 +55,9 @@ class ProductServiceBatchTest {
         // Arrange
         when(jdbcTemplate.queryForObject(anyString(), eq(Integer.class), eq(1)))
                 .thenReturn(1);
+        // Danh mục 1 là danh mục lá (không có danh mục con)
+        when(jdbcTemplate.queryForObject(contains("parent_id"), eq(Integer.class), eq(1)))
+                .thenReturn(0);
         when(productRepository.insertProduct(any())).thenReturn(101, 102);
 
         BatchCreateProductRequest batchRequest = new BatchCreateProductRequest();
@@ -112,7 +115,7 @@ class ProductServiceBatchTest {
                 IllegalArgumentException.class,
                 () -> productService.createProductsBatch(batchRequest)
         );
-        assertTrue(ex.getMessage().contains("must not be empty"));
+        assertTrue(ex.getMessage().contains("trống"));
     }
 
     @Test
@@ -136,7 +139,7 @@ class ProductServiceBatchTest {
                 IllegalArgumentException.class,
                 () -> productService.createProductsBatch(batchRequest)
         );
-        assertTrue(ex.getMessage().contains("active category"));
+        assertTrue(ex.getMessage().contains("ngưng hoạt động"));
         verify(productRepository, never()).insertProduct(any());
     }
 
@@ -144,6 +147,8 @@ class ProductServiceBatchTest {
     void createProductsBatch_duplicateVariantCombination_throwsException() {
         when(jdbcTemplate.queryForObject(anyString(), eq(Integer.class), eq(1)))
                 .thenReturn(1);
+        when(jdbcTemplate.queryForObject(contains("parent_id"), eq(Integer.class), eq(1)))
+                .thenReturn(0);
 
         BatchCreateProductRequest batchRequest = new BatchCreateProductRequest();
         CreateProductRequest p = new CreateProductRequest();
@@ -164,7 +169,7 @@ class ProductServiceBatchTest {
                 IllegalArgumentException.class,
                 () -> productService.createProductsBatch(batchRequest)
         );
-        assertTrue(ex.getMessage().contains("Duplicate size and color"));
+        assertTrue(ex.getMessage().contains("bị trùng"));
         verify(productRepository, never()).insertProduct(any());
     }
 

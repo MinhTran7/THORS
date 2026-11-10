@@ -433,7 +433,7 @@ export default function ProductDetailPage() {
                   mt: 0.5
                 }}
               >
-                Mã sản phẩm: #{product.productId}
+                {product.sku ? `SKU: ${product.sku} · ` : ''}Mã sản phẩm: #{product.productId}
               </Typography>
 
               <Typography
@@ -630,7 +630,14 @@ export default function ProductDetailPage() {
                             color: C.muted
                           }}
                         >
-                          #{variant.detailId}
+                          {variant.code ? (
+                            <Box component="span" sx={{ fontFamily: 'monospace', color: C.text, fontWeight: 600 }}>
+                              {variant.code}
+                            </Box>
+                          ) : (
+                            'Chưa có mã'
+                          )}
+                          <Box sx={{ fontSize: 11.5 }}>#{variant.detailId}</Box>
                         </TableCell>
 
                         <TableCell sx={{ fontSize: 13.5, fontWeight: 800, color: '#0F172A' }}>
