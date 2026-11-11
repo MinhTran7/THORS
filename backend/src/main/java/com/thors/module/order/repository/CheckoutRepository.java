@@ -63,6 +63,17 @@ public class CheckoutRepository {
                 itemsAmount, shippingFee, totalAmount, paymentMethod, null, null, BigDecimal.ZERO);
     }
 
+    /**
+     * Đơn thanh toán online: giữ hàng trong {@code minutes} phút (tính theo giờ DB). Quá hạn chưa trả thì
+     * OrderScheduler chuyển đơn sang EXPIRED và trả lại phần hàng đang giữ.
+     */
+    public int setPaymentDeadline(int orderId, int minutes) {
+        return jdbcTemplate.update(
+                "UPDATE orders SET payment_expires_at = DATE_ADD(NOW(), INTERVAL ? MINUTE)"
+                        + " WHERE order_id = ? AND order_status = 'AWAITING_PAYMENT'",
+                minutes, orderId);
+    }
+
     public int insertOrder(String orderNumber, int userId,
                            String deliveryName, String deliveryPhone, String deliveryAddress,
                            BigDecimal itemsAmount, BigDecimal shippingFee, BigDecimal totalAmount,

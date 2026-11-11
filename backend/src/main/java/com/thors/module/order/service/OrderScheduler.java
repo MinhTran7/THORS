@@ -22,17 +22,22 @@ public class OrderScheduler {
     }
 
     /**
-     * Mỗi 5 phút: hủy đơn chờ thanh toán đã quá hạn (khi có thanh toán online, đơn được cho 2 giờ) và
-     * tự hoàn tất đơn đã giao mà khách chưa bấm "Đã nhận hàng".
+     * Mỗi phút: hủy đơn chuyển khoản quá hạn thanh toán (giữ 10 phút — CheckoutService.ONLINE_PAYMENT_HOLD_MINUTES)
+     * và trả lại hàng đang giữ. Chạy mỗi phút để đơn không bị giữ quá lâu sau hạn.
      */
-    @Scheduled(fixedDelay = 5 * 60 * 1000L, initialDelay = 60 * 1000L)
-    public void run() {
+    @Scheduled(fixedDelay = 60 * 1000L, initialDelay = 30 * 1000L)
+    public void expireUnpaid() {
         try {
             int expired = service.expireUnpaidOrders();
             if (expired > 0) log.info("Đã hết hạn thanh toán {} đơn hàng", expired);
         } catch (RuntimeException e) {
             log.warn("Không xử lý được đơn hết hạn thanh toán: {}", e.getClass().getSimpleName());
         }
+    }
+
+    /** Mỗi 5 phút: tự hoàn tất đơn đã giao mà khách chưa bấm "Đã nhận hàng". */
+    @Scheduled(fixedDelay = 5 * 60 * 1000L, initialDelay = 60 * 1000L)
+    public void run() {
         try {
             int completed = service.autoCompleteDelivered();
             if (completed > 0) log.info("Đã tự hoàn tất {} đơn hàng đã giao", completed);

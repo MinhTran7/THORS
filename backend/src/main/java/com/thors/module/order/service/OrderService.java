@@ -6,6 +6,7 @@ import com.thors.module.notification.service.NotificationPublisher;
 import com.thors.module.notification.service.NotificationTypes;
 import com.thors.module.order.delivery.DeliveryService;
 import com.thors.module.order.delivery.GhnShippingService;
+import com.thors.module.order.dto.OrderViews;
 import com.thors.module.order.dto.OrderViews.Detail;
 import com.thors.module.order.dto.OrderViews.Page;
 import com.thors.module.order.repository.OrderRepository;
@@ -253,6 +254,24 @@ public class OrderService {
             Integer weightG,
             Integer ghnDistrictId,
             String ghnWardCode) {
+        return changeStatus(actor, orderId, target, reason, carrier, weightG, ghnDistrictId, ghnWardCode, null);
+    }
+
+    /**
+     * Như trên, kèm tài khoản nhận tiền hoàn: bắt buộc khi khách hủy đơn đã thanh toán online
+     * (cửa hàng không hoàn tiền tự động, chủ shop quét mã VietQR tạo từ tài khoản này để trả lại).
+     */
+    @Transactional
+    public Detail changeStatus(
+            Account actor,
+            int orderId,
+            String target,
+            String reason,
+            String carrier,
+            Integer weightG,
+            Integer ghnDistrictId,
+            String ghnWardCode,
+            OrderViews.BankAccount refundAccount) {
         requireOrderAccess(actor);
         if (!isCustomer(actor) && !"OWNER".equals(actor.role()))
             throw new ApiException(403, "ROLE", "Chỉ Owner được xử lý đơn hàng online.");
@@ -304,6 +323,13 @@ public class OrderService {
         else if (OrderStatus.SHIPPING.equals(target))
             delivery.requireDeliverableAddress(orderId, DeliveryService.NOT_FOUND_ON_SHIP);
 
+        // Khách hủy đơn đã thanh toán online: phải có tài khoản nhận tiền hoàn hợp lệ
+        boolean paidOnline =
+                "ONLINE".equals(found.detail().paymentMethod()) && "PAID".equals(found.detail().paymentStatus());
+        OrderViews.BankAccount safeRefund = null;
+        if (paidOnline && isCustomer(actor) && OrderStatus.CANCELLED.equals(target))
+            safeRefund = requireBankAccount(refundAccount);
+
         String finalReason = safeReason;
         if (finalReason == null && OrderStatus.REJECTED.equals(target)) finalReason = "Cửa hàng từ chối đơn";
         if (finalReason == null && OrderStatus.CANCELLED.equals(target)) finalReason = "Khách hủy đơn";
@@ -331,6 +357,33 @@ public class OrderService {
         }
 
         int customerId = found.userId();
+
+        // Đơn đã thanh toán online mà bị hủy / từ chối: cần hoàn tiền cho khách
+        boolean refundNeeded =
+                (OrderStatus.CANCELLED.equals(target) || OrderStatus.REJECTED.equals(target))
+                        && orders.markRefundPendingIfPaid(orderId) > 0;
+        String refundAmount = vnd(found.detail().totalAmount());
+        if (refundNeeded) {
+            // Tài khoản nhận hoàn: khách vừa nhập, hoặc (cửa hàng từ chối) tài khoản khách đã chuyển khoản
+            OrderViews.BankAccount account = safeRefund != null ? safeRefund : orders.payerAccount(orderId);
+            if (account != null) orders.saveRefundAccount(orderId, account);
+            notifications.toRole(
+                    OWNER_ROLE,
+                    NotificationTypes.ORDER_STATUS,
+                    "Cần hoàn tiền cho khách",
+                    "Đơn " + number + " đã thanh toán " + refundAmount + " nhưng bị "
+                            + (OrderStatus.CANCELLED.equals(target) ? "khách hủy" : "từ chối")
+                            + ". Hãy chuyển khoản trả lại khách rồi bấm \"Đã hoàn tiền\".",
+                    NotificationTypes.ENTITY_ORDER,
+                    orderId);
+            notifyCustomer(customerId, orderId, "Đơn hàng đang chờ hoàn tiền",
+                    account != null
+                            ? "Cửa hàng sẽ hoàn " + refundAmount + " cho đơn " + number + " vào tài khoản "
+                                    + account.accountNumber() + "."
+                            : "Đơn " + number + " sẽ được hoàn " + refundAmount
+                                    + ". Vui lòng vào chi tiết đơn để nhập tài khoản nhận tiền hoàn.");
+        }
+
         switch (target) {
             case OrderStatus.AWAITING_PICKUP ->
                     notifyCustomer(customerId, orderId, "Đơn hàng đã được xác nhận",
@@ -373,7 +426,89 @@ public class OrderService {
     }
 
     /**
-     * Việc nền: hủy đơn online chờ thanh toán đã quá hạn (đơn trả tiền online được cho 2 giờ, hạn lưu ở
+     * Owner xác nhận đã chuyển khoản trả lại khách cho đơn đang "Chờ hoàn tiền" (PayOS không hoàn tự động).
+     */
+    @Transactional
+    public Detail markRefunded(Account actor, int orderId) {
+        requireOrderAccess(actor);
+        if (!"OWNER".equals(actor.role()))
+            throw new ApiException(403, "ROLE", "Chỉ Owner được xác nhận đã hoàn tiền.");
+        var found =
+                orders.find(orderId, true)
+                        .filter(f -> OrderStatus.TYPE_ONLINE.equals(f.orderType()))
+                        .orElseThrow(
+                                () -> new ApiException(404, "ORDER_NOT_FOUND", "Không tìm thấy đơn hàng."));
+        if (orders.markRefunded(orderId) == 0)
+            throw new ApiException(409, "REFUND_STATE", "Đơn này không ở trạng thái chờ hoàn tiền.");
+        notifyCustomer(found.userId(), orderId, "Đã hoàn tiền",
+                "Cửa hàng đã hoàn " + vnd(found.detail().totalAmount()) + " cho đơn "
+                        + found.detail().orderNumber() + ".");
+        return detail(actor, orderId);
+    }
+
+    /**
+     * Nhập / sửa tài khoản nhận tiền hoàn khi đơn đang "Chờ hoàn tiền": khách tự nhập, hoặc Owner nhập giúp
+     * (vd. sau khi gọi điện hỏi khách) khi PayOS không gửi tài khoản người chuyển.
+     */
+    @Transactional
+    public Detail saveRefundAccount(Account actor, int orderId, OrderViews.BankAccount account) {
+        requireOrderAccess(actor);
+        boolean owner = "OWNER".equals(actor.role());
+        if (!isCustomer(actor) && !owner)
+            throw new ApiException(403, "ROLE", "Chỉ khách hàng hoặc Owner nhập tài khoản nhận tiền hoàn.");
+        var found =
+                orders.find(orderId, owner)
+                        .filter(f -> OrderStatus.TYPE_ONLINE.equals(f.orderType()))
+                        .filter(f -> owner || f.userId() == actor.id())
+                        .orElseThrow(
+                                () -> new ApiException(404, "ORDER_NOT_FOUND", "Không tìm thấy đơn hàng."));
+        if (!"REFUND_PENDING".equals(found.detail().paymentStatus()))
+            throw new ApiException(409, "REFUND_STATE", "Đơn này không ở trạng thái chờ hoàn tiền.");
+        if (!orders.saveRefundAccount(orderId, requireBankAccount(account)))
+            throw new ApiException(409, "REFUND_UNAVAILABLE",
+                    "Hệ thống chưa hỗ trợ lưu tài khoản hoàn tiền. Hãy chạy migration 2026-11-11_refund_bank_account.sql.");
+        if (owner)
+            notifyCustomer(found.userId(), orderId, "Đã ghi nhận tài khoản nhận hoàn tiền",
+                    "Cửa hàng sẽ hoàn tiền đơn " + found.detail().orderNumber() + " vào tài khoản "
+                            + account.accountNumber() + ".");
+        else
+            notifications.toRole(
+                    OWNER_ROLE,
+                    NotificationTypes.ORDER_STATUS,
+                    "Khách đã gửi tài khoản nhận hoàn tiền",
+                    "Đơn " + found.detail().orderNumber() + ": quét mã VietQR trong chi tiết đơn để hoàn tiền cho khách.",
+                    NotificationTypes.ENTITY_ORDER,
+                    orderId);
+        return detail(actor, orderId);
+    }
+
+    /** Kiểm tra tài khoản nhận tiền hoàn: mã BIN 6 số, số tài khoản 6–19 chữ số, tên chủ tài khoản. */
+    private static OrderViews.BankAccount requireBankAccount(OrderViews.BankAccount a) {
+        String bin = a == null ? null : blankToNull(a.bankBin());
+        String number = a == null ? null : blankToNull(a.accountNumber());
+        String name = a == null ? null : blankToNull(a.accountName());
+        if (bin == null || number == null || name == null)
+            throw new ApiException(400, "REFUND_ACCOUNT",
+                    "Đơn đã thanh toán: vui lòng nhập ngân hàng, số tài khoản và tên chủ tài khoản để nhận tiền hoàn.");
+        number = number.replaceAll("\\s", "");
+        if (!bin.matches("\\d{6}"))
+            throw new ApiException(400, "REFUND_ACCOUNT", "Ngân hàng nhận tiền hoàn không hợp lệ.");
+        if (!number.matches("\\d{6,19}"))
+            throw new ApiException(400, "REFUND_ACCOUNT", "Số tài khoản chỉ gồm 6–19 chữ số.");
+        if (name.length() > 100)
+            throw new ApiException(400, "REFUND_ACCOUNT", "Tên chủ tài khoản quá dài.");
+        String bankName = blankToNull(a.bankName());
+        return new OrderViews.BankAccount(bin, bankName == null ? null : bankName.trim(), number,
+                name.trim().toUpperCase(java.util.Locale.ROOT));
+    }
+
+    /** 120000 -> "120.000 ₫" */
+    private static String vnd(long amount) {
+        return String.format(java.util.Locale.ROOT, "%,d", amount).replace(',', '.') + " ₫";
+    }
+
+    /**
+     * Việc nền: hủy đơn online chờ thanh toán đã quá hạn (đơn chuyển khoản được giữ 10 phút, hạn lưu ở
      * payment_expires_at). Trả về số đơn đã chuyển sang hết hạn.
      */
     @Transactional
@@ -393,7 +528,7 @@ public class OrderService {
                     due.userId(),
                     due.orderId(),
                     "Đơn hàng đã hết hạn",
-                    "Đơn " + due.orderNumber() + " đã hết hạn thanh toán và bị hủy.");
+                    "Đơn " + due.orderNumber() + " đã quá 10 phút chưa thanh toán nên đã bị hủy.");
             count++;
         }
         return count;

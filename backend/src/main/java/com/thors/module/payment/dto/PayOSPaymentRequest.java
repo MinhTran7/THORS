@@ -14,6 +14,12 @@ public class PayOSPaymentRequest {
     private String cancelUrl;
     private String returnUrl;
     private String signature;
+    // Hạn của link (unix giây). Không nằm trong chữ ký; null = không gửi (link theo hạn mặc định của PayOS)
+    @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+    private Long expiredAt;
+
+    public Long getExpiredAt() { return expiredAt; }
+    public void setExpiredAt(Long expiredAt) { this.expiredAt = expiredAt; }
 
     public static class Item {
         private String name;

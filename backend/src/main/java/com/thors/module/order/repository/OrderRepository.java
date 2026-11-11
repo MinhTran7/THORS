@@ -45,6 +45,68 @@ public class OrderRepository {
         return rs.getObject(column, LocalDateTime.class);
     }
 
+    /** Cột có trong kết quả không (cột refund_* chỉ có sau migration 2026-11-11_refund_bank_account.sql). */
+    private static boolean hasColumn(ResultSet rs, String column) throws SQLException {
+        var meta = rs.getMetaData();
+        for (int i = 1; i <= meta.getColumnCount(); i++)
+            if (column.equalsIgnoreCase(meta.getColumnLabel(i))) return true;
+        return false;
+    }
+
+    private static BankAccount refundAccount(ResultSet rs) throws SQLException {
+        if (!hasColumn(rs, "refund_account_number")) return null;
+        String number = rs.getString("refund_account_number");
+        if (number == null || number.isBlank()) return null;
+        return new BankAccount(
+                rs.getString("refund_bank_bin"),
+                rs.getString("refund_bank_name"),
+                number,
+                rs.getString("refund_account_name"));
+    }
+
+    /** Tài khoản khách đã chuyển khoản cho đơn (lần thanh toán thành công gần nhất); null nếu PayOS không gửi. */
+    public BankAccount payerAccount(int orderId) {
+        try {
+            List<BankAccount> rows =
+                    db.query(
+                            """
+                            SELECT payer_bank_bin, payer_bank_name, payer_account_number, payer_account_name
+                            FROM payment
+                            WHERE order_id = ? AND payment_status = 'SUCCESS'
+                              AND payer_account_number IS NOT NULL AND payer_account_number <> ''
+                            ORDER BY paid_at DESC, payment_id DESC
+                            LIMIT 1
+                            """,
+                            (rs, i) ->
+                                    new BankAccount(
+                                            rs.getString("payer_bank_bin"),
+                                            rs.getString("payer_bank_name"),
+                                            rs.getString("payer_account_number"),
+                                            rs.getString("payer_account_name")),
+                            orderId);
+            return rows.isEmpty() ? null : rows.get(0);
+        } catch (org.springframework.jdbc.BadSqlGrammarException e) {
+            return null; // chưa chạy migration
+        }
+    }
+
+    /** Lưu tài khoản nhận tiền hoàn của đơn. false = DB chưa có cột (chưa chạy migration). */
+    public boolean saveRefundAccount(int orderId, BankAccount account) {
+        try {
+            db.update(
+                    "UPDATE orders SET refund_bank_bin = ?, refund_bank_name = ?, refund_account_number = ?,"
+                            + " refund_account_name = ? WHERE order_id = ?",
+                    account.bankBin(),
+                    account.bankName(),
+                    account.accountNumber(),
+                    account.accountName(),
+                    orderId);
+            return true;
+        } catch (org.springframework.jdbc.BadSqlGrammarException e) {
+            return false;
+        }
+    }
+
     /** 0h của ngày {@code day} theo giờ VN, đổi ra giờ UTC để so với cột trong DB. */
     private static LocalDateTime vnStartOfDayUtc(LocalDate day) {
         return day.atStartOfDay(VN).withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
@@ -220,7 +282,9 @@ public class OrderRepository {
                                             rs.getString("cancel_reason"),
                                             shipment,
                                             customer,
-                                            List.of());
+                                            List.of(),
+                                            refundAccount(rs),
+                                            null);
                             return new Found(rs.getInt("user_id"), rs.getString("order_type"), detail);
                         },
                         orderId);
@@ -254,7 +318,9 @@ public class OrderRepository {
                         d.cancelReason(),
                         d.shipment(),
                         d.customer(),
-                        lines(orderId));
+                        lines(orderId),
+                        d.refundAccount(),
+                        "ONLINE".equals(d.paymentMethod()) ? payerAccount(orderId) : null);
         return Optional.of(new Found(found.userId(), found.orderType(), withLines));
     }
 
@@ -726,6 +792,26 @@ public class OrderRepository {
     // ------------------------------------------------------------------
     // Việc chạy nền: đơn hết hạn thanh toán, đơn đã giao quá lâu
     // ------------------------------------------------------------------
+
+    /**
+     * Đơn online đã thanh toán (PayOS) mà bị hủy / từ chối: chuyển tiền sang "Chờ hoàn tiền" để chủ shop
+     * hoàn lại cho khách. Trả về số dòng đổi (0 = đơn chưa thanh toán, không cần hoàn).
+     */
+    public int markRefundPendingIfPaid(int orderId) {
+        return db.update(
+                "UPDATE orders SET payment_status = 'REFUND_PENDING'"
+                        + " WHERE order_id = ? AND payment_method = 'ONLINE' AND payment_status = 'PAID'"
+                        + " AND order_status IN ('CANCELLED', 'REJECTED')",
+                orderId);
+    }
+
+    /** Chủ shop đã chuyển khoản trả lại khách: "Chờ hoàn tiền" -> "Đã hoàn tiền". */
+    public int markRefunded(int orderId) {
+        return db.update(
+                "UPDATE orders SET payment_status = 'REFUNDED'"
+                        + " WHERE order_id = ? AND payment_status = 'REFUND_PENDING'",
+                orderId);
+    }
 
     /** Đơn cần xử lý nền: mã, chủ đơn và số đơn để gửi thông báo. */
     public record Due(int orderId, int userId, String orderNumber) {}
