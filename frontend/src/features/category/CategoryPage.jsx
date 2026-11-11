@@ -982,7 +982,6 @@ export default function CategoryPage() {
             <TableHead>
               <TableRow>
                 <TableCell sx={{ pl: 3 }}>TÊN DANH MỤC</TableCell>
-                <TableCell>ĐỐI TƯỢNG</TableCell>
                 <TableCell>MÔ TẢ</TableCell>
                 <TableCell>SỐ SẢN PHẨM</TableCell>
                 <TableCell>TRẠNG THÁI</TableCell>
@@ -993,7 +992,7 @@ export default function CategoryPage() {
             <TableBody>
               {loading && (
                 <TableRow>
-                  <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
+                  <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
                     <CircularProgress size={32} sx={{ color: C.cyan }} />
                     <Typography fontSize={13.5} color={C.muted} sx={{ mt: 1.5 }}>
                       Đang tải danh mục...
@@ -1088,11 +1087,6 @@ export default function CategoryPage() {
                             {/* Chỉ hiện tên cho gọn; mã danh mục xem ở nút Xem chi tiết */}
                           </Box>
                         </Stack>
-                      </TableCell>
-
-                      {/* TARGET GROUP */}
-                      <TableCell>
-                        <TargetBadge value={category.targetGroup} />
                       </TableCell>
 
                       {/* DESCRIPTION */}
@@ -1265,7 +1259,7 @@ export default function CategoryPage() {
 
               {!loading && filteredCategories.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
+                  <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
                     <Typography
                       sx={{
                         fontSize: 14,

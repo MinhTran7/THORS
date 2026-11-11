@@ -175,6 +175,15 @@ public class Product {
     }
 
     private String variantCodes;            // mã các biến thể đang hoạt động, "TH000051,TH000052"
+    private Integer neverStockedVariantCount; // biến thể tồn 0, chưa từng nhập hàng (chưa có dòng thẻ kho)
+
+    public Integer getNeverStockedVariantCount() {
+        return neverStockedVariantCount;
+    }
+
+    public void setNeverStockedVariantCount(Integer neverStockedVariantCount) {
+        this.neverStockedVariantCount = neverStockedVariantCount;
+    }
 
     public String getVariantCodes() {
         return variantCodes;

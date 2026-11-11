@@ -32,31 +32,50 @@ public class ProductRepository {
 
     public List<Product> findAll() {
         try {
-            return jdbcTemplate.query(listSql(true, true), new ProductMapper());
+            return jdbcTemplate.query(listSql(true, true, true), new ProductMapper());
+        } catch (org.springframework.jdbc.BadSqlGrammarException ignored) {
+            // DB chưa có bảng thẻ kho stock_adjustment -> không phân biệt "chưa nhập hàng"
+        }
+        try {
+            return jdbcTemplate.query(listSql(true, true, false), new ProductMapper());
         } catch (org.springframework.jdbc.BadSqlGrammarException e) {
             // Database chưa chạy migration 2026-11-10_product_sku.sql (chưa có product.sku)
             // và/hoặc 2026-11-06_inventory.sql (chưa có min_stock_quantity): lùi dần, vẫn trả danh sách
             try {
-                return jdbcTemplate.query(listSql(true, false), new ProductMapper());
+                return jdbcTemplate.query(listSql(true, false, false), new ProductMapper());
             } catch (org.springframework.jdbc.BadSqlGrammarException e2) {
-                return jdbcTemplate.query(listSql(false, false), new ProductMapper());
+                return jdbcTemplate.query(listSql(false, false, false), new ProductMapper());
             }
         }
     }
 
+    /** Ngưỡng "sắp hết" mặc định cho biến thể chưa đặt ngưỡng tối thiểu ở màn hình Tồn kho. */
+    public static final int DEFAULT_LOW_STOCK_THRESHOLD = 5;
+
     /**
      * Danh sách sản phẩm. Tồn kho, giá chỉ tính biến thể đang hoạt động; "có thể bán", "hết hàng",
      * "sắp hết" dùng cùng công thức màn hình Tồn kho (WarehouseInventory): có thể bán = tồn − đang giữ
-     * cho đơn; hết hàng khi tồn = 0; sắp hết khi có ngưỡng tối thiểu và có thể bán ≤ ngưỡng.
+     * cho đơn; sắp hết khi có thể bán ≤ ngưỡng (chưa đặt ngưỡng thì dùng DEFAULT_LOW_STOCK_THRESHOLD).
+     * withLedger: dựa vào thẻ kho (stock_adjustment) để tách "hết hàng" (đã từng có hàng, nay tồn = 0)
+     * với "chưa nhập hàng" (tồn = 0, chưa từng có biến động kho nào).
      */
-    private static String listSql(boolean withThreshold, boolean withSku) {
+    private static String listSql(boolean withThreshold, boolean withSku, boolean withLedger) {
         String lowExpr = withThreshold
                 ? """
                   SUM(CASE WHEN d.status = 'ACTIVE' AND d.stock_quantity > 0
-                           AND d.min_stock_quantity IS NOT NULL
-                           AND d.stock_quantity - COALESCE(h.held, 0) <= d.min_stock_quantity
-                      THEN 1 ELSE 0 END)"""
+                           AND d.stock_quantity - COALESCE(h.held, 0) <= COALESCE(d.min_stock_quantity, %d)
+                      THEN 1 ELSE 0 END)""".formatted(DEFAULT_LOW_STOCK_THRESHOLD)
                 : "0";
+        // Hết hàng: chỉ tính biến thể đã từng có hàng; chưa từng có biến động kho -> "chưa nhập hàng"
+        String outExpr = withLedger
+                ? "SUM(CASE WHEN d.status = 'ACTIVE' AND d.stock_quantity = 0 AND mv.detail_id IS NOT NULL THEN 1 ELSE 0 END)"
+                : "SUM(CASE WHEN d.status = 'ACTIVE' AND d.stock_quantity = 0 THEN 1 ELSE 0 END)";
+        String neverExpr = withLedger
+                ? "SUM(CASE WHEN d.status = 'ACTIVE' AND d.stock_quantity = 0 AND mv.detail_id IS NULL THEN 1 ELSE 0 END)"
+                : "0";
+        String ledgerJoin = withLedger
+                ? "LEFT JOIN (SELECT DISTINCT detail_id FROM stock_adjustment) mv ON mv.detail_id = d.detail_id"
+                : "";
 
         return """
             SELECT
@@ -112,7 +131,8 @@ public class ProductRepository {
                     ) AS online_variant_count,
                     SUM(CASE WHEN d.status = 'ACTIVE'
                              THEN GREATEST(d.stock_quantity - COALESCE(h.held, 0), 0) ELSE 0 END) AS sellable_stock,
-                    SUM(CASE WHEN d.status = 'ACTIVE' AND d.stock_quantity = 0 THEN 1 ELSE 0 END) AS out_variant_count,
+                    %s AS out_variant_count,
+                    %s AS never_stocked_variant_count,
                     %s AS low_variant_count,
                     GROUP_CONCAT(CONCAT_WS(' ', d.barcode, d.size, d.color) SEPARATOR ' ') AS search_text,
                     GROUP_CONCAT(CASE WHEN d.status = 'ACTIVE' THEN d.barcode END ORDER BY d.detail_id SEPARATOR ',') AS variant_codes
@@ -123,12 +143,13 @@ public class ProductRepository {
                     WHERE reserved_quantity > 0
                     GROUP BY detail_id
                 ) h ON h.detail_id = d.detail_id
+                %s
                 GROUP BY d.product_id
             ) stats
                 ON p.product_id = stats.product_id
 
             ORDER BY p.product_id DESC
-            """.formatted(withSku ? "p.sku," : "", lowExpr);
+            """.formatted(withSku ? "p.sku," : "", outExpr, neverExpr, lowExpr, ledgerJoin);
     }
 
     // ==========================================
@@ -315,8 +336,32 @@ public class ProductRepository {
     public List<Map<String, Object>> findVariantsByProductId(
             int productId
     ) {
+        try {
+            return jdbcTemplate.queryForList(variantsSql(true), productId);
+        } catch (org.springframework.jdbc.BadSqlGrammarException e) {
+            // DB chưa có bảng kệ (rack / shelf_level / product_location) -> không có vị trí kệ
+            return jdbcTemplate.queryForList(variantsSql(false), productId);
+        }
+    }
 
-        String sql = """
+    /**
+     * withLocations: thêm cột locations = các vị trí kệ đang chứa hàng của biến thể, dạng "A1:30,B2:4"
+     * (mã kệ + số tầng, giống nhãn ở module Kho; chỉ lấy vị trí còn số lượng > 0).
+     */
+    private static String variantsSql(boolean withLocations) {
+        String locations = withLocations
+                ? """
+                (
+                    SELECT GROUP_CONCAT(CONCAT(r.rack_code, t.level_number, ':', pl.quantity)
+                                        ORDER BY r.rack_code, t.level_number SEPARATOR ',')
+                    FROM product_location pl
+                    JOIN shelf_level t ON t.shelf_level_id = pl.shelf_level_id
+                    JOIN rack r ON r.rack_id = t.rack_id
+                    WHERE pl.detail_id = pd.detail_id AND pl.quantity > 0
+                ) AS locations,"""
+                : "";
+
+        return """
             SELECT
                 detail_id AS detailId,
                 barcode AS code,
@@ -331,6 +376,7 @@ public class ProductRepository {
                 ), 0), 0) AS sellableQuantity,
                 online_sales_enabled AS onlineSalesEnabled,
                 status,
+                %s
                 -- locked = 1: biến thể đã có tồn hoặc lịch sử bán/kho, không được đổi size/màu
                 -- (đổi sẽ làm hàng thật trên kệ, mã vạch và lịch sử bị lệch tên)
                 (
@@ -343,12 +389,7 @@ public class ProductRepository {
             FROM product_detail pd
             WHERE pd.product_id = ?
             ORDER BY pd.detail_id ASC
-            """;
-
-        return jdbcTemplate.queryForList(
-                sql,
-                productId
-        );
+            """.formatted(locations);
     }
 
     // ==========================================

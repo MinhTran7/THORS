@@ -1,4 +1,5 @@
 -- Bỏ SKU cấp sản phẩm + đưa mã biến thể về dạng TH (11/11/2026).
+-- ĐÃ CHẠY trên Aiven (11/11/2026): 20 sản phẩm không còn SKU; 39 biến thể đều mã TH (#59 -> TH000059, #60 -> TH000060).
 -- Mã tự tạo nay nằm ở TỪNG BIẾN THỂ: product_detail.barcode = TH + mã biến thể 6 chữ số (vd TH000058),
 -- giống module Kho (WarehouseBarcodes).
 

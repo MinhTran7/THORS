@@ -9,6 +9,7 @@ import {
   CircularProgress,
   Grid,
   IconButton,
+  InputAdornment,
   MenuItem,
   Stack,
   TextField,
@@ -46,6 +47,7 @@ import {
   sortCategoriesAsTree
 } from '../../services/categoryService';
 import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../customer/theme';
+import { formatPriceInput, parsePriceInput } from './priceInput';
 
 const inputSx = (hasError) => ({
   '& .MuiOutlinedInput-root': {
@@ -735,19 +737,23 @@ export default function EditProductPage() {
                           fullWidth
                           required
                           size="small"
-                          type="number"
-                          value={variant.price}
+                          // Hiển thị dạng tiền ngay trong ô (250.000), lưu chuỗi chữ số (250000)
+                          placeholder="Ví dụ: 250.000"
+                          value={formatPriceInput(variant.price)}
                           onChange={(event) =>
                             updateVariantField(
                               index,
                               'price',
-                              event.target.value
+                              parsePriceInput(event.target.value)
                             )
                           }
                           slotProps={{
                             htmlInput: {
-                              min: 0,
-                              step: 1000
+                              inputMode: 'numeric',
+                              autoComplete: 'off'
+                            },
+                            input: {
+                              endAdornment: <InputAdornment position="end">₫</InputAdornment>
                             }
                           }}
                           sx={inputSx(false)}
