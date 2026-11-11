@@ -77,7 +77,7 @@ public class ProductService {
     // GỢI Ý MÃ SẢN PHẨM (SKU)
     // ==========================================
 
-    /** SKU kế tiếp theo danh mục (vd "Giày nam" -> GN-0004), dùng cho nút "Tạo tự động". */
+    /** SKU kế tiếp dạng TH000001, dùng cho nút "Tạo tự động". */
     @Transactional(readOnly = true)
     public String suggestSku(Integer categoryId) {
         if (!codes.supportsSku()) {
@@ -379,33 +379,23 @@ public class ProductService {
             CreateProductRequest request
     ) {
 
-        // Mã sản phẩm (SKU): để trống -> tự tạo theo danh mục; DB chưa có cột sku -> bỏ qua
+        // Mã sản phẩm (SKU) cấp sản phẩm: không tự tạo nữa — chỉ lưu khi gửi lên (vd nhập từ Excel)
         String sku = null;
         if (codes.supportsSku()) {
             sku = request.getSku();
-            if (sku == null) {
-                sku = codes.suggestSku(request.getCategoryId());
-            } else if (codes.skuExists(sku, null)) {
+            if (sku != null && codes.skuExists(sku, null)) {
                 throw new ApiException(409, "SKU_EXISTS",
                         "Mã sản phẩm \"" + sku + "\" đã được dùng cho sản phẩm khác.");
             }
         }
         request.setSku(sku);
 
-        // Mã biến thể: mã nhập tay phải chưa ai dùng; còn lại tự tạo SKU-SIZE-MÀU
-        Set<String> takenCodes = new HashSet<>();
+        // Mã biến thể nhập tay phải chưa ai dùng; để trống thì gán TH + id biến thể sau khi lưu
         for (CreateProductRequest.VariantRequest variant : request.getVariants()) {
             String code = variant.getCode();
-            if (code == null) continue;
-            if (codes.variantCodeExists(code)) {
+            if (code != null && codes.variantCodeExists(code)) {
                 throw new ApiException(409, "VARIANT_CODE_EXISTS",
                         "Mã biến thể \"" + code + "\" đã được dùng cho biến thể khác.");
-            }
-            takenCodes.add(code);
-        }
-        for (CreateProductRequest.VariantRequest variant : request.getVariants()) {
-            if (variant.getCode() == null && sku != null) {
-                variant.setCode(codes.uniqueVariantCode(sku, variant.getSize(), variant.getColor(), takenCodes));
             }
         }
 
@@ -423,6 +413,9 @@ public class ProductService {
                         variant
                 );
             }
+
+            // Biến thể chưa có mã: TH + id biến thể (giống module Kho)
+            codes.assignVariantCodes(productId);
         } catch (org.springframework.dao.DuplicateKeyException e) {
             // Hai người tạo cùng lúc lấy trùng mã, hoặc biến thể trùng theo cách so của DB
             throw new ApiException(409, "PRODUCT_CODE_CONFLICT",
@@ -818,22 +811,18 @@ public class ProductService {
             throw new ApiException(500, "PRODUCT_UPDATE_FAILED", "Không cập nhật được sản phẩm. Vui lòng thử lại.");
         }
 
-        // 8b. Mã sản phẩm (SKU): đổi nếu nhập mã mới; sản phẩm cũ chưa có mã thì tự tạo
-        String productSku = null;
+        // 8b. Mã sản phẩm (SKU): chỉ đổi khi nhập mã mới (không tự tạo — mã tự tạo nằm ở từng biến thể)
         if (codes.supportsSku()) {
-            productSku = existingProduct.getSku();
-            String nextSku = requestedSku != null ? requestedSku
-                    : productSku == null ? codes.suggestSku(categoryId) : null;
+            String productSku = existingProduct.getSku();
+            String nextSku = requestedSku;
             if (nextSku != null && !nextSku.equals(productSku)) {
                 if (codes.skuExists(nextSku, productId)) {
                     throw new ApiException(409, "SKU_EXISTS",
                             "Mã sản phẩm \"" + nextSku + "\" đã được dùng cho sản phẩm khác.");
                 }
                 productRepository.updateProductSku(productId, nextSku);
-                productSku = nextSku;
             }
         }
-        Set<String> takenCodes = new HashSet<>();
 
         // 9a. Biến thể đổi size/màu: chuyển sang tên tạm trước (size = "~<detailId>", luôn duy nhất)
         // để hoán đổi size/màu giữa hai biến thể (M <-> L) không vướng UNIQUE (product_id, size, color)
@@ -880,17 +869,18 @@ public class ProductService {
 
             } else {
 
-                // Biến thể mới: tự tạo mã SKU-SIZE-MÀU (sản phẩm có SKU)
+                // Biến thể mới: mã được gán ngay bên dưới (TH + id biến thể)
                 productRepository.insertNewVariant(
                         productId,
                         variant.getSize(),
                         variant.getColor(),
-                        variant.getPrice(),
-                        productSku == null ? null
-                                : codes.uniqueVariantCode(productSku, variant.getSize(), variant.getColor(), takenCodes)
+                        variant.getPrice()
                 );
             }
         }
+
+        // 9c. Biến thể chưa có mã (mới thêm hoặc dữ liệu cũ): TH + id biến thể, giống module Kho
+        codes.assignVariantCodes(productId);
 
         logger.info(
                 "Product {} updated successfully",

@@ -5,7 +5,7 @@
 -- Backend vẫn chạy được khi CHƯA chạy file này (chỉ không dùng được danh mục cha / đối tượng).
 -- Sau khi chạy: chuyển các sản phẩm đang nằm trực tiếp ở danh mục cha sang danh mục con tương ứng.
 
--- 1. Danh mục cha (chỉ 2 cấp: cha phải là danh mục gốc — kiểm tra ở backend)
+-- 1. Danh mục cha (từ 11/11/2026 không giới hạn số cấp — xem 2026-11-11_category_free_target.sql)
 ALTER TABLE category
   ADD COLUMN parent_id INT DEFAULT NULL
     COMMENT 'Danh mục cha; NULL = danh mục gốc. Chỉ cho 2 cấp'

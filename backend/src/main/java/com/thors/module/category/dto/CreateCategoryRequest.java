@@ -9,6 +9,8 @@ public class CreateCategoryRequest {
     private Integer parentId;
     // Đối tượng: MEN / WOMEN / KIDS / UNISEX (null/rỗng = không áp dụng)
     private String targetGroup;
+    // Khóa icon chọn ở bảng icon (vd "skin"); null/rỗng = icon mặc định
+    private String icon;
 
     public CreateCategoryRequest() {
     }
@@ -43,5 +45,13 @@ public class CreateCategoryRequest {
 
     public void setTargetGroup(String targetGroup) {
         this.targetGroup = targetGroup;
+    }
+
+    public String getIcon() {
+        return icon;
+    }
+
+    public void setIcon(String icon) {
+        this.icon = icon;
     }
 }

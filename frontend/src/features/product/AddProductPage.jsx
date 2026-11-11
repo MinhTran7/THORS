@@ -20,7 +20,6 @@ import {
   TableHead,
   TableRow,
   TextField,
-  Tooltip,
   Typography
 } from '@mui/material';
 
@@ -32,11 +31,10 @@ import {
   InfoCircleOutlined,
   PlusOutlined,
   StarFilled,
-  StarOutlined,
-  ThunderboltOutlined
+  StarOutlined
 } from '@ant-design/icons';
 
-import { createProductWithImages, suggestProductSku } from '../../services/productService';
+import { createProductWithImages } from '../../services/productService';
 import {
   getCategories,
   isAssignableCategory,
@@ -112,12 +110,6 @@ const fold = (value) =>
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
 
-// "Xanh lá" -> "XANH-LA" (phần mã biến thể gợi ý)
-const slug = (value) =>
-  fold(value)
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
 
 function SectionTitle({ title, subtitle }) {
   return (
@@ -179,11 +171,6 @@ export default function AddProductPage() {
   const [productName, setProductName] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [description, setDescription] = useState('');
-  // Mã sản phẩm (SKU): để trống => backend tự tạo theo danh mục (vd GN-0001)
-  const [sku, setSku] = useState('');
-  const [suggestingSku, setSuggestingSku] = useState(false);
-  // Mã gợi ý theo danh mục đang chọn (hiện ở placeholder; để trống ô SKU thì backend dùng mã kế tiếp)
-  const [skuHint, setSkuHint] = useState('');
   // Mở bán online ngay sau khi tạo (mặc định tắt)
   const [onlineSalesEnabled, setOnlineSalesEnabled] = useState(false);
 
@@ -386,40 +373,6 @@ export default function AddProductPage() {
   }
 
   // ==========================================
-  // GỢI Ý MÃ SẢN PHẨM (SKU)
-  // ==========================================
-
-  useEffect(() => {
-    let active = true;
-    setSkuHint('');
-    if (!categoryId) return undefined;
-    suggestProductSku(categoryId)
-      .then((data) => {
-        if (active) setSkuHint(data?.sku || '');
-      })
-      .catch(() => {
-        // DB chưa có cột SKU hoặc lỗi mạng: không gợi ý, vẫn tạo sản phẩm bình thường
-      });
-    return () => {
-      active = false;
-    };
-  }, [categoryId]);
-
-  async function handleSuggestSku() {
-    if (!categoryId) return;
-    setError('');
-    setSuggestingSku(true);
-    try {
-      const data = await suggestProductSku(categoryId);
-      setSku(data?.sku || '');
-    } catch (err) {
-      setError(err?.message || 'Không tạo được mã sản phẩm.');
-    } finally {
-      setSuggestingSku(false);
-    }
-  }
-
-  // ==========================================
   // FORM VALIDATION
   // ==========================================
 
@@ -436,9 +389,6 @@ export default function AddProductPage() {
       return 'Vui lòng chọn danh mục cho sản phẩm.';
     }
 
-    if (sku && (sku.length < 3 || sku.length > 30 || !CODE_PATTERN.test(sku))) {
-      return 'Mã sản phẩm (SKU) chỉ gồm chữ in hoa, số và dấu "-", dài 3–30 ký tự, không bắt đầu/kết thúc bằng "-".';
-    }
 
     if (images.length === 0) {
       return 'Vui lòng tải lên ít nhất một hình ảnh đại diện cho sản phẩm.';
@@ -528,7 +478,6 @@ export default function AddProductPage() {
       categoryId: Number(categoryId),
       productName: productName.trim(),
       description: description.trim(),
-      sku: sku.trim() || null,
       onlineSalesEnabled,
       variants: variants.map((variant) => ({
         size: variant.size.trim(),
@@ -571,7 +520,6 @@ export default function AddProductPage() {
     Boolean(productName.trim()) ||
     Boolean(categoryId) ||
     Boolean(description.trim()) ||
-    Boolean(sku.trim()) ||
     images.length > 0 ||
     variants.length > 1 ||
     variants.some(
@@ -736,51 +684,6 @@ export default function AddProductPage() {
                         : categories.length === 0
                           ? 'Chưa có danh mục hoạt động nào.'
                           : 'Gõ để tìm, không dấu cũng được. Danh mục có danh mục con thì chọn danh mục con.'}
-                    </Typography>
-                  </Box>
-
-                  <Box>
-                    <FieldLabel>
-                      Mã sản phẩm (SKU)
-                    </FieldLabel>
-
-                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
-                      <TextField
-                        fullWidth
-                        size="small"
-                        placeholder={
-                          skuHint
-                            ? `Để trống sẽ dùng ${skuHint}`
-                            : categoryId
-                              ? 'Để trống để tự tạo theo danh mục'
-                              : 'Chọn danh mục để gợi ý mã (ví dụ: GN-0001)'
-                        }
-                        value={sku}
-                        onChange={(event) => setSku(cleanCode(event.target.value))}
-                        disabled={saving}
-                        slotProps={{
-                          htmlInput: {
-                            maxLength: 30
-                          }
-                        }}
-                        sx={inputSx(false)}
-                      />
-                      <Tooltip title={categoryId ? 'Điền mã gợi ý theo danh mục' : 'Hãy chọn danh mục trước'}>
-                        <span>
-                          <Button
-                            startIcon={suggestingSku ? <CircularProgress size={14} color="inherit" /> : <ThunderboltOutlined />}
-                            onClick={handleSuggestSku}
-                            disabled={saving || suggestingSku || !categoryId}
-                            sx={{ ...outlineButtonSx, height: 44, whiteSpace: 'nowrap', flexShrink: 0 }}
-                          >
-                            Tạo tự động
-                          </Button>
-                        </span>
-                      </Tooltip>
-                    </Box>
-
-                    <Typography sx={{ fontSize: 12, color: C.muted, mt: 0.75 }}>
-                      Chỉ gồm chữ in hoa, số và dấu &quot;-&quot;. Mỗi biến thể sẽ có mã riêng dạng SKU-SIZE-MÀU (ví dụ GN-0001-42-DEN).
                     </Typography>
                   </Box>
 
@@ -1332,11 +1235,8 @@ export default function AddProductPage() {
                       <TextField
                         fullWidth
                         size="small"
-                        placeholder={
-                          variant.size.trim()
-                            ? [sku.trim() || 'SKU', slug(variant.size), slug(variant.color)].filter(Boolean).join('-')
-                            : 'Tự tạo'
-                        }
+                        // Để trống: lưu xong tự gán TH + mã biến thể (vd TH000058), giống mã vạch ở module Kho
+                        placeholder="Tự tạo (TH000…)"
                         value={variant.code}
                         disabled={saving}
                         onChange={(event) => updateVariant(variant.id, 'code', cleanCode(event.target.value))}
@@ -1398,7 +1298,7 @@ export default function AddProductPage() {
               }}
             >
               Tổng cộng: <strong>{variants.length}</strong> biến thể · Tồn kho ban đầu là <strong>0</strong>, được cộng khi tạo
-              phiếu nhập hàng. Để trống mã biến thể thì hệ thống tự tạo.
+              phiếu nhập hàng. Để trống mã biến thể thì hệ thống tự tạo dạng TH + mã biến thể (ví dụ TH000058).
             </Typography>
 
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>

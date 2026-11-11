@@ -66,6 +66,10 @@ public class ProductMapper implements RowMapper<Product> {
             product.setOutOfStockVariantCount(rs.getInt("out_variant_count"));
             product.setLowStockVariantCount(rs.getInt("low_variant_count"));
             product.setSearchText(rs.getString("search_text"));
+            // Mã các biến thể đang hoạt động, phân tách bằng dấu phẩy (vd "TH000051,TH000052")
+            if (columns.contains("variant_codes")) {
+                product.setVariantCodes(rs.getString("variant_codes"));
+            }
         }
 
         return product;

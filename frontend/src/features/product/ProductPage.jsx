@@ -305,11 +305,21 @@ export default function ProductPage() {
   // SEARCH AND FILTER
   // ==========================================
 
-  // categoryId (chuỗi) -> id danh mục cha
+  // categoryId (chuỗi) -> id danh mục cha (để lọc theo nhánh nhiều cấp)
   const categoryParentMap = useMemo(
     () => new Map(categories.filter((c) => c.parentId).map((c) => [String(c.categoryId), c.parentId])),
     [categories]
   );
+
+  // Sản phẩm thuộc danh mục đang lọc hoặc bất kỳ danh mục con / cháu nào của nó
+  const inCategoryBranch = (categoryId, branchId) => {
+    let cursor = String(categoryId ?? '');
+    for (let depth = 0; cursor && depth < 50; depth++) {
+      if (cursor === branchId) return true;
+      cursor = String(categoryParentMap.get(cursor) ?? '');
+    }
+    return false;
+  };
 
   const filteredProducts = useMemo(() => {
     const keyword = normalizeText(search);
@@ -325,11 +335,8 @@ export default function ProductPage() {
         normalizeText(product.sku).includes(keyword) ||
         normalizeText(product.searchText).includes(keyword);
 
-      // Lọc theo danh mục cha thì lấy cả sản phẩm của các danh mục con
-      const matchesCategory =
-        categoryFilter === 'ALL' ||
-        String(product.categoryId) === categoryFilter ||
-        String(categoryParentMap.get(String(product.categoryId)) ?? '') === categoryFilter;
+      // Lọc theo danh mục cha thì lấy cả sản phẩm của các danh mục con, cháu…
+      const matchesCategory = categoryFilter === 'ALL' || inCategoryBranch(product.categoryId, categoryFilter);
 
       return matchesSearch && matchesCategory && matchTab(product);
     });
@@ -645,7 +652,7 @@ export default function ProductPage() {
           >
             <MenuItem value="ALL">Tất cả danh mục</MenuItem>
             {categories.map((category) => (
-              <MenuItem key={category.categoryId} value={String(category.categoryId)} sx={{ pl: category.parentId ? 4 : 2 }}>
+              <MenuItem key={category.categoryId} value={String(category.categoryId)} sx={{ pl: 2 + (category.depth || 0) * 2 }}>
                 {category.parentId ? categoryFullName(category) : category.categoryName}
                 {category.childCount > 0 ? ' (tất cả)' : ''}
                 {category.status !== 'ACTIVE' ? ' (Đã ngưng)' : ''}
@@ -702,6 +709,7 @@ export default function ProductPage() {
             <TableHead>
               <TableRow>
                 <TableCell sx={{ pl: 3 }}>SẢN PHẨM</TableCell>
+                <TableCell>MÃ BIẾN THỂ</TableCell>
                 <TableCell>DANH MỤC</TableCell>
                 <TableCell>GIÁ BÁN</TableCell>
                 <TableCell>TỒN KHO</TableCell>
@@ -717,7 +725,7 @@ export default function ProductPage() {
             <TableBody>
               {loading && (
                 <TableRow>
-                  <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
+                  <TableCell colSpan={8} align="center" sx={{ py: 6 }}>
                     <Stack alignItems="center" spacing={1.5}>
                       <CircularProgress size={32} sx={{ color: C.cyan }} />
                       <Typography fontSize={13.5} color={C.muted}>
@@ -776,10 +784,47 @@ export default function ProductPage() {
                               {product.productName}
                             </Typography>
                             <Typography sx={{ fontSize: 12, color: '#94A3B8', mt: 0.25 }}>
-                              {product.sku ? `${product.sku} · ` : ''}#{product.productId} · {activeVariants} biến thể
+                              #{product.productId} · {activeVariants} biến thể
                             </Typography>
                           </Box>
                         </Stack>
+                      </TableCell>
+
+                      {/* MÃ BIẾN THỂ (TH + mã biến thể): hiện mã đầu, còn lại gom thành "+N" (rê chuột để xem hết) */}
+                      <TableCell>
+                        {(() => {
+                          const codes = (product.variantCodes || '').split(',').filter(Boolean);
+                          if (codes.length === 0) {
+                            return <Typography sx={{ fontSize: 13, color: '#94A3B8' }}>—</Typography>;
+                          }
+                          return (
+                            <Tooltip title={codes.length > 1 ? codes.join(', ') : ''}>
+                              <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, whiteSpace: 'nowrap' }}>
+                                <Box
+                                  component="span"
+                                  sx={{
+                                    fontFamily: 'monospace',
+                                    fontSize: 13,
+                                    fontWeight: 700,
+                                    color: '#0F172A',
+                                    bgcolor: '#F1F5F9',
+                                    border: `1px solid ${C.border}`,
+                                    borderRadius: 1.5,
+                                    px: 1,
+                                    py: 0.35
+                                  }}
+                                >
+                                  {codes[0]}
+                                </Box>
+                                {codes.length > 1 && (
+                                  <Typography component="span" sx={{ fontSize: 12, fontWeight: 700, color: C.muted }}>
+                                    +{codes.length - 1}
+                                  </Typography>
+                                )}
+                              </Box>
+                            </Tooltip>
+                          );
+                        })()}
                       </TableCell>
 
                       {/* CATEGORY */}
@@ -945,7 +990,7 @@ export default function ProductPage() {
 
               {!loading && filteredProducts.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
+                  <TableCell colSpan={8} align="center" sx={{ py: 6 }}>
                     <Typography sx={{ fontSize: 14, fontWeight: 800, color: '#0F172A' }}>
                       {products.length === 0 ? 'Chưa có sản phẩm nào trong kho' : 'Không tìm thấy sản phẩm phù hợp'}
                     </Typography>

@@ -433,7 +433,7 @@ export default function ProductDetailPage() {
                   mt: 0.5
                 }}
               >
-                {product.sku ? `SKU: ${product.sku} · ` : ''}Mã sản phẩm: #{product.productId}
+                Mã sản phẩm: #{product.productId}
               </Typography>
 
               <Typography

@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import PropTypes from 'prop-types';
 import { Autocomplete, Box, TextField, Typography } from '@mui/material';
 import { SearchOutlined } from '@ant-design/icons';
@@ -50,22 +51,39 @@ function TargetChip({ value }) {
 TargetChip.propTypes = { value: PropTypes.string };
 
 /**
- * Ô chọn danh mục cho sản phẩm: gõ để tìm (không dấu cũng được), danh mục con gom dưới tên danh mục cha,
+ * Ô chọn danh mục cho sản phẩm: gõ để tìm (không dấu cũng được), danh mục con gom dưới đường dẫn danh mục cha,
  * kèm nhãn đối tượng Nam / Nữ / Trẻ em. categories: danh sách đã lọc (chỉ danh mục gắn được sản phẩm),
  * đã sắp theo cây (sortCategoriesAsTree) để các danh mục con cùng cha nằm liền nhau.
  */
+// Tên nhóm của một lựa chọn = đường dẫn danh mục cha, vd "Giày › Giày nữ" ('' = danh mục gốc)
+const groupOf = (option) => {
+  const path = option.pathName || '';
+  const cut = path.lastIndexOf(' › ');
+  return cut > 0 ? path.slice(0, cut) : option.parentName || '';
+};
+
 export default function CategoryPicker({ categories, value, onChange, disabled, error, inputSx }) {
   const selected = categories.find((item) => String(item.categoryId) === String(value)) || null;
 
+  // Gom các danh mục cùng cha liền nhau (cây nhiều cấp sau khi lọc có thể bị xen kẽ), giữ thứ tự nhóm xuất hiện đầu tiên
+  const options = useMemo(() => {
+    const order = new Map();
+    categories.forEach((item) => {
+      const group = groupOf(item);
+      if (!order.has(group)) order.set(group, order.size);
+    });
+    return [...categories].sort((a, b) => order.get(groupOf(a)) - order.get(groupOf(b)));
+  }, [categories]);
+
   return (
     <Autocomplete
-      options={categories}
+      options={options}
       value={selected}
       disabled={disabled}
       onChange={(_, option) => onChange(option ? String(option.categoryId) : '')}
       getOptionLabel={(option) => categoryFullName(option)}
       isOptionEqualToValue={(option, current) => option.categoryId === current.categoryId}
-      groupBy={(option) => option.parentName || ''}
+      groupBy={groupOf}
       filterOptions={(options, state) => {
         const keyword = fold(state.inputValue);
         if (!keyword) return options;

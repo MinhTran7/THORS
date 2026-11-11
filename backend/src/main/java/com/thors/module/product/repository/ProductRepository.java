@@ -114,7 +114,8 @@ public class ProductRepository {
                              THEN GREATEST(d.stock_quantity - COALESCE(h.held, 0), 0) ELSE 0 END) AS sellable_stock,
                     SUM(CASE WHEN d.status = 'ACTIVE' AND d.stock_quantity = 0 THEN 1 ELSE 0 END) AS out_variant_count,
                     %s AS low_variant_count,
-                    GROUP_CONCAT(CONCAT_WS(' ', d.barcode, d.size, d.color) SEPARATOR ' ') AS search_text
+                    GROUP_CONCAT(CONCAT_WS(' ', d.barcode, d.size, d.color) SEPARATOR ' ') AS search_text,
+                    GROUP_CONCAT(CASE WHEN d.status = 'ACTIVE' THEN d.barcode END ORDER BY d.detail_id SEPARATOR ',') AS variant_codes
                 FROM product_detail d
                 LEFT JOIN (
                     SELECT detail_id, SUM(reserved_quantity) AS held
