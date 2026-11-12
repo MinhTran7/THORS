@@ -36,12 +36,16 @@ export default function ReceiptDialog({
   customerName = '',
   sellerName = '',
   completedAt,
-  closeText = 'Bán đơn mới'
+  closeText = 'Bán đơn mới',
+  receivedAmount,
+  changeAmount
 }) {
   if (!saleData) return null;
 
   const displayCustomer = customerName.trim() || 'Khách mua tại quầy';
   const displaySeller = sellerName.trim() || '—';
+  const received = receivedAmount ?? saleData.receivedAmount ?? (saleData.paymentMethod === 'CASH' ? saleData.totalAmount : 0);
+  const change = changeAmount ?? saleData.changeAmount ?? 0;
 
   function handlePrint() {
     window.print();
@@ -193,6 +197,12 @@ export default function ReceiptDialog({
             {/* Thông tin thanh toán — lấy từ Backend response */}
             <Stack spacing={0.4} sx={{ mb: 1 }}>
               <ReceiptRow label="Phương thức" value={saleData.paymentMethod === 'CASH' ? 'Tiền mặt' : 'Chuyển khoản'} />
+              {saleData.paymentMethod === 'CASH' && (
+                <>
+                  <ReceiptRow label="Tiền nhận" value={money(received)} />
+                  <ReceiptRow label="Tiền trả lại" value={money(change)} />
+                </>
+              )}
               <ReceiptRow
                 label="Trạng thái"
                 value={saleData.paymentStatus === 'PAID' || saleData.paymentStatus === 'SUCCESS' ? 'Đã thanh toán' : saleData.paymentStatus}

@@ -637,8 +637,14 @@ public class OrderRepository {
         }
         args.add(orderId);
         args.add(from);
-        return db.update("UPDATE orders SET " + set + " WHERE order_id = ? AND order_status = ?", args.toArray())
-                > 0;
+        boolean changed =
+                db.update("UPDATE orders SET " + set + " WHERE order_id = ? AND order_status = ?", args.toArray())
+                        > 0;
+        // Đơn đóng mà chưa trừ kho: trả lại phần hàng đang giữ (order_item.reserved_quantity, vd. đơn Facebook
+        // giữ hàng khi chốt) để màn hình Tồn kho / đơn khác bán được. Đơn đã trừ kho thì phần giữ đã về 0.
+        if (changed && ("REJECTED".equals(to) || "CANCELLED".equals(to) || "EXPIRED".equals(to)))
+            db.update("UPDATE order_item SET reserved_quantity = 0 WHERE order_id = ?", orderId);
+        return changed;
     }
 
     // ------------------------------------------------------------------

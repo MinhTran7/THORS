@@ -62,11 +62,9 @@ export default function OrdersPage() {
         title="Đặt hàng nhập"
         subtitle="Đặt theo từng màu/size với nhà cung cấp; theo dõi trạng thái chứng từ và tiến độ nhận hàng riêng."
         action={
-          owner && (
-            <Button variant="contained" onClick={() => setForm({})}>
-              Tạo phiếu đặt hàng
-            </Button>
-          )
+          <Button variant="contained" onClick={() => setForm({})}>
+            Tạo phiếu đặt hàng
+          </Button>
         }
       />
       <MainCard>
@@ -187,7 +185,10 @@ export default function OrdersPage() {
       </MainCard>
       {!owner && (
         <Box sx={{ mt: 2 }}>
-          <Alert severity="info">Bạn được xem phiếu đặt và lập phiếu nhập nháp từ phiếu đặt đã xác nhận. Chủ cửa hàng tạo và duyệt phiếu đặt.</Alert>
+          <Alert severity="info">
+            Bạn lập phiếu đặt nháp rồi bấm “Gửi chủ cửa hàng xác nhận”. Chủ cửa hàng có thể sửa trước khi xác nhận. Hàng chưa có trong hệ
+            thống: ghi vào ghi chú để chủ cửa hàng tạo sản phẩm.
+          </Alert>
         </Box>
       )}
       {detail && (
@@ -205,7 +206,7 @@ export default function OrdersPage() {
       {otherDoc && (
         <DocumentDetail id={otherDoc} readOnly onClose={() => setOtherDoc(null)} />
       )}
-      {form && owner && <DocumentForm type="PURCHASE_ORDER" document={form.document} onClose={() => setForm(null)} />}
+      {form && <DocumentForm type="PURCHASE_ORDER" document={form.document} onClose={() => setForm(null)} />}
       {action && (
         <DocumentAction
           action={action}

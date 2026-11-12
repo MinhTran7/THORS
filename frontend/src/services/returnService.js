@@ -41,6 +41,15 @@ export async function trackOrderPublic(orderNumber, phone = '') {
   return api(`/returns/track/${encodeURIComponent(orderNumber.trim())}${query}`);
 }
 
+// Khách xác nhận "Đã nhận được hàng" trên trang tra cứu công khai (cần 4 số cuối SĐT người nhận).
+// Trả về thông tin đơn mới nhất (trạng thái COMPLETED).
+export async function confirmReceivedPublic(orderNumber, phone) {
+  return api(`/returns/track/${encodeURIComponent(orderNumber.trim())}/received`, {
+    method: 'POST',
+    body: { phone }
+  });
+}
+
 export async function createPublicReturnRequest(data) {
   return post('/returns/public', data);
 }
@@ -53,6 +62,3 @@ export async function uploadReturnEvidence(file) {
     form: formData
   });
 }
-
-
-

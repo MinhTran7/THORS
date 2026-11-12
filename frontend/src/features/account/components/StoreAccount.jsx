@@ -1,5 +1,6 @@
 import { Link as RouterLink } from 'react-router-dom';
 import { Box } from '@mui/material';
+import { RightOutlined } from '@ant-design/icons';
 import { useAuth } from 'features/auth/AuthProvider';
 import { C, CARD_SHADOW, RADIUS, SANS, SERIF, focusRing } from 'features/shop/storeTheme';
 
@@ -31,7 +32,7 @@ const overridesSx = {
     fontWeight: 700,
     letterSpacing: 0
   },
-  '& .MuiButton-contained': { bgcolor: C.cyan, color: C.cyanInk, fontWeight: 800, '&:hover': { bgcolor: '#8FE6EF', boxShadow: 'none' } },
+  '& .MuiButton-contained': { bgcolor: C.cyan, color: C.cyanInk, fontWeight: 800, '&:hover': { bgcolor: '#3A3A3A', boxShadow: 'none' } },
   '& .MuiButton-contained.Mui-disabled': { bgcolor: '#E5E7EB', color: '#9CA3AF' },
   '& .MuiButton-outlined': {
     bgcolor: '#FFFFFF',
@@ -48,35 +49,35 @@ const overridesSx = {
   '& .MuiTypography-root': { fontFamily: SANS }
 };
 
-const backLinkSx = {
-  color: C.teal,
-  textDecoration: 'none',
-  fontSize: 14,
-  fontWeight: 700,
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 1,
-  mb: 3,
-  '&:hover': { color: '#158A98' },
-  ...focusRing
-};
+export function StoreCrumb({ back, current }) {
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1.25, mb: 3, fontSize: 15 }}>
+      <Box component={RouterLink} to={back.to} sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, color: '#1E293B', textDecoration: 'none', fontWeight: 600, ...focusRing }}>
+        {back.icon && <Box component="span" sx={{ display: 'inline-flex', fontSize: 16, color: '#475569' }}>{back.icon}</Box>}
+        {back.label}
+      </Box>
+      <RightOutlined style={{ fontSize: 11, color: '#64748B', margin: '0 2px' }} />
+      <Box component="span" sx={{ color: '#D7428B', fontWeight: 700 }}>
+        {current}
+      </Box>
+    </Box>
+  );
+}
 
 /** Khung trang tài khoản của khách: link quay lại, dòng nhỏ phía trên, tiêu đề lớn, mô tả, nút bên phải. */
-export function StoreAccountShell({ back, eyebrow = 'Tài khoản của tôi', title, subtitle, action, children }) {
+export function StoreAccountShell({ back, eyebrow, title, subtitle, action, children }) {
   return (
     <Box sx={{ fontFamily: SANS, color: C.ink, ...overridesSx }}>
-      {back && (
-        <Box component={RouterLink} to={back.to} sx={backLinkSx}>
-          <span aria-hidden="true">←</span> {back.label}
-        </Box>
-      )}
+      {back && <StoreCrumb back={back} current={title} />}
       <Box
         sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 2, mb: { xs: 3, sm: 4 } }}
       >
         <Box>
-          <Box component="p" sx={{ m: 0, mb: 1, fontSize: 14, fontWeight: 700, color: C.accent }}>
-            {eyebrow}
-          </Box>
+          {eyebrow && (
+            <Box component="p" sx={{ m: 0, mb: 1, fontSize: 14, fontWeight: 700, color: C.accent }}>
+              {eyebrow}
+            </Box>
+          )}
           <Box component="h1" sx={{ m: 0, fontFamily: SERIF, fontWeight: 800, letterSpacing: '-0.5px', fontSize: { xs: 30, sm: 38 }, lineHeight: 1.1 }}>
             {title}
           </Box>

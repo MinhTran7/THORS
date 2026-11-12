@@ -235,7 +235,7 @@ public class WarehouseInventory {
                 s.jdbc()
                         .queryForList(
                                 """
-                SELECT d.detail_id,d.product_id,d.barcode,d.color,d.size,d.stock_quantity,d.min_stock_quantity,
+                SELECT d.detail_id,d.product_id,d.barcode,d.color,d.size,d.price,d.stock_quantity,d.min_stock_quantity,
                   d.status,p.product_name,p.status AS product_status,p.category_id,c.category_name,
                   COALESCE(l.assigned,0) AS assigned_quantity,COALESCE(h.held,0) AS held_quantity,
                   sale.last_sale_at,fin.first_in_at,COALESCE(led.total,0) AS ledger_total
@@ -272,6 +272,7 @@ public class WarehouseInventory {
             row.put("color", v.get("color"));
             row.put("size", v.get("size"));
             row.put("barcode", v.get("barcode"));
+            row.put("price", v.get("price"));
             row.put("status", v.get("status"));
             row.put("stock_quantity", stock);
             row.put("assigned_quantity", assigned);

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link as RouterLink, useParams, useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import useSWR, { useSWRConfig } from 'swr';
 import {
   Alert,
@@ -21,7 +21,7 @@ import {
   TextField,
   Typography
 } from '@mui/material';
-import { QrcodeOutlined, RollbackOutlined } from '@ant-design/icons';
+import { QrcodeOutlined, RollbackOutlined, ShoppingOutlined } from '@ant-design/icons';
 import { Stack } from 'features/account/components/Flex';
 import { useCrumbs } from 'layouts/crumbs';
 import { useAuth } from 'features/auth/AuthProvider';
@@ -52,9 +52,9 @@ import {
   panelTitleSx,
   storeBtnSx,
   storeDialogPaperSx,
-  storeInputsSx,
-  textLinkSx
+  storeInputsSx
 } from './storeStyle';
+import { StoreCrumb } from 'features/account/components/StoreAccount';
 
 const dateTime = (value) => (value ? `${formatLogDate(value)} · ${formatTime(value)}` : null);
 
@@ -183,9 +183,7 @@ function CustomerView({ order, status, actions, busy, onAction, actionError, onP
   return (
     <Box>
       {/* Đầu trang: quay lại, mã đơn, trạng thái */}
-      <Box component={RouterLink} to={back.to} sx={{ ...textLinkSx, mb: 3 }}>
-        <span aria-hidden="true">←</span> {back.label.toUpperCase()}
-      </Box>
+      <StoreCrumb back={{ to: back.to, label: 'Đơn hàng của tôi', icon: <ShoppingOutlined /> }} current={`Đơn hàng #${order.orderNumber}`} />
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 2, mb: { xs: 4, sm: 5 } }}>
         <Box>
           <Box component="p" sx={{ ...storeEyebrowSx, mb: 1.5 }}>

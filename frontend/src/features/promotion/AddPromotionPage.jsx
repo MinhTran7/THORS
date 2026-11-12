@@ -711,7 +711,7 @@ export default function AddPromotionPage() {
         autoHideDuration={5000}
         onClose={() => setError('')}
         anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-        sx={{ mt: 7 }}
+        sx={{ top: { xs: 64, sm: 72 } }}
       >
         <Alert
           severity="error"

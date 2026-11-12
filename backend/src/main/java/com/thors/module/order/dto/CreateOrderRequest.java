@@ -8,7 +8,8 @@ public record CreateOrderRequest(
         String paymentMethod,               // "COD" | "BANK"
         String note,
         List<Integer> cartItemIds,          // mua từ giỏ hàng
-        List<Item> items                    // "Mua ngay"
+        List<Item> items,                   // "Mua ngay"
+        Integer promotionId
 ) {
     public record ShippingAddressInput(
             String recipientName,

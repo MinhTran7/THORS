@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class FacebookLoginHandler implements AuthenticationSuccessHandler {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(FacebookLoginHandler.class);
     private final FacebookAccountService facebook;
     private final SessionAccess sessions;
     private final Settings settings;
@@ -42,6 +43,8 @@ public class FacebookLoginHandler implements AuthenticationSuccessHandler {
         } catch (Exception e) {
             sessions.clear(req, res);
             String code = e instanceof com.thors.common.ApiException x ? x.code : "FACEBOOK_FAILED";
+            if (e instanceof com.thors.common.ApiException) log.info("Facebook login refused: {}", code);
+            else log.warn("Facebook login failed after OAuth success", e);
             res.sendRedirect(settings.frontendUrl() + "/login?error=" + code.toLowerCase(java.util.Locale.ROOT));
         }
     }

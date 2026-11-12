@@ -44,7 +44,9 @@ const lineFrom = (v) => ({
  * failed save can be retried without creating them again.
  */
 export default function PurchaseOrderForm({ document, onClose }) {
-  const { data, run, reload } = useWarehouse();
+  const { data, run, reload, owner } = useWarehouse();
+  // Owner reviewing an order a family member sent: edits keep it waiting for confirmation.
+  const reviewing = document?.status === 'PENDING_CONFIRMATION';
   const [suppliers, setSuppliers] = useState([]);
   const [categories, setCategories] = useState([]);
   const [supplierInput, setSupplierInput] = useState(document?.manufacturer_name || '');
@@ -143,7 +145,7 @@ export default function PurchaseOrderForm({ document, onClose }) {
               items: items.map((i) => ({ detailId: i.detailId, sourceItemId: null, quantity: Number(i.quantity), unitPrice: Number(i.unitPrice) }))
             }
           }),
-        'Đã lưu phiếu đặt nháp.'
+        reviewing ? 'Đã lưu thay đổi. Phiếu vẫn chờ xác nhận.' : 'Đã lưu phiếu đặt nháp.'
       );
       onClose();
     } catch (e) {
@@ -271,7 +273,8 @@ export default function PurchaseOrderForm({ document, onClose }) {
                     if (problem) setError(problem);
                     else setSelected(new Map());
                   }}
-                  onQuickCreate={() => setQuick({})}
+                  // Only the owner creates new products; a family member asks in the note.
+                  onQuickCreate={owner ? () => setQuick({}) : undefined}
                 />
                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { sm: 'center' } }}>
                   <Button variant="outlined" disabled={saving || excelBusy} onClick={() => setExcelOpen(true)}>
@@ -367,7 +370,9 @@ export default function PurchaseOrderForm({ document, onClose }) {
                   {!items.length && (
                     <TableRow>
                       <TableCell colSpan={7} sx={{ py: 3, color: 'text.secondary' }}>
-                        Chưa có hàng. Chọn ở bảng trên, nhập Excel hoặc tạo nhanh hàng mới.
+                        {owner
+                          ? 'Chưa có hàng. Chọn ở bảng trên, nhập Excel hoặc tạo nhanh hàng mới.'
+                          : 'Chưa có hàng. Chọn ở bảng trên hoặc nhập Excel. Hàng chưa có trong hệ thống: ghi vào ghi chú.'}
                       </TableCell>
                     </TableRow>
                   )}
@@ -395,7 +400,7 @@ export default function PurchaseOrderForm({ document, onClose }) {
             Quay lại
           </Button>
           <Button variant="contained" onClick={save} disabled={saving || !supplier || !items.length}>
-            {saving ? 'Đang lưu…' : 'Lưu phiếu nháp'}
+            {saving ? 'Đang lưu…' : reviewing ? 'Lưu thay đổi' : 'Lưu phiếu nháp'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -487,7 +492,7 @@ export default function PurchaseOrderForm({ document, onClose }) {
           currentItems={items}
           manufacturer={supplier}
           onClose={() => setExcelOpen(false)}
-          onQuickCreate={(initial, assign) => setQuick({ initial, assign })}
+          onQuickCreate={owner ? (initial, assign) => setQuick({ initial, assign }) : undefined}
           onApply={(report) => {
             setItems(report.items.map((i) => ({ ...i, info: i.info || variantById.get(i.detailId) })));
             setMessage(`Đã điền ${report.imports.length} biến thể từ Excel. Kiểm tra rồi lưu phiếu nháp.`);

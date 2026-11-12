@@ -44,11 +44,11 @@ public class PromotionService {
         String role = currentRole();
 
         if ("OWNER".equals(role)) {
-            return repository.findAll();
+            return repository.findAll().stream().map(this::withProductIds).toList();
         }
 
         if ("CUSTOMER".equals(role)) {
-            return repository.findAvailable(LocalDateTime.now());
+            return repository.findAvailable(LocalDateTime.now()).stream().map(this::withProductIds).toList();
         }
 
         throw forbidden();

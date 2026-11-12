@@ -1,14 +1,28 @@
-import { useEffect, useState } from 'react';
-import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link as RouterLink, useNavigate, useOutletContext, useParams } from 'react-router-dom';
 import { Box, Button, Chip, Typography } from '@mui/material';
 import { useAuth } from 'features/auth/AuthProvider';
 import { brand } from 'features/account/tokens';
 import { buyNow as goBuyNow, stashBuyNow } from 'features/cart/checkout';
 import { useCrumbs } from 'layouts/crumbs';
 import { api, post } from 'services/http';
-import { Photo, money, priceText } from './ShopCommon';
+import { Photo, isNewProduct, money, priceText } from './ShopCommon';
 import PendingCartHandler from './PendingCartHandler';
 import { savePending } from './pendingCart';
+import { C, SERIF } from './storeTheme';
+import { ProductCard } from './ShopPage';
+
+const RELATED_COUNT = 4; // số sản phẩm gợi ý ở cuối trang
+
+// Giá sau khuyến mãi của một mức giá: khuyến mãi theo % thì trừ %, theo số tiền thì trừ đúng số tiền đó
+function salePriceOf(price, promo) {
+  if (!promo) return price;
+  const label = String(promo.discountLabel || '');
+  const pct = parseFloat(label.replace(/[^\d.]/g, ''));
+  if (label.includes('%') && pct > 0) return Math.round((Number(price) * (100 - pct)) / 100);
+  const off = Number(promo.minPrice) - Number(promo.salePrice);
+  return off > 0 ? Math.max(0, Number(price) - off) : Number(price);
+}
 
 /** Trang chi tiết sản phẩm công khai: /shop/products/:productId */
 export default function ShopProductPage() {
@@ -18,6 +32,11 @@ export default function ShopProductPage() {
   const account = auth?.account;
 
   const [data, setData] = useState(null);
+  const [promos, setPromos] = useState([]); // các khuyến mãi đang chạy
+  const [related, setRelated] = useState([]); // gợi ý: sản phẩm cùng danh mục
+  const { categories = [] } = useOutletContext() || {};
+  const promoMap = useMemo(() => new Map(promos.map((p) => [String(p.productId), p])), [promos]);
+  const promo = promoMap.get(String(productId)) || null; // khuyến mãi đang áp dụng cho sản phẩm này (nếu có)
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
@@ -39,12 +58,56 @@ export default function ShopProductPage() {
     setQty(1);
     setImageIndex(0);
     setNeedLogin('');
+    setPromos([]);
+    setRelated([]);
     api(`/shop/products/${productId}`)
       .then(setData)
       .catch((e) => setLoadError(e.message));
+    // API chi tiết chưa trả khuyến mãi nên lấy từ danh sách khuyến mãi đang chạy
+    api('/shop/promotions?size=100')
+      .then((d) => setPromos(d.items || []))
+      .catch(() => setPromos([]));
   }, [productId]);
 
+  // "Có thể bạn sẽ thích": ưu tiên sản phẩm cùng danh mục (bỏ sản phẩm đang xem);
+  // danh mục chưa đủ RELATED_COUNT sản phẩm thì lấy thêm sản phẩm mới nhất ở danh mục khác cho đủ.
+  // API chi tiết có categoryId thì dùng luôn, không thì tìm theo tên danh mục.
+  const categoryId =
+    data?.product?.categoryId ?? categories.find((c) => c.categoryName === data?.product?.categoryName)?.categoryId ?? null;
+  useEffect(() => {
+    if (!data) return undefined;
+    let alive = true;
+    const fetchList = (extra) =>
+      api(`/shop/products?${new URLSearchParams({ page: 0, size: RELATED_COUNT * 2, sort: 'newest', ...extra })}`)
+        .then((d) => d.items || [])
+        .catch(() => []);
+
+    (async () => {
+      const picked = [];
+      const seen = new Set([String(productId)]);
+      const add = (list) => {
+        for (const p of list) {
+          if (picked.length >= RELATED_COUNT) break;
+          const id = String(p.productId);
+          if (!seen.has(id)) {
+            seen.add(id);
+            picked.push(p);
+          }
+        }
+      };
+      if (categoryId) add(await fetchList({ categoryId }));
+      if (picked.length < RELATED_COUNT) add(await fetchList({}));
+      if (alive) setRelated(picked);
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [data, categoryId, productId]);
+
   const variants = data?.variants ?? [];
+  const minPrice = variants.length ? Math.min(...variants.map((v) => Number(v.price))) : 0;
+  const maxPrice = variants.length ? Math.max(...variants.map((v) => Number(v.price))) : 0;
   const sizes = [...new Set(variants.map((v) => v.size))];
   const colors = [...new Set(variants.map((v) => v.color))];
   const find = (s, c) => variants.find((v) => v.size === s && v.color === c);
@@ -72,6 +135,7 @@ export default function ShopProductPage() {
       return;
     }
     const item = {
+      productId: Number(data?.product?.productId || productId),
       variantId: variant.detailId,
       productName: data.product.productName,
       imageUrl: data.images?.[0],
@@ -172,7 +236,25 @@ export default function ShopProductPage() {
             }}
           >
             <Box>
-              <Photo src={data.images[imageIndex]} name={data.product.productName} sx={{ aspectRatio: '1', borderRadius: '12px' }} />
+              <Box sx={{ position: 'relative' }}>
+                <Photo src={data.images[imageIndex]} name={data.product.productName} sx={{ aspectRatio: '1', borderRadius: '12px' }} />
+                {isNewProduct(data.product) && (
+                  <Box
+                    component="span"
+                    sx={{ position: 'absolute', top: 16, left: 16, bgcolor: '#FFFFFF', color: C.ink, fontSize: 14, fontWeight: 700, letterSpacing: '0.08em', px: 1.25, py: 0.5, lineHeight: 1.4 }}
+                  >
+                    MỚI
+                  </Box>
+                )}
+                {promo && (
+                  <Box
+                    component="span"
+                    sx={{ position: 'absolute', top: 16, right: 16, bgcolor: C.accent, color: '#FFFFFF', fontSize: 16, fontWeight: 700, px: 1.25, py: 0.5, lineHeight: 1.4 }}
+                  >
+                    {promo.discountLabel}
+                  </Box>
+                )}
+              </Box>
               <Box sx={{ display: 'flex', gap: 1, mt: 1.5, flexWrap: 'wrap' }}>
                 {data.images.map((url, i) => (
                   <Box
@@ -202,17 +284,17 @@ export default function ShopProductPage() {
                 {data.product.productName}
               </Typography>
 
-              {data.product.description && (
-                <Typography variant="body1" sx={{ color: brand.muted, mt: 1, whiteSpace: 'pre-line' }}>
-                  {data.product.description}
+              {/* Có khuyến mãi: giá gốc gạch ngang màu xám, giá sau giảm màu đỏ */}
+              <Box sx={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', columnGap: 1.5, mt: 2, mb: 2.5 }}>
+                {promo && (
+                  <Typography component="span" sx={{ fontSize: 20, color: '#8C857B', textDecoration: 'line-through' }}>
+                    {variant ? money(variant.price) : priceText(minPrice, maxPrice)}
+                  </Typography>
+                )}
+                <Typography component="span" sx={{ fontSize: 28, fontWeight: 700, color: promo ? C.accent : C.ink }}>
+                  {variant ? money(salePriceOf(variant.price, promo)) : priceText(salePriceOf(minPrice, promo), salePriceOf(maxPrice, promo))}
                 </Typography>
-              )}
-
-              <Typography sx={{ fontSize: 28, fontWeight: 700, color: '#27a9bd', mt: 2, mb: 2.5 }}>
-                {variant
-                  ? money(variant.price)
-                  : priceText(Math.min(...variants.map((v) => v.price)), Math.max(...variants.map((v) => v.price)))}
-              </Typography>
+              </Box>
 
               <Typography variant="subtitle2" sx={{ mb: 1 }}>
                 Size
@@ -293,6 +375,40 @@ export default function ShopProductPage() {
                   </Box>
                 </Box>
               )}
+            </Box>
+          </Box>
+        )}
+
+        {/* Mô tả sản phẩm: nằm dưới khung thông tin chung */}
+        {data?.product.description && (
+          <Box component="section" sx={{ mt: { xs: 4, md: 6 } }}>
+            <Typography component="h2" sx={{ fontFamily: SERIF, fontWeight: 400, fontSize: { xs: 26, md: 32 }, color: C.ink, mb: 2 }}>
+              Mô tả sản phẩm
+            </Typography>
+            <Box sx={{ borderTop: `1px solid ${C.line}`, pt: 3 }}>
+              <Typography sx={{ fontSize: 16, lineHeight: 1.8, color: '#3F3A34', whiteSpace: 'pre-line', maxWidth: 820 }}>
+                {data.product.description}
+              </Typography>
+            </Box>
+          </Box>
+        )}
+
+        {/* Gợi ý sản phẩm cùng danh mục */}
+        {related.length > 0 && (
+          <Box component="section" sx={{ mt: { xs: 6, md: 9 } }}>
+            <Typography component="h2" sx={{ fontFamily: SERIF, fontWeight: 400, fontSize: { xs: 32, md: 40 }, color: C.ink, mb: { xs: 3, md: 4 } }}>
+              Có thể bạn sẽ thích
+            </Typography>
+            <Box
+              sx={{
+                display: 'grid',
+                gap: { xs: '24px 12px', sm: '32px 20px' },
+                gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', md: `repeat(${RELATED_COUNT}, minmax(0, 1fr))` }
+              }}
+            >
+              {related.map((p) => (
+                <ProductCard key={p.productId} product={p} promo={promoMap.get(String(p.productId))} />
+              ))}
             </Box>
           </Box>
         )}

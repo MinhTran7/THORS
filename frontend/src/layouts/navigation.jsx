@@ -31,8 +31,8 @@ import {
 } from '@ant-design/icons';
 
 
-const dashboard = { to: '/workspace', label: 'Dashboard', icon: <DashboardOutlined /> };
-const profile = { to: '/profile', label: 'Profile', icon: <UserOutlined /> };
+const dashboard = { to: '/workspace', label: 'Bảng điều khiển', icon: <DashboardOutlined /> };
+const profile = { to: '/profile', label: 'Hồ sơ cá nhân', icon: <UserOutlined /> };
 const promotions = { to: '/promotions', label: 'Khuyến mãi', icon: <PercentageOutlined /> };
 
 // ─── Menu đầy đủ của chủ cửa hàng ───

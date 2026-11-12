@@ -8,7 +8,12 @@ import {
   Card,
   Checkbox,
   Chip,
+  Collapse,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   FormControlLabel,
   IconButton,
@@ -18,10 +23,12 @@ import {
   TextField,
   Typography
 } from '@mui/material';
-import { TagOutlined, CloseOutlined } from '@ant-design/icons';
+import { TagOutlined, CloseOutlined, ShoppingCartOutlined, DownOutlined, StarFilled, StarOutlined, PlusOutlined, ArrowLeftOutlined, EnvironmentOutlined, CreditCardOutlined } from '@ant-design/icons';
+import { StoreCrumb } from 'features/account/components/StoreAccount';
 import { api } from 'services/http';
 import { useAuth } from 'features/auth/AuthProvider';
 import { fetchProvinces, fetchWards } from './vnAddress';
+import { getPromotions } from 'services/promotionService';
 
 
 const SHIPPING_FEE = 0;
@@ -87,12 +94,15 @@ function validateAddress(f) {
   return e;
 }
 
-function SectionCard({ title, children }) {
+function SectionCard({ title, icon, children }) {
   return (
     <Card variant="outlined" sx={{ p: 3, borderRadius: 3 }}>
-      <Typography variant="h5" sx={{ mb: 2 }}>
-        {title}
-      </Typography>
+      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 2 }}>
+        {icon}
+        <Typography variant="h5">
+          {title}
+        </Typography>
+      </Stack>
       {children}
     </Card>
   );
@@ -114,7 +124,7 @@ function AddressOption({ value, selected, children }) {
         cursor: 'pointer'
       }}
     >
-      <Radio value={value} sx={{ p: 0.5 }} />
+      <Radio value={value} sx={{ p: 0.5, color: '#9CA3AF', '&.Mui-checked': { color: '#8EECF5 !important' } }} />
       <Box sx={{ flexGrow: 1, minWidth: 0, pt: 0.5 }}>{children}</Box>
     </Box>
   );
@@ -249,6 +259,86 @@ export default function CheckoutPage() {
     };
   }, [provinceCode]);
 
+  const [openPromoDialog, setOpenPromoDialog] = useState(false);
+  const [allPromotions, setAllPromotions] = useState([]);
+  const [promosLoading, setPromosLoading] = useState(false);
+  const [expandedPromoId, setExpandedPromoId] = useState(null);
+  const [tempVoucher, setTempVoucher] = useState(null);
+  const [openAddressDialog, setOpenAddressDialog] = useState(false);
+  const [isCreatingAddress, setIsCreatingAddress] = useState(false);
+  const [savingAddress, setSavingAddress] = useState(false);
+
+  const handleSaveNewAddress = async () => {
+    const found = validateAddress(addr);
+    setErrors(found);
+    if (Object.keys(found).length) return;
+
+    setSavingAddress(true);
+    try {
+      const payload = {
+        recipientName: addr.receiverName.trim(),
+        phone: addr.receiverPhone.trim(),
+        provinceCode: addr.province.code,
+        provinceName: addr.province.name,
+        wardCode: addr.ward.code,
+        wardName: addr.ward.name,
+        addressDetail: addr.address.trim(),
+        isDefault: addresses.length === 0
+      };
+      const res = await api('/addresses', { method: 'POST', body: payload });
+      const newId = res?.id;
+      const refetched = await api('/addresses');
+      const list = (Array.isArray(refetched) ? refetched : refetched?.items || []).map(normalizeAddress);
+      setAddresses(list);
+      if (newId != null) {
+        setSelectedAddressId(String(newId));
+      } else if (list.length > 0) {
+        setSelectedAddressId(String(list[list.length - 1].id));
+      }
+      setIsCreatingAddress(false);
+      setOpenAddressDialog(false);
+    } catch (e) {
+      setSubmitError(e.message || 'Không thể lưu địa chỉ');
+    } finally {
+      setSavingAddress(false);
+    }
+  };
+
+  const checkPromoEligibility = (p) => {
+    if (p.status && p.status !== 'ACTIVE') {
+      return { eligible: false, reason: 'Chương trình hiện không khả dụng' };
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    const start = p.startDate ? String(p.startDate).slice(0, 10) : '';
+    const end = p.endDate ? String(p.endDate).slice(0, 10) : '';
+    if (start && today < start) return { eligible: false, reason: 'Chưa đến thời gian áp dụng' };
+    if (end && today > end) return { eligible: false, reason: 'Mã đã hết hạn sử dụng' };
+
+    let eligibleSubtotal = 0;
+    if (p.applyScope === 'ALL' || !p.applyScope) {
+      eligibleSubtotal = subtotal;
+    } else if (p.applyScope === 'SELECTED') {
+      const allowedIds = new Set((p.productIds || []).map(Number));
+      const matched = (items || []).filter((item) => {
+        const idVal = item.productId != null ? Number(item.productId) : Number(item.id);
+        return allowedIds.has(idVal);
+      });
+      eligibleSubtotal = matched.reduce((s, i) => s + i.price * i.quantity, 0);
+      if (eligibleSubtotal === 0) {
+        return { eligible: false, reason: 'Không áp dụng cho sản phẩm trong đơn' };
+      }
+    }
+    const minOrder = Number(p.minOrderValue || 0);
+    if (eligibleSubtotal < minOrder) {
+      const diff = minOrder - eligibleSubtotal;
+      return {
+        eligible: false,
+        reason: `Cần thêm ${new Intl.NumberFormat('vi-VN').format(diff)} ₫ để áp dụng`
+      };
+    }
+    return { eligible: true };
+  };
+
   const [voucher, setVoucher] = useState(() => {
     try {
       const raw = sessionStorage.getItem('thors:applied_voucher');
@@ -257,6 +347,36 @@ export default function CheckoutPage() {
       return null;
     }
   });
+
+  useEffect(() => {
+    if (!voucher?.promotionId) return;
+    if (voucher.applyScope === 'SELECTED' && (!voucher.productIds || voucher.productIds.length === 0)) {
+      api('/promotions/' + voucher.promotionId)
+        .then((res) => {
+          if (res && res.productIds && res.productIds.length > 0) {
+            setVoucher(res);
+            try {
+              sessionStorage.setItem('thors:applied_voucher', JSON.stringify(res));
+            } catch {}
+          }
+        })
+        .catch(() => {});
+    }
+  }, [voucher?.promotionId, voucher?.applyScope]);
+
+  useEffect(() => {
+    if (buyNow && items.length > 0 && !items[0]?.productId) {
+      api('/shop/products?size=100')
+        .then((res) => {
+          const list = res?.items || [];
+          const matched = list.find((p) => p.productName === items[0]?.name);
+          if (matched) {
+            setItems((prev) => prev.map((it) => ({ ...it, productId: matched.productId })));
+          }
+        })
+        .catch(() => {});
+    }
+  }, [buyNow, items]);
 
   const subtotal = useMemo(() => items.reduce((s, i) => s + i.price * i.quantity, 0), [items]);
   const totalQty = useMemo(() => items.reduce((s, i) => s + i.quantity, 0), [items]);
@@ -284,8 +404,8 @@ export default function CheckoutPage() {
     } else if (voucher.applyScope === 'SELECTED') {
       const eligibleIds = new Set((voucher.productIds || []).map(Number));
       const eligibleItems = items.filter((item) => {
-        const pId = item.productId ?? item.id;
-        return eligibleIds.has(Number(pId));
+        const pId = item.productId != null ? Number(item.productId) : Number(item.id);
+        return eligibleIds.has(pId);
       });
       eligibleSubtotal = eligibleItems.reduce((s, i) => s + i.price * i.quantity, 0);
       if (eligibleSubtotal === 0) {
@@ -386,7 +506,8 @@ export default function CheckoutPage() {
 
       
       
-      const base = { ...addressPart, paymentMethod: form.paymentMethod };
+      const appliedPromoId = voucherResult?.valid && voucher?.promotionId != null ? voucher.promotionId : null;
+      const base = { ...addressPart, paymentMethod: form.paymentMethod, ...(appliedPromoId != null && { promotionId: appliedPromoId }) };
       const body = buyNow
         ? { ...base, items: [{ productVariantId: buyNow.variantId, quantity: buyNow.quantity }] }
         : { ...base, cartItemIds: items.map((i) => i.id) };
@@ -490,12 +611,11 @@ export default function CheckoutPage() {
   );
 
   return (
-    <Box sx={{ maxWidth: 1180, mx: 'auto', p: { xs: 1, md: 3 } }}>
-      <Stack spacing={0.5} sx={{ mb: 3 }}>
+    <Box sx={{ maxWidth: 1180, mx: 'auto', px: { xs: 1, md: 3 }, pt: 0, pb: 4, mt: { xs: -1, md: -2.5 } }}>
+      {!buyNow && <StoreCrumb back={{ to: '/cart', label: 'Giỏ hàng', icon: <ShoppingCartOutlined /> }} current="Đặt hàng" />}
+      <Stack spacing={0.5} sx={{ mb: 2 }}>
         <Typography variant="h2">Đặt hàng</Typography>
-        <Typography color="text.secondary">
-          {buyNow ? 'Mua ngay: kiểm tra sản phẩm và chọn địa chỉ nhận hàng.' : 'Chọn địa chỉ nhận hàng và xác nhận đơn.'}
-        </Typography>
+        
       </Stack>
 
       {loadError && (
@@ -513,60 +633,83 @@ export default function CheckoutPage() {
           Các sản phẩm đã chọn không còn trong giỏ hàng.
         </Alert>
       ) : (
-        <Box sx={{ display: 'grid', gap: 3, gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1fr) 380px' }, alignItems: 'start' }}>
-          <Stack spacing={3}>
-            <SectionCard title="Địa chỉ nhận hàng">
-              {addrLoading ? (
-                <CircularProgress size={24} />
-              ) : addresses.length === 0 ? (
-                newAddressForm
-              ) : (
-                <>
-                  <RadioGroup value={selectedAddressId} onChange={(e) => setSelectedAddressId(e.target.value)}>
-                    <Stack spacing={1.5}>
-                      {addresses.map((a) => (
-                        <AddressOption key={a.id} value={String(a.id)} selected={selectedAddressId === String(a.id)}>
-                          <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
-                            <Typography variant="subtitle1">{a.name}</Typography>
-                            <Typography color="text.secondary">{a.phone}</Typography>
-                            {a.isDefault && <Chip size="small" color="primary" variant="outlined" label="Mặc định" />}
-                          </Stack>
-                          <Typography variant="body2" color="text.secondary">
-                            {fullAddress(a)}
-                          </Typography>
-                        </AddressOption>
-                      ))}
-                      <AddressOption value={NEW} selected={isNew}>
-                        <Typography variant="subtitle1">+ Dùng địa chỉ mới</Typography>
-                      </AddressOption>
-                    </Stack>
-                  </RadioGroup>
-                  {isNew && newAddressForm}
-                </>
-              )}
-            </SectionCard>
+        <Box sx={{ display: 'grid', gap: 2.5, gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1fr) 380px' }, alignItems: 'start' }}>
+          <Stack spacing={2.5}>
+            <Card variant="outlined" sx={{ p: 2.5, borderRadius: 3 }}>
+              <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', mb: chosen ? 1.5 : 0 }}>
+                <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                  <EnvironmentOutlined style={{ color: '#DC2626', fontSize: 16 }} />
+                  <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#DC2626' }}>
+                    Địa chỉ nhận hàng
+                  </Typography>
+                </Stack>
+                <Button
+                  size="small"
+                  disableRipple
+                  disableElevation
+                  onClick={() => {
+                    setIsCreatingAddress(false);
+                    setOpenAddressDialog(true);
+                  }}
+                  sx={{
+                    textTransform: 'none',
+                    color: '#8EECF5 !important',
+                    fontWeight: 600,
+                    fontSize: 13,
+                    p: 0,
+                    minWidth: 'auto',
+                    bgcolor: 'transparent !important',
+                    boxShadow: 'none !important',
+                    '&:hover': { bgcolor: 'transparent !important', color: '#8EECF5 !important', textDecoration: 'none' },
+                    '&::after': { display: 'none !important' }
+                  }}
+                >
+                  <span style={{ color: '#8EECF5' }}>Thay đổi</span>
+                </Button>
+              </Stack>
 
-            <SectionCard title="Phương thức thanh toán">
-              <RadioGroup value={form.paymentMethod} onChange={setFormField('paymentMethod')}>
-                {PAYMENT_METHODS.map((m) => (
-                  <FormControlLabel
-                    key={m.value}
-                    value={m.value}
-                    disabled={m.disabled}
-                    control={<Radio />}
-                    sx={{ alignItems: 'flex-start', mb: 1 }}
-                    label={
-                      <Box sx={{ pt: 0.75 }}>
-                        <Typography variant="subtitle1">{m.label}</Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {m.hint}
-                        </Typography>
-                      </Box>
-                    }
-                  />
-                ))}
-              </RadioGroup>
-            </SectionCard>
+              {addrLoading ? (
+                <CircularProgress size={20} />
+              ) : chosen ? (
+                <Box
+                  sx={{
+                    pt: 1,
+                    display: 'flex',
+                    flexDirection: { xs: 'column', sm: 'row' },
+                    alignItems: { xs: 'flex-start', sm: 'center' },
+                    gap: { xs: 1, sm: 3.5 }
+                  }}
+                >
+                  <Box sx={{ flexShrink: 0, minWidth: { sm: 160 } }}>
+                    <Typography sx={{ fontWeight: 700, fontSize: 14, color: '#202D42', lineHeight: 1.3 }}>
+                      {chosen.name}
+                    </Typography>
+                    <Typography sx={{ fontWeight: 700, fontSize: 13.5, color: '#202D42', mt: 0.25 }}>
+                      {chosen.phone}
+                    </Typography>
+                  </Box>
+
+                  <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
+                    <Typography sx={{ fontSize: 13, color: '#4B5563', lineHeight: 1.5 }}>
+                      {fullAddress(chosen)}
+                    </Typography>
+                    {chosen.isDefault && (
+                      <Chip
+                        size="small"
+                        color="primary"
+                        variant="outlined"
+                        label="Mặc định"
+                        sx={{ height: 20, fontSize: 11, flexShrink: 0 }}
+                      />
+                    )}
+                  </Box>
+                </Box>
+              ) : (
+                <Typography sx={{ fontSize: 13, color: '#64748B', pt: 0.5 }}>
+                  Chưa chọn địa chỉ nhận hàng
+                </Typography>
+              )}
+            </Card>
 
             <SectionCard title={`Sản phẩm (${items.length})`}>
               <Stack divider={<Divider flexItem />} spacing={2}>
@@ -596,6 +739,28 @@ export default function CheckoutPage() {
                 ))}
               </Stack>
             </SectionCard>
+
+            <SectionCard title="Phương thức thanh toán">
+              <RadioGroup value={form.paymentMethod} onChange={setFormField('paymentMethod')}>
+                {PAYMENT_METHODS.map((m) => (
+                  <FormControlLabel
+                    key={m.value}
+                    value={m.value}
+                    disabled={m.disabled}
+                    control={<Radio sx={{ color: '#9CA3AF', '&.Mui-checked': { color: '#8EECF5 !important' } }} />}
+                    sx={{ alignItems: 'flex-start', mb: 1 }}
+                    label={
+                      <Box sx={{ pt: 0.75 }}>
+                        <Typography variant="subtitle1">{m.label}</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {m.hint}
+                        </Typography>
+                      </Box>
+                    }
+                  />
+                ))}
+              </RadioGroup>
+            </SectionCard>
           </Stack>
 
           <Stack spacing={2} sx={{ position: { md: 'sticky' }, top: { md: 80 } }}>
@@ -608,12 +773,32 @@ export default function CheckoutPage() {
                   </Typography>
                 </Stack>
                 <Button
-                  component={Link}
-                  to="/promotions"
                   size="small"
-                  sx={{ textTransform: 'none', color: '#BE185D', fontWeight: 600, fontSize: 13, p: 0, minWidth: 'auto' }}
+                  disableRipple
+                  disableElevation
+                  onClick={() => {
+                    setTempVoucher(voucher);
+                    setOpenPromoDialog(true);
+                    setPromosLoading(true);
+                    getPromotions()
+                      .then((res) => setAllPromotions(Array.isArray(res) ? res : res?.data || []))
+                      .catch(() => setAllPromotions([]))
+                      .finally(() => setPromosLoading(false));
+                  }}
+                  sx={{
+                    textTransform: 'none',
+                    color: '#8EECF5 !important',
+                    fontWeight: 600,
+                    fontSize: 13,
+                    p: 0,
+                    minWidth: 'auto',
+                    bgcolor: 'transparent !important',
+                    boxShadow: 'none !important',
+                    '&:hover': { bgcolor: 'transparent !important', color: '#8EECF5 !important', textDecoration: 'none' },
+                    '&::after': { display: 'none !important' }
+                  }}
                 >
-                  {voucher ? 'Đổi mã khác' : 'Chọn mã'}
+                  <span style={{ color: '#8EECF5' }}>{voucher ? 'Đổi mã khác' : 'Chọn mã'}</span>
                 </Button>
               </Stack>
 
@@ -622,8 +807,8 @@ export default function CheckoutPage() {
                   sx={{
                     p: 1.5,
                     borderRadius: 2,
-                    bgcolor: voucherResult?.valid ? '#FFF1F5' : '#FEFCE8',
-                    border: `1px solid ${voucherResult?.valid ? '#F8B4C8' : '#FDE047'}`
+                    bgcolor: '#FEFCE8',
+                    border: '1px solid #FEF08A'
                   }}
                 >
                   <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -692,6 +877,430 @@ export default function CheckoutPage() {
           </Stack>
         </Box>
       )}
+
+      <Dialog
+        open={openPromoDialog}
+        onClose={() => setOpenPromoDialog(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            maxWidth: 490,
+            width: '100%',
+            borderRadius: '20px',
+            p: 1,
+            maxHeight: '85vh',
+            bgcolor: '#FFFFFF',
+            boxShadow: 'none'
+          }
+        }}
+      >
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', px: 2, py: 1.5 }}>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+            <TagOutlined style={{ color: '#BE185D', fontSize: 19 }} />
+            <Typography sx={{ fontWeight: 800, fontSize: 18, color: '#1F2937' }}>
+              Chọn mã giảm giá
+            </Typography>
+          </Stack>
+          <IconButton size="small" onClick={() => setOpenPromoDialog(false)} sx={{ color: '#6B7280', '&:hover': { bgcolor: '#F3F4F6' } }}>
+            <CloseOutlined style={{ fontSize: 15 }} />
+          </IconButton>
+        </DialogTitle>
+
+        <DialogContent dividers sx={{ borderColor: '#F1F5F9', maxHeight: 520, p: { xs: 1.5, sm: 2 } }}>
+          {promosLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
+              <CircularProgress size={32} sx={{ color: '#1BA3B3' }} />
+            </Box>
+          ) : allPromotions.length === 0 ? (
+            <Box sx={{ textAlign: 'center', py: 6 }}>
+              <Typography sx={{ fontSize: 14, color: '#6B7280' }}>
+                Hiện không có mã khuyến mãi nào khả dụng.
+              </Typography>
+            </Box>
+          ) : (
+            <Stack spacing={2}>
+              {allPromotions.map((p) => {
+                const status = checkPromoEligibility(p);
+                const isPercentType = ['PERCENT', 'PERCENTAGE'].includes(p.discountType);
+                const dVal = Number(p.discountValue || 0);
+                const isCurrent = tempVoucher?.promotionId === p.promotionId;
+                const isExpanded = expandedPromoId === p.promotionId;
+
+                return (
+                  <Card
+                    key={p.promotionId}
+                    variant="outlined"
+                    sx={{
+                      borderRadius: '16px',
+                      border: '2px solid',
+                      borderColor: isCurrent ? '#A7F2FA' : '#FEF08A',
+                      bgcolor: '#FEFCE8',
+                      overflow: 'hidden',
+                      boxShadow: 'none !important'
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' } }}>
+                      <Box
+                        sx={{
+                          width: { xs: '100%', sm: 105 },
+                          minWidth: { xs: '100%', sm: 105 },
+                          bgcolor: '#FEF9C3',
+                          borderRight: { sm: '1.5px dashed #FDE047' },
+                          borderBottom: { xs: '1.5px dashed #FDE047', sm: 'none' },
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          p: 1.5,
+                          textAlign: 'center'
+                        }}
+                      >
+                        <Typography sx={{ fontSize: 20, fontWeight: 800, color: status.eligible ? '#854D0E' : '#94A3B8', lineHeight: 1.1 }}>
+                          {isPercentType ? `${dVal}%` : dVal >= 1000 ? `${Math.round(dVal / 1000)}K` : `${dVal}đ`}
+                        </Typography>
+                        <Typography sx={{ fontSize: 10, fontWeight: 700, color: status.eligible ? '#854D0E' : '#94A3B8', mt: 0.5, textTransform: 'uppercase' }}>
+                          {isPercentType ? 'GIẢM GIÁ' : 'GIẢM TIỀN'}
+                        </Typography>
+                      </Box>
+
+                      <Box sx={{ flex: 1, p: 2, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                        <Box>
+                          <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
+                            <Typography sx={{ fontWeight: 700, fontSize: 14, color: status.eligible ? '#1F2937' : '#94A3B8' }}>
+                              {p.name}
+                            </Typography>
+                            <Box
+                              onClick={() => {
+                                if (!status.eligible) return;
+                                if (isCurrent) {
+                                  setTempVoucher(null);
+                                } else {
+                                  setTempVoucher(p);
+                                }
+                              }}
+                              sx={{
+                                cursor: status.eligible ? 'pointer' : 'default',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                width: 26,
+                                height: 26,
+                                flexShrink: 0,
+                                color: isCurrent ? '#FFB800' : status.eligible ? '#9CA3AF' : '#D1D5DB',
+                                '&:hover': status.eligible ? { color: '#FFB800' } : {}
+                              }}
+                            >
+                              {isCurrent ? (
+                                <StarFilled style={{ fontSize: 20, color: '#FFB800' }} />
+                              ) : (
+                                <StarOutlined style={{ fontSize: 20 }} />
+                              )}
+                            </Box>
+                          </Box>
+                          <Typography sx={{ fontSize: 12.5, color: '#6B7280', mt: 0.5 }}>
+                            Đơn tối thiểu: <strong>{money(p.minOrderValue)}</strong>
+                            {isPercentType && p.maxDiscountAmount && (
+                              <span> · Tối đa: <strong>{money(p.maxDiscountAmount)}</strong></span>
+                            )}
+                          </Typography>
+                          <Typography sx={{ fontSize: 11.5, color: '#94A3B8', mt: 0.25 }}>
+                            HSD: {p.endDate ? String(p.endDate).slice(0, 10).split('-').reverse().join('/') : '—'}
+                          </Typography>
+                          {!status.eligible && (
+                            <Typography sx={{ fontSize: 12, color: '#BE185D', fontWeight: 600, mt: 0.75 }}>
+                              {status.reason}
+                            </Typography>
+                          )}
+                        </Box>
+
+                        <Box sx={{ display: 'flex', alignItems: 'center', pt: 1, mt: 1, borderTop: '1px solid #FEF08A' }}>
+                          <Button
+                            size="small"
+                            disableRipple
+                            onClick={() => setExpandedPromoId((prev) => (prev === p.promotionId ? null : p.promotionId))}
+                            sx={{
+                              textTransform: 'none',
+                              fontSize: 12,
+                              fontWeight: 600,
+                              color: '#0E3A41',
+                              p: 0,
+                              minWidth: 'auto',
+                              bgcolor: 'transparent !important',
+                              boxShadow: 'none !important',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 0.5,
+                              '&:hover': { bgcolor: 'transparent !important', textDecoration: 'none', color: '#0E3A41', boxShadow: 'none !important' },
+                              '&:active': { bgcolor: 'transparent !important', boxShadow: 'none !important' }
+                            }}
+                          >
+                            <span>Điều kiện</span>
+                            <DownOutlined
+                              style={{
+                                fontSize: 10,
+                                transform: isExpanded ? 'rotate(180deg)' : 'none'
+                              }}
+                            />
+                          </Button>
+                        </Box>
+                      </Box>
+                    </Box>
+
+                    {isExpanded && (
+                      <Box
+                        sx={{
+                          p: 2,
+                          bgcolor: '#FFFDF0',
+                          borderTop: '1px dashed #FDE047',
+                          fontSize: 12.5,
+                          color: '#4B5563'
+                        }}
+                      >
+                        {p.description && (
+                          <Typography sx={{ fontSize: 12.5, color: '#4B5563', mb: 1, fontStyle: 'italic' }}>
+                            {p.description}
+                          </Typography>
+                        )}
+                        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1 }}>
+                          <Box>
+                            <Typography sx={{ fontSize: 11.5, color: '#6B7280' }}>Mức ưu đãi</Typography>
+                            <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: '#BE185D' }}>
+                              {isPercentType ? `Giảm ${dVal}%` : `Giảm ${money(dVal)}`}
+                              {isPercentType && p.maxDiscountAmount && ` (Tối đa ${money(p.maxDiscountAmount)})`}
+                            </Typography>
+                          </Box>
+                          <Box>
+                            <Typography sx={{ fontSize: 11.5, color: '#6B7280' }}>Đơn tối thiểu</Typography>
+                            <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: '#1F2937' }}>
+                              {money(p.minOrderValue)}
+                            </Typography>
+                          </Box>
+                          <Box sx={{ gridColumn: { xs: 'span 1', sm: 'span 2' } }}>
+                            <Typography sx={{ fontSize: 11.5, color: '#6B7280' }}>Phạm vi áp dụng</Typography>
+                            <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: '#1F2937' }}>
+                              {p.applyScope === 'ALL'
+                                ? 'Toàn bộ sản phẩm trong cửa hàng'
+                                : 'Chỉ áp dụng cho một số sản phẩm thuộc chương trình'}
+                            </Typography>
+                          </Box>
+                          <Box sx={{ gridColumn: { xs: 'span 1', sm: 'span 2' } }}>
+                            <Typography sx={{ fontSize: 11.5, color: '#6B7280' }}>Thời gian áp dụng</Typography>
+                            <Typography sx={{ fontSize: 12, color: '#1F2937' }}>
+                              {p.startDate ? String(p.startDate).slice(0, 10).split('-').reverse().join('/') : '—'} đến ${p.endDate ? String(p.endDate).slice(0, 10).split('-').reverse().join('/') : '—'}
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </Box>
+                    )}
+                  </Card>
+                );
+              })}
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 1.5, px: 2, borderTop: '1px solid #F1F5F9' }}>
+          <Button
+            fullWidth
+            variant="contained"
+            disableRipple
+            onClick={() => {
+              setVoucher(tempVoucher);
+              try {
+                if (tempVoucher) {
+                  sessionStorage.setItem('thors:applied_voucher', JSON.stringify(tempVoucher));
+                } else {
+                  sessionStorage.removeItem('thors:applied_voucher');
+                }
+              } catch {}
+              setOpenPromoDialog(false);
+            }}
+            sx={{
+              bgcolor: '#A7F2FA',
+              color: '#0E3A41',
+              fontWeight: 700,
+              fontSize: 13.5,
+              borderRadius: '12px',
+              py: 0.85,
+              boxShadow: 'none !important',
+              textTransform: 'none',
+              '&:hover': { bgcolor: '#8EECF5', boxShadow: 'none !important' },
+              '&:active': { bgcolor: '#A2F2FA', boxShadow: 'none !important' }
+            }}
+          >
+            Đồng ý
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog
+        open={openAddressDialog}
+        onClose={() => {
+          setOpenAddressDialog(false);
+          setIsCreatingAddress(false);
+        }}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: '20px',
+            overflow: 'hidden',
+            maxHeight: '85vh',
+            width: '100%',
+            maxWidth: '490px'
+          }
+        }}
+      >
+        <DialogTitle sx={{ p: 2, px: 2.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #F1F5F9' }}>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+            {isCreatingAddress && (
+              <IconButton size="small" onClick={() => setIsCreatingAddress(false)} sx={{ mr: 0.5, p: 0.5 }}>
+                <ArrowLeftOutlined style={{ fontSize: 14 }} />
+              </IconButton>
+            )}
+            <Typography sx={{ fontWeight: 800, fontSize: 16, color: '#1F2937' }}>
+              {isCreatingAddress ? 'Thêm địa chỉ mới' : 'Địa chỉ nhận hàng'}
+            </Typography>
+          </Stack>
+          <IconButton
+            size="small"
+            onClick={() => {
+              setOpenAddressDialog(false);
+              setIsCreatingAddress(false);
+            }}
+            sx={{ color: '#94A3B8' }}
+          >
+            <CloseOutlined style={{ fontSize: 14 }} />
+          </IconButton>
+        </DialogTitle>
+
+        <DialogContent sx={{ p: 2, px: 2.5 }}>
+          {isCreatingAddress ? (
+            newAddressForm
+          ) : addresses.length === 0 ? (
+            <Box sx={{ textAlign: 'center', py: 4 }}>
+              <Typography sx={{ fontSize: 14, color: '#6B7280' }}>
+                Chưa có địa chỉ nào được lưu.
+              </Typography>
+            </Box>
+          ) : (
+            <Stack spacing={1.5}>
+              {addresses.map((a) => {
+                const isCurrent = selectedAddressId === String(a.id);
+                return (
+                  <Card
+                    key={a.id}
+                    variant="outlined"
+                    onClick={() => {
+                      setSelectedAddressId(String(a.id));
+                      setOpenAddressDialog(false);
+                    }}
+                    sx={{
+                      borderRadius: '16px',
+                      border: '2px solid',
+                      borderColor: isCurrent ? '#A7F2FA' : '#FEF08A',
+                      bgcolor: '#FEFCE8',
+                      overflow: 'hidden',
+                      boxShadow: 'none !important',
+                      cursor: 'pointer',
+                      p: 2,
+                      transition: 'border-color 0.15s ease'
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
+                      <Box sx={{ minWidth: 0, flex: 1 }}>
+                        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', mb: 0.5 }}>
+                          <Typography sx={{ fontWeight: 700, fontSize: 14, color: '#1F2937' }}>
+                            {a.name}
+                          </Typography>
+                          <Typography sx={{ fontSize: 13, color: '#64748B' }}>
+                            {a.phone}
+                          </Typography>
+                          {a.isDefault && (
+                            <Chip size="small" color="primary" variant="outlined" label="Mặc định" sx={{ height: 20, fontSize: 11 }} />
+                          )}
+                        </Stack>
+                        <Typography sx={{ fontSize: 12.5, color: '#4B5563', lineHeight: 1.4 }}>
+                          {fullAddress(a)}
+                        </Typography>
+                      </Box>
+
+                      <Box
+                        sx={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: 26,
+                          height: 26,
+                          flexShrink: 0,
+                          color: isCurrent ? '#FFB800' : '#9CA3AF'
+                        }}
+                      >
+                        {isCurrent ? (
+                          <StarFilled style={{ fontSize: 20, color: '#FFB800' }} />
+                        ) : (
+                          <StarOutlined style={{ fontSize: 20 }} />
+                        )}
+                      </Box>
+                    </Box>
+                  </Card>
+                );
+              })}
+            </Stack>
+          )}
+        </DialogContent>
+
+        <DialogActions sx={{ p: 1.5, px: 2, borderTop: '1px solid #F1F5F9' }}>
+          {isCreatingAddress ? (
+            <Button
+              fullWidth
+              variant="contained"
+              disableRipple
+              disabled={savingAddress}
+              onClick={handleSaveNewAddress}
+              sx={{
+                bgcolor: '#A7F2FA',
+                color: '#0E3A41',
+                fontWeight: 700,
+                fontSize: 13.5,
+                borderRadius: '12px',
+                py: 0.85,
+                boxShadow: 'none !important',
+                textTransform: 'none',
+                '&:hover': { bgcolor: '#8EECF5', boxShadow: 'none !important' },
+                '&:active': { bgcolor: '#A2F2FA', boxShadow: 'none !important' }
+              }}
+            >
+              {savingAddress ? 'Đang lưu...' : 'Hoàn thành'}
+            </Button>
+          ) : (
+            <Button
+              fullWidth
+              variant="contained"
+              disableRipple
+              onClick={() => setIsCreatingAddress(true)}
+              sx={{
+                bgcolor: '#A7F2FA',
+                color: '#0E3A41',
+                fontWeight: 700,
+                fontSize: 13.5,
+                borderRadius: '12px',
+                py: 0.85,
+                boxShadow: 'none !important',
+                textTransform: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 0.75,
+                '&:hover': { bgcolor: '#8EECF5', boxShadow: 'none !important' },
+                '&:active': { bgcolor: '#A2F2FA', boxShadow: 'none !important' }
+              }}
+            >
+              <PlusOutlined style={{ fontSize: 14 }} />
+              <span>Thêm địa chỉ mới</span>
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

@@ -1,7 +1,7 @@
 // Màu và kiểu nút / thẻ của trang địa chỉ giao hàng, đồng bộ với trang Đăng nhập và các trang tài khoản của khách
 export const C = {
   cyan: '#A8F1F8',
-  cyanHover: '#8FE6EF',
+  cyanHover: '#8EECF5',
   cyanInk: '#0E3A41',
   teal: '#1BA3B3',
   text: '#1F2937',

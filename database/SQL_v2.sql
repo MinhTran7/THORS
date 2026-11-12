@@ -1672,8 +1672,6 @@ CREATE TABLE IF NOT EXISTS `shipping_address` (
   `phone` varchar(15) NOT NULL,
   `province_code` varchar(20) NOT NULL,
   `province_name` varchar(100) NOT NULL,
-  `district_code` varchar(20) DEFAULT NULL,
-  `district_name` varchar(100) DEFAULT NULL,
   `ward_code` varchar(20) NOT NULL,
   `ward_name` varchar(100) NOT NULL,
   `address_detail` varchar(255) NOT NULL,
@@ -1691,18 +1689,15 @@ CREATE TABLE IF NOT EXISTS `shipping_address` (
   CONSTRAINT `chk_shipping_address_default` CHECK ((`is_default` in (0,1))),
   CONSTRAINT `chk_shipping_address_deleted` CHECK ((`is_deleted` in (0,1))),
   CONSTRAINT `chk_shipping_address_default_active` CHECK ((not((`is_default` = 1) and (`is_deleted` = 1)))),
-  CONSTRAINT `chk_shipping_address_coordinates` CHECK ((((`latitude` is null) and (`longitude` is null)) or ((`latitude` is not null) and (`longitude` is not null) and (`latitude` between -90 and 90) and (`longitude` between -180 and 180))))
+  CONSTRAINT `chk_shipping_address_coordinates` CHECK ((((`latitude` is null) and (`longitude` is null)) or ((`latitude` is not null) and (`longitude` is not null) and (`latitude` between -90 and 90) and (`longitude` between -180 and 180)))),
+  CONSTRAINT `chk_shipping_address_required` CHECK (((char_length(trim(`recipient_name`)) >= 2) and (char_length(trim(`phone`)) >= 10) and (trim(`province_code`) <> '') and (trim(`province_name`) <> '') and (trim(`ward_code`) <> '') and (trim(`ward_name`) <> '') and (char_length(trim(`address_detail`)) >= 2)))
 ) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Dumping data for table thors_restore.shipping_address: ~6 rows (approximately)
-INSERT INTO `shipping_address` (`address_id`, `user_id`, `recipient_name`, `phone`, `province_code`, `province_name`, `district_code`, `district_name`, `ward_code`, `ward_name`, `address_detail`, `latitude`, `longitude`, `is_default`, `is_deleted`, `created_at`, `updated_at`) VALUES
-	(1, 5, 'Noah Williams', '+84900000003', '20', 'Tỉnh Lạng Sơn', NULL, NULL, '6187', 'Phường Kỳ Lừa', '1', NULL, NULL, 0, 1, '2026-10-31 10:33:17', '2026-11-01 08:33:59'),
-	(2, 5, 'Noah Williams', '+84900000003', '20', 'Tỉnh Lạng Sơn', NULL, NULL, '6187', 'Phường Kỳ Lừa', '1', NULL, NULL, 0, 1, '2026-10-31 10:33:20', '2026-11-01 08:34:04'),
-	(3, 5, 'Noah Williams', '+84900000003', '20', 'Tỉnh Lạng Sơn', NULL, NULL, '6187', 'Phường Kỳ Lừa', '1', NULL, NULL, 0, 1, '2026-10-31 10:33:21', '2026-11-01 11:21:35'),
-	(4, 5, 'Hồng Phước', '0359071422', '1', 'Thành phố Hà Nội', '275', 'Huyện Quốc Oai', '9934', 'Xã Hưng Đạo', 'Số 186, đường 72', NULL, NULL, 0, 0, '2026-11-01 08:36:26', '2026-11-01 13:12:57'),
-	(5, 5, 'Noah', '+84900000003', '24', 'Thành phố Bắc Ninh', NULL, NULL, '7210', 'Phường Bắc Giang', '3', NULL, NULL, 0, 1, '2026-11-01 09:51:12', '2026-11-01 11:21:32'),
-	(6, 5, 'Lam Béo', '0986378193', '8', 'Tỉnh Tuyên Quang', '70', 'Thành phố Tuyên Quang', '2216', 'Phường Tân Hà', '1234', NULL, NULL, 0, 0, '2026-11-01 13:07:12', '2026-11-04 06:01:01'),
-	(7, 5, 'huan', '0823826468', '91', 'Tỉnh Kiên Giang', '906', 'Huyện Giồng Riềng', '30922', 'Xã Bàn Tân Định', 'abc', NULL, NULL, 1, 0, '2026-11-01 14:57:12', '2026-11-04 06:01:02');
+-- Dumping data for table thors_restore.shipping_address: ~3 rows (approximately)
+INSERT INTO `shipping_address` (`address_id`, `user_id`, `recipient_name`, `phone`, `province_code`, `province_name`, `ward_code`, `ward_name`, `address_detail`, `latitude`, `longitude`, `is_default`, `is_deleted`, `created_at`, `updated_at`) VALUES
+	(4, 5, 'Hồng Phước', '0359071422', '1', 'Thành phố Hà Nội', '9934', 'Xã Hưng Đạo', 'Số 186, đường 72', NULL, NULL, 0, 0, '2026-11-01 08:36:26', '2026-11-01 13:12:57'),
+	(6, 5, 'Lam Béo', '0986378193', '8', 'Tỉnh Tuyên Quang', '2216', 'Phường Tân Hà', '1234', NULL, NULL, 0, 0, '2026-11-01 13:07:12', '2026-11-04 06:01:01'),
+	(7, 5, 'huan', '0823826468', '91', 'Tỉnh Kiên Giang', '30922', 'Xã Bàn Tân Định', 'abc', NULL, NULL, 1, 0, '2026-11-01 14:57:12', '2026-11-04 06:01:02');
 
 -- Dumping structure for table thors_restore.stock_adjustment
 CREATE TABLE IF NOT EXISTS `stock_adjustment` (

@@ -1,21 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Box, Typography, TextField, MenuItem, Button, Divider, IconButton } from '@mui/material';
-import { StarFilled, StarOutlined } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
-import { StoreAccountShell } from 'features/account/components/StoreAccount';
+import { Box, Typography, TextField, Button, Divider, IconButton, Autocomplete } from '@mui/material';
+import { StarFilled, StarOutlined, EnvironmentOutlined, RightOutlined } from '@ant-design/icons';
+import { useNavigate, Link as RouterLink } from 'react-router-dom';
+import { SANS } from 'features/shop/storeTheme';
 import { fetchProvinces, fetchWards } from '../cart/vnAddress';
 import { C, cardSx, outlineButtonSx, primaryButtonSx } from './theme';
 import AddressMap, { fullAddress } from './AddressMap';
 
 const EMPTY = { recipientName: '', phone: '', provinceCode: '', wardCode: '', addressDetail: '', isDefault: false };
 
-const menuProps = {
-  autoFocus: false,
-  disableAutoFocusItem: true,
-  PaperProps: { sx: { maxHeight: 280, borderRadius: '14px', mt: 0.5 } }
-};
-
-// Ô nhập giống trang Đăng nhập: bo 14px, nền xanh rất nhạt, viền xanh khi đang nhập
 const inputSx = (hasError) => ({
   '& .MuiOutlinedInput-root': {
     borderRadius: '14px',
@@ -50,7 +43,6 @@ function Field({ label, error, children, ...props }) {
         error={Boolean(error)}
         helperText={error}
         FormHelperTextProps={{ sx: { mx: 0.5, fontSize: 12 } }}
-        SelectProps={{ MenuProps: menuProps }}
         sx={inputSx(error)}
         {...props}
       >
@@ -99,16 +91,16 @@ export default function AddressForm({ title, subtitle, submitLabel, initial, loc
     };
   }, [provinceCode]);
 
-  function change(name, value) {
-    setForm((f) => ({ ...f, [name]: value, ...(name === 'provinceCode' && { wardCode: '' }) }));
-    setErrors((e) => ({ ...e, [name]: '' }));
-  }
+  const change = (field, value) => {
+    setForm((f) => ({ ...f, [field]: value }));
+    if (errors[field]) setErrors((e) => ({ ...e, [field]: undefined }));
+  };
 
   async function handleSubmit(e) {
     e.preventDefault();
-    const found = validate(form, province, ward);
-    setErrors(found);
-    if (Object.keys(found).length) return;
+    const errs = validate(form, province, ward);
+    setErrors(errs);
+    if (Object.keys(errs).length > 0) return;
 
     setSaving(true);
     setError('');
@@ -132,14 +124,35 @@ export default function AddressForm({ title, subtitle, submitLabel, initial, loc
   }
 
   return (
-    <StoreAccountShell back={{ to: '/addresses', label: 'Địa chỉ giao hàng' }} title={title} subtitle={subtitle}>
-      <Box component="form" noValidate onSubmit={handleSubmit} sx={{ ...cardSx, maxWidth: 880, p: { xs: 2.5, sm: 4 } }}>
+    <Box sx={{ fontFamily: SANS, color: C.text }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, mb: 3 }}>
+        <Box
+          component={RouterLink}
+          to="/addresses"
+          sx={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 1,
+            color: "#1E293B",
+            textDecoration: "none",
+            fontSize: 15,
+            fontWeight: 600
+          }}
+        >
+          <EnvironmentOutlined style={{ fontSize: 16, color: "#475569" }} />
+          <span>Địa chỉ giao hàng</span>
+        </Box>
+        <RightOutlined style={{ fontSize: 11, color: '#64748B', margin: '0 2px' }} />
+        <Typography component="span" sx={{ color: '#D7428B', fontWeight: 700, fontSize: 15 }}>
+          {title}
+        </Typography>
+      </Box>
+      <Box component="form" noValidate onSubmit={handleSubmit} sx={{ ...cardSx, boxShadow: 'none', border: `1px solid ${C.border}`, p: { xs: 2.5, sm: 4 } }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5 }}>
           <Typography sx={{ fontWeight: 800, fontSize: 16 }}>Thông tin giao hàng</Typography>
           <Typography sx={{ fontSize: 12.5, color: C.muted }}>* Thông tin bắt buộc</Typography>
         </Box>
 
-        {/* Người nhận */}
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2.5 }}>
           <Field
             label="Tên người nhận *"
@@ -160,42 +173,68 @@ export default function AddressForm({ title, subtitle, submitLabel, initial, loc
 
         <Divider sx={{ my: 3, borderColor: C.borderLight }} />
 
-        {/* Địa chỉ nhận hàng */}
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2.5, mb: 2.5 }}>
-          <Field
-            select
-            label="Tỉnh/Thành phố *"
-            value={province ? form.provinceCode : ''}
-            onChange={(e) => change('provinceCode', e.target.value)}
-            disabled={!provinces.length}
-            error={errors.provinceCode}
-          >
-            <MenuItem value="" disabled>
-              {provinces.length ? 'Chọn Tỉnh/Thành phố' : 'Đang tải...'}
-            </MenuItem>
-            {provinces.map((p) => (
-              <MenuItem key={p.code} value={p.code}>
-                {p.name}
-              </MenuItem>
-            ))}
-          </Field>
-          <Field
-            select
-            label="Phường/Xã *"
-            value={ward ? form.wardCode : ''}
-            onChange={(e) => change('wardCode', e.target.value)}
-            disabled={!wards.length}
-            error={errors.wardCode}
-          >
-            <MenuItem value="" disabled>
-              Chọn Phường/Xã
-            </MenuItem>
-            {wards.map((w) => (
-              <MenuItem key={w.code} value={w.code}>
-                {w.name}
-              </MenuItem>
-            ))}
-          </Field>
+          <Box>
+            <Typography sx={{ fontSize: 14, fontWeight: 700, color: '#374151', mb: 0.75 }}>
+              Tỉnh/Thành phố *
+            </Typography>
+            <Autocomplete
+              options={provinces}
+              value={province || null}
+              getOptionLabel={(option) => (option ? option.name : '')}
+              isOptionEqualToValue={(option, val) => option?.code === val?.code}
+              noOptionsText="Không tìm thấy"
+              loadingText="Đang tải..."
+              loading={!provinces.length}
+              onChange={(_, val) => {
+                setForm((f) => ({ ...f, provinceCode: val ? val.code : '', wardCode: '' }));
+                if (errors.provinceCode) setErrors((e) => ({ ...e, provinceCode: undefined, wardCode: undefined }));
+              }}
+              slotProps={{ paper: { sx: { borderRadius: '14px', mt: 0.5, boxShadow: '0 10px 25px -5px rgba(15, 23, 42, 0.1)' } } }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  size="small"
+                  placeholder="Chọn hoặc gõ tìm Tỉnh/Thành phố"
+                  error={Boolean(errors.provinceCode)}
+                  helperText={errors.provinceCode}
+                  FormHelperTextProps={{ sx: { mx: 0.5, fontSize: 12 } }}
+                  sx={inputSx(errors.provinceCode)}
+                />
+              )}
+            />
+          </Box>
+
+          <Box>
+            <Typography sx={{ fontSize: 14, fontWeight: 700, color: '#374151', mb: 0.75 }}>
+              Phường/Xã *
+            </Typography>
+            <Autocomplete
+              options={wards}
+              value={ward || null}
+              disabled={!form.provinceCode}
+              getOptionLabel={(option) => (option ? option.name : '')}
+              isOptionEqualToValue={(option, val) => option?.code === val?.code}
+              noOptionsText={form.provinceCode ? 'Không tìm thấy' : 'Vui lòng chọn Tỉnh/Thành phố trước'}
+              loadingText="Đang tải..."
+              onChange={(_, val) => {
+                setForm((f) => ({ ...f, wardCode: val ? val.code : '' }));
+                if (errors.wardCode) setErrors((e) => ({ ...e, wardCode: undefined }));
+              }}
+              slotProps={{ paper: { sx: { borderRadius: '14px', mt: 0.5, boxShadow: '0 10px 25px -5px rgba(15, 23, 42, 0.1)' } } }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  size="small"
+                  placeholder={form.provinceCode ? 'Chọn hoặc gõ tìm Phường/Xã' : 'Chọn Tỉnh/Thành phố trước'}
+                  error={Boolean(errors.wardCode)}
+                  helperText={errors.wardCode}
+                  FormHelperTextProps={{ sx: { mx: 0.5, fontSize: 12 } }}
+                  sx={inputSx(errors.wardCode)}
+                />
+              )}
+            />
+          </Box>
         </Box>
 
         <Field
@@ -215,7 +254,6 @@ export default function AddressForm({ title, subtitle, submitLabel, initial, loc
           </Box>
         )}
 
-        {/* Mặc định */}
         <Box
           sx={{
             my: 4,
@@ -269,6 +307,6 @@ export default function AddressForm({ title, subtitle, submitLabel, initial, loc
           </Box>
         </Box>
       </Box>
-    </StoreAccountShell>
+    </Box>
   );
 }

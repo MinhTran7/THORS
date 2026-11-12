@@ -15,6 +15,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Skeleton,
   TextField,
   Typography
 } from '@mui/material';
@@ -58,7 +59,8 @@ export function Title({ title, subtitle, action }) {
   );
 }
 // items: [title, value, hint, onClick?, active?, display?]; onClick makes the card a filter toggle.
-export function Metrics({ items, columns }) {
+// loading: data not arrived yet → show a placeholder instead of a misleading 0.
+export function Metrics({ items, columns, loading = false }) {
   return (
     <Box
       sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', lg: `repeat(${columns || items.length}, minmax(0, 1fr))` }, gap: 2, mb: 3 }}
@@ -81,7 +83,7 @@ export function Metrics({ items, columns }) {
         >
           <Typography color="text.secondary">{title}</Typography>
           <Typography variant="h2" sx={{ my: 1 }}>
-            {display ?? number(val)}
+            {loading ? <Skeleton width={72} aria-label="Đang tải" /> : (display ?? number(val))}
           </Typography>
           <Typography variant="caption" color="text.secondary">
             {hint}
