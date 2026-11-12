@@ -62,7 +62,6 @@ import EditAddressPage from 'features/customer/EditAddressPage';
 // Shop management
 import ShopPage from 'features/shop/ShopPage';
 import ShopProductPage from 'features/shop/ShopProductPage';
-import PromotionProductsPage from 'features/promotion/PromotionProductsPage';
 import ShopCollectionPage from 'features/shop/ShopCollectionPage';
 
 // Cart (Giỏ hàng)
@@ -94,7 +93,6 @@ export default createBrowserRouter([
     children: [
       { path: '/', element: <ShopPage /> },
       { path: '/shop/products/:productId', element: <ShopProductPage /> },
-      { path: '/promotions/:promotionId/products', element: <PromotionProductsPage /> },
       { path: '/shop/category/:categoryId', element: <ShopCollectionPage /> },
       { path: '/shop/best-sellers', element: <ShopCollectionPage key="best" collection="best_selling" /> },
       { path: '/shop/new-arrivals', element: <ShopCollectionPage key="new" collection="newest" /> },

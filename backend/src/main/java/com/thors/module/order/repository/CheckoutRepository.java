@@ -51,20 +51,6 @@ public class CheckoutRepository {
 
     public int insertOrder(String orderNumber, int userId,
                            String deliveryName, String deliveryPhone, String deliveryAddress,
-                           BigDecimal itemsAmount, BigDecimal shippingFee, BigDecimal totalAmount) {
-        return insertOrder(orderNumber, userId, deliveryName, deliveryPhone, deliveryAddress, itemsAmount, shippingFee, totalAmount, "COD");
-    }
-
-    public int insertOrder(String orderNumber, int userId,
-                           String deliveryName, String deliveryPhone, String deliveryAddress,
-                           BigDecimal itemsAmount, BigDecimal shippingFee, BigDecimal totalAmount,
-                           String paymentMethod) {
-        return insertOrder(orderNumber, userId, deliveryName, deliveryPhone, deliveryAddress,
-                itemsAmount, shippingFee, totalAmount, paymentMethod, null, null, BigDecimal.ZERO);
-    }
-
-    public int insertOrder(String orderNumber, int userId,
-                           String deliveryName, String deliveryPhone, String deliveryAddress,
                            BigDecimal itemsAmount, BigDecimal shippingFee, BigDecimal totalAmount,
                            String paymentMethod, Integer promotionId, String promotionName, BigDecimal promotionDiscount) {
         String method = "ONLINE".equalsIgnoreCase(paymentMethod) ? "ONLINE" : "COD";

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Box, Button, CircularProgress, ClickAwayListener, Dialog, IconButton, InputAdornment, MenuItem, Snackbar, TextField, Typography, useMediaQuery } from '@mui/material';
+import { Alert, Box, Button, CircularProgress, ClickAwayListener, Dialog, IconButton, InputAdornment, Snackbar, TextField, Typography, useMediaQuery } from '@mui/material';
 import {
   SearchOutlined,
   ScanOutlined,
@@ -23,6 +23,7 @@ import { addScannedLine, scanToCartLine } from '../warehouse/scanToCart';
 import CameraScanDialog from '../warehouse/CameraScanDialog';
 import { useCrumbs } from '../../layouts/crumbs';
 import ReceiptDialog from './ReceiptDialog';
+import ProductInfoDialog from './ProductInfoDialog';
 
 const money = (value) => `${Number(value || 0).toLocaleString('vi-VN')} đ`;
 const formatNumberInput = (val) => {
@@ -54,11 +55,11 @@ export default function InStoreSalesPage() {
   }, [isDesktop]);
 
   const [products, setProducts] = useState([]);
-  const [category, setCategory] = useState('Tất cả danh mục');
   const [search, setSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [addingId, setAddingId] = useState(null);
+  const [infoLine, setInfoLine] = useState(null);
 
   // Quản lý nhiều tab hóa đơn chờ kiểu Sapo
   const [orders, setOrders] = useState([
@@ -202,20 +203,10 @@ export default function InStoreSalesPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const categories = useMemo(() => ['Tất cả danh mục', ...new Set(products.map((p) => p.categoryName).filter(Boolean))], [products]);
-
   const visibleProducts = useMemo(() => {
     const keyword = search.trim().toLowerCase();
-    return products.filter((p) => {
-      const matchesCategory = category === 'Tất cả danh mục' || p.categoryName === category;
-      const matchesSearch = [p.productName, p.sku].some((value) =>
-        String(value || '')
-          .toLowerCase()
-          .includes(keyword)
-      );
-      return matchesCategory && matchesSearch;
-    });
-  }, [products, category, search]);
+    return products.filter((p) => [p.productName, p.sku].some((value) => String(value || '').toLowerCase().includes(keyword)));
+  }, [products, search]);
 
   const sizes = useMemo(() => [...new Set(variants.map((v) => String(v.size ?? '')).filter(Boolean))], [variants]);
 
@@ -692,33 +683,6 @@ export default function InStoreSalesPage() {
                 )}
               </Box>
             </ClickAwayListener>
-
-            <TextField
-              select
-              size="small"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              SelectProps={{
-                MenuProps: { disablePortal: true }
-              }}
-              sx={{
-                minWidth: { xs: 150, sm: 200 },
-                bgcolor: '#FFFFFF',
-                '& .MuiOutlinedInput-root': {
-                  borderRadius: 2.5,
-                  height: 42,
-                  '& fieldset': { borderColor: '#E2E8F0' },
-                  '&:hover fieldset': { borderColor: '#8EECF5' },
-                  '&.Mui-focused fieldset': { borderColor: '#8EECF5' }
-                }
-              }}
-            >
-              {categories.map((c) => (
-                <MenuItem key={c} value={c}>
-                  {c}
-                </MenuItem>
-              ))}
-            </TextField>
           </Box>
 
           <Box
@@ -776,14 +740,18 @@ export default function InStoreSalesPage() {
                     component="img"
                     src={line.image || ''}
                     alt={line.name}
+                    onClick={() => setInfoLine(line)}
                     sx={{
+                      cursor: 'pointer',
                       width: 44,
                       height: 44,
                       borderRadius: 2,
                       objectFit: 'cover',
                       bgcolor: '#F8FAFC',
                       flexShrink: 0,
-                      border: '1px solid #E2E8F0'
+                      border: '1px solid #E2E8F0',
+                      transition: 'border-color .15s',
+                      '&:hover': { borderColor: '#8EECF5' }
                     }}
                   />
                   <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -865,34 +833,6 @@ export default function InStoreSalesPage() {
               ))
             )}
           </Box>
-
-          {/* Nút + góc dưới bên phải: thêm món khác vào hóa đơn này (đưa con trỏ lên ô tìm kiếm) */}
-          {cart.length > 0 && (
-            <Box sx={{ position: 'sticky', bottom: 0, display: 'flex', justifyContent: 'flex-end', pt: 1.5, pointerEvents: 'none' }}>
-              <IconButton
-                aria-label="Thêm sản phẩm vào hóa đơn"
-                title="Thêm sản phẩm vào hóa đơn này (hoặc cứ quét mã bằng máy quét)"
-                onClick={() => {
-                  // Đợi ClickAwayListener của ô tìm kiếm xử lý cú click này xong rồi mới mở danh sách.
-                  setTimeout(() => {
-                    searchInputRef.current?.focus();
-                    setSearchOpen(true);
-                  }, 0);
-                }}
-                sx={{
-                  pointerEvents: 'auto',
-                  width: 44,
-                  height: 44,
-                  bgcolor: '#8EECF5',
-                  color: '#0F172A',
-                  boxShadow: '0 4px 12px rgba(15, 23, 42, 0.15)',
-                  '&:hover': { bgcolor: '#5FDDEA' }
-                }}
-              >
-                <PlusOutlined style={{ fontSize: 18 }} />
-              </IconButton>
-            </Box>
-          )}
           </Box>
         </Box>
 
@@ -1004,7 +944,7 @@ export default function InStoreSalesPage() {
           </Box>
 
           {/* Header hóa đơn */}
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1.5, mb: 0.5 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <FileTextOutlined style={{ fontSize: 18, color: '#0F172A' }} />
               <Typography sx={{ fontSize: 16.5, fontWeight: 800, color: '#0F172A' }}>{activeOrder?.label || 'Hóa đơn hiện tại'}</Typography>
@@ -1673,6 +1613,8 @@ export default function InStoreSalesPage() {
         receivedAmount={completedPayment.received}
         changeAmount={completedPayment.change}
       />
+
+      <ProductInfoDialog line={infoLine} onClose={() => setInfoLine(null)} />
     </Box>
   );
 }

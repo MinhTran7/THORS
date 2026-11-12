@@ -10,7 +10,6 @@ public record UpdatePromotionRequest(
         String discountType,
         BigDecimal discountValue,
         BigDecimal minOrderValue,
-        BigDecimal maxDiscountAmount,
         LocalDateTime startDate,
         LocalDateTime endDate,
         Integer usageLimit,

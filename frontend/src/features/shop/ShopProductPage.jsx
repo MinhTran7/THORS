@@ -16,12 +16,10 @@ const RELATED_COUNT = 4; // số sản phẩm gợi ý ở cuối trang
 
 // Giá sau khuyến mãi của một mức giá: khuyến mãi theo % thì trừ %, theo số tiền thì trừ đúng số tiền đó
 function salePriceOf(price, promo) {
-  if (!promo) return price;
-  const label = String(promo.discountLabel || '');
-  const pct = parseFloat(label.replace(/[^\d.]/g, ''));
-  if (label.includes('%') && pct > 0) return Math.round((Number(price) * (100 - pct)) / 100);
-  const off = Number(promo.minPrice) - Number(promo.salePrice);
-  return off > 0 ? Math.max(0, Number(price) - off) : Number(price);
+  if (!promo) return Number(price);
+  const value = Number(promo.discountValue);
+  const off = promo.discountType === 'PERCENT' ? Math.round((Number(price) * value) / 100) : value;
+  return Math.max(0, Number(price) - off);
 }
 
 /** Trang chi tiết sản phẩm công khai: /shop/products/:productId */
@@ -142,6 +140,7 @@ export default function ShopProductPage() {
       size: variant.size,
       color: variant.color,
       unitPrice: variant.price,
+      salePrice: salePriceOf(variant.price, promo),
       quantity: qty
     };
 

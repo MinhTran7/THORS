@@ -393,7 +393,7 @@ const LETTERS = [
 
 const discountText = (p) => {
   const v = Number(p.discountValue) || 0;
-  if (['PERCENT', 'PERCENTAGE'].includes(p.discountType)) return `${v}%`;
+  if (p.discountType === 'PERCENT') return `${v}%`;
   return v >= 1000 ? `${Math.round(v / 1000)}K` : money(v);
 };
 

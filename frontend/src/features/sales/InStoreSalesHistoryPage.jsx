@@ -161,7 +161,7 @@ export default function InStoreSalesHistoryPage() {
   }
 
   return (
-    <Box sx={{ maxWidth: 1400, mx: 'auto', color: C.text, pb: 4 }}>
+    <Box sx={{ color: C.text, pb: 4 }}>
       {/* ─── TIÊU ĐỀ TRÊN CÙNG: DANH SÁCH HÓA ĐƠN ─── */}
       <Box sx={{ mb: 2.5 }}>
         <Typography variant="h3" sx={{ fontWeight: 800, color: C.text }}>

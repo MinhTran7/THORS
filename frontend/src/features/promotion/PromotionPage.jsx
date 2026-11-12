@@ -33,10 +33,7 @@ import {
   PlusOutlined,
   SearchOutlined
 } from '@ant-design/icons';
-import {
-  changePromotionStatus,
-  getPromotions
-} from 'services/promotionService';
+import { changePromotionStatus, findProductConflict, getPromotions } from 'services/promotionService';
 import { useAuth } from 'features/auth/AuthProvider';
 import CustomerPromotionPage from './CustomerPromotionPage';
 import { useCrumbs } from '../../layouts/crumbs';
@@ -162,6 +159,60 @@ function PromotionSwitch({ promotion, onToggleNormal, onEndedClick, disabled }) 
   );
 }
 
+function FilterSelect({ label, value, onChange, options }) {
+  return (
+    <Box sx={{ minWidth: 0 }}>
+      <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>{label}</Typography>
+      <Select
+        fullWidth
+        size="small"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        sx={{
+          bgcolor: C.surface,
+          borderRadius: 2.5,
+          height: 44,
+          fontSize: 13.5,
+          '& .MuiOutlinedInput-notchedOutline': { borderColor: C.border },
+          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: C.cyan },
+          '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: C.cyan }
+        }}
+      >
+        {options.map(([key, text]) => (
+          <MenuItem key={key} value={key}>
+            {text}
+          </MenuItem>
+        ))}
+      </Select>
+    </Box>
+  );
+}
+
+function UsageBar({ promotion }) {
+  if (!(Number(promotion.minOrderValue) > 0))
+    return (
+      <Box>
+        <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: C.muted }}>Tự động áp dụng</Typography>
+        <Typography sx={{ fontSize: 11.5, color: '#94A3B8' }}>Không tính lượt</Typography>
+      </Box>
+    );
+  const used = Number(promotion.usedCount || 0);
+  const limit = Number(promotion.usageLimit || 0);
+  const percent = limit ? Math.min(100, (used / limit) * 100) : 0;
+  return (
+    <Box sx={{ maxWidth: 170 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
+        <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: C.text }}>{limit ? `${used}/${limit} lượt` : `${used} lượt`}</Typography>
+        {limit > 0 && <Typography sx={{ fontSize: 11.5, color: C.muted }}>{Math.round(percent)}%</Typography>}
+      </Box>
+      <Box sx={{ mt: 0.75, height: 6, borderRadius: 3, bgcolor: '#E2E8F0', overflow: 'hidden' }}>
+        <Box sx={{ width: `${percent}%`, height: '100%', borderRadius: 3, bgcolor: percent >= 100 ? '#EF4444' : percent >= 80 ? '#F59E0B' : '#67E8F9' }} />
+      </Box>
+      {!limit && <Typography sx={{ fontSize: 11.5, color: '#94A3B8', mt: 0.5 }}>Chưa đặt giới hạn</Typography>}
+    </Box>
+  );
+}
+
 function OwnerPromotionView() {
   useCrumbs(['Danh sách khuyến mãi']);
 
@@ -172,6 +223,7 @@ function OwnerPromotionView() {
   const [search, setSearch] = useState('');
   const [scheduleFilter, setScheduleFilter] = useState('ALL');
   const [enableFilter, setEnableFilter] = useState('ALL');
+  const [kindFilter, setKindFilter] = useState('ALL');
   const [page, setPage] = useState(1);
   const [statusTarget, setStatusTarget] = useState(null);
   const [endedTarget, setEndedTarget] = useState(null);
@@ -207,9 +259,10 @@ function OwnerPromotionView() {
         enableFilter === 'ALL' ||
         (enableFilter === 'ACTIVE' && isPromotionActive(promotion)) ||
         (enableFilter === 'INACTIVE' && !isPromotionActive(promotion));
-      return matchesSearch && matchesSchedule && matchesEnable;
+      const matchesKind = kindFilter === 'ALL' || (Number(promotion.minOrderValue) > 0 ? 'ORDER' : 'PRODUCT') === kindFilter;
+      return matchesSearch && matchesSchedule && matchesEnable && matchesKind;
     });
-  }, [promotions, search, scheduleFilter, enableFilter]);
+  }, [promotions, search, scheduleFilter, enableFilter, kindFilter]);
 
   const pageCount = Math.max(1, Math.ceil(filteredPromotions.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
@@ -220,6 +273,11 @@ function OwnerPromotionView() {
     setChangingStatus(true);
     try {
       const nextStatus = statusTarget.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+      const conflict = nextStatus === 'ACTIVE' && (await findProductConflict(statusTarget));
+      if (conflict) {
+        const date = (value) => new Date(value).toLocaleDateString('vi-VN');
+        throw new Error(`Không thể bật: trùng sản phẩm với khuyến mãi “${conflict.name}” (${date(conflict.startDate)} – ${date(conflict.endDate)}).`);
+      }
       await changePromotionStatus(statusTarget.promotionId, nextStatus);
       setPromotions((prev) =>
         prev.map((item) =>
@@ -239,11 +297,12 @@ function OwnerPromotionView() {
     setSearch('');
     setScheduleFilter('ALL');
     setEnableFilter('ALL');
+    setKindFilter('ALL');
     setPage(1);
   };
 
   return (
-    <Box sx={{ maxWidth: 1400, mx: 'auto', color: C.text, pb: 4 }}>
+    <Box sx={{ color: C.text, pb: 4 }}>
       {/* ─── TIÊU ĐỀ TRÊN CÙNG: DANH SÁCH KHUYẾN MÃI ─── */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5 }}>
         <Typography variant="h3" sx={{ fontWeight: 800, color: C.text }}>
@@ -327,7 +386,7 @@ function OwnerPromotionView() {
           gridTemplateColumns: {
             xs: '1fr',
             sm: 'repeat(2, 1fr)',
-            md: 'minmax(200px, 1.8fr) 180px 180px auto'
+            md: 'minmax(200px, 1.8fr) 180px 180px 180px auto'
           },
           gap: { xs: 1.5, lg: 2 },
           alignItems: 'flex-end'
@@ -367,62 +426,46 @@ function OwnerPromotionView() {
           />
         </Box>
 
-        <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>
-            Thời gian
-          </Typography>
-          <Select
-            fullWidth
-            size="small"
-            value={scheduleFilter}
-            onChange={(e) => {
-              setScheduleFilter(e.target.value);
-              setPage(1);
-            }}
-            sx={{
-              bgcolor: C.surface,
-              borderRadius: 2.5,
-              height: 44,
-              fontSize: 13.5,
-              '& .MuiOutlinedInput-notchedOutline': { borderColor: C.border },
-              '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: C.cyan },
-              '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: C.cyan }
-            }}
-          >
-            <MenuItem value="ALL">Tất cả</MenuItem>
-            <MenuItem value="ONGOING">Đang diễn ra</MenuItem>
-            <MenuItem value="UPCOMING">Sắp diễn ra</MenuItem>
-            <MenuItem value="ENDED">Đã kết thúc</MenuItem>
-          </Select>
-        </Box>
-
-        <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>
-            Trạng thái
-          </Typography>
-          <Select
-            fullWidth
-            size="small"
-            value={enableFilter}
-            onChange={(e) => {
-              setEnableFilter(e.target.value);
-              setPage(1);
-            }}
-            sx={{
-              bgcolor: C.surface,
-              borderRadius: 2.5,
-              height: 44,
-              fontSize: 13.5,
-              '& .MuiOutlinedInput-notchedOutline': { borderColor: C.border },
-              '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: C.cyan },
-              '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: C.cyan }
-            }}
-          >
-            <MenuItem value="ALL">Tất cả</MenuItem>
-            <MenuItem value="ACTIVE">Đang bật</MenuItem>
-            <MenuItem value="INACTIVE">Đang tắt</MenuItem>
-          </Select>
-        </Box>
+        <FilterSelect
+          label="Loại"
+          value={kindFilter}
+          onChange={(value) => {
+            setKindFilter(value);
+            setPage(1);
+          }}
+          options={[
+            ['ALL', 'Tất cả'],
+            ['PRODUCT', 'Giảm giá sản phẩm'],
+            ['ORDER', 'Giảm theo đơn hàng']
+          ]}
+        />
+        <FilterSelect
+          label="Thời gian"
+          value={scheduleFilter}
+          onChange={(value) => {
+            setScheduleFilter(value);
+            setPage(1);
+          }}
+          options={[
+            ['ALL', 'Tất cả'],
+            ['ONGOING', 'Đang diễn ra'],
+            ['UPCOMING', 'Sắp diễn ra'],
+            ['ENDED', 'Đã kết thúc']
+          ]}
+        />
+        <FilterSelect
+          label="Trạng thái"
+          value={enableFilter}
+          onChange={(value) => {
+            setEnableFilter(value);
+            setPage(1);
+          }}
+          options={[
+            ['ALL', 'Tất cả'],
+            ['ACTIVE', 'Đang bật'],
+            ['INACTIVE', 'Đang tắt']
+          ]}
+        />
 
         {/* Nút Bỏ lọc */}
         <Box sx={{ minWidth: 0, display: 'flex' }}>
@@ -483,7 +526,8 @@ function OwnerPromotionView() {
             <TableContainer sx={{ overflowX: 'auto' }}>
               <Table
                 sx={{
-                  minWidth: 800,
+                  minWidth: 1100,
+                  tableLayout: 'fixed',
                   '& th': {
                     bgcolor: C.surface,
                     color: C.muted,
@@ -504,25 +548,27 @@ function OwnerPromotionView() {
               >
                 <TableHead>
                   <TableRow>
-                    <TableCell sx={{ pl: 3 }}>TÊN KHUYẾN MÃI</TableCell>
-                    <TableCell>MỨC GIẢM</TableCell>
-                    <TableCell>THỜI GIAN</TableCell>
-                    <TableCell sx={{ minWidth: 150 }}>SỬ DỤNG</TableCell>
-                    <TableCell>TRẠNG THÁI</TableCell>
-                    <TableCell align="center" sx={{ pr: 3 }}>THAO TÁC</TableCell>
+                    <TableCell align="center" sx={{ pl: 3, width: '5%' }}>STT</TableCell>
+                    <TableCell sx={{ width: '14%' }}>TÊN KHUYẾN MÃI</TableCell>
+                    <TableCell sx={{ width: '10%' }}>MỨC GIẢM</TableCell>
+                    <TableCell sx={{ width: '14%' }}>THỜI GIAN</TableCell>
+                    <TableCell sx={{ width: '18%' }}>ÁP DỤNG</TableCell>
+                    <TableCell sx={{ width: '18%' }}>LƯỢT DÙNG</TableCell>
+                    <TableCell sx={{ width: '12%' }}>TRẠNG THÁI</TableCell>
+                    <TableCell align="center" sx={{ pr: 3, width: '9%' }}>THAO TÁC</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {rows.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
+                      <TableCell colSpan={8} align="center" sx={{ py: 6 }}>
                         <Typography sx={{ color: C.muted, fontSize: 14 }}>
                           Không có chương trình khuyến mãi nào phù hợp.
                         </Typography>
                       </TableCell>
                     </TableRow>
                   ) : (
-                    rows.map((promotion) => {
+                    rows.map((promotion, index) => {
                       const schedule = getScheduleStatus(promotion);
                       return (
                         <TableRow
@@ -530,36 +576,23 @@ function OwnerPromotionView() {
                           hover
                           sx={{ '&:hover': { bgcolor: '#FAFCFE' } }}
                         >
+                          <TableCell align="center" sx={{ pl: 3, color: C.muted, fontWeight: 600 }}>
+                            {(currentPage - 1) * PAGE_SIZE + index + 1}
+                          </TableCell>
                           {/* Tên khuyến mãi */}
-                          <TableCell sx={{ pl: 3 }}>
+                          <TableCell>
                             <Typography sx={{ fontWeight: 800, color: C.text, fontSize: 13.5, overflowWrap: 'anywhere' }}>
                               {promotion.name}
                             </Typography>
                             {promotion.description && (
-                              <Typography sx={{ fontSize: 12, color: '#94A3B8', mt: 0.25 }}>
+                              <Typography sx={{ fontSize: 12, color: '#94A3B8', mt: 0.25, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                                 {promotion.description}
                               </Typography>
                             )}
                           </TableCell>
 
-                          {/* Mức giảm - Màu vàng nhạt giống badge Tiền mặt */}
                           <TableCell>
-                            <Box
-                              sx={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                px: 1.5,
-                                py: 0.5,
-                                borderRadius: 4,
-                                bgcolor: C.cream,
-                                color: C.creamText,
-                                fontSize: 12,
-                                fontWeight: 700,
-                                letterSpacing: '0.01em'
-                              }}
-                            >
-                              {getDiscountText(promotion)}
-                            </Box>
+                            <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: C.text }}>{getDiscountText(promotion)}</Typography>
                           </TableCell>
 
                           {/* Thời gian */}
@@ -602,59 +635,19 @@ function OwnerPromotionView() {
                             </Box>
                           </TableCell>
 
-                          {/* Sử dụng - Đoạn tiến độ 0-100% màu xanh chủ đạo */}
-                          <TableCell sx={{ minWidth: 150 }}>
-                            {promotion.usageLimit == null ? (
-                              <Box sx={{ width: '100%', maxWidth: 130 }}>
-                                <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: C.text, mb: 0.6 }}>
-                                  Không giới hạn
-                                </Typography>
-                                <Box
-                                  sx={{
-                                    width: '100%',
-                                    height: 7,
-                                    borderRadius: 4,
-                                    bgcolor: '#F1F5F9',
-                                    border: `1px solid ${C.border}`
-                                  }}
-                                />
-                              </Box>
-                            ) : (
-                              (() => {
-                                const used = promotion.usedCount || 0;
-                                const limit = promotion.usageLimit;
-                                const percent = Math.min(100, Math.round((used * 100) / limit));
-                                return (
-                                  <Tooltip title={`Đã dùng: ${used} / ${limit} lượt`}>
-                                    <Box sx={{ width: '100%', maxWidth: 130, cursor: 'default' }}>
-                                      <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: C.text, mb: 0.6 }}>
-                                        {percent}%
-                                      </Typography>
-                                      <Box
-                                        sx={{
-                                          width: '100%',
-                                          height: 7,
-                                          borderRadius: 4,
-                                          bgcolor: '#F1F5F9',
-                                          border: `1px solid ${C.border}`,
-                                          overflow: 'hidden'
-                                        }}
-                                      >
-                                        <Box
-                                          sx={{
-                                            width: `${percent}%`,
-                                            height: '100%',
-                                            bgcolor: C.cyan,
-                                            borderRadius: 4,
-                                            transition: 'width 0.3s ease'
-                                          }}
-                                        />
-                                      </Box>
-                                    </Box>
-                                  </Tooltip>
-                                );
-                              })()
-                            )}
+                          <TableCell>
+                            <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text }}>
+                              {promotion.applyScope === 'SELECTED' ? 'Sản phẩm chọn' : 'Toàn bộ cửa hàng'}
+                            </Typography>
+                            <Typography sx={{ fontSize: 11.5, color: '#94A3B8' }}>
+                              {Number(promotion.minOrderValue) > 0
+                                ? `Đơn từ ${Number(promotion.minOrderValue).toLocaleString('vi-VN')} đ`
+                                : 'Không yêu cầu đơn tối thiểu'}
+                            </Typography>
+                          </TableCell>
+
+                          <TableCell>
+                            <UsageBar promotion={promotion} />
                           </TableCell>
 
                           {/* Trạng thái Switch & Chip chuẩn theo mẫu */}
@@ -744,6 +737,11 @@ function OwnerPromotionView() {
             Bạn có chắc muốn {statusTarget && statusTarget.status === 'ACTIVE' ? 'tắt' : 'bật'} chương trình{' '}
             <strong style={{ color: C.text }}>{statusTarget?.name}</strong>?
           </Typography>
+          {statusTarget?.status === 'ACTIVE' && getScheduleStatus(statusTarget) === 'ONGOING' && (
+            <Alert severity="warning" sx={{ mt: 1.5, fontSize: 13, borderRadius: 2 }}>
+              Khuyến mãi đang áp dụng. Sau khi tắt, khách sẽ không được giảm nữa; các đơn đã đặt vẫn giữ mức giảm cũ.
+            </Alert>
+          )}
         </DialogContent>
         <DialogActions sx={{ p: 2, pt: 1 }}>
           <Button
@@ -786,7 +784,7 @@ function OwnerPromotionView() {
         maxWidth="xs"
         fullWidth
         PaperProps={{
-          sx: { borderRadius: 3.5, border: `1px solid ${C.border}`, p: 1 }
+          sx: { borderRadius: 3.5, border: `1px solid ${C.border}`, p: 1, maxWidth: 520 }
         }}
       >
         <DialogTitle sx={{ color: C.text, fontWeight: 700, fontSize: 17, pb: 1 }}>
@@ -797,7 +795,7 @@ function OwnerPromotionView() {
             Chương trình <strong style={{ color: C.text }}>{endedTarget?.name}</strong> đã kết thúc vào lúc{' '}
             <strong style={{ color: C.text }}>{dateText(endedTarget?.endDate)}</strong>.
             <br />
-            Vui lòng chỉnh sửa ngày kết thúc sang tương lai để có thể bật lại khuyến mãi.
+            Vui lòng chỉnh sửa thời gian để có thể bật lại khuyến mãi.
           </Typography>
         </DialogContent>
         <DialogActions sx={{ p: 2, pt: 1, gap: 1 }}>

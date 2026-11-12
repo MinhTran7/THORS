@@ -30,11 +30,10 @@ public class PromotionRepository {
                    created_by,
                    discount_type,
                    min_order_value,
-                   max_discount_amount,
                    usage_limit,
                    apply_scope,
                    (SELECT COUNT(*) FROM orders o
-                    WHERE (o.promotion_id = promotion.promotion_id OR o.promotion_name_snapshot = promotion.name)
+                    WHERE o.promotion_id = promotion.promotion_id
                       AND o.order_status NOT IN ('CANCELLED', 'REJECTED', 'EXPIRED')) AS used_count
             FROM promotion
             """;
@@ -57,12 +56,10 @@ public class PromotionRepository {
         return jdbc.query(
                 SELECT_COLUMNS + """
                          WHERE status = 'ACTIVE'
-                           AND start_date <= ?
                            AND end_date > ?
                          ORDER BY end_date ASC, promotion_id DESC
                         """,
                 mapper,
-                Timestamp.valueOf(now),
                 Timestamp.valueOf(now)
         );
     }
@@ -73,6 +70,29 @@ public class PromotionRepository {
                 mapper,
                 id
         ).stream().findFirst();
+    }
+
+    public Optional<Promotion> lockById(int id) {
+        return jdbc.query(
+                SELECT_COLUMNS + " WHERE promotion_id = ? FOR UPDATE",
+                mapper,
+                id
+        ).stream().findFirst();
+    }
+
+    public int countUsage(int promotionId) {
+        Integer count = jdbc.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM orders
+                WHERE promotion_id = ?
+                  AND order_status NOT IN ('CANCELLED', 'REJECTED', 'EXPIRED')
+                FOR SHARE
+                """,
+                Integer.class,
+                promotionId
+        );
+        return count == null ? 0 : count;
     }
 
     public Optional<Promotion> findAvailableById(
@@ -93,13 +113,31 @@ public class PromotionRepository {
         ).stream().findFirst();
     }
 
+    public Optional<Promotion> findRunningProductPromotion(int productId, LocalDateTime now) {
+        return jdbc.query(
+                SELECT_COLUMNS + """
+                         WHERE status = 'ACTIVE'
+                           AND COALESCE(min_order_value, 0) = 0
+                           AND start_date <= ?
+                           AND end_date > ?
+                           AND (apply_scope = 'ALL'
+                                OR promotion_id IN (SELECT promotion_id FROM promotion_product WHERE product_id = ?))
+                         ORDER BY promotion_id DESC
+                         LIMIT 1
+                        """,
+                mapper,
+                Timestamp.valueOf(now),
+                Timestamp.valueOf(now),
+                productId
+        ).stream().findFirst();
+    }
+
     public int create(
             String name,
             String description,
             String discountType,
             BigDecimal discountValue,
             BigDecimal minOrderValue,
-            BigDecimal maxDiscountAmount,
             LocalDateTime startDate,
             LocalDateTime endDate,
             Integer usageLimit,
@@ -117,7 +155,6 @@ public class PromotionRepository {
                         discount_type,
                         discount_value,
                         min_order_value,
-                        max_discount_amount,
                         start_date,
                         end_date,
                         usage_limit,
@@ -125,7 +162,7 @@ public class PromotionRepository {
                         status,
                         created_by
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?)
                     """,
                     Statement.RETURN_GENERATED_KEYS
             );
@@ -135,18 +172,11 @@ public class PromotionRepository {
             statement.setString(3, discountType);
             statement.setBigDecimal(4, discountValue);
             statement.setBigDecimal(5, minOrderValue);
-            statement.setBigDecimal(6, maxDiscountAmount);
-            statement.setTimestamp(7, Timestamp.valueOf(startDate));
-            statement.setTimestamp(8, Timestamp.valueOf(endDate));
-
-            if (usageLimit == null) {
-                statement.setNull(9, java.sql.Types.INTEGER);
-            } else {
-                statement.setInt(9, usageLimit);
-            }
-
-            statement.setString(10, applyScope);
-            statement.setInt(11, createdBy);
+            statement.setTimestamp(6, Timestamp.valueOf(startDate));
+            statement.setTimestamp(7, Timestamp.valueOf(endDate));
+            statement.setObject(8, usageLimit, java.sql.Types.INTEGER);
+            statement.setString(9, applyScope);
+            statement.setInt(10, createdBy);
 
             return statement;
         }, keyHolder);
@@ -167,7 +197,6 @@ public class PromotionRepository {
             String discountType,
             BigDecimal discountValue,
             BigDecimal minOrderValue,
-            BigDecimal maxDiscountAmount,
             LocalDateTime startDate,
             LocalDateTime endDate,
             Integer usageLimit,
@@ -181,7 +210,6 @@ public class PromotionRepository {
                     discount_type = ?,
                     discount_value = ?,
                     min_order_value = ?,
-                    max_discount_amount = ?,
                     start_date = ?,
                     end_date = ?,
                     usage_limit = ?,
@@ -193,7 +221,6 @@ public class PromotionRepository {
                 discountType,
                 discountValue,
                 minOrderValue,
-                maxDiscountAmount,
                 Timestamp.valueOf(startDate),
                 Timestamp.valueOf(endDate),
                 usageLimit,

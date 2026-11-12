@@ -106,7 +106,7 @@ export default function InStoreSaleDetailPage() {
 
   if (isLoading) {
     return (
-      <Box sx={{ maxWidth: 1400, mx: 'auto', py: 10, textAlign: 'center' }}>
+      <Box sx={{ py: 10, textAlign: 'center' }}>
         <CircularProgress size={38} sx={{ color: C.cyan }} />
         <Typography sx={{ mt: 2, color: C.muted, fontSize: 13.5 }}>
           Đang tải thông tin chi tiết hóa đơn...
@@ -117,7 +117,7 @@ export default function InStoreSaleDetailPage() {
 
   if (error || !data) {
     return (
-      <Box sx={{ maxWidth: 1400, mx: 'auto', py: 8 }}>
+      <Box sx={{ py: 8 }}>
         <Card sx={{ p: 4, textAlign: 'center', borderRadius: 3.5, border: `1px solid ${C.border}` }}>
           <Typography color="error" sx={{ fontWeight: 700, fontSize: 15 }}>
             {error?.message || 'Không tìm thấy thông tin hóa đơn.'}
@@ -144,7 +144,7 @@ export default function InStoreSaleDetailPage() {
   }
 
   return (
-    <Box sx={{ maxWidth: 1400, mx: 'auto', color: C.text, pb: 6 }}>
+    <Box sx={{ color: C.text, pb: 6 }}>
       {/* ─── TIÊU ĐỀ & NÚT IN HÓA ĐƠN SANG HẲN BÊN PHẢI ─── */}
       <Box
         sx={{

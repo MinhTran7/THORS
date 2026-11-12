@@ -6,8 +6,40 @@ import { useCrumbs } from '../../layouts/crumbs';
 import { getShippingAddresses, deleteShippingAddress } from '../../services/shippingAddressService';
 import { StoreAccountShell } from 'features/account/components/StoreAccount';
 import { C, cardSx, outlineButtonSx, primaryButtonSx } from './theme';
+import { C as STORE, focusRing } from 'features/shop/storeTheme';
 
 const MAX_ADDRESSES = 5;
+
+const LIMIT_NOTICE = {
+  title: 'Đã đạt giới hạn địa chỉ',
+  content: (
+    <>
+      Bạn đã lưu tối đa <strong>{MAX_ADDRESSES} địa chỉ giao hàng</strong>. Vui lòng xóa bớt địa chỉ không còn sử dụng để thêm địa chỉ mới.
+    </>
+  )
+};
+
+const DEFAULT_NOTICE = {
+  title: 'Không thể xóa địa chỉ mặc định',
+  content: 'Nếu muốn xóa địa chỉ này, hãy đặt một địa chỉ khác làm mặc định trước.'
+};
+
+const addButtonSx = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 1,
+  height: 46,
+  px: 3,
+  border: 0,
+  borderRadius: 0,
+  bgcolor: STORE.accent,
+  color: '#FFFFFF',
+  fontFamily: 'inherit',
+  fontSize: 14.5,
+  fontWeight: 800,
+  cursor: 'pointer',
+  ...focusRing
+};
 
 export default function CustomerAddressPage() {
   useCrumbs(['Tài khoản', 'Địa chỉ của tôi']);
@@ -18,7 +50,7 @@ export default function CustomerAddressPage() {
   const [error, setError] = useState('');
   const [target, setTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
-  const [limitAlert, setLimitAlert] = useState(false);
+  const [notice, setNotice] = useState(null);
 
   async function load() {
     setLoading(true);
@@ -38,7 +70,7 @@ export default function CustomerAddressPage() {
 
   function handleAddAddress() {
     if (addresses.length >= MAX_ADDRESSES) {
-      setLimitAlert(true);
+      setNotice(LIMIT_NOTICE);
       return;
     }
     navigate('/addresses/new');
@@ -64,9 +96,10 @@ export default function CustomerAddressPage() {
       subtitle="Lưu địa chỉ giao hàng để thanh toán nhanh hơn."
       action={
         addresses.length > 0 && (
-          <Button startIcon={<PlusOutlined />} onClick={handleAddAddress} sx={primaryButtonSx}>
+          <Box component="button" type="button" onClick={handleAddAddress} sx={addButtonSx}>
+            <PlusOutlined />
             Thêm địa chỉ mới
-          </Button>
+          </Box>
         )
       }
     >
@@ -97,9 +130,10 @@ export default function CustomerAddressPage() {
           <Typography sx={{ fontSize: 13.5, color: C.muted, maxWidth: 420, mx: 'auto', mb: 3, lineHeight: 1.6 }}>
             Thêm địa chỉ nhận hàng để thanh toán nhanh hơn và theo dõi đơn hàng chính xác.
           </Typography>
-          <Button startIcon={<PlusOutlined />} onClick={handleAddAddress} sx={primaryButtonSx}>
+          <Box component="button" type="button" onClick={handleAddAddress} sx={addButtonSx}>
+            <PlusOutlined />
             Thêm địa chỉ giao hàng
-          </Button>
+          </Box>
         </Box>
       ) : (
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2.5 }}>
@@ -109,8 +143,7 @@ export default function CustomerAddressPage() {
               sx={{
                 bgcolor: C.surface,
                 borderRadius: '20px',
-                border: a.isDefault ? `2px solid ${C.cyan}` : `1px solid ${C.border}`,
-                boxShadow: 'none',
+                border: a.isDefault ? `2px solid ${STORE.accent}` : `1px solid ${C.border}`,
                 px: { xs: 2, sm: 2.5 },
                 py: { xs: 1.75, sm: 2 },
                 display: 'flex',
@@ -185,39 +218,35 @@ export default function CustomerAddressPage() {
                         bgcolor: 'transparent',
                         border: 0,
                         p: 0,
-                        cursor: 'pointer',
-                        transition: 'color 0.15s ease',
-                        '&:hover': { color: C.cyan }
+                        cursor: 'pointer'
                       }}
                     >
                       <EditOutlined style={{ fontSize: 13 }} />
                       Chỉnh sửa
                     </Box>
 
-                    {!a.isDefault && (
-                      <Box
-                        component="button"
-                        type="button"
-                        onClick={() => setTarget(a)}
-                        sx={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 0.5,
-                          fontSize: 13,
-                          fontWeight: 600,
-                          color: '#FF6B60',
-                          bgcolor: 'transparent',
-                          border: 0,
-                          p: 0,
-                          cursor: 'pointer',
-                          transition: 'color 0.15s ease',
-                          '&:hover': { color: '#FF3527' }
-                        }}
-                      >
-                        <DeleteOutlined style={{ fontSize: 13 }} />
-                        Xóa
-                      </Box>
-                    )}
+                    <Box
+                      component="button"
+                      type="button"
+                      onClick={() => (a.isDefault ? setNotice(DEFAULT_NOTICE) : setTarget(a))}
+                      sx={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 0.5,
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: '#FF6B60',
+                        bgcolor: 'transparent',
+                        border: 0,
+                        p: 0,
+                        cursor: 'pointer',
+                        transition: 'color 0.15s ease',
+                        '&:hover': { color: '#FF3527' }
+                      }}
+                    >
+                      <DeleteOutlined style={{ fontSize: 13 }} />
+                      Xóa
+                    </Box>
                   </Box>
                 </Box>
               </Box>
@@ -227,20 +256,18 @@ export default function CustomerAddressPage() {
       )}
 
       <Dialog
-        open={limitAlert}
-        onClose={() => setLimitAlert(false)}
+        open={Boolean(notice)}
+        onClose={() => setNotice(null)}
         maxWidth="xs"
         fullWidth
-        PaperProps={{ sx: { borderRadius: '24px', p: 1 } }}
+        slotProps={{ paper: { sx: { borderRadius: '24px', p: 1 } } }}
       >
-        <DialogTitle sx={{ fontWeight: 800, fontSize: 17 }}>Đã đạt giới hạn địa chỉ</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 800, fontSize: 17 }}>{notice?.title}</DialogTitle>
         <DialogContent>
-          <Typography sx={{ fontSize: 14, color: C.muted, lineHeight: 1.6 }}>
-            Bạn đã lưu tối đa <strong>{MAX_ADDRESSES} địa chỉ giao hàng</strong>. Vui lòng xóa bớt địa chỉ không còn sử dụng để thêm địa chỉ mới.
-          </Typography>
+          <Typography sx={{ fontSize: 14, color: C.muted, lineHeight: 1.6 }}>{notice?.content}</Typography>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setLimitAlert(false)} sx={primaryButtonSx}>
+          <Button onClick={() => setNotice(null)} sx={primaryButtonSx}>
             Đóng
           </Button>
         </DialogActions>
@@ -251,7 +278,7 @@ export default function CustomerAddressPage() {
         onClose={() => !deleting && setTarget(null)}
         maxWidth="xs"
         fullWidth
-        PaperProps={{ sx: { borderRadius: '24px', p: 1 } }}
+        slotProps={{ paper: { sx: { borderRadius: '24px', p: 1 } } }}
       >
         <DialogTitle sx={{ fontWeight: 800, fontSize: 17 }}>Xóa địa chỉ giao hàng?</DialogTitle>
         <DialogContent>
@@ -265,7 +292,7 @@ export default function CustomerAddressPage() {
             disabled={deleting}
             sx={{
               ...outlineButtonSx,
-              "&:hover": { bgcolor: C.surface, borderColor: C.border, color: "#374151" }
+              '&:hover': { bgcolor: C.surface, borderColor: C.border, color: '#374151' }
             }}
           >
             Hủy
@@ -275,12 +302,12 @@ export default function CustomerAddressPage() {
             disabled={deleting}
             sx={{
               ...outlineButtonSx,
-              borderColor: "#F2A3A3",
+              borderColor: '#F2A3A3',
               color: C.error,
-              "&:hover": { bgcolor: C.surface, borderColor: "#F2A3A3", color: C.error }
+              '&:hover': { bgcolor: C.surface, borderColor: '#F2A3A3', color: C.error }
             }}
           >
-            {deleting ? "Đang xóa..." : "Xóa địa chỉ"}
+            {deleting ? 'Đang xóa...' : 'Xóa địa chỉ'}
           </Button>
         </DialogActions>
       </Dialog>

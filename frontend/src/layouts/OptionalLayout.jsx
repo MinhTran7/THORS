@@ -12,7 +12,6 @@ const STOREFRONT_PATHS = [
   '/shop/new-arrivals',
   '/shop/sale',
   '/shop/products/:productId',
-  '/promotions/:promotionId/products',
   '/cart',
   '/checkout',
   '/order-success'

@@ -17,7 +17,8 @@ const toUi = (r) => ({
   id: r.cartItemId,
   name: r.productName,
   variant: `Size ${r.size} · ${r.color}`,
-  price: Number(r.price),
+  originalPrice: Number(r.price),
+  price: Number(r.salePrice ?? r.price),
   qty: Number(r.quantity),
   stock: Number(r.stock),
   imageUrl: r.imageUrl,
@@ -176,7 +177,10 @@ export default function CartPage({ onCheckout }) {
                     </div>
                   </div>
 
-                  <div className="thc-c thc-price" data-label="Đơn giá">{money(item.price)}</div>
+                  <div className="thc-c thc-price" data-label="Đơn giá">
+                    {item.price < item.originalPrice && <s className="thc-old">{money(item.originalPrice)}</s>}
+                    {money(item.price)}
+                  </div>
 
                   <div className="thc-c" data-label="Số lượng">
                     <div className="thc-qty">
@@ -298,6 +302,7 @@ font-size:24px;font-weight:700;color:#0f4c57}
 .thc-low{display:inline-block;margin-top:6px;font-size:12px;background:var(--warn);border:1px solid var(--warn-l);
 padding:2px 8px;border-radius:6px}
 .thc-price{font-size:14px;color:var(--mute)}
+.thc-old{display:block;font-size:12.5px;opacity:.7}
 .thc-sub{font-weight:700;color:var(--cy-d)}
 .thc-qty{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff}
 .thc-qty button{width:32px;height:34px;border:0;background:#faf9f1;font-size:17px;color:var(--ink)}

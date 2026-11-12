@@ -1,11 +1,14 @@
 package com.thors.module.cart.service;
 
 import com.thors.module.cart.repository.CartRepository;
+import com.thors.module.promotion.service.PromotionService;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -14,14 +17,21 @@ import java.util.Map;
 public class CartService {
 
     private final CartRepository cartRepository;
+    private final PromotionService promotionService;
 
-    public CartService(CartRepository cartRepository) {
+    public CartService(CartRepository cartRepository, PromotionService promotionService) {
         this.cartRepository = cartRepository;
+        this.promotionService = promotionService;
     }
 
     @Transactional(readOnly = true)
     public List<Map<String, Object>> getCart(int userId) {
-        return cartRepository.findItems(userId);
+        List<Map<String, Object>> items = cartRepository.findItems(userId);
+        for (Map<String, Object> item : items) {
+            int productId = ((Number) item.get("productId")).intValue();
+            item.put("salePrice", promotionService.salePrice(productId, (BigDecimal) item.get("price")));
+        }
+        return items;
     }
 
     @Transactional

@@ -1,26 +1,24 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useMemo } from 'react';
 import { Box, Button, CircularProgress, Dialog, IconButton, InputAdornment, Tab, Tabs, TextField } from '@mui/material';
 import { SearchOutlined, CloseOutlined } from '@ant-design/icons';
 import { getPromotions } from 'services/promotionService';
-import { api } from 'services/http';
 import { useCrumbs } from '../../layouts/crumbs';
 import { StoreAccountShell } from 'features/account/components/StoreAccount';
 import { C, RADIUS, SANS } from 'features/shop/storeTheme';
-import { primaryButtonSx } from 'features/customer/theme';
 
 const HOUR = 3600 * 1000;
 const DAY = 24 * HOUR;
 const WARN = '#8A5A00';
+const STUB_BG = '#FFF9DB';
 
 const TABS = [
   ['ALL', 'Tất cả'],
-  ['PERCENT', 'Giảm theo %'],
-  ['AMOUNT', 'Giảm tiền'],
-  ['EXPIRING', 'Sắp hết hạn']
+  ['ONGOING', 'Đang diễn ra'],
+  ['EXPIRING', 'Sắp hết hạn'],
+  ['UPCOMING', 'Sắp diễn ra']
 ];
 
-const isPercent = (p) => ['PERCENT', 'PERCENTAGE'].includes(p.discountType);
+const isPercent = (p) => p.discountType === 'PERCENT';
 
 const money = (val) => `${(Number(val) || 0).toLocaleString('vi-VN')} đ`;
 
@@ -42,11 +40,13 @@ const timeLeft = (end) => {
   return ms >= DAY ? `Còn ${Math.floor(ms / DAY)} ngày` : `Còn ${Math.max(1, Math.floor(ms / HOUR))} giờ`;
 };
 
+const isUpcoming = (p) => new Date(p.startDate) > new Date();
+
 const matchTab = (p, tab) =>
   tab === 'ALL' ||
-  (tab === 'PERCENT' && isPercent(p)) ||
-  (tab === 'AMOUNT' && !isPercent(p)) ||
-  (tab === 'EXPIRING' && Boolean(timeLeft(p.endDate)));
+  (tab === 'ONGOING' && !isUpcoming(p)) ||
+  (tab === 'EXPIRING' && !isUpcoming(p) && Boolean(timeLeft(p.endDate))) ||
+  (tab === 'UPCOMING' && isUpcoming(p));
 
 const discountParts = (p) => {
   const v = Number(p.discountValue) || 0;
@@ -60,24 +60,15 @@ const CYAN_HOVER = C.accent;
 
 const noClickFx = { '&::after': { display: 'none !important' } };
 
-const cyanBtnSx = {
-  ...noClickFx,
-  bgcolor: `${CYAN} !important`,
-  color: `${C.cyanInk} !important`,
-  boxShadow: 'none !important',
-  '&:hover': { bgcolor: `${CYAN_HOVER} !important`, color: `${C.cyanInk} !important` }
-};
-
-const ticketBtnSx = { ...cyanBtnSx, px: 2, height: 38, fontSize: 12 };
-
-const notch = (x, y) => `radial-gradient(circle at ${x} ${y}, #0000 10px, #000 10.5px) ${x} ${y} / 20px 50% no-repeat`;
+const notch = (x, y) => `radial-gradient(circle at ${x} ${y}, #0000 10px, #000 10.5px) ${x} ${y} / 20px 51% no-repeat`;
 const teeth = (x) => `radial-gradient(circle at ${x} 50%, #0000 5px, #000 5.5px) ${x} 0 / 8px 14px repeat-y`;
 const solid = (x, w) => `linear-gradient(#000 0 0) ${x} 0 / calc(100% - ${w}px) 100% no-repeat`;
 const maskSx = (...layers) => ({ WebkitMask: layers.join(','), mask: layers.join(',') });
 
-function VoucherTicket({ promotion, onUse, onViewCondition }) {
+function VoucherTicket({ promotion, onViewCondition }) {
   const [value, unit] = discountParts(promotion);
   const left = timeLeft(promotion.endDate);
+  const upcoming = isUpcoming(promotion);
 
   return (
     <Box sx={{ display: 'flex', minHeight: 160, filter: 'drop-shadow(0 14px 18px rgba(31,41,55,.08)) drop-shadow(0 0 1px rgba(160,140,90,.55))' }}>
@@ -96,23 +87,14 @@ function VoucherTicket({ promotion, onUse, onViewCondition }) {
           {promotion.name}
         </Box>
         <Box sx={{ fontSize: 12.5, color: C.muted, mt: 0.5, lineHeight: 1.5, '& b': { color: C.ink, fontWeight: 600 } }}>
-          Đơn tối thiểu <b>{money(promotion.minOrderValue)}</b>
-          {isPercent(promotion) && promotion.maxDiscountAmount && (
-            <>
-              <br />
-              Giảm tối đa <b>{money(promotion.maxDiscountAmount)}</b>
-            </>
-          )}
+          Cho đơn từ <b>{money(promotion.minOrderValue)}</b>
         </Box>
-        <Box sx={{ fontSize: 12.5, mt: 0.75, color: left ? WARN : C.muted, fontWeight: left ? 600 : 400 }}>
-          {left || `HSD ${formatDate(promotion.endDate)}`}
+        <Box sx={{ fontSize: 12.5, mt: 0.75, color: left && !upcoming ? WARN : C.muted, fontWeight: left && !upcoming ? 600 : 400 }}>
+          {upcoming ? `Bắt đầu ${formatDateTime(promotion.startDate)}` : left || `HSD ${formatDate(promotion.endDate)}`}
         </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 'auto', pt: 1.5 }}>
+        <Box sx={{ mt: 'auto', pt: 1.5 }}>
           <Button variant="text" disableRipple onClick={() => onViewCondition(promotion)} sx={{ ...noClickFx, fontSize: 12.5, minWidth: 0, px: 0, color: `${CYAN_HOVER} !important`, '&:hover': { bgcolor: 'transparent' } }}>
             Điều kiện
-          </Button>
-          <Button variant="contained" disableRipple onClick={() => onUse(promotion)} sx={ticketBtnSx}>
-            DÙNG NGAY
           </Button>
         </Box>
       </Box>
@@ -121,7 +103,7 @@ function VoucherTicket({ promotion, onUse, onViewCondition }) {
         sx={{
           width: 104,
           flexShrink: 0,
-          bgcolor: C.sand,
+          bgcolor: STUB_BG,
           borderLeft: '2px dashed #E7CF8A',
           pr: 1,
           display: 'flex',
@@ -143,14 +125,14 @@ function VoucherTicket({ promotion, onUse, onViewCondition }) {
   );
 }
 
-function ConditionDialog({ promotion, onClose, onUse }) {
+function ConditionDialog({ promotion, onClose }) {
   const [value, unit] = discountParts(promotion);
   const rows = [
-    ['Đơn tối thiểu', Number(promotion.minOrderValue) > 0 ? money(promotion.minOrderValue) : 'Không yêu cầu'],
-    isPercent(promotion) && promotion.maxDiscountAmount && ['Giảm tối đa', money(promotion.maxDiscountAmount)],
+    ['Đơn tối thiểu', money(promotion.minOrderValue)],
     ['Bắt đầu', formatDateTime(promotion.startDate)],
     ['Kết thúc', formatDateTime(promotion.endDate)],
-    ['Sản phẩm áp dụng', promotion.applyScope === 'ALL' ? 'Toàn bộ cửa hàng' : 'Một số sản phẩm']
+    ['Áp dụng', 'Toàn bộ đơn hàng'],
+    promotion.usageLimit && ['Lượt còn lại', `${promotion.usageLimit - promotion.usedCount}/${promotion.usageLimit}`]
   ].filter(Boolean);
 
   return (
@@ -161,7 +143,7 @@ function ConditionDialog({ promotion, onClose, onUse }) {
       fullWidth
       slotProps={{ paper: { sx: { borderRadius: RADIUS.card, overflowY: 'auto', scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' }, color: C.ink, fontFamily: SANS } } }}
     >
-      <Box sx={{ position: 'relative', bgcolor: C.sand, textAlign: 'center', p: '32px 28px 24px' }}>
+      <Box sx={{ position: 'relative', bgcolor: STUB_BG, textAlign: 'center', p: '32px 28px 24px' }}>
         <IconButton onClick={onClose} sx={{ position: 'absolute', top: 14, right: 14, width: 34, height: 34, bgcolor: '#FFFFFF', '&:hover': { bgcolor: '#FFFFFF' } }}>
           <CloseOutlined style={{ fontSize: 12, color: C.muted }} />
         </IconButton>
@@ -189,26 +171,13 @@ function ConditionDialog({ promotion, onClose, onUse }) {
             </Box>
           </Box>
         ))}
-
-        <Button
-          fullWidth
-          disableRipple
-          onClick={() => {
-            onClose();
-            onUse(promotion);
-          }}
-          sx={{ ...primaryButtonSx, ...cyanBtnSx, mt: 2, height: 50, fontSize: 14 }}
-        >
-          ÁP DỤNG VÀ MUA SẮM NGAY
-        </Button>
       </Box>
     </Dialog>
   );
 }
 
 export default function CustomerPromotionPage() {
-  const navigate = useNavigate();
-  useCrumbs(['Kho voucher & Khuyến mãi']);
+  useCrumbs(['Kho voucher']);
 
   const [promotions, setPromotions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -218,12 +187,16 @@ export default function CustomerPromotionPage() {
 
   useEffect(() => {
     let active = true;
-    getPromotions()
-      .then((res) => active && setPromotions(Array.isArray(res) ? res : res?.data || []))
-      .catch((err) => console.error('Lỗi tải danh sách khuyến mãi:', err))
-      .finally(() => active && setLoading(false));
+    const load = () =>
+      getPromotions()
+        .then((res) => active && setPromotions(Array.isArray(res) ? res : res?.data || []))
+        .catch((err) => console.error('Lỗi tải danh sách khuyến mãi:', err))
+        .finally(() => active && setLoading(false));
+    load();
+    window.addEventListener('focus', load);
     return () => {
       active = false;
+      window.removeEventListener('focus', load);
     };
   }, []);
 
@@ -235,22 +208,8 @@ export default function CustomerPromotionPage() {
 
   const shown = searched.filter((p) => matchTab(p, tab));
 
-  const handleUse = useCallback(
-    (promo) => {
-      try {
-        sessionStorage.setItem('thors:applied_voucher', JSON.stringify(promo));
-      } catch {}
-      if (promo.applyScope === 'SELECTED') {
-        navigate(`/promotions/${promo.promotionId}/products`);
-      } else {
-        navigate('/');
-      }
-    },
-    [navigate]
-  );
-
   return (
-    <StoreAccountShell title="Kho khuyến mãi" subtitle="Khám phá nhiều ưu đãi cùng THORS">
+    <StoreAccountShell title="Kho voucher" subtitle="Voucher giảm giá cho đơn hàng của bạn">
       <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 2, borderBottom: `1px solid ${C.line}`, mb: 3.5 }}>
         <Tabs
           value={tab}
@@ -270,6 +229,7 @@ export default function CustomerPromotionPage() {
               fontWeight: 500,
               fontSize: 14,
               color: C.muted,
+              '&:hover': { bgcolor: STUB_BG, color: C.ink },
               '&.Mui-selected': { color: C.ink, fontWeight: 600 }
             }
           }}
@@ -302,37 +262,44 @@ export default function CustomerPromotionPage() {
             )
           }}
           size="small"
-          sx={{ width: { xs: '100%', sm: 280 }, mb: { xs: 1.5, sm: 0 } }}
+          sx={{
+            width: { xs: '100%', sm: 280 },
+            mb: { xs: 1.5, sm: 0 },
+            '& .MuiOutlinedInput-root': { borderRadius: '0 !important', boxShadow: 'none !important' },
+            '& fieldset': { borderColor: `${C.line} !important` }
+          }}
         />
       </Box>
 
-      {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}>
-          <CircularProgress size={36} sx={{ color: C.teal }} />
-        </Box>
-      ) : shown.length === 0 ? (
-        <Box sx={{ bgcolor: C.sand, py: { xs: 8, sm: 9 }, px: 2, textAlign: 'center' }}>
-          <Box component="h2" sx={{ m: 0, fontSize: { xs: 26, sm: 30 } }}>
-            {search ? 'Không tìm thấy ưu đãi nào' : 'Hiện chưa có ưu đãi nào'}
+      <Box sx={{ minHeight: { xs: 'calc(100vh - 420px)', md: 'calc(100vh - 470px)' } }}>
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}>
+            <CircularProgress size={36} sx={{ color: C.teal }} />
           </Box>
-          <Box component="p" sx={{ m: 0, mt: 1.5, fontSize: 15, color: C.muted, maxWidth: 420, mx: 'auto', lineHeight: 1.6 }}>
-            {search ? 'Không có voucher nào khớp với từ khóa của bạn. Thử từ khóa khác hoặc chọn tab khác.' : 'Quay lại sau để nhận thêm ưu đãi mới nhé.'}
+        ) : shown.length === 0 ? (
+          <Box sx={{ bgcolor: C.sand, py: { xs: 8, sm: 9 }, px: 2, textAlign: 'center' }}>
+            <Box component="h2" sx={{ m: 0, fontSize: { xs: 26, sm: 30 } }}>
+              {search ? 'Không tìm thấy ưu đãi nào' : 'Hiện chưa có ưu đãi nào'}
+            </Box>
+            <Box component="p" sx={{ m: 0, mt: 1.5, fontSize: 15, color: C.muted, maxWidth: 420, mx: 'auto', lineHeight: 1.6 }}>
+              {search ? 'Không có voucher nào khớp với từ khóa của bạn. Thử từ khóa khác hoặc chọn tab khác.' : 'Quay lại sau để nhận thêm ưu đãi mới nhé.'}
+            </Box>
+            {search && (
+              <Button variant="outlined" onClick={() => setSearch('')} sx={{ mt: 3.5, height: 44, px: 2.5 }}>
+                XÓA TÌM KIẾM
+              </Button>
+            )}
           </Box>
-          {search && (
-            <Button variant="outlined" onClick={() => setSearch('')} sx={{ mt: 3.5, height: 44, px: 2.5 }}>
-              XÓA TÌM KIẾM
-            </Button>
-          )}
-        </Box>
-      ) : (
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr', lg: 'repeat(3, 1fr)' }, gap: 3 }}>
-          {shown.map((promo) => (
-            <VoucherTicket key={promo.promotionId} promotion={promo} onUse={handleUse} onViewCondition={setSelectedPromo} />
-          ))}
-        </Box>
-      )}
+        ) : (
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr', lg: 'repeat(3, 1fr)' }, gap: 3 }}>
+            {shown.map((promo) => (
+              <VoucherTicket key={promo.promotionId} promotion={promo} onViewCondition={setSelectedPromo} />
+            ))}
+          </Box>
+        )}
+      </Box>
 
-      {selectedPromo && <ConditionDialog promotion={selectedPromo} onClose={() => setSelectedPromo(null)} onUse={handleUse} />}
+      {selectedPromo && <ConditionDialog promotion={selectedPromo} onClose={() => setSelectedPromo(null)} />}
     </StoreAccountShell>
   );
 }
