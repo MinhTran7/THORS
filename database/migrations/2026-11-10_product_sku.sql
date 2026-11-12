@@ -1,4 +1,5 @@
 -- Mã sản phẩm (SKU) cấp sản phẩm (10/11/2026).
+-- ĐÃ CHẠY trên Aiven (11/11/2026): 17 sản phẩm đều có SKU dạng SP-xxxx (SP-0003 … SP-0029).
 -- Mã biến thể dùng lại cột product_detail.barcode có sẵn: sản phẩm mới tự tạo SKU-SIZE-MÀU (vd GN-0001-42-DEN).
 -- Không xóa/sửa dữ liệu cũ ngoài việc gán SKU cho sản phẩm hiện có; mã vạch (barcode) đã có giữ nguyên.
 -- Backend vẫn chạy được khi CHƯA chạy file này (chỉ không có SKU).

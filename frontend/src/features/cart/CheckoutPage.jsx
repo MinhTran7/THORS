@@ -28,6 +28,8 @@ import { StoreCrumb } from 'features/account/components/StoreAccount';
 import { api } from 'services/http';
 import { useAuth } from 'features/auth/AuthProvider';
 import { fetchProvinces, fetchWards } from './vnAddress';
+import { ordersApi } from 'features/order/api';
+import PayOSPaymentModal from 'features/order/components/PayOSPaymentModal';
 import { getPromotions } from 'services/promotionService';
 
 
@@ -176,6 +178,9 @@ export default function CheckoutPage() {
   const [geoError, setGeoError] = useState('');
 
   const [form, setForm] = useState({ paymentMethod: 'COD' });
+  // Thanh toán trực tuyến: đặt hàng xong hiện mã QR ngay tại trang (giống Shopee / TikTok Shop)
+  // { data: link PayOS, successState: dữ liệu cho trang đặt hàng thành công, paid }
+  const [payment, setPayment] = useState(null);
 
   useEffect(() => {
     if (state?.itemIds?.length || state?.buyNow) {
@@ -457,6 +462,35 @@ export default function CheckoutPage() {
   };
 
   
+  // Đã đặt hàng, đang chờ quét mã thanh toán (giỏ hàng đã được xóa nên phải hiện trước kiểm tra giỏ trống)
+  if (payment) {
+    const { successState } = payment;
+    const finish = () =>
+      payment.paid
+        ? navigate('/order-success', { replace: true, state: { ...successState, paid: true } })
+        : navigate(`/orders/${successState.orderId}`, { replace: true });
+    return (
+      <Box sx={{ py: 8, textAlign: 'center' }}>
+        <Typography variant="h4" sx={{ mb: 1 }}>
+          Đã tạo đơn {successState.orderCode}
+        </Typography>
+        <Typography color="text.secondary" sx={{ mb: 3 }}>
+          Quét mã QR để thanh toán {money(successState.total)} trong 10 phút. Quá 10 phút chưa thanh toán thì đơn tự hủy.
+        </Typography>
+        <Button variant="contained" onClick={() => setPayment((p) => ({ ...p, reopen: Date.now() }))}>
+          Mở lại mã thanh toán
+        </Button>
+        <PayOSPaymentModal
+          key={payment.reopen || 0}
+          open
+          paymentData={payment.data}
+          onSuccess={() => setPayment((p) => (p.paid ? p : { ...p, paid: true }))}
+          onClose={finish}
+        />
+      </Box>
+    );
+  }
+
   if (!buyNow && !itemIds?.length) return <Navigate to="/cart" replace />;
 
   const isNew = selectedAddressId === NEW;
@@ -527,17 +561,28 @@ export default function CheckoutPage() {
           : [addr.address.trim(), addr.ward?.name, addr.province?.name].filter(Boolean).join(', ');
 
       
-      navigate('/order-success', {
-        replace: true,
-        state: {
-          orderId: result?.id,
-          orderCode: result?.orderNumber ?? result?.id,
-          total: result?.totalAmount ?? total,
-          paymentMethod: form.paymentMethod,
-          receiver,
-          address: receiverAddress
+      const successState = {
+        orderId: result?.id,
+        orderCode: result?.orderNumber ?? result?.id,
+        total: result?.totalAmount ?? total,
+        paymentMethod: form.paymentMethod,
+        receiver,
+        address: receiverAddress
+      };
+
+      // Thanh toán trực tuyến: tạo mã QR ngay, khách quét luôn tại trang này
+      if (form.paymentMethod === 'ONLINE' && result?.id != null) {
+        try {
+          const link = await ordersApi.createPayOSLink(result.id);
+          setPayment({ data: link, successState, paid: false });
+          return;
+        } catch {
+          // Không tạo được mã: đơn vẫn đã đặt, khách thanh toán sau ở trang chi tiết đơn
+          successState.paymentPending = true;
         }
-      });
+      }
+
+      navigate('/order-success', { replace: true, state: successState });
     } catch (e) {
       setSubmitError(e.message || 'Đặt hàng thất bại, vui lòng thử lại');
     } finally {
@@ -868,7 +913,11 @@ export default function CheckoutPage() {
             )}
 
             <Button fullWidth variant="contained" size="large" sx={{ mt: 2 }} onClick={submit} disabled={submitting || addrLoading}>
-              {submitting ? 'Đang đặt hàng...' : 'Đặt hàng'}
+              {submitting
+                ? 'Đang đặt hàng...'
+                : form.paymentMethod === 'ONLINE'
+                  ? 'Đặt hàng & thanh toán'
+                  : 'Đặt hàng'}
             </Button>
             <Button fullWidth sx={{ mt: 1 }} disabled={submitting} onClick={() => navigate(buyNow ? -1 : '/cart')}>
               {buyNow ? 'Quay lại' : 'Quay lại giỏ hàng'}

@@ -49,6 +49,19 @@ public class PaymentRepository {
             long price
     ) {}
 
+    /**
+     * Số giây còn lại tới hạn thanh toán (tính bằng giờ DB để không lệch múi giờ); rỗng nếu đơn không có hạn.
+     * Âm = đã quá hạn.
+     */
+    public Optional<Long> secondsUntilPaymentDeadline(int orderId) {
+        List<Long> rows = db.query(
+                "SELECT TIMESTAMPDIFF(SECOND, NOW(), payment_expires_at) AS left_seconds FROM orders"
+                        + " WHERE order_id = ? AND payment_expires_at IS NOT NULL",
+                (rs, i) -> rs.getLong("left_seconds"),
+                orderId);
+        return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
+    }
+
     public Optional<OrderPayable> findOrderPayable(int orderId) {
         String sql = """
             SELECT order_id, order_number, user_id, total_amount, payment_status,
@@ -157,6 +170,34 @@ public class PaymentRepository {
             WHERE transaction_ref = ?
         """;
         db.update(sql, transactionRef);
+    }
+
+    /**
+     * Lưu tài khoản người chuyển PayOS gửi kèm (counterAccount*). Bỏ qua nếu PayOS không gửi số tài khoản
+     * hoặc DB chưa có cột (chưa chạy migration 2026-11-11_refund_bank_account.sql).
+     */
+    public void savePayerAccount(String transactionRef, java.util.Map<String, Object> source) {
+        if (source == null) return;
+        String number = text(source.get("counterAccountNumber"));
+        if (number == null) return;
+        try {
+            db.update(
+                    "UPDATE payment SET payer_bank_bin = ?, payer_bank_name = ?, payer_account_number = ?,"
+                            + " payer_account_name = ? WHERE transaction_ref = ?",
+                    text(source.get("counterAccountBankId")),
+                    text(source.get("counterAccountBankName")),
+                    number,
+                    text(source.get("counterAccountName")),
+                    transactionRef);
+        } catch (org.springframework.jdbc.BadSqlGrammarException e) {
+            // chưa chạy migration: không lưu được, vẫn ghi nhận thanh toán bình thường
+        }
+    }
+
+    private static String text(Object value) {
+        if (value == null) return null;
+        String s = String.valueOf(value).trim();
+        return s.isEmpty() || "null".equalsIgnoreCase(s) ? null : s;
     }
 
     public void markPaymentFailed(String transactionRef, String reason) {

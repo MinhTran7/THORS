@@ -15,9 +15,11 @@ import {
   DialogTitle,
   IconButton,
   InputAdornment,
+  ListItemIcon,
+  Menu,
   Select,
+  Snackbar,
   Stack,
-  Switch,
   Table,
   TableBody,
   TableCell,
@@ -33,10 +35,12 @@ import { Pager } from 'features/account/components/Blocks';
 
 import {
   EditOutlined,
+  EllipsisOutlined,
+  EyeInvisibleOutlined,
   EyeOutlined,
+  GlobalOutlined,
   FileExcelOutlined,
   PlusOutlined,
-  ReloadOutlined,
   SearchOutlined
 } from '@ant-design/icons';
 
@@ -64,36 +68,6 @@ const C = {
 };
 
 const PAGE_SIZE = 8;
-
-// Switch thu nhỏ theo Design System (34x18, track #BAF2F8 khi bật, #CBD5E1 khi tắt)
-const switchSx = {
-  width: 34,
-  height: 18,
-  p: 0,
-  '& .MuiSwitch-switchBase': {
-    p: '2px',
-    transitionDuration: '200ms',
-    '&.Mui-checked': {
-      transform: 'translateX(16px)',
-      color: '#67E8F9',
-      '& + .MuiSwitch-track': {
-        bgcolor: '#BAF2F8',
-        opacity: 1,
-        border: 0
-      }
-    }
-  },
-  '& .MuiSwitch-thumb': {
-    boxShadow: '0 1px 2px rgba(0,0,0,0.15)',
-    width: 14,
-    height: 14
-  },
-  '& .MuiSwitch-track': {
-    borderRadius: 9,
-    bgcolor: '#CBD5E1',
-    opacity: 1
-  }
-};
 
 const chipSx = (bg, color) => ({
   display: 'inline-flex',
@@ -149,23 +123,35 @@ function isOnlineProduct(product) {
   return product.status === 'ACTIVE' && Number(product.onlineVariantCount || 0) > 0;
 }
 
-// Cảnh báo tồn theo từng biến thể, cùng công thức màn hình Tồn kho:
-// hết hàng = tồn 0; sắp hết = có thể bán (tồn − đang giữ) ≤ ngưỡng tối thiểu của biến thể
+// Trạng thái tồn theo từng biến thể đang hoạt động (backend tính):
+// - hết hàng   = tồn 0 và đã từng có hàng (có dòng thẻ kho)
+// - chưa nhập  = tồn 0 và chưa từng có biến động kho nào
+// - sắp hết    = có thể bán (tồn − đang giữ) ≤ ngưỡng tối thiểu (chưa đặt ngưỡng thì mặc định 5)
+// Sản phẩm lấy mức nặng nhất: OUT (mọi biến thể đều không còn hàng) > LOW > INFO (chỉ có biến thể chưa nhập);
+// NEW = mọi biến thể đều chưa nhập hàng.
 function stockAlert(product) {
   const active = Number(product.activeVariantCount || 0);
   const out = Number(product.outOfStockVariantCount || 0);
   const low = Number(product.lowStockVariantCount || 0);
+  const never = Number(product.neverStockedVariantCount || 0);
 
   if (product.status !== 'ACTIVE' || active === 0) return null;
-  if (out === active) return { level: 'OUT', label: 'Hết hàng' };
-  if (out > 0 || low > 0) {
-    const parts = [];
-    if (out > 0) parts.push(`${out} hết`);
-    if (low > 0) parts.push(`${low} sắp hết`);
-    return { level: 'LOW', label: parts.join(' · ') };
-  }
+  if (never === active) return { level: 'NEW', label: 'Chưa nhập hàng lần nào' };
+
+  const parts = [];
+  if (out > 0) parts.push(`${out} hết`);
+  if (low > 0) parts.push(`${low} sắp hết`);
+  if (never > 0) parts.push(`${never} chưa nhập`);
+  const detail = active > 1 ? ` (${active} biến thể: ${parts.join(' · ')})` : '';
+
+  if (out + never === active) return { level: 'OUT', label: `Hết hàng${detail}` };
+  if (out > 0 || low > 0) return { level: 'LOW', label: `Sắp hết${detail}` };
+  if (never > 0) return { level: 'INFO', label: `${never}/${active} biến thể chưa nhập hàng` };
   return null;
 }
+
+// Cần nhập hàng = đã bán hết hoặc sắp hết (không gồm sản phẩm chưa nhập hàng lần nào)
+const needsRestock = (product) => ['OUT', 'LOW'].includes(stockAlert(product)?.level);
 
 // Bỏ dấu tiếng Việt để tìm "ao thun" ra "Áo thun"
 function normalizeText(value) {
@@ -222,6 +208,10 @@ export default function ProductPage() {
   // ==========================================
 
   const [page, setPage] = useState(1);
+
+  // Menu "⋯" của từng dòng (ẩn/hiện sản phẩm, bật/tắt bán online)
+  const [menuAnchor, setMenuAnchor] = useState(null);
+  const [menuProduct, setMenuProduct] = useState(null);
 
   // ==========================================
   // STATES - CHANGE PRODUCT STATUS / ONLINE
@@ -287,7 +277,7 @@ export default function ProductPage() {
       ACTIVE: (product) => product.status === 'ACTIVE',
       INACTIVE: (product) => product.status === 'INACTIVE',
       ONLINE: isOnlineProduct,
-      LOW_STOCK: (product) => stockAlert(product) !== null,
+      LOW_STOCK: needsRestock,
       ALL: () => true
     }),
     []
@@ -305,11 +295,21 @@ export default function ProductPage() {
   // SEARCH AND FILTER
   // ==========================================
 
-  // categoryId (chuỗi) -> id danh mục cha
+  // categoryId (chuỗi) -> id danh mục cha (để lọc theo nhánh nhiều cấp)
   const categoryParentMap = useMemo(
     () => new Map(categories.filter((c) => c.parentId).map((c) => [String(c.categoryId), c.parentId])),
     [categories]
   );
+
+  // Sản phẩm thuộc danh mục đang lọc hoặc bất kỳ danh mục con / cháu nào của nó
+  const inCategoryBranch = (categoryId, branchId) => {
+    let cursor = String(categoryId ?? '');
+    for (let depth = 0; cursor && depth < 50; depth++) {
+      if (cursor === branchId) return true;
+      cursor = String(categoryParentMap.get(cursor) ?? '');
+    }
+    return false;
+  };
 
   const filteredProducts = useMemo(() => {
     const keyword = normalizeText(search);
@@ -317,7 +317,7 @@ export default function ProductPage() {
     const idMatch = keyword.match(/^#?(\d+)$/);
     const matchTab = tabMatchers[activeTab] ?? tabMatchers.ALL;
 
-    return products.filter((product) => {
+    const matched = products.filter((product) => {
       const matchesSearch =
         !keyword ||
         (idMatch && String(product.productId) === idMatch[1]) ||
@@ -325,14 +325,17 @@ export default function ProductPage() {
         normalizeText(product.sku).includes(keyword) ||
         normalizeText(product.searchText).includes(keyword);
 
-      // Lọc theo danh mục cha thì lấy cả sản phẩm của các danh mục con
-      const matchesCategory =
-        categoryFilter === 'ALL' ||
-        String(product.categoryId) === categoryFilter ||
-        String(categoryParentMap.get(String(product.categoryId)) ?? '') === categoryFilter;
+      // Lọc theo danh mục cha thì lấy cả sản phẩm của các danh mục con, cháu…
+      const matchesCategory = categoryFilter === 'ALL' || inCategoryBranch(product.categoryId, categoryFilter);
 
       return matchesSearch && matchesCategory && matchTab(product);
     });
+    // Tab "Cần nhập hàng": sản phẩm đã hết lên đầu, sắp hết xếp sau
+    if (activeTab === 'LOW_STOCK') {
+      const rank = (product) => (stockAlert(product)?.level === 'OUT' ? 0 : 1);
+      return [...matched].sort((a, b) => rank(a) - rank(b));
+    }
+    return matched;
   }, [products, search, categoryFilter, activeTab, tabMatchers, categoryParentMap]);
 
   // ==========================================
@@ -357,13 +360,6 @@ export default function ProductPage() {
     resetPage();
   }
 
-  function clearFilters() {
-    // Về đúng trạng thái mặc định khi mở trang
-    setSearch('');
-    setCategoryFilter('ALL');
-    setActiveTab('ACTIVE');
-    resetPage();
-  }
 
   // ==========================================
   // NAVIGATION
@@ -506,17 +502,6 @@ export default function ProductPage() {
         </Box>
 
         <Stack direction="row" spacing={1.5} alignItems="center">
-          <Tooltip title={loadedAt ? `Tải lúc ${loadedAt.toLocaleTimeString('vi-VN')} · Nhấn để làm mới` : 'Làm mới'}>
-            <span>
-              <IconButton
-                disabled={busy || loading}
-                onClick={() => loadProducts()}
-                sx={{ width: 44, height: 44, border: `1px solid ${C.border}`, borderRadius: 2.5, color: C.muted }}
-              >
-                <ReloadOutlined spin={loading} style={{ fontSize: 16 }} />
-              </IconButton>
-            </span>
-          </Tooltip>
 
           <Button startIcon={<FileExcelOutlined />} disabled={busy} onClick={() => setExcelDialogOpen(true)} sx={outlineButtonSx}>
             Nhập từ Excel
@@ -535,21 +520,32 @@ export default function ProductPage() {
         </Alert>
       )}
 
-      {/* SUCCESS MESSAGE */}
-      {success && (
-        <Alert severity="success" sx={{ mb: 2.5, borderRadius: 2.5, fontSize: 13.5, fontWeight: 600 }} onClose={() => setSuccess('')}>
+      {/* SUCCESS MESSAGE — nổi ở góc dưới, tự ẩn, không làm bảng bị đẩy xuống */}
+      <Snackbar
+        open={Boolean(success)}
+        autoHideDuration={3500}
+        onClose={(_, reason) => {
+          if (reason !== 'clickaway') setSuccess('');
+        }}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert
+          severity="success"
+          variant="filled"
+          onClose={() => setSuccess('')}
+          sx={{ borderRadius: 2.5, fontSize: 13.5, fontWeight: 600, bgcolor: '#168B70', boxShadow: '0 8px 24px rgba(15,23,42,0.18)' }}
+        >
           {success}
         </Alert>
-      )}
+      </Snackbar>
 
       {/* QUICK FILTER TABS */}
-      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 3 }}>
+      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
         {[
-          { key: 'ACTIVE', label: 'Đang hoạt động' },
+          { key: 'ACTIVE', label: 'Đang bán' },
+          { key: 'LOW_STOCK', label: 'Cần nhập hàng' },
           { key: 'INACTIVE', label: 'Đã ẩn' },
-          { key: 'ONLINE', label: 'Bán online' },
-          { key: 'LOW_STOCK', label: 'Hết / sắp hết hàng' },
-          { key: 'ALL', label: 'Tất cả sản phẩm' }
+          { key: 'ALL', label: 'Tất cả' }
         ].map((tab) => {
           const selected = activeTab === tab.key;
 
@@ -560,8 +556,8 @@ export default function ProductPage() {
               onClick={() => changeTab(tab.key)}
               sx={{
                 textTransform: 'none',
-                height: 40,
-                px: 2.25,
+                height: 36,
+                px: 2,
                 borderRadius: 2.5,
                 fontSize: 13,
                 fontWeight: selected ? 800 : 600,
@@ -581,89 +577,69 @@ export default function ProductPage() {
         })}
       </Stack>
 
-      {/* SEARCH AND FILTER — trạng thái lọc bằng các tab phía trên */}
+      {/* TÌM KIẾM + DANH MỤC trên một hàng (trạng thái lọc bằng các tab phía trên) */}
       <Box
         sx={{
-          mb: 3,
+          mb: 2.5,
           display: 'grid',
-          gridTemplateColumns: {
-            xs: '1fr',
-            sm: '1fr 1fr',
-            md: 'minmax(200px, 1.8fr) 220px auto'
-          },
-          gap: { xs: 1.5, lg: 2 },
-          alignItems: 'flex-end'
+          gridTemplateColumns: { xs: '1fr', md: 'minmax(240px, 1fr) 260px' },
+          gap: 1.5,
+          alignItems: 'center'
         }}
       >
-        {/* SEARCH */}
-        <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>Tìm kiếm sản phẩm</Typography>
-          <TextField
-            fullWidth
-            size="small"
-            disabled={busy}
-            placeholder="Tên sản phẩm, mã #ID, mã vạch, size hoặc màu..."
-            value={search}
-            onChange={(event) => {
-              setSearch(event.target.value);
-              resetPage();
-            }}
-            InputProps={{
+        <TextField
+          fullWidth
+          size="small"
+          disabled={busy}
+          // Vẫn tìm được theo mã #ID, mã vạch, size, màu — chỉ gợi ý 2 cách hay dùng nhất
+          placeholder="Tìm theo tên sản phẩm hoặc mã vạch..."
+          value={search}
+          onChange={(event) => {
+            setSearch(event.target.value);
+            resetPage();
+          }}
+          slotProps={{
+            input: {
               startAdornment: (
                 <InputAdornment position="start">
                   <SearchOutlined style={{ color: '#94A3B8', fontSize: 16 }} />
                 </InputAdornment>
               )
-            }}
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                bgcolor: C.surface,
-                borderRadius: 2.5,
-                height: 44,
-                fontSize: 13.5,
-                '& fieldset': { borderColor: C.border },
-                '&:hover fieldset': { borderColor: C.cyan },
-                '&.Mui-focused fieldset': { borderColor: C.cyan }
-              }
-            }}
-          />
-        </Box>
+            }
+          }}
+          sx={{
+            '& .MuiOutlinedInput-root': {
+              bgcolor: C.surface,
+              borderRadius: 2.5,
+              height: 42,
+              fontSize: 13.5,
+              '& fieldset': { borderColor: C.border },
+              '&:hover fieldset': { borderColor: C.cyan },
+              '&.Mui-focused fieldset': { borderColor: C.cyan }
+            }
+          }}
+        />
 
-        {/* CATEGORY FILTER */}
-        <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>Danh mục</Typography>
-          <Select
-            fullWidth
-            size="small"
-            disabled={busy}
-            value={categoryFilter}
-            onChange={(event) => {
-              setCategoryFilter(event.target.value);
-              resetPage();
-            }}
-            sx={filterSelectSx}
-          >
-            <MenuItem value="ALL">Tất cả danh mục</MenuItem>
-            {categories.map((category) => (
-              <MenuItem key={category.categoryId} value={String(category.categoryId)} sx={{ pl: category.parentId ? 4 : 2 }}>
-                {category.parentId ? categoryFullName(category) : category.categoryName}
-                {category.childCount > 0 ? ' (tất cả)' : ''}
-                {category.status !== 'ACTIVE' ? ' (Đã ngưng)' : ''}
-              </MenuItem>
-            ))}
-          </Select>
-        </Box>
-
-        {/* Nút Bỏ lọc */}
-        <Box sx={{ minWidth: 0, display: 'flex' }}>
-          <Button
-            onClick={clearFilters}
-            disabled={busy}
-            sx={{ ...outlineButtonSx, height: 44, px: 2, fontSize: 13, whiteSpace: 'nowrap', bgcolor: C.surface }}
-          >
-            Bỏ lọc
-          </Button>
-        </Box>
+        <Select
+          fullWidth
+          size="small"
+          disabled={busy}
+          value={categoryFilter}
+          onChange={(event) => {
+            setCategoryFilter(event.target.value);
+            resetPage();
+          }}
+          MenuProps={{ slotProps: { paper: { sx: { maxHeight: 360 } } } }}
+          sx={{ ...filterSelectSx, height: 42 }}
+        >
+          <MenuItem value="ALL">Tất cả danh mục</MenuItem>
+          {categories.map((category) => (
+            <MenuItem key={category.categoryId} value={String(category.categoryId)} sx={{ pl: 2 + (category.depth || 0) * 2 }}>
+              {category.parentId ? categoryFullName(category) : category.categoryName}
+              {category.status !== 'ACTIVE' ? ' (Đã ngưng)' : ''}
+            </MenuItem>
+          ))}
+        </Select>
       </Box>
 
       {/* ─── KHỐI BẢNG DANH SÁCH SẢN PHẨM ─── */}
@@ -679,7 +655,9 @@ export default function ProductPage() {
         <TableContainer sx={{ overflowX: 'auto' }}>
           <Table
             sx={{
-              minWidth: 950,
+              minWidth: 760,
+              // Cố định độ rộng cột: đổi tab / ẩn / bật online không làm bảng xê dịch
+              tableLayout: 'fixed',
               '& th': {
                 bgcolor: C.surface,
                 color: C.muted,
@@ -702,14 +680,10 @@ export default function ProductPage() {
             <TableHead>
               <TableRow>
                 <TableCell sx={{ pl: 3 }}>SẢN PHẨM</TableCell>
-                <TableCell>DANH MỤC</TableCell>
-                <TableCell>GIÁ BÁN</TableCell>
-                <TableCell>TỒN KHO</TableCell>
-                <TableCell>TRẠNG THÁI</TableCell>
-                <TableCell>BÁN ONLINE</TableCell>
-                <TableCell align="center" sx={{ pr: 3 }}>
-                  THAO TÁC
-                </TableCell>
+                <TableCell sx={{ width: 200 }}>GIÁ BÁN</TableCell>
+                <TableCell sx={{ width: 130 }}>TỒN KHO</TableCell>
+                <TableCell sx={{ width: 190 }}>TRẠNG THÁI</TableCell>
+                <TableCell align="right" sx={{ pr: 3, width: 110 }} />
               </TableRow>
             </TableHead>
 
@@ -717,7 +691,7 @@ export default function ProductPage() {
             <TableBody>
               {loading && (
                 <TableRow>
-                  <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
+                  <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
                     <Stack alignItems="center" spacing={1.5}>
                       <CircularProgress size={32} sx={{ color: C.cyan }} />
                       <Typography fontSize={13.5} color={C.muted}>
@@ -737,6 +711,8 @@ export default function ProductPage() {
                   const sellable = Number(product.sellableStock ?? totalStock);
                   const onlineCount = Number(product.onlineVariantCount ?? 0);
                   const activeVariants = Number(product.activeVariantCount ?? product.variantCount ?? 0);
+                  // Mã các biến thể đang hoạt động (TH + mã biến thể)
+                  const codes = (product.variantCodes || '').split(',').filter(Boolean);
 
                   return (
                     <TableRow
@@ -775,16 +751,18 @@ export default function ProductPage() {
                             <Typography sx={{ fontSize: 13.5, fontWeight: 800, color: '#0F172A' }} noWrap>
                               {product.productName}
                             </Typography>
-                            <Typography sx={{ fontSize: 12, color: '#94A3B8', mt: 0.25 }}>
-                              {product.sku ? `${product.sku} · ` : ''}#{product.productId} · {activeVariants} biến thể
+                            {/* Dòng phụ: danh mục · mã biến thể đầu (+N) · số biến thể */}
+                            <Typography sx={{ fontSize: 12, color: '#94A3B8', mt: 0.25 }} noWrap>
+                              {[
+                                product.categoryName,
+                                codes.length ? `${codes[0]}${codes.length > 1 ? ` +${codes.length - 1}` : ''}` : null,
+                                `${activeVariants} biến thể`
+                              ]
+                                .filter(Boolean)
+                                .join(' · ')}
                             </Typography>
                           </Box>
                         </Stack>
-                      </TableCell>
-
-                      {/* CATEGORY */}
-                      <TableCell>
-                        <Typography sx={{ fontSize: 13.5, color: '#334155', fontWeight: 500 }}>{product.categoryName || '—'}</Typography>
                       </TableCell>
 
                       {/* SELLING PRICE */}
@@ -794,15 +772,30 @@ export default function ProductPage() {
 
                       {/* STOCK — tồn của biến thể đang hoạt động; có thể bán = tồn − đang giữ cho đơn */}
                       <TableCell>
+                        {/* Đỏ = hết, vàng đậm = sắp hết, "Chưa nhập" xám = chưa nhập hàng lần nào; xem riêng ở tab "Cần nhập hàng" */}
                         <Tooltip
-                          title={
+                          title={[
+                            alert?.label,
                             sellable !== totalStock
                               ? `Tồn ${totalStock}, đang giữ cho đơn ${totalStock - sellable}, có thể bán ${sellable}`
                               : 'Tổng tồn của các biến thể đang hoạt động'
-                          }
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
                         >
-                          <Typography component="span" sx={{ fontSize: 13.5, fontWeight: 700, color: C.text }}>
-                            {totalStock}
+                          <Typography
+                            component="span"
+                            sx={
+                              alert?.level === 'NEW'
+                                ? { fontSize: 13, fontWeight: 600, color: C.subtle }
+                                : {
+                                    fontSize: 13.5,
+                                    fontWeight: 700,
+                                    color: alert?.level === 'OUT' ? '#DC2626' : alert?.level === 'LOW' ? '#B45309' : C.text
+                                  }
+                            }
+                          >
+                            {alert?.level === 'NEW' ? 'Chưa nhập' : totalStock}
                             {sellable !== totalStock && (
                               <Box component="span" sx={{ fontSize: 12, fontWeight: 600, color: C.muted, ml: 0.75 }}>
                                 (bán được {sellable})
@@ -810,114 +803,28 @@ export default function ProductPage() {
                             )}
                           </Typography>
                         </Tooltip>
-                        {alert && (
-                          <Box
-                            sx={{
-                              display: 'flex',
-                              width: 'fit-content',
-                              alignItems: 'center',
-                              px: 1.25,
-                              py: 0.3,
-                              borderRadius: 4,
-                              bgcolor: alert.level === 'OUT' ? '#FEE2E2' : C.cream,
-                              color: alert.level === 'OUT' ? '#B91C1C' : C.creamText,
-                              fontSize: 11,
-                              fontWeight: 700,
-                              letterSpacing: '0.01em',
-                              mt: 0.5
-                            }}
-                          >
-                            {alert.label}
-                          </Box>
-                        )}
                       </TableCell>
 
-                      {/* PRODUCT STATUS */}
+                      {/* TRẠNG THÁI: đang bán / đã ẩn + online (đổi ở menu ⋯) */}
                       <TableCell>
-                        <Stack direction="row" alignItems="center" spacing={1.25} sx={{ pt: 0.5 }}>
-                          <Tooltip title={isActive ? 'Nhấn để ẩn sản phẩm' : 'Nhấn để kích hoạt sản phẩm'}>
-                            <span>
-                              <Switch
-                                checked={isActive}
-                                size="small"
-                                disabled={busy}
-                                onClick={(event) => event.stopPropagation()}
-                                onChange={(event) => {
-                                  event.stopPropagation();
-                                  openStatusDialog(product);
-                                }}
-                                sx={switchSx}
-                              />
-                            </span>
-                          </Tooltip>
-
+                        <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" useFlexGap>
                           <Box sx={chipSx(isActive ? '#E7F6F1' : '#F0F2F4', isActive ? '#168B70' : '#75869F')}>
-                            {isActive ? 'Hoạt động' : 'Đã ẩn'}
+                            {isActive ? 'Đang bán' : 'Đã ẩn'}
                           </Box>
-                        </Stack>
-                      </TableCell>
-
-                      {/* ONLINE SALE */}
-                      <TableCell>
-                        <Stack direction="row" alignItems="center" spacing={1.25} sx={{ pt: 0.5 }}>
-                          <Tooltip
-                            title={
-                              !isActive
-                                ? 'Sản phẩm đang ẩn — kích hoạt trước khi bật bán online'
-                                : isOnline
-                                  ? `${onlineCount}/${activeVariants} biến thể đang bán online · Nhấn để tắt`
-                                  : 'Nhấn để bật bán online cho mọi biến thể đang hoạt động'
-                            }
-                          >
-                            <span>
-                              <Switch
-                                checked={isOnline}
-                                size="small"
-                                disabled={busy || !isActive}
-                                onClick={(event) => event.stopPropagation()}
-                                onChange={(event) => {
-                                  event.stopPropagation();
-                                  openOnlineDialog(product);
-                                }}
-                                sx={switchSx}
-                              />
-                            </span>
-                          </Tooltip>
-                          <Box sx={chipSx(isOnline ? '#E7F6F1' : '#F0F2F4', isOnline ? '#168B70' : '#75869F')}>
-                            {isOnline
-                              ? onlineCount < activeVariants
-                                ? `${onlineCount}/${activeVariants} biến thể`
-                                : 'Đang bật'
-                              : 'Đang tắt'}
-                          </Box>
+                          {isOnline && (
+                            <Tooltip title={`${onlineCount}/${activeVariants} biến thể đang bán online`}>
+                              <Box sx={chipSx('#F0FCFE', C.cyanText)}>
+                                Online{onlineCount < activeVariants ? ` ${onlineCount}/${activeVariants}` : ''}
+                              </Box>
+                            </Tooltip>
+                          )}
                         </Stack>
                       </TableCell>
 
                       {/* ACTIONS */}
-                      <TableCell align="center" sx={{ pr: 3 }}>
-                        <Stack direction="row" alignItems="center" justifyContent="center" spacing={0.5}>
-                          <Tooltip title="Xem chi tiết">
-                            <IconButton
-                              size="small"
-                              disabled={busy}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                viewProduct(product.productId);
-                              }}
-                              sx={{
-                                color: '#64748B',
-                                p: 0.75,
-                                '&:hover': {
-                                  color: '#0F172A',
-                                  bgcolor: 'transparent'
-                                }
-                              }}
-                            >
-                              <EyeOutlined style={{ fontSize: 17 }} />
-                            </IconButton>
-                          </Tooltip>
-
-                          <Tooltip title="Chỉnh sửa sản phẩm">
+                      <TableCell align="right" sx={{ pr: 3 }}>
+                        <Stack direction="row" alignItems="center" justifyContent="flex-end" spacing={0.5}>
+                          <Tooltip title="Chỉnh sửa">
                             <IconButton
                               size="small"
                               disabled={busy}
@@ -937,6 +844,21 @@ export default function ProductPage() {
                               <EditOutlined style={{ fontSize: 17 }} />
                             </IconButton>
                           </Tooltip>
+
+                          <Tooltip title="Tùy chọn khác">
+                            <IconButton
+                              size="small"
+                              disabled={busy}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setMenuAnchor(event.currentTarget);
+                                setMenuProduct(product);
+                              }}
+                              sx={{ color: '#64748B', p: 0.75, '&:hover': { color: '#0F172A', bgcolor: 'transparent' } }}
+                            >
+                              <EllipsisOutlined style={{ fontSize: 17 }} />
+                            </IconButton>
+                          </Tooltip>
                         </Stack>
                       </TableCell>
                     </TableRow>
@@ -945,14 +867,14 @@ export default function ProductPage() {
 
               {!loading && filteredProducts.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
+                  <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
                     <Typography sx={{ fontSize: 14, fontWeight: 800, color: '#0F172A' }}>
                       {products.length === 0 ? 'Chưa có sản phẩm nào trong kho' : 'Không tìm thấy sản phẩm phù hợp'}
                     </Typography>
                     <Typography sx={{ fontSize: 13, color: C.muted, mt: 0.5 }}>
                       {products.length === 0
                         ? 'Hãy thêm sản phẩm mới hoặc nhập tệp danh sách từ file Excel.'
-                        : 'Hãy thử thay đổi từ khóa tìm kiếm, chọn tab khác hoặc bấm "Bỏ lọc".'}
+                        : 'Hãy thử từ khóa khác, danh mục khác hoặc chọn tab khác.'}
                     </Typography>
                   </TableCell>
                 </TableRow>
@@ -981,6 +903,59 @@ export default function ProductPage() {
           {loadedAt ? `Dữ liệu tải lúc ${loadedAt.toLocaleTimeString('vi-VN')}` : ''}
         </Typography>
       </Box>
+
+      {/* MENU ⋯: xem, ẩn/hiện, bật/tắt bán online (mở hộp thoại xác nhận như trước) */}
+      <Menu
+        anchorEl={menuAnchor}
+        open={Boolean(menuAnchor)}
+        onClose={() => setMenuAnchor(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        slotProps={{ paper: { sx: { borderRadius: 2.5, minWidth: 220, mt: 0.5 } } }}
+      >
+        {menuProduct && [
+          <MenuItem
+            key="view"
+            onClick={() => {
+              setMenuAnchor(null);
+              viewProduct(menuProduct.productId);
+            }}
+            sx={{ fontSize: 13.5, fontWeight: 600 }}
+          >
+            <ListItemIcon>
+              <EyeOutlined />
+            </ListItemIcon>
+            Xem chi tiết
+          </MenuItem>,
+          <MenuItem
+            key="online"
+            disabled={menuProduct.status !== 'ACTIVE'}
+            onClick={() => {
+              setMenuAnchor(null);
+              openOnlineDialog(menuProduct);
+            }}
+            sx={{ fontSize: 13.5, fontWeight: 600 }}
+          >
+            <ListItemIcon>
+              <GlobalOutlined />
+            </ListItemIcon>
+            {isOnlineProduct(menuProduct) ? 'Tắt bán online' : 'Bật bán online'}
+          </MenuItem>,
+          <MenuItem
+            key="status"
+            onClick={() => {
+              setMenuAnchor(null);
+              openStatusDialog(menuProduct);
+            }}
+            sx={{ fontSize: 13.5, fontWeight: 600, color: menuProduct.status === 'ACTIVE' ? '#B45309' : '#168B70' }}
+          >
+            <ListItemIcon sx={{ color: 'inherit' }}>
+              {menuProduct.status === 'ACTIVE' ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+            </ListItemIcon>
+            {menuProduct.status === 'ACTIVE' ? 'Ẩn sản phẩm' : 'Hiện lại sản phẩm'}
+          </MenuItem>
+        ]}
+      </Menu>
 
       {/* CHANGE PRODUCT STATUS DIALOG */}
       <Dialog

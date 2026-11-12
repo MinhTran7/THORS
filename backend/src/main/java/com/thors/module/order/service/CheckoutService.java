@@ -30,6 +30,8 @@ import java.util.regex.Pattern;
 public class CheckoutService {
 
     private static final BigDecimal SHIPPING_FEE = BigDecimal.ZERO;
+    /** Đơn thanh toán online (chuyển khoản / PayOS) chỉ giữ hàng trong ngần này phút, quá hạn tự hủy. */
+    public static final int ONLINE_PAYMENT_HOLD_MINUTES = 10;
     private static final Pattern PHONE = Pattern.compile("^(0|\\+84)\\d{9}$");
 
     private final CheckoutRepository checkoutRepository;
@@ -176,6 +178,11 @@ public class CheckoutService {
                     String.valueOf(d.get("productName")), String.valueOf(d.get("size")), String.valueOf(d.get("color")));
         }
 
+        // Thanh toán online: chỉ giữ đơn (và hàng) ONLINE_PAYMENT_HOLD_MINUTES phút
+        if ("ONLINE".equalsIgnoreCase(paymentMethod)) {
+            checkoutRepository.setPaymentDeadline(orderId, ONLINE_PAYMENT_HOLD_MINUTES);
+        }
+
         for (Integer cartItemId : cartItemIds) {
             cartRepository.deleteItem(userId, cartItemId);
         }
@@ -185,6 +192,9 @@ public class CheckoutService {
         result.put("orderNumber", orderNumber);
         result.put("totalAmount", total);
         result.put("paymentMethod", paymentMethod);
+        if ("ONLINE".equalsIgnoreCase(paymentMethod)) {
+            result.put("paymentHoldMinutes", ONLINE_PAYMENT_HOLD_MINUTES);
+        }
         if (promotionDiscount.compareTo(BigDecimal.ZERO) > 0) {
             result.put("discountAmount", promotionDiscount);
             result.put("promotionName", promotionName);

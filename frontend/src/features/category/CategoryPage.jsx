@@ -15,6 +15,7 @@ import {
   Grid,
   IconButton,
   InputAdornment,
+  ListSubheader,
   Menu,
   MenuItem,
   Select,
@@ -59,10 +60,15 @@ import {
   updateCategory,
   changeCategoryStatus,
   TARGET_GROUPS,
-  targetGroupLabel
+  targetGroupLabel,
+  isStandardTarget,
+  sortCategoriesAsTree,
+  descendantIds
 } from 'services/categoryService';
 
 import { getProducts } from 'services/productService';
+import CategoryIconPicker from './CategoryIconPicker';
+import { findCategoryIcon } from './categoryIcons';
 import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../customer/theme';
 
 const PAGE_SIZE = 5;
@@ -71,8 +77,12 @@ const emptyForm = {
   categoryName: '',
   description: '',
   parentId: '',
-  targetGroup: ''
+  targetGroup: '',
+  icon: ''
 };
+
+// Ô Đối tượng: mục "Khác…" để nhập tên đối tượng mới
+const OTHER_TARGET = '__other__';
 
 // Màu nhãn đối tượng (Nam / Nữ / Trẻ em / Nam & Nữ)
 const TARGET_BADGE = {
@@ -138,6 +148,9 @@ const TARGET_ICON = {
 
 // Danh mục gốc (có hay chưa có danh mục con) dùng chung icon túi mua sắm
 function CategoryIcon({ category }) {
+  // Icon tự chọn ở bảng icon (nếu có)
+  const chosen = findCategoryIcon(category.icon);
+  if (chosen) return <chosen.Icon />;
   if (category.isChild) {
     const Icon = TARGET_ICON[category.targetGroup] || TagOutlined;
     return <Icon />;
@@ -154,12 +167,24 @@ function iconTone(category) {
   return { bgcolor: C.surface, color: C.muted, borderColor: C.border };
 }
 
+// Đối tượng tự nhập (vd "Bé gái"): nhãn màu trung tính
+const CUSTOM_TARGET_TONE = { bg: '#F8FAFC', color: '#475569', border: '#E2E8F0' };
+
+// Gõ đúng nhãn chuẩn ("nữ", "Trẻ em") thì quy về mã chuẩn; còn lại giữ nguyên chữ đang gõ (kể cả khoảng trắng)
+function toTargetValue(text) {
+  if (!text) return '';
+  const standard = TARGET_GROUPS.find(
+    (item) => item.value === text || item.label.toLowerCase() === text.toLowerCase()
+  );
+  return standard ? standard.value : text;
+}
+
 function TargetBadge({ value }) {
   const label = targetGroupLabel(value);
   if (!label) {
     return <Typography sx={{ fontSize: 13, color: '#94A3B8' }}>—</Typography>;
   }
-  const tone = TARGET_BADGE[value];
+  const tone = TARGET_BADGE[value] || CUSTOM_TARGET_TONE;
   return <Box sx={badgeSx(tone.bg, tone.color, tone.border)}>{label}</Box>;
 }
 
@@ -267,6 +292,8 @@ export default function CategoryPage() {
 
   const [dialog, setDialog] = useState(null);
   const [form, setForm] = useState(emptyForm);
+  // Đang nhập đối tượng mới (đã chọn "Khác…")
+  const [targetOther, setTargetOther] = useState(false);
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -355,15 +382,37 @@ export default function CategoryPage() {
     return productCountMap.get(Number(categoryId)) || 0;
   }
 
-  // Danh mục cha: cộng cả sản phẩm của các danh mục con
+  // Danh mục cha: cộng cả sản phẩm của các danh mục con, cháu…
   function getProductCount(categoryId) {
     if (!productsLoaded) return null;
-    const children = childrenOf.get(categoryId) || [];
-    return children.reduce(
-      (sum, child) => sum + (productCountMap.get(Number(child.categoryId)) || 0),
+    return (childrenOf.get(categoryId) || []).reduce(
+      (sum, child) => sum + (getProductCount(child.categoryId) || 0),
       getDirectProductCount(categoryId)
     );
   }
+
+  // Cây đã sắp xếp (có depth + pathName "Giày › Giày nữ › Cao gót") cho ô chọn danh mục cha / xem chi tiết
+  const treeCategories = useMemo(() => sortCategoriesAsTree(categories), [categories]);
+  const pathNameOf = (categoryId) =>
+    treeCategories.find((item) => item.categoryId === categoryId)?.pathName || '';
+
+  // Đối tượng tự nhập đã lưu (lấy từ các danh mục): số danh mục đang dùng, dùng nhiều nhất trước
+  const customTargetCount = useMemo(() => {
+    const counts = new Map();
+    for (const item of categories) {
+      if (item.targetGroup && !isStandardTarget(item.targetGroup)) {
+        counts.set(item.targetGroup, (counts.get(item.targetGroup) || 0) + 1);
+      }
+    }
+    return counts;
+  }, [categories]);
+  const customTargets = useMemo(
+    () =>
+      [...customTargetCount.keys()].sort(
+        (a, b) => customTargetCount.get(b) - customTargetCount.get(a) || a.localeCompare(b, 'vi')
+      ),
+    [customTargetCount]
+  );
 
   // ==========================================
   // SEARCH / FILTER / PAGINATION
@@ -391,18 +440,26 @@ export default function CategoryPage() {
       return matchesSearch && matchesStatus && matchesTarget;
     };
 
+    // Một nút hiện khi chính nó khớp hoặc có con / cháu khớp (để biết con thuộc nhánh nào)
+    const seen = new Set();
+    const build = (category, depth) => {
+      if (seen.has(category.categoryId)) return null;
+      seen.add(category.categoryId);
+      const children = (childrenOf.get(category.categoryId) || [])
+        .map((child) => build(child, depth + 1))
+        .filter(Boolean);
+      const self = matches(category);
+      if (!self && children.length === 0) return null;
+      return { category: { ...category, depth, isChild: depth > 0, contextOnly: !self }, children };
+    };
+
     const ids = new Set(categories.map((item) => item.categoryId));
     const groups = [];
     for (const root of categories) {
       // Danh mục con mất cha (không có trong danh sách) được coi như danh mục gốc
       if (root.parentId && ids.has(root.parentId)) continue;
-      const children = (childrenOf.get(root.categoryId) || []).filter(matches);
-      if (matches(root) || children.length > 0) {
-        groups.push({
-          root: { ...root, isChild: false, contextOnly: !matches(root) },
-          children: children.map((child) => ({ ...child, isChild: true }))
-        });
-      }
+      const node = build(root, 0);
+      if (node) groups.push(node);
     }
     return groups;
   }, [categories, childrenOf, search, statusFilter, targetFilter]);
@@ -430,17 +487,16 @@ export default function CategoryPage() {
 
   const currentPage = Math.min(page, pageCount);
 
-  // Các dòng hiển thị: danh mục cha + danh mục con (nếu đang mở)
+  // Các dòng hiển thị: duyệt cây, chỉ đi xuống nhánh đang mở (đang lọc thì mở hết)
   const paginatedCategories = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE;
-    return filteredCategories
-      .slice(start, start + PAGE_SIZE)
-      .flatMap((group) => [
-        { ...group.root, visibleChildren: group.children.length },
-        ...(isFiltering || expanded.has(group.root.categoryId)
-          ? group.children.map((child, index) => ({ ...child, isLastChild: index === group.children.length - 1 }))
-          : [])
-      ]);
+    const rows = [];
+    const walk = (node) => {
+      rows.push({ ...node.category, visibleChildren: node.children.length });
+      if (isFiltering || expanded.has(node.category.categoryId)) node.children.forEach(walk);
+    };
+    filteredCategories.slice(start, start + PAGE_SIZE).forEach(walk);
+    return rows;
   }, [filteredCategories, currentPage, expanded, isFiltering]);
 
   function handleSearchChange(value) {
@@ -468,6 +524,7 @@ export default function CategoryPage() {
       setExpanded((prev) => new Set(prev).add(parent.categoryId));
     }
     setForm({ ...emptyForm, parentId: parent?.categoryId ? String(parent.categoryId) : '' });
+    setTargetOther(false);
     setFormError('');
     setSuccess('');
     setDialog({ mode: 'create' });
@@ -478,8 +535,10 @@ export default function CategoryPage() {
       categoryName: category.categoryName,
       description: category.description || '',
       parentId: category.parentId ? String(category.parentId) : '',
-      targetGroup: category.targetGroup || ''
+      targetGroup: category.targetGroup || '',
+      icon: category.icon || ''
     });
+    setTargetOther(false);
 
     setFormError('');
     setSuccess('');
@@ -490,12 +549,16 @@ export default function CategoryPage() {
     });
   }
 
-  // Danh mục cha hợp lệ: danh mục gốc, khác chính nó, đang hoạt động (giữ lại cha hiện tại dù đã ngưng)
+  // Danh mục cha hợp lệ: mọi cấp, trừ chính nó và con / cháu của nó (tránh vòng lặp);
+  // đang hoạt động (giữ lại cha hiện tại dù đã ngưng)
   const editingId = dialog?.mode === 'edit' ? dialog.item.categoryId : null;
-  const editingHasChildren = dialog?.mode === 'edit' && dialog.item.childCount > 0;
-  const parentOptions = rootCategories.filter(
+  const blockedParentIds = useMemo(
+    () => (editingId ? new Set([editingId, ...descendantIds(categories, editingId)]) : new Set()),
+    [categories, editingId]
+  );
+  const parentOptions = treeCategories.filter(
     (item) =>
-      item.categoryId !== editingId &&
+      !blockedParentIds.has(item.categoryId) &&
       (item.status === 'ACTIVE' || String(item.categoryId) === form.parentId)
   );
 
@@ -514,15 +577,14 @@ export default function CategoryPage() {
         );
         if (sameRoot) next.parentId = String(sameRoot.categoryId);
       }
-      const parent = rootCategories.find((item) => String(item.categoryId) === next.parentId);
+      const parent = categories.find((item) => String(item.categoryId) === next.parentId);
       const canReplace =
         !typed ||
         typed === lastSuggestion.current ||
         rootCategories.some((item) => item.categoryName.trim().toLowerCase() === typed.toLowerCase());
       if (parent && canReplace) {
-        const suggestion = next.targetGroup
-          ? `${parent.categoryName} ${TARGET_SUFFIX[next.targetGroup]}`
-          : '';
+        const suffix = TARGET_SUFFIX[next.targetGroup] || next.targetGroup.trim().toLowerCase();
+        const suggestion = suffix ? `${parent.categoryName} ${suffix}` : '';
         next.categoryName = suggestion || (typed === lastSuggestion.current ? '' : form.categoryName);
         lastSuggestion.current = suggestion;
       }
@@ -558,6 +620,12 @@ export default function CategoryPage() {
       return;
     }
 
+    const targetGroup = toTargetValue(form.targetGroup.trim().replace(/\s+/g, ' '));
+    if (targetGroup.length > 30) {
+      setFormError('Đối tượng tự nhập tối đa 30 ký tự.');
+      return;
+    }
+
     const isCreate = dialog.mode === 'create';
     setSaving(true);
     setFormError('');
@@ -568,7 +636,8 @@ export default function CategoryPage() {
         categoryName,
         description,
         parentId: form.parentId,
-        targetGroup: form.targetGroup
+        targetGroup,
+        icon: form.icon
       };
 
       if (isCreate) {
@@ -834,6 +903,11 @@ export default function CategoryPage() {
                 {item.label}
               </MenuItem>
             ))}
+            {customTargets.map((value) => (
+              <MenuItem key={value} value={value}>
+                {value}
+              </MenuItem>
+            ))}
             <MenuItem value="NONE">Không áp dụng</MenuItem>
           </Select>
         </Box>
@@ -908,7 +982,6 @@ export default function CategoryPage() {
             <TableHead>
               <TableRow>
                 <TableCell sx={{ pl: 3 }}>TÊN DANH MỤC</TableCell>
-                <TableCell>ĐỐI TƯỢNG</TableCell>
                 <TableCell>MÔ TẢ</TableCell>
                 <TableCell>SỐ SẢN PHẨM</TableCell>
                 <TableCell>TRẠNG THÁI</TableCell>
@@ -919,7 +992,7 @@ export default function CategoryPage() {
             <TableBody>
               {loading && (
                 <TableRow>
-                  <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
+                  <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
                     <CircularProgress size={32} sx={{ color: C.cyan }} />
                     <Typography fontSize={13.5} color={C.muted} sx={{ mt: 1.5 }}>
                       Đang tải danh mục...
@@ -933,7 +1006,7 @@ export default function CategoryPage() {
                   const isActive = category.status === 'ACTIVE';
                   const productCount = getProductCount(category.categoryId);
                   const isParent = category.childCount > 0;
-                  const canToggle = !category.isChild && category.visibleChildren > 0;
+                  const canToggle = category.visibleChildren > 0;
                   const open = canToggle && isExpanded(category.categoryId);
                   // Danh mục cha vẫn còn sản phẩm gắn trực tiếp -> nhắc chuyển sang danh mục con
                   const directCount = isParent ? getDirectProductCount(category.categoryId) : 0;
@@ -943,8 +1016,8 @@ export default function CategoryPage() {
                       key={category.categoryId}
                       hover
                       sx={{
-                        // Cha đang mở: nền xanh nhạt + vạch trái; con: nền xám rất nhạt
-                        bgcolor: category.isChild ? '#FAFBFC' : open ? '#F5FDFE' : '#FFFFFF',
+                        // Cha đang mở: nền xanh nhạt + vạch trái (chỉ cấp gốc); con: nền xám rất nhạt
+                        bgcolor: category.isChild ? (open ? '#F3FAFC' : '#FAFBFC') : open ? '#F5FDFE' : '#FFFFFF',
                         boxShadow: !category.isChild && open ? `inset 3px 0 0 ${C.cyanHover}` : 'none',
                         '&:hover': { bgcolor: '#F5FAFC' }
                       }}
@@ -962,10 +1035,10 @@ export default function CategoryPage() {
                         <Stack
                           direction="row"
                           spacing={1.5}
-                          sx={{ alignItems: 'center', ml: category.isChild ? '58px' : 0 }}
+                          // Mỗi cấp thụt vào 34px; ô mũi tên luôn chiếm chỗ để các cấp thẳng hàng
+                          sx={{ alignItems: 'center', ml: `${(category.depth || 0) * 34}px` }}
                         >
-                          {!category.isChild && (
-                            <Box
+                          <Box
                               aria-label={open ? 'Thu gọn danh mục con' : 'Xem danh mục con'}
                               sx={{
                                 width: 22,
@@ -983,7 +1056,6 @@ export default function CategoryPage() {
                             >
                               {open ? <DownOutlined /> : <RightOutlined />}
                             </Box>
-                          )}
                           <Box
                             sx={{
                               width: category.isChild ? 28 : 36,
@@ -1006,7 +1078,7 @@ export default function CategoryPage() {
                             <Typography
                               sx={{
                                 fontSize: category.isChild ? 13 : 14,
-                                fontWeight: category.isChild ? 500 : 700,
+                                fontWeight: category.isChild ? (canToggle ? 600 : 500) : 700,
                                 color: category.isChild ? '#334155' : '#0F172A'
                               }}
                             >
@@ -1015,11 +1087,6 @@ export default function CategoryPage() {
                             {/* Chỉ hiện tên cho gọn; mã danh mục xem ở nút Xem chi tiết */}
                           </Box>
                         </Stack>
-                      </TableCell>
-
-                      {/* TARGET GROUP */}
-                      <TableCell>
-                        <TargetBadge value={category.targetGroup} />
                       </TableCell>
 
                       {/* DESCRIPTION */}
@@ -1192,7 +1259,7 @@ export default function CategoryPage() {
 
               {!loading && filteredCategories.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
+                  <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
                     <Typography
                       sx={{
                         fontSize: 14,
@@ -1259,7 +1326,7 @@ export default function CategoryPage() {
           Chỉnh sửa danh mục
         </MenuItem>
 
-        {menuCategory && !menuCategory.parentId && menuCategory.status === 'ACTIVE' && (
+        {menuCategory && menuCategory.status === 'ACTIVE' && (
           <MenuItem
             onClick={() => {
               const selected = menuCategory;
@@ -1327,7 +1394,7 @@ export default function CategoryPage() {
                     DANH MỤC CHA
                   </Typography>
                   <Typography sx={{ fontSize: 14, color: '#334155', mt: 0.5, fontWeight: 600 }}>
-                    {viewCategory.parentName || 'Danh mục gốc'}
+                    {viewCategory.parentId ? pathNameOf(viewCategory.parentId) || viewCategory.parentName : 'Danh mục gốc'}
                   </Typography>
                 </Box>
                 <Box>
@@ -1468,22 +1535,34 @@ export default function CategoryPage() {
                     size="small"
                     displayEmpty
                     value={form.parentId}
-                    disabled={editingHasChildren}
                     onChange={(event) => changeHierarchy({ parentId: event.target.value })}
+                    // Ô đã chọn hiện đường dẫn đầy đủ, vd "Giày › Giày nữ"
+                    renderValue={(value) =>
+                      value ? pathNameOf(Number(value)) : 'Không có (danh mục gốc)'
+                    }
+                    MenuProps={{ slotProps: { paper: { sx: { maxHeight: 320 } } } }}
                     sx={selectSx}
                   >
                     <MenuItem value="">Không có (danh mục gốc)</MenuItem>
                     {parentOptions.map((item) => (
-                      <MenuItem key={item.categoryId} value={String(item.categoryId)}>
+                      <MenuItem
+                        key={item.categoryId}
+                        value={String(item.categoryId)}
+                        // Thụt theo cấp để thấy cây ngay trong danh sách
+                        sx={{ pl: 2 + item.depth * 2, fontWeight: item.depth === 0 ? 600 : 400, fontSize: 13.5 }}
+                      >
+                        {item.depth > 0 && (
+                          <Box component="span" sx={{ color: '#CBD5E1', mr: 1 }}>
+                            └
+                          </Box>
+                        )}
                         {item.categoryName}
                         {item.status !== 'ACTIVE' ? ' (Đã ngưng)' : ''}
                       </MenuItem>
                     ))}
                   </Select>
                   <Typography sx={{ fontSize: 12, color: C.muted, mt: 0.75, lineHeight: 1.5 }}>
-                    {editingHasChildren
-                      ? 'Danh mục này đang có danh mục con nên luôn là danh mục gốc.'
-                      : 'Ví dụ: "Giày nam" chọn danh mục cha là "Giày".'}
+                    Chọn được cả danh mục con, ví dụ &quot;Cao gót&quot; chọn cha là &quot;Giày nữ&quot;.
                   </Typography>
                 </Box>
 
@@ -1491,12 +1570,27 @@ export default function CategoryPage() {
                   <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>
                     Đối tượng
                   </Typography>
+                  {/* Chọn đối tượng có sẵn / đã lưu, hoặc "Khác…" để nhập tên mới */}
                   <Select
                     fullWidth
                     size="small"
                     displayEmpty
-                    value={form.targetGroup}
-                    onChange={(event) => changeHierarchy({ targetGroup: event.target.value })}
+                    value={targetOther ? OTHER_TARGET : form.targetGroup}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      if (value === OTHER_TARGET) {
+                        setTargetOther(true);
+                        changeHierarchy({ targetGroup: '' });
+                      } else {
+                        setTargetOther(false);
+                        changeHierarchy({ targetGroup: value });
+                      }
+                    }}
+                    renderValue={(value) =>
+                      value === OTHER_TARGET ? 'Khác (nhập tên mới)' : targetGroupLabel(value) || 'Không áp dụng'
+                    }
+                    // Nhiều đối tượng đã lưu thì danh sách cuộn trong khung
+                    MenuProps={{ slotProps: { paper: { sx: { maxHeight: 340 } } } }}
                     sx={selectSx}
                   >
                     <MenuItem value="">Không áp dụng</MenuItem>
@@ -1505,11 +1599,56 @@ export default function CategoryPage() {
                         {item.label}
                       </MenuItem>
                     ))}
+                    {customTargets.length > 0 && (
+                      <ListSubheader sx={{ fontSize: 11.5, fontWeight: 800, lineHeight: '32px', color: C.muted }}>
+                        ĐÃ LƯU ({customTargets.length})
+                      </ListSubheader>
+                    )}
+                    {customTargets.map((value) => (
+                      <MenuItem key={value} value={value} sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+                        <span>{value}</span>
+                        <Box component="span" sx={{ fontSize: 11.5, color: C.muted }}>
+                          {customTargetCount.get(value)} danh mục
+                        </Box>
+                      </MenuItem>
+                    ))}
+                    <MenuItem value={OTHER_TARGET} sx={{ color: '#0E7490', fontWeight: 600, borderTop: `1px solid ${C.borderLight}` }}>
+                      + Khác (nhập tên mới)…
+                    </MenuItem>
                   </Select>
+                  {targetOther && (
+                    <TextField
+                      fullWidth
+                      size="small"
+                      autoFocus
+                      autoComplete="off"
+                      placeholder="Nhập đối tượng mới, ví dụ: Bé gái"
+                      value={form.targetGroup}
+                      onChange={(event) => changeHierarchy({ targetGroup: event.target.value })}
+                      slotProps={{ htmlInput: { maxLength: 30, name: 'category-target-new', autoComplete: 'off' } }}
+                      sx={{ ...inputSx(false), mt: 1 }}
+                    />
+                  )}
                   <Typography sx={{ fontSize: 12, color: C.muted, mt: 0.75, lineHeight: 1.5 }}>
-                    Dùng để lọc Nam / Nữ / Trẻ em trên cửa hàng.
+                    {targetOther
+                      ? 'Tối đa 30 ký tự. Lưu danh mục xong, đối tượng này có trong mục "Đã lưu" để lần sau chọn lại.'
+                      : 'Dùng để lọc theo đối tượng trên cửa hàng. Chọn "Khác…" để thêm đối tượng mới.'}
                   </Typography>
                 </Box>
+              </Box>
+
+              <Box>
+                <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>
+                  Icon danh mục
+                </Typography>
+                <CategoryIconPicker
+                  value={form.icon}
+                  disabled={saving}
+                  onChange={(icon) => setForm((prev) => ({ ...prev, icon }))}
+                  defaultPreview={
+                    <CategoryIcon category={{ isChild: Boolean(form.parentId), targetGroup: form.targetGroup }} />
+                  }
+                />
               </Box>
 
               <Box>
