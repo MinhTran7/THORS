@@ -5,7 +5,6 @@ import com.thors.module.account.mapper.AccountMapper;
 import com.thors.module.account.service.AccountService;
 import com.thors.module.account.service.AuditLogService;
 import com.thors.module.account.service.AvatarImageService;
-import com.thors.module.sizeadvice.SizeAdviceSchema;
 import com.thors.security.SessionAccess;
 import jakarta.validation.Valid;
 import java.util.Map;
@@ -20,19 +19,13 @@ public class AccountController {
   private final AuditLogService audits;
   private final AvatarImageService avatars;
   private final SessionAccess sessions;
-  private final SizeAdviceSchema sizeAdviceSchema;
 
   public AccountController(
-      AccountService service,
-      AuditLogService audits,
-      AvatarImageService avatars,
-      SessionAccess sessions,
-      SizeAdviceSchema sizeAdviceSchema) {
+      AccountService service, AuditLogService audits, AvatarImageService avatars, SessionAccess sessions) {
     this.service = service;
     this.audits = audits;
     this.avatars = avatars;
     this.sessions = sessions;
-    this.sizeAdviceSchema = sizeAdviceSchema;
   }
 
   // ----- Profile (mọi người dùng đã đăng nhập) -----
@@ -65,20 +58,6 @@ public class AccountController {
   @PostMapping("/profile/phone")
   Object phone(@Valid @RequestBody Phone r) {
     return AccountMapper.view(service.phone(sessions.current(), r.phone()));
-  }
-
-  /** Chiều cao (cm) / cân nặng (kg) để gợi ý size; trả về { heightCm, weightKg } (null nếu chưa nhập). */
-  // Trả 503 SIZE_ADVICE_UNAVAILABLE (thay vì lỗi SQL) khi database chưa chạy migration gợi ý size.
-  @GetMapping("/profile/body-measurements")
-  Object bodyMeasurements() {
-    sizeAdviceSchema.require();
-    return service.bodyMeasurements(sessions.current());
-  }
-
-  @PutMapping("/profile/body-measurements")
-  Object updateBodyMeasurements(@Valid @RequestBody BodyMeasurements r) {
-    sizeAdviceSchema.require();
-    return service.updateBodyMeasurements(sessions.current(), r);
   }
 
   /** Lần đăng nhập gần nhất và các hoạt động gần đây của chính người đang đăng nhập. */

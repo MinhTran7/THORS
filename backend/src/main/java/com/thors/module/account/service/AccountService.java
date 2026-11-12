@@ -67,20 +67,6 @@ public class AccountService {
     return detail(users.byId(a.id()).orElseThrow());
   }
 
-  /** Chiều cao/cân nặng của chính người đang đăng nhập (dùng để gợi ý size ở trang Hồ sơ). */
-  public BodyMeasurements bodyMeasurements(Account actor) {
-    return users.bodyMeasurements(actor.id());
-  }
-
-  /** Lưu chiều cao/cân nặng; giá trị null = xóa. Trả về số đo sau khi lưu. */
-  @Transactional
-  public BodyMeasurements updateBodyMeasurements(Account actor, BodyMeasurements r) {
-    var a = users.lock(actor.id());
-    users.updateBodyMeasurements(a.id(), r);
-    users.audit(a.id(), "PROFILE_UPDATE", a.id(), "Body measurements updated");
-    return users.bodyMeasurements(a.id());
-  }
-
   /**
    * Đặt (url khác null) hoặc gỡ (null) ảnh đại diện của chính người đang đăng nhập. Trả về đường dẫn
    * ảnh cũ để AvatarImageService xóa trên Cloudinary sau khi giao dịch này đã commit.

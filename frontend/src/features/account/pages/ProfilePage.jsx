@@ -27,7 +27,6 @@ import { BrandButton, OutlineButton } from '../components/Brand';
 import { RoleChip } from '../components/Chips';
 import { PageHeader } from '../components/Blocks';
 import UserAvatar from '../components/UserAvatar';
-import SizeAdvisor from '../components/SizeAdvisor';
 
 const CRUMBS = ['Hồ sơ'];
 
@@ -249,8 +248,6 @@ function CustomerProfile({ data, loading, fullName, passwordEnabled, googleLinke
             <StoreInfoRow label="Email">{loading ? <Skeleton width={180} /> : data?.email}</StoreInfoRow>
             <StoreInfoRow label="Số điện thoại">{loading ? <Skeleton width={110} /> : data?.phone}</StoreInfoRow>
           </Box>
-
-          <SizeAdvisor />
 
           <Box component="section" sx={{ ...storePanelSx, p: { xs: 3, sm: 4 } }}>
             <Box component="h2" sx={{ ...storePanelTitleSx, mb: 1 }}>

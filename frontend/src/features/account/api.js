@@ -22,9 +22,6 @@ export const accountsApi = {
     return api('/accounts/profile/avatar', { method: 'PUT', form });
   },
   removeAvatar: () => api('/accounts/profile/avatar', { method: 'DELETE' }),
-  // { heightCm, weightKg } dùng để gợi ý size; null = chưa nhập.
-  bodyMeasurements: () => api('/accounts/profile/body-measurements'),
-  updateBodyMeasurements: (body) => api('/accounts/profile/body-measurements', { method: 'PUT', body }),
   changePassword: (body) => post('/auth/change-password', body),
   list: (params) => api(`/accounts${query(params)}`),
   summary: () => api('/accounts/summary'),
