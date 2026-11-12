@@ -4,7 +4,7 @@ import { Box } from '@mui/material';
 import { useAuth } from 'features/auth/AuthProvider';
 import { api } from 'services/http';
 import PendingCartHandler from './PendingCartHandler';
-import { colorHex, fetchProductVariants } from './ShopCommon';
+import { categoryTree, colorHex, fetchProductVariants } from './ShopCommon';
 import { ProductCard } from './ShopPage';
 import { C, SERIF, Icon, btnSx, container, focusRing, h2Sx, linkSx, srOnly } from './storeTheme';
 
@@ -125,6 +125,115 @@ function Option({ type = 'radio', name, checked, onChange, children }) {
       />
       {children}
     </Box>
+  );
+}
+
+/* ---------- Danh mục dạng cây: danh mục lớn, bấm mũi tên để xổ danh mục con ---------- */
+
+// Đường đi từ gốc tới danh mục id (gồm cả nó), không có thì []
+function pathTo(nodes, id) {
+  for (const n of nodes) {
+    if (n.categoryId === id) return [n.categoryId];
+    const sub = pathTo(n.children, id);
+    if (sub.length) return [n.categoryId, ...sub];
+  }
+  return [];
+}
+
+function CategoryNode({ node, depth, selectedId, expanded, onToggle, onPick }) {
+  const hasKids = node.children.length > 0;
+  const open = expanded.has(node.categoryId);
+  return (
+    <Box component="li" sx={{ listStyle: 'none' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', pl: depth * 3.5 }}>
+        <Box sx={{ flex: 1, minWidth: 0, '& label': { fontWeight: depth === 0 ? 600 : 400, color: depth === 0 ? C.ink : C.muted } }}>
+          <Option name="category" checked={selectedId === node.categoryId} onChange={() => onPick(node.categoryId)}>
+            {node.categoryName}
+          </Option>
+        </Box>
+        {hasKids && (
+          <Box
+            component="button"
+            type="button"
+            aria-label={`${open ? 'Thu gọn' : 'Xem'} danh mục con của ${node.categoryName}`}
+            aria-expanded={open}
+            onClick={() => onToggle(node.categoryId)}
+            sx={{
+              width: 32,
+              height: 32,
+              p: 0,
+              border: 0,
+              bgcolor: 'transparent',
+              color: C.muted,
+              cursor: 'pointer',
+              display: 'grid',
+              placeItems: 'center',
+              flexShrink: 0,
+              '&:hover': { color: C.ink },
+              ...focusRing
+            }}
+          >
+            <Box component="span" sx={{ display: 'flex', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }}>
+              <Icon size={16}>
+                <path d="M6 9l6 6 6-6" />
+              </Icon>
+            </Box>
+          </Box>
+        )}
+      </Box>
+      {hasKids && open && (
+        <Box component="ul" sx={{ m: 0, p: 0 }}>
+          {node.children.map((child) => (
+            <CategoryNode
+              key={child.categoryId}
+              node={child}
+              depth={depth + 1}
+              selectedId={selectedId}
+              expanded={expanded}
+              onToggle={onToggle}
+              onPick={onPick}
+            />
+          ))}
+        </Box>
+      )}
+    </Box>
+  );
+}
+
+function CategoryFilter({ categories, selectedId, onPick }) {
+  const tree = useMemo(() => categoryTree(categories), [categories]);
+  const [expanded, setExpanded] = useState(() => new Set());
+  // Danh mục đang chọn nằm sâu bên trong thì tự mở các danh mục cha của nó
+  useEffect(() => {
+    const path = pathTo(tree, selectedId);
+    if (path.length > 1) setExpanded((prev) => new Set([...prev, ...path.slice(0, -1)]));
+  }, [tree, selectedId]);
+  const toggle = (id) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  return (
+    <>
+      <Option name="category" checked={selectedId === 0} onChange={() => onPick(0)}>
+        Tất cả
+      </Option>
+      <Box component="ul" sx={{ m: 0, p: 0 }}>
+        {tree.map((node) => (
+          <CategoryNode
+            key={node.categoryId}
+            node={node}
+            depth={0}
+            selectedId={selectedId}
+            expanded={expanded}
+            onToggle={toggle}
+            onPick={onPick}
+          />
+        ))}
+      </Box>
+    </>
   );
 }
 
@@ -301,14 +410,7 @@ export default function ShopCollectionPage({ collection }) {
   const sidebar = (
     <Box component="aside" aria-label="Bộ lọc">
       <FilterSection title="Danh mục" defaultOpen>
-        <Option name="category" checked={categoryId === 0} onChange={() => pickCategory(0)}>
-          Tất cả
-        </Option>
-        {categories.map((c) => (
-          <Option key={c.categoryId} name="category" checked={categoryId === c.categoryId} onChange={() => pickCategory(c.categoryId)}>
-            {c.categoryName}
-          </Option>
-        ))}
+        <CategoryFilter categories={categories} selectedId={categoryId} onPick={pickCategory} />
       </FilterSection>
 
       <FilterSection title="Kích thước" defaultOpen={sizes.length > 0}>

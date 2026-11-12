@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link as RouterLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Box, Menu, MenuItem } from '@mui/material';
 import { ThemeProvider } from '@mui/material/styles';
 import { useAuth } from 'features/auth/AuthProvider';
 import { STORE_NAME } from 'features/account/constants';
 import { api } from 'services/http';
+import { categoryTree, descendantsOf } from 'features/shop/ShopCommon';
 import StoreNotificationBell from 'features/notification/StoreNotificationBell';
 import { ThorsLogo } from 'features/auth/components/ShopAuthArt';
 import { C, FONT_URL, SANS, SERIF, Icon, btnSx, container, focusRing, iconBtnSx, linkSx, srOnly } from 'features/shop/storeTheme';
@@ -91,28 +92,25 @@ const MEGA_MENUS = [
 ];
 
 function MegaMenu({ menu, categories, open, onClose, onEnter, onLeave }) {
+  // Hàng ngang trên cùng: danh mục lớn. Rê chuột (hoặc chạm) vào danh mục lớn thì bên dưới hiện các danh mục con,
+  // mỗi danh mục con là một cột, các danh mục cháu nằm dưới cột đó (vd Giày nữ -> Giày cao gót, Giày Thể Thao Nữ).
+  const tree = useMemo(() => categoryTree(categories), [categories]);
+  const [activeId, setActiveId] = useState(null);
+  const lastPointer = useRef('mouse');
   if (!open || !menu) return null;
-  const linkCol = { ...linkSx, fontSize: 16, fontWeight: 600, py: 0.75, display: 'block' };
-  const badge = (bg) => ({
-    display: 'inline-block',
-    px: 2,
-    py: 1,
-    bgcolor: bg,
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: 700,
-    textDecoration: 'none',
-    whiteSpace: 'nowrap',
-    '&:hover': { opacity: 0.85, color: '#FFFFFF' },
-    ...focusRing
-  });
+  const active = tree.find((c) => c.categoryId === activeId) || tree[0];
+
+  const subLink = { ...linkSx, display: 'block', py: 0.6, fontSize: 15, color: C.muted, '&:hover': { color: C.ink } };
   return (
     <Box
       id={`mega-${menu.key}`}
       onPointerEnter={(e) => e.pointerType === 'mouse' && onEnter()}
       onPointerLeave={(e) => e.pointerType === 'mouse' && onLeave()}
+      onPointerDown={(e) => {
+        lastPointer.current = e.pointerType;
+      }}
       onClick={(e) => {
-        if (e.target.closest('a')) onClose();
+        if (e.target.closest('a') && !e.defaultPrevented) onClose();
       }}
       sx={{
         position: 'absolute',
@@ -122,46 +120,106 @@ function MegaMenu({ menu, categories, open, onClose, onEnter, onLeave }) {
         bgcolor: '#FFFFFF',
         borderTop: `1px solid ${C.line}`,
         boxShadow: '0 12px 24px rgba(0,0,0,.08)',
-        zIndex: 30
+        zIndex: 30,
+        maxHeight: 'calc(100vh - 120px)',
+        overflowY: 'auto'
       }}
     >
-      <Box sx={{ ...container, py: { xs: 3, md: 5 }, display: 'flex', flexWrap: 'wrap', gap: { xs: 3, md: 6 } }}>
-        <Box sx={{ flex: '1 1 480px', minWidth: 0 }}>
+      <Box sx={{ ...container, py: { xs: 3, md: 4 }, display: 'flex', flexWrap: 'wrap', gap: { xs: 3, md: 6 } }}>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
           <Box
             component={RouterLink}
             to={menu.allTo}
-            sx={{ ...linkSx, display: 'inline-block', fontSize: 17, fontWeight: 600, color: C.muted, mb: 2 }}
+            sx={{ ...linkSx, display: 'inline-block', fontSize: 17, fontWeight: 600, color: C.muted, mb: 1.5 }}
           >
             {menu.allLabel}
           </Box>
-          {/* Danh mục chia thành cột, mỗi cột tối đa 5 mục */}
+
+          {/* Hàng ngang: danh mục lớn (điện thoại thì vuốt ngang) */}
           <Box
+            component="ul"
             sx={{
-              display: 'grid',
-              gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', md: 'none' },
-              gridTemplateRows: { md: 'repeat(5, auto)' },
-              gridAutoFlow: { xs: 'row', md: 'column' },
-              gridAutoColumns: { md: '200px' },
-              columnGap: 4
+              listStyle: 'none',
+              m: 0,
+              p: 0,
+              display: 'flex',
+              flexWrap: { xs: 'nowrap', md: 'wrap' },
+              overflowX: { xs: 'auto', md: 'visible' },
+              columnGap: { xs: 3, md: 4 },
+              borderBottom: `1px solid ${C.line}`
             }}
           >
-            {categories.map((c) => (
-              <Box key={c.categoryId} component={RouterLink} to={menu.categoryTo(c.categoryId)} sx={linkCol}>
-                {c.categoryName}
-              </Box>
-            ))}
+            {tree.map((c) => {
+              const isActive = active?.categoryId === c.categoryId;
+              const hasKids = c.children.length > 0;
+              return (
+                <Box component="li" key={c.categoryId} sx={{ flexShrink: 0 }}>
+                  <Box
+                    component={RouterLink}
+                    to={menu.categoryTo(c.categoryId)}
+                    aria-haspopup={hasKids ? 'true' : undefined}
+                    aria-expanded={hasKids ? isActive : undefined}
+                    onPointerEnter={(e) => e.pointerType === 'mouse' && setActiveId(c.categoryId)}
+                    onFocus={() => setActiveId(c.categoryId)}
+                    onClick={(e) => {
+                      // Màn hình cảm ứng: chạm lần đầu để xem danh mục con, chạm lần nữa mới mở trang
+                      if (lastPointer.current !== 'mouse' && hasKids && !isActive) {
+                        e.preventDefault();
+                        setActiveId(c.categoryId);
+                      }
+                    }}
+                    sx={{
+                      ...linkSx,
+                      display: 'block',
+                      py: 1.25,
+                      mb: '-1px',
+                      fontSize: 16,
+                      fontWeight: 600,
+                      whiteSpace: 'nowrap',
+                      color: isActive ? C.accent : C.ink,
+                      borderBottom: '2px solid',
+                      borderColor: isActive ? C.accent : 'transparent'
+                    }}
+                  >
+                    {c.categoryName}
+                  </Box>
+                </Box>
+              );
+            })}
           </Box>
-        </Box>
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1.5 }}>
-          <Box component={RouterLink} to="/shop/best-sellers" sx={badge(C.accent)}>
-            Bán chạy
-          </Box>
-          <Box component={RouterLink} to="/shop/new-arrivals" sx={badge(C.ink)}>
-            Hàng mới về
-          </Box>
-          <Box component={RouterLink} to="/shop/sale" sx={badge('#C62828')}>
-            Sale off
-          </Box>
+
+          {/* Danh mục con của danh mục đang trỏ: mỗi cột = 1 danh mục con + các danh mục cháu bên dưới */}
+          {active && (
+            <Box sx={{ pt: 3 }}>
+              {active.children.length > 0 && (
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', md: 'repeat(4, minmax(0, 1fr))' },
+                    columnGap: 4,
+                    rowGap: 2.5
+                  }}
+                >
+                  {active.children.map((sub) => (
+                    <Box key={sub.categoryId} sx={{ minWidth: 0 }}>
+                      <Box
+                        component={RouterLink}
+                        to={menu.categoryTo(sub.categoryId)}
+                        sx={{ ...linkSx, display: 'block', py: 0.6, fontSize: 15, fontWeight: 700 }}
+                      >
+                        {sub.categoryName}
+                      </Box>
+                      {descendantsOf(sub).map((leaf) => (
+                        <Box key={leaf.categoryId} component={RouterLink} to={menu.categoryTo(leaf.categoryId)} sx={subLink}>
+                          {leaf.categoryName}
+                        </Box>
+                      ))}
+                    </Box>
+                  ))}
+                </Box>
+              )}
+            </Box>
+          )}
         </Box>
       </Box>
     </Box>
@@ -471,7 +529,7 @@ function StoreFooter({ categories }) {
             <Box component={RouterLink} to="/shop/new-arrivals" sx={footerLinkSx}>
               Hàng mới
             </Box>
-            {categories.slice(0, 4).map((c) => (
+            {categoryTree(categories).slice(0, 4).map((c) => (
               <Box key={c.categoryId} component={RouterLink} to={`/shop/category/${c.categoryId}`} sx={footerLinkSx}>
                 {c.categoryName}
               </Box>
