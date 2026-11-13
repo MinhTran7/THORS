@@ -18,7 +18,7 @@ public class OrderController {
     }
 
     /**
-     * GET /api/orders?status=&q=&dateFrom=yyyy-MM-dd&dateTo=yyyy-MM-dd&paymentMethod=COD|ONLINE&page=0&size=10
+     * GET /api/orders?status=&q=&dateFrom=yyyy-MM-dd&dateTo=yyyy-MM-dd&paymentMethod=COD|ONLINE&source=WEB|FACEBOOK&page=0&size=10
      */
     @GetMapping
     Object list(
@@ -27,10 +27,11 @@ public class OrderController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo,
             @RequestParam(required = false) String paymentMethod,
+            @RequestParam(required = false) String source,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
         return service.list(
-                sessions.current(), status, q, dateFrom, dateTo, paymentMethod, page, size);
+                sessions.current(), status, q, dateFrom, dateTo, paymentMethod, source, page, size);
     }
 
     /** GET /api/orders/counts: số đơn theo từng trạng thái (hiện trên các tab) */

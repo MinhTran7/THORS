@@ -75,6 +75,10 @@ public class OrderRepository {
      *
      * <p>dateFrom / dateTo (có thể null): lọc theo ngày đặt, gồm cả hai ngày đầu cuối. paymentFilter
      * (có thể null): lọc đúng giá trị cột payment_method (COD, ONLINE, CASH).
+     *
+     * <p>sourceFilter (có thể null): WEB hoặc FACEBOOK. Bảng orders không lưu nguồn đơn, nên suy từ
+     * tài khoản gắn với đơn giống DashboardService: khách tự đặt trên web thì user_id là tài khoản
+     * CUSTOMER; đơn Social POS do nhân viên tạo nên user_id là tài khoản nhân viên.
      */
     public Slice search(
             Integer customerId,
@@ -84,6 +88,7 @@ public class OrderRepository {
             LocalDate dateFrom,
             LocalDate dateTo,
             String paymentFilter,
+            String sourceFilter,
             int page,
             int size) {
         var where = new StringBuilder(" WHERE o.order_type = ?");
@@ -111,6 +116,11 @@ public class OrderRepository {
         if (paymentFilter != null) {
             where.append(" AND o.payment_method = ?");
             args.add(paymentFilter);
+        }
+        if (sourceFilter != null) {
+            where.append(sourceFilter.equals("WEB") ? " AND EXISTS" : " AND NOT EXISTS")
+                    .append(" (SELECT 1 FROM `user` su JOIN `role` sr ON sr.role_id = su.role_id")
+                    .append(" WHERE su.user_id = o.user_id AND sr.role_name = 'CUSTOMER')");
         }
         if (q != null) {
             String like =

@@ -59,6 +59,9 @@ public class OrderService {
     /** Bộ lọc hình thức thanh toán: khớp đúng giá trị cột orders.payment_method. */
     private static final Set<String> PAYMENT_FILTERS = Set.of("COD", "ONLINE", "CASH");
 
+    /** Bộ lọc nguồn đơn: WEB (khách tự đặt) hoặc FACEBOOK (nhân viên tạo từ Social POS). */
+    private static final Set<String> SOURCE_FILTERS = Set.of("WEB", "FACEBOOK");
+
     private final OrderRepository orders;
     private final NotificationPublisher notifications;
     private final GhnShippingService ghnShipping;
@@ -103,6 +106,7 @@ public class OrderService {
             LocalDate dateFrom,
             LocalDate dateTo,
             String paymentMethod,
+            String source,
             int page,
             int size) {
         requireOrderAccess(actor);
@@ -121,6 +125,14 @@ public class OrderService {
                 throw new ApiException(400, "PAYMENT_METHOD", "Hình thức thanh toán không hợp lệ.");
         }
 
+        // Khách chỉ thấy đơn của mình nên bộ lọc nguồn không có ý nghĩa, bỏ qua
+        String safeSource = isCustomer(actor) ? null : blankToNull(source);
+        if (safeSource != null) {
+            safeSource = safeSource.toUpperCase();
+            if (!SOURCE_FILTERS.contains(safeSource))
+                throw new ApiException(400, "SOURCE", "Nguồn đơn không hợp lệ.");
+        }
+
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), MAX_SIZE);
         Integer customerId = isCustomer(actor) ? actor.id() : null;
@@ -134,6 +146,7 @@ public class OrderService {
                         dateFrom,
                         dateTo,
                         safePayment,
+                        safeSource,
                         safePage,
                         safeSize);
         int totalPages = (int) Math.ceil(slice.total() / (double) safeSize);

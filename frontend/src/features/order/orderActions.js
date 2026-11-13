@@ -23,6 +23,21 @@ export const ownerActionsFor = (order) => {
   return CARRIER_MANAGED.includes(carrier) ? actions.filter((a) => a.to !== 'SHIPPING' && a.to !== 'DELIVERED') : actions;
 };
 
+// Danh sách chỉ có 2 chỗ nút cố định: nút bước tiếp theo (đổi chữ theo trạng thái) và nút từ chối.
+// Nút không dùng được vẫn hiện nhưng bị làm mờ, để các dòng thẳng hàng và không nhảy layout.
+const FIRST_STEP = OWNER_ACTIONS.PENDING_CONFIRMATION[0];
+const REJECT = OWNER_ACTIONS.PENDING_CONFIRMATION[1];
+
+/** 2 nút của Owner cho một dòng đơn, kèm cờ enabled. */
+export const ownerActionSlots = (order) => {
+  const available = new Set(ownerActionsFor(order).map((a) => a.to));
+  const next = (OWNER_ACTIONS[order?.orderStatus] ?? []).find((a) => a.primary) ?? FIRST_STEP;
+  return [
+    { ...next, enabled: available.has(next.to) },
+    { ...REJECT, enabled: available.has(REJECT.to) }
+  ];
+};
+
 // Khách: hủy khi cửa hàng chưa xác nhận, xác nhận đã nhận hàng khi đơn đã giao
 const CANCEL = { to: 'CANCELLED', label: 'Hủy đơn', askReason: true };
 export const CUSTOMER_ACTIONS = {
