@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link as RouterLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Box, Menu, MenuItem } from '@mui/material';
+import { keyframes } from '@emotion/react';
 import { ThemeProvider } from '@mui/material/styles';
 import { useAuth } from 'features/auth/AuthProvider';
 import { STORE_NAME } from 'features/account/constants';
 import { api } from 'services/http';
 import { categoryTree, descendantsOf } from 'features/shop/ShopCommon';
+import { aboutLines, useWebsiteSettings } from 'features/website/websiteSettings';
+import StoreSearch from 'features/shop/StoreSearch';
 import StoreNotificationBell from 'features/notification/StoreNotificationBell';
 import { ThorsLogo } from 'features/auth/components/ShopAuthArt';
-import { C, FONT_URL, SANS, SERIF, Icon, btnSx, container, focusRing, iconBtnSx, linkSx, srOnly } from 'features/shop/storeTheme';
+import { C, FONT_URL, SANS, SERIF, Icon, container, iconBtnSx, linkSx } from 'features/shop/storeTheme';
 
 /**
  * Khung giao diện cửa hàng cho khách: thanh thông báo + header + footer kiểu thời trang tối giản.
@@ -226,6 +229,11 @@ function MegaMenu({ menu, categories, open, onClose, onEnter, onLeave }) {
   );
 }
 
+const slideIn = keyframes`
+  from { clip-path: inset(0 0 0 100%); opacity: .4; }
+  to { clip-path: inset(0 0 0 0); opacity: 1; }
+`;
+
 function StoreHeader({ categories }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -234,10 +242,21 @@ function StoreHeader({ categories }) {
   const query = pathname === '/shop/category/all' ? params.get('q') || '' : '';
   const isCustomer = account?.role === 'CUSTOMER';
   const cartCount = useCartCount(isCustomer);
-  const [searchOpen, setSearchOpen] = useState(Boolean(query));
-  const [input, setInput] = useState(query);
+  const { search } = useLocation();
+  // Thanh tìm kiếm trượt ra đè lên menu + logo; chuyển trang (tìm xong, mở sản phẩm) thì tự đóng
+  const [searchOpen, setSearchOpen] = useState(false);
+  useEffect(() => setSearchOpen(false), [pathname, search]);
+  // Bấm ra ngoài thanh tìm kiếm (và khung gợi ý) thì đóng luôn, không cần nút X
+  const searchBoxRef = useRef(null);
+  useEffect(() => {
+    if (!searchOpen) return undefined;
+    const onDown = (e) => {
+      if (!searchBoxRef.current?.contains(e.target)) setSearchOpen(false);
+    };
+    document.addEventListener('pointerdown', onDown);
+    return () => document.removeEventListener('pointerdown', onDown);
+  }, [searchOpen]);
   const [menuAnchor, setMenuAnchor] = useState(null);
-  const searchRef = useRef(null);
 
   // Menu xổ xuống (Sản phẩm / Hàng mới / Sale): mở khi rê chuột hoặc bấm, đóng khi rời chuột, nhấn Esc hoặc chuyển trang
   const [openKey, setOpenKey] = useState(null);
@@ -259,16 +278,7 @@ function StoreHeader({ categories }) {
   }, [openKey]);
   useEffect(() => () => clearTimeout(closeTimer.current), []);
 
-  useEffect(() => setInput(query), [query]);
-  useEffect(() => {
-    if (searchOpen) searchRef.current?.focus();
-  }, [searchOpen]);
 
-  const submit = (e) => {
-    e.preventDefault();
-    const text = input.trim();
-    navigate(text ? `/shop/category/all?q=${encodeURIComponent(text)}` : '/shop/category/all');
-  };
 
   const go = (to) => {
     setMenuAnchor(null);
@@ -300,8 +310,44 @@ function StoreHeader({ categories }) {
   return (
     <Box component="header" sx={{ position: 'sticky', top: 0, zIndex: 20, bgcolor: '#FFFFFF', borderBottom: `1px solid ${C.line}` }}>
       <Box
-        sx={{ ...container, py: '18px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}
+        sx={{
+          ...container,
+          position: 'relative',
+          py: '18px',
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 2
+        }}
       >
+        {searchOpen && (
+          // Trượt từ phải sang trái, che menu và logo; bấm ra ngoài, nút X hoặc Esc để đóng
+          <Box
+            ref={searchBoxRef}
+            sx={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: 5,
+              px: container.px,
+              bgcolor: '#FFFFFF',
+              display: 'flex',
+              alignItems: 'center',
+              gap: { xs: 1, sm: 2 },
+              animation: `${slideIn} .28s ease-out`,
+              '@media (prefers-reduced-motion: reduce)': { animation: 'none' }
+            }}
+          >
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <StoreSearch categories={categories} initialQuery={query} autoFocus onClose={() => setSearchOpen(false)} />
+            </Box>
+            <Box component="button" type="button" aria-label="Đóng tìm kiếm" onClick={() => setSearchOpen(false)} sx={iconBtnSx}>
+              <Icon>
+                <path d="M6 6l12 12M18 6 6 18" />
+              </Icon>
+            </Box>
+          </Box>
+        )}
         <Box
           component="nav"
           aria-label="Danh mục chính"
@@ -450,65 +496,55 @@ function StoreHeader({ categories }) {
         onLeave={leaveMega}
       />
 
-      {searchOpen && (
-        <Box sx={{ borderTop: `1px solid ${C.line}`, py: '14px' }}>
-          <Box component="form" role="search" onSubmit={submit} sx={{ ...container, display: 'flex', position: 'relative' }}>
-            <Box component="label" htmlFor="shop-search" sx={srOnly}>
-              Tìm sản phẩm
-            </Box>
-            <Box
-              component="input"
-              id="shop-search"
-              ref={searchRef}
-              type="search"
-              placeholder="Tìm sản phẩm..."
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              sx={{
-                flex: 1,
-                minWidth: 0,
-                height: 48,
-                border: `1px solid ${C.ink}`,
-                bgcolor: '#FFFFFF',
-                px: 2,
-                font: 'inherit',
-                fontSize: 15,
-                ...focusRing
-              }}
-            />
-            <Box component="button" type="submit" sx={{ ...btnSx('dark'), py: 0, height: 48, px: '28px' }}>
-              TÌM
-            </Box>
-          </Box>
-        </Box>
-      )}
     </Box>
   );
 }
 
-const footerLinkSx = { color: '#D9D6D0', textDecoration: 'none', '&:hover': { color: '#FFFFFF' }, ...focusRing };
 const footerColSx = { flex: '1 1 160px', display: 'flex', flexDirection: 'column', gap: 1.25, fontSize: 14 };
 const footerTitleSx = { color: '#FFFFFF', fontWeight: 600, mb: 0.5 };
 
-const CONTACTS = [
-  {
-    label: 'Hotline',
-    value: 'Đang cập nhật',
-    icon: <path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2" />
-  },
-  {
-    label: 'Địa chỉ',
-    value: 'Đang cập nhật',
-    icon: (
-      <>
-        <path d="M12 21s-7-6-7-11a7 7 0 0 1 14 0c0 5-7 11-7 11z" />
-        <circle cx="12" cy="10" r="2.5" />
-      </>
-    )
-  }
-];
+// Biểu tượng của các dòng liên hệ ở footer (nội dung sửa ở Kênh bán hàng > Website)
+const CONTACT_ICONS = {
+  hotline: <path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2" />,
+  email: (
+    <>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="m3 7 9 6 9-6" />
+    </>
+  ),
+  address: (
+    <>
+      <path d="M12 21s-7-6-7-11a7 7 0 0 1 14 0c0 5-7 11-7 11z" />
+      <circle cx="12" cy="10" r="2.5" />
+    </>
+  )
+};
 
-function StoreFooter({ categories }) {
+/** Thanh thông báo trên cùng. Nội dung rỗng thì ẩn. */
+export function AnnouncementBar({ text }) {
+  if (!text) return null;
+  return (
+    <Box sx={{ bgcolor: C.ink, color: '#FFFFFF', fontSize: 13, letterSpacing: '0.04em', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, textAlign: 'center', py: '11px', px: 2 }}>
+      <Icon size={18}>
+        <path d="M3 7h11v9H3z" />
+        <path d="M14 10h4l3 3v3h-7" />
+        <circle cx="7" cy="17.5" r="1.5" />
+        <circle cx="17" cy="17.5" r="1.5" />
+      </Icon>
+      {text}
+    </Box>
+  );
+}
+
+/** Footer cửa hàng. settings: thông tin website (đã gộp mặc định), xem features/website/websiteSettings.js */
+export function StoreFooter({ settings }) {
+  const about = aboutLines(settings.about);
+  const contacts = [
+    { key: 'hotline', label: 'Hotline', value: settings.hotline },
+    ...(settings.email ? [{ key: 'email', label: 'Email', value: settings.email }] : []),
+    { key: 'address', label: 'Địa chỉ', value: settings.address }
+  ];
+  const rowSx = { display: 'flex', gap: 1.25, alignItems: 'flex-start', '& svg': { flexShrink: 0, mt: '2px' } };
   return (
     <Box component="footer" sx={{ bgcolor: C.ink, color: '#D9D6D0', mt: 'auto' }}>
       <Box sx={{ ...container, pt: 9, pb: 4, display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -520,28 +556,32 @@ function StoreFooter({ categories }) {
               </Box>
               {STORE_NAME.toUpperCase()}
             </Box>
-            <Box component="p" sx={{ m: 0, fontSize: 14, lineHeight: 1.7, maxWidth: 320 }}>
-              Thời trang tối giản, chất liệu bền đẹp — giao tận nhà.
-            </Box>
-          </Box>
-          <Box component="nav" aria-label="Mua sắm" sx={footerColSx}>
-            <Box sx={footerTitleSx}>Mua sắm</Box>
-            <Box component={RouterLink} to="/shop/new-arrivals" sx={footerLinkSx}>
-              Hàng mới
-            </Box>
-            {categoryTree(categories).slice(0, 4).map((c) => (
-              <Box key={c.categoryId} component={RouterLink} to={`/shop/category/${c.categoryId}`} sx={footerLinkSx}>
-                {c.categoryName}
+            {settings.tagline && (
+              <Box component="p" sx={{ m: 0, fontSize: 14, lineHeight: 1.7, maxWidth: 320, whiteSpace: 'pre-line' }}>
+                {settings.tagline}
               </Box>
-            ))}
+            )}
           </Box>
+          {about.length > 0 && (
+            <Box sx={footerColSx}>
+              <Box sx={footerTitleSx}>Về {STORE_NAME}</Box>
+              {about.map((text, i) => (
+                <Box key={i} sx={rowSx}>
+                  <Icon size={16}>
+                    <path d="M5 12l5 5L20 7" />
+                  </Icon>
+                  <span>{text}</span>
+                </Box>
+              ))}
+            </Box>
+          )}
           <Box sx={footerColSx}>
             <Box sx={footerTitleSx}>Liên hệ</Box>
-            {CONTACTS.map((c) => (
-              <Box key={c.label} sx={{ display: 'flex', gap: 1.25, alignItems: 'flex-start', '& svg': { flexShrink: 0, mt: '2px' } }}>
-                <Icon size={16}>{c.icon}</Icon>
+            {contacts.map((c) => (
+              <Box key={c.key} sx={rowSx}>
+                <Icon size={16}>{CONTACT_ICONS[c.key]}</Icon>
                 <span>
-                  {c.label}: {c.value}
+                  {c.label}: {c.value || 'Đang cập nhật'}
                 </span>
               </Box>
             ))}
@@ -562,7 +602,7 @@ function StoreFooter({ categories }) {
           <span>
             © {new Date().getFullYear()} {STORE_NAME}
           </span>
-          <span>{STORE_NAME} luôn đồng hành cùng bạn!</span>
+          {settings.closingNote && <span>{settings.closingNote}</span>}
         </Box>
       </Box>
     </Box>
@@ -573,6 +613,8 @@ export default function StorefrontLayout() {
   useStoreFonts();
   const { pathname } = useLocation();
   const [categories, setCategories] = useState([]);
+  // Thông tin chung của website (thanh thông báo, footer) — sửa ở Kênh bán hàng > Website
+  const website = useWebsiteSettings();
   // Trang chủ và chi tiết sản phẩm tự canh lề; các trang khác (giỏ hàng, đặt hàng...) được bọc khung có lề
   const fullBleed = pathname === '/' || pathname.startsWith('/shop/');
 
@@ -599,15 +641,7 @@ export default function StorefrontLayout() {
         '& .MuiButton-root': { borderRadius: 0, boxShadow: 'none' }
       }}
     >
-      <Box sx={{ bgcolor: C.ink, color: '#FFFFFF', fontSize: 13, letterSpacing: '0.04em', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, textAlign: 'center', py: '11px', px: 2 }}>
-        <Icon size={18}>
-          <path d="M3 7h11v9H3z" />
-          <path d="M14 10h4l3 3v3h-7" />
-          <circle cx="7" cy="17.5" r="1.5" />
-          <circle cx="17" cy="17.5" r="1.5" />
-        </Icon>
-        Giao hàng toàn quốc — Thanh toán khi nhận hàng hoặc chuyển khoản
-      </Box>
+      <AnnouncementBar text={website.announcement} />
       <StoreHeader categories={categories} />
 
       <Box component="main" sx={{ flex: 1, bgcolor: fullBleed ? '#FFFFFF' : C.cream }}>
@@ -622,7 +656,7 @@ export default function StorefrontLayout() {
         </ThemeProvider>
       </Box>
 
-      <StoreFooter categories={categories} />
+      <StoreFooter settings={website} />
     </Box>
   );
 }

@@ -18,6 +18,7 @@ import UpdateProfilePage from 'features/account/pages/UpdateProfilePage';
 import ChangePasswordPage from 'features/account/pages/ChangePasswordPage';
 import FamilyListPage from 'features/account/pages/FamilyListPage';
 import FamilyFormPage from 'features/account/pages/FamilyFormPage';
+import WebsiteSettingsPage from 'features/website/WebsiteSettingsPage';
 import FamilyDetailPage from 'features/account/pages/FamilyDetailPage';
 import AccountsPage from 'features/account/pages/AccountListPage';
 import SystemLogPage from 'features/account/pages/SystemLogPage';
@@ -177,6 +178,8 @@ export default createBrowserRouter([
               { path: '/products/:productId', element: <ProductDetailPage /> },
               { path: '/products/:productId/edit', element: <EditProductPage /> },
               { path: '/returns', element: <ReturnsPage /> },
+              // Kênh bán hàng > Website: thông tin chung của website (footer, thanh thông báo)
+              { path: '/website', element: <WebsiteSettingsPage /> },
               // Promotion (của phuoc)
               { path: '/promotions/add', element: <AddPromotionPage /> },
               { path: '/promotions/:promotionId', element: <PromotionDetailPage /> },

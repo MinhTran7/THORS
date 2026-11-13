@@ -199,7 +199,17 @@ export default function ShopProductPage() {
           {data && (
             <>
               <span>/</span>
-              <span>{data.product.categoryName}</span>
+              {categoryId ? (
+                <Box
+                  component={RouterLink}
+                  to={`/shop/category/${categoryId}`}
+                  sx={{ color: brand.muted, textDecoration: 'none', '&:hover': { color: brand.ink } }}
+                >
+                  {data.product.categoryName}
+                </Box>
+              ) : (
+                <span>{data.product.categoryName}</span>
+              )}
               <span>/</span>
               <Box component="span" sx={{ color: brand.ink, fontWeight: 600 }}>
                 {data.product.productName}
@@ -277,7 +287,12 @@ export default function ShopProductPage() {
             </Box>
 
             <Box>
-              <Typography variant="caption" sx={{ color: brand.muted }}>
+              {/* Tên danh mục: bấm để về trang danh mục đó */}
+              <Typography
+                variant="caption"
+                {...(categoryId ? { component: RouterLink, to: `/shop/category/${categoryId}` } : {})}
+                sx={{ color: brand.muted, textDecoration: 'none', '&:hover': { color: categoryId ? brand.ink : brand.muted } }}
+              >
                 {data.product.categoryName}
               </Typography>
               <Typography variant="h3" sx={{ color: brand.ink }}>
