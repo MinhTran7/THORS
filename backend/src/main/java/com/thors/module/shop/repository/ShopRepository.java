@@ -21,15 +21,27 @@ public class ShopRepository {
         WHERE p.status = 'ACTIVE'
         """;
 
+    // Số lượng đã bán của sản phẩm p (đơn đã giao hoặc hoàn tất, gồm cả bán tại quầy;
+    // không tính đơn hủy, hết hạn, bị từ chối)
+    private static final String SOLD_QTY = """
+        SELECT COALESCE(SUM(oi.quantity), 0)
+        FROM order_item oi
+        JOIN product_detail d ON d.detail_id = oi.detail_id
+        JOIN orders o ON o.order_id = oi.order_id
+        WHERE d.product_id = p.product_id
+          AND o.order_status IN ('DELIVERED', 'COMPLETED')
+        """;
+
     private final JdbcTemplate jdbcTemplate;
 
     public ShopRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
     }
 
+    // parentId: danh mục cha (null = danh mục lớn), để web dựng menu danh mục lớn -> danh mục con
     public List<Map<String, Object>> findCategories() {
         return jdbcTemplate.queryForList("""
-            SELECT category_id AS categoryId, category_name AS categoryName
+            SELECT category_id AS categoryId, category_name AS categoryName, parent_id AS parentId
             FROM category
             WHERE status = 'ACTIVE'
             ORDER BY category_name
@@ -47,8 +59,14 @@ public class ShopRepository {
         String orderBy = switch (sort == null ? "" : sort) {
             case "price_asc" -> "MIN(pd.price) ASC, p.product_id DESC";
             case "price_desc" -> "MIN(pd.price) DESC, p.product_id DESC";
+            // Bán chạy: bán được nhiều nhất đứng đầu
+            case "best_selling" -> "(" + SOLD_QTY + ") DESC, p.product_id DESC";
             default -> "p.product_id DESC";
         };
+        // Bán chạy: chỉ lấy sản phẩm đã bán được ít nhất 1 cái
+        if ("best_selling".equals(sort)) {
+            filter += " AND (" + SOLD_QTY + ") > 0 ";
+        }
 
         String sql = """
             SELECT p.product_id AS productId,
@@ -86,8 +104,9 @@ public class ShopRepository {
             SELECT p.product_id AS productId,
                    p.product_name AS productName,
                    p.description AS description,
+                   p.category_id AS categoryId,
                    c.category_name AS categoryName
-            """ + FROM_WHERE + " AND p.product_id = ? GROUP BY p.product_id, p.product_name, p.description, c.category_name",
+            """ + FROM_WHERE + " AND p.product_id = ? GROUP BY p.product_id, p.product_name, p.description, p.category_id, c.category_name",
                 productId);
         return rows.isEmpty() ? null : rows.get(0);
     }
@@ -134,7 +153,17 @@ public class ShopRepository {
             args.add(like);
         }
         if (categoryId != null && categoryId > 0) {
-            sb.append(" AND p.category_id = ? ");
+            // Lấy cả sản phẩm thuộc danh mục con, cháu... (vd chọn "Giày" ra cả Giày nam, Giày cao gót)
+            sb.append("""
+                 AND p.category_id IN (
+                    WITH RECURSIVE sub AS (
+                        SELECT category_id FROM category WHERE category_id = ?
+                        UNION ALL
+                        SELECT ch.category_id FROM category ch JOIN sub ON ch.parent_id = sub.category_id
+                    )
+                    SELECT category_id FROM sub
+                 )
+                """);
             args.add(categoryId);
         }
         if (promotionId != null && promotionId > 0) {

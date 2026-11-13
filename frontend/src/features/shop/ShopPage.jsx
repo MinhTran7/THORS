@@ -21,9 +21,10 @@ const SHELF_SIZE = 8; // số sản phẩm mỗi khối Hàng bán chạy / Hàn
 /* ---------- Ảnh ---------- */
 
 // Có ảnh thì hiện ảnh, không thì hiện chữ cái đầu
-function ProductPhoto({ src, name, dark = false, zoomOnHover = false }) {
+// fit='contain': hiện trọn ảnh trong khung (ảnh ngang/dọc/vuông đều không bị cắt); 'cover': phủ kín khung
+function ProductPhoto({ src, name, dark = false, zoomOnHover = false, fit = 'cover' }) {
   return (
-    <Box sx={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center', bgcolor: dark ? '#3A1212' : C.photo }}>
+    <Box sx={{ position: 'relative', width: '100%', height: '100%', display: 'grid', placeItems: 'center', bgcolor: dark ? '#3A1212' : C.photo }}>
       {src ? (
         <Box
           component="img"
@@ -31,7 +32,8 @@ function ProductPhoto({ src, name, dark = false, zoomOnHover = false }) {
           alt={name}
           loading="lazy"
           className={zoomOnHover ? 'zoom' : undefined}
-          sx={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform .4s ease' }}
+          // absolute để ảnh luôn đúng bằng khung (ảnh dọc không bị kéo cao hơn khung)
+          sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: fit, transition: 'transform .4s ease' }}
         />
       ) : (
         <Box component="span" sx={{ fontFamily: SERIF, fontSize: 48, color: dark ? 'rgba(255,255,255,.35)' : 'rgba(17,17,17,.3)' }}>
@@ -325,7 +327,7 @@ export function ProductCard({ product, promo, sx }) {
       }}
     >
       <Box sx={{ position: 'relative', aspectRatio: '4 / 5', overflow: 'hidden' }}>
-        <ProductPhoto src={product.imageUrl} name={product.productName} zoomOnHover />
+        <ProductPhoto src={product.imageUrl} name={product.productName} zoomOnHover fit="contain" />
         {/* Góc trái: "MỚI" cho sản phẩm mới; góc phải: hết hàng hoặc % giảm giá */}
         {isNew && (
           <Box component="span" sx={badgeSx('#FFFFFF')}>

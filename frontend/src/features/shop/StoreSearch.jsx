@@ -351,9 +351,9 @@ export default function StoreSearch({ categories = [], initialQuery = '', autoFo
                     bgcolor: i === active ? '#F6F4F1' : 'transparent'
                   }}
                 >
-                  <Box sx={{ width: 64, height: 80, flexShrink: 0, bgcolor: C.photo, overflow: 'hidden', display: 'grid', placeItems: 'center' }}>
+                  <Box sx={{ position: 'relative', width: 64, height: 80, flexShrink: 0, bgcolor: C.photo, overflow: 'hidden', display: 'grid', placeItems: 'center' }}>
                     {p.imageUrl ? (
-                      <Box component="img" src={p.imageUrl} alt="" loading="lazy" sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <Box component="img" src={p.imageUrl} alt="" loading="lazy" sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' }} />
                     ) : (
                       <Box component="span" sx={{ fontSize: 24, color: '#B5AFA6' }}>
                         {p.productName?.charAt(0)}

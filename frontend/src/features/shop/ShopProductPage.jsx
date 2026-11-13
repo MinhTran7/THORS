@@ -247,7 +247,27 @@ export default function ShopProductPage() {
           >
             <Box>
               <Box sx={{ position: 'relative' }}>
-                <Photo src={data.images[imageIndex]} name={data.product.productName} sx={{ aspectRatio: '1', borderRadius: '12px' }} />
+                {/* Khung cố định 4:5, ảnh hiện trọn (contain) nên ảnh ngang, dọc hay vuông đều không bị cắt */}
+                {data.images[imageIndex] ? (
+                  <Box
+                    sx={{
+                      aspectRatio: '4 / 5',
+                      borderRadius: '12px',
+                      bgcolor: '#F5F3F0',
+                      overflow: 'hidden',
+                      position: 'relative'
+                    }}
+                  >
+                    <Box
+                      component="img"
+                      src={data.images[imageIndex]}
+                      alt={data.product.productName}
+                      sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
+                    />
+                  </Box>
+                ) : (
+                  <Photo name={data.product.productName} sx={{ aspectRatio: '4 / 5', borderRadius: '12px' }} />
+                )}
                 {isNewProduct(data.product) && (
                   <Box
                     component="span"
@@ -269,19 +289,25 @@ export default function ShopProductPage() {
                 {data.images.map((url, i) => (
                   <Box
                     key={url}
-                    component="img"
-                    src={url}
-                    alt=""
+                    component="button"
+                    type="button"
+                    aria-label={`Xem ảnh ${i + 1}`}
+                    aria-pressed={i === imageIndex}
                     onClick={() => setImageIndex(i)}
                     sx={{
                       width: 64,
-                      height: 64,
-                      objectFit: 'cover',
+                      height: 80,
+                      p: 0,
+                      bgcolor: '#F5F3F0',
                       borderRadius: '8px',
+                      overflow: 'hidden',
+                      position: 'relative',
                       cursor: 'pointer',
                       border: `2px solid ${i === imageIndex ? brand.cyan : 'transparent'}`
                     }}
-                  />
+                  >
+                    <Box component="img" src={url} alt="" sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' }} />
+                  </Box>
                 ))}
               </Box>
             </Box>
