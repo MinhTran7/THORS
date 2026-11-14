@@ -296,11 +296,9 @@ function StoreHeader({ categories }) {
 
   const menuItems = isCustomer
     ? [
+        // Đơn hàng nằm ngay trên header; thông báo xem ở chuông, khuyến mãi ở menu "Khuyến mãi"
         ['/profile', 'Tài khoản của tôi'],
-        ['/orders', 'Đơn hàng'],
-        ['/addresses', 'Địa chỉ giao hàng'],
-        ['/notifications', 'Thông báo'],
-        ['/promotions', 'Khuyến mãi']
+        ['/addresses', 'Địa chỉ giao hàng']
       ]
     : [
         ['/workspace', 'Trang quản lý'],
@@ -433,6 +431,35 @@ function StoreHeader({ categories }) {
           </Box>
 
           {isCustomer && <StoreNotificationBell />}
+
+          {/* Đơn hàng: chỉ hiện khi khách đã đăng nhập */}
+          {isCustomer && (
+            <Box
+              component={RouterLink}
+              to="/orders"
+              aria-label="Đơn hàng của tôi"
+              aria-current={pathname.startsWith('/orders') ? 'page' : undefined}
+              sx={{
+                ...linkSx,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.75,
+                height: 44,
+                px: 1,
+                fontSize: 14,
+                fontWeight: 500,
+                color: pathname.startsWith('/orders') ? C.accent : C.ink
+              }}
+            >
+              <Icon>
+                <path d="M6 3h12v18l-3-2-3 2-3-2-3 2z" />
+                <path d="M9 8h6M9 12h6M9 16h3" />
+              </Icon>
+              <Box component="span" sx={{ display: { xs: 'none', md: 'inline' } }}>
+                Đơn hàng
+              </Box>
+            </Box>
+          )}
 
           {account ? (
             <>
