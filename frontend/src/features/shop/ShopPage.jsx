@@ -17,7 +17,7 @@ import { C, SERIF, Icon, container, focusRing, h2Sx, linkSx, scrollToId, section
  * Dữ liệu: /shop/categories (lấy từ layout), /shop/products, /shop/promotions.
  */
 
-const SHELF_SIZE = 8; // số sản phẩm mỗi khối Hàng bán chạy / Hàng mới về
+const SHELF_SIZE = 8; // số sản phẩm tải mỗi lần ở khối Hàng bán chạy / Hàng mới về (kéo tới cuối thì tải tiếp)
 /* ---------- Ảnh ---------- */
 
 // Có ảnh thì hiện ảnh, không thì hiện chữ cái đầu
@@ -461,16 +461,37 @@ const shelfArrowSx = (side) => ({
 });
 
 // Một hàng sản phẩm trên trang chủ (Hàng bán chạy / Hàng mới về): 1 dòng, cuộn ngang bằng 2 nút mũi tên
-function ProductShelf({ id, title, items, promoMap, moreTo }) {
+function ProductShelf({ id, title, items: firstItems, sort, promoMap, moreTo }) {
   const trackRef = useRef(null);
   const [edge, setEdge] = useState({ left: false, right: false });
 
-  // Còn cuộn được sang trái / phải không (để làm mờ nút mũi tên tương ứng)
+  // Trang đầu do trang chủ tải sẵn; kéo (hoặc bấm mũi tên) tới gần cuối thì tải thêm trang tiếp theo
+  const [more, setMore] = useState({ items: [], page: 0, done: firstItems.length < SHELF_SIZE, loading: false });
+  useEffect(() => setMore({ items: [], page: 0, done: firstItems.length < SHELF_SIZE, loading: false }), [firstItems]);
+  const items = useMemo(() => {
+    const seen = new Set();
+    return [...firstItems, ...more.items].filter((p) => !seen.has(p.productId) && seen.add(p.productId));
+  }, [firstItems, more.items]);
+
+  const loadMore = useCallback(() => {
+    if (!sort || more.done || more.loading) return;
+    const page = more.page + 1;
+    setMore((m) => ({ ...m, loading: true }));
+    api(`/shop/products?page=${page}&size=${SHELF_SIZE}&sort=${sort}`)
+      .then((d) => {
+        const list = d.items || [];
+        setMore((m) => ({ items: [...m.items, ...list], page, done: list.length < SHELF_SIZE, loading: false }));
+      })
+      .catch(() => setMore((m) => ({ ...m, loading: false, done: true })));
+  }, [sort, more]);
+
+  // Còn cuộn được sang trái / phải không (để làm mờ nút mũi tên tương ứng); gần tới cuối thì tải thêm
   const updateEdge = useCallback(() => {
     const el = trackRef.current;
     if (!el) return;
     setEdge({ left: el.scrollLeft > 4, right: el.scrollLeft + el.clientWidth < el.scrollWidth - 4 });
-  }, []);
+    if (el.scrollLeft + el.clientWidth * 2 >= el.scrollWidth) loadMore();
+  }, [loadMore]);
 
   useEffect(() => {
     updateEdge();
@@ -534,11 +555,41 @@ function ProductShelf({ id, title, items, promoMap, moreTo }) {
               }}
             />
           ))}
+          {/* Đang tải thêm */}
+          {more.loading && (
+            <Box sx={{ ...shelfTileSx, color: C.muted, fontSize: 14 }} aria-live="polite">
+              Đang tải thêm…
+            </Box>
+          )}
+          {/* Hết sản phẩm: ô cuối dẫn sang trang xem tất cả */}
+          {more.done && moreTo && (
+            <Box component={RouterLink} to={moreTo} sx={{ ...shelfTileSx, ...linkSx, gap: 1.5, flexDirection: 'column', fontWeight: 600 }}>
+              <Box component="span" sx={{ width: 56, height: 56, borderRadius: '50%', border: `1px solid ${C.ink}`, display: 'grid', placeItems: 'center' }}>
+                <Icon size={20}>
+                  <path d="M5 12h14M13 6l6 6-6 6" />
+                </Icon>
+              </Box>
+              Xem tất cả
+            </Box>
+          )}
         </Box>
       </Box>
     </Box>
   );
 }
+
+// Ô cuối hàng (đang tải / xem tất cả): cùng bề rộng và chiều cao ảnh với thẻ sản phẩm
+const shelfTileSx = {
+  flex: { xs: '0 0 calc((100% - 12px) / 2)', sm: '0 0 calc((100% - 40px) / 3)', md: '0 0 calc((100% - 60px) / 4)' },
+  aspectRatio: '4 / 5',
+  alignSelf: 'flex-start',
+  bgcolor: C.photo,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  textAlign: 'center',
+  scrollSnapAlign: 'start'
+};
 
 export default function ShopPage() {
   const auth = useAuth();
@@ -600,8 +651,8 @@ export default function ShopPage() {
     <>
       <ShopBanner voucher={voucher} />
       <Categories categories={categories} onPick={pickCategory} />
-      <ProductShelf id="ban-chay" title="Hàng bán chạy" items={bestSellers} promoMap={promoMap} moreTo="/shop/best-sellers" />
-      <ProductShelf id="moi" title="Hàng mới về" items={newest} promoMap={promoMap} moreTo="/shop/new-arrivals" />
+      <ProductShelf id="ban-chay" title="Hàng bán chạy" items={bestSellers} sort="best_selling" promoMap={promoMap} moreTo="/shop/best-sellers" />
+      <ProductShelf id="moi" title="Hàng mới về" items={newest} sort="newest" promoMap={promoMap} moreTo="/shop/new-arrivals" />
       <Benefits />
 
       {account?.role === 'CUSTOMER' && <PendingCartHandler />}
