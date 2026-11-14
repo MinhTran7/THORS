@@ -8,6 +8,7 @@ import { useCrumbs } from 'layouts/crumbs';
 import { api, post } from 'services/http';
 import { Photo, isNewProduct, money, priceText } from './ShopCommon';
 import PendingCartHandler from './PendingCartHandler';
+import ShopProductDescription from './ShopProductDescription';
 import { savePending } from './pendingCart';
 import { C, SERIF } from './storeTheme';
 import { ProductCard } from './ShopPage';
@@ -420,19 +421,8 @@ export default function ShopProductPage() {
           </Box>
         )}
 
-        {/* Mô tả sản phẩm: nằm dưới khung thông tin chung */}
-        {data?.product.description && (
-          <Box component="section" sx={{ mt: { xs: 4, md: 6 } }}>
-            <Typography component="h2" sx={{ fontFamily: SERIF, fontWeight: 400, fontSize: { xs: 26, md: 32 }, color: C.ink, mb: 2 }}>
-              Mô tả sản phẩm
-            </Typography>
-            <Box sx={{ borderTop: `1px solid ${C.line}`, pt: 3 }}>
-              <Typography sx={{ fontSize: 16, lineHeight: 1.8, color: '#3F3A34', whiteSpace: 'pre-line', maxWidth: 820 }}>
-                {data.product.description}
-              </Typography>
-            </Box>
-          </Box>
-        )}
+        {/* Mô tả sản phẩm: nằm dưới khung thông tin chung (Mô tả, Chất liệu & kiểu dáng, Bảo quản, Đổi trả) */}
+        {data?.product.description && <ShopProductDescription description={data.product.description} />}
 
         {/* Gợi ý sản phẩm cùng danh mục */}
         {related.length > 0 && (
