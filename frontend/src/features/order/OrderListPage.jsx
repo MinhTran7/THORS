@@ -42,6 +42,7 @@ import { StatusPill } from 'features/account/components/Chips';
 import { bodyCellSx, EmptyRow, headCellSx, PageHeader, Pager, SearchField, Toolbar } from 'features/account/components/Blocks';
 import { LIVE_SWR, ordersApi, refreshAllOrders } from './api';
 import { CUSTOMER_ACTIONS, OWNER_ACTIONS, ownerActionSlots } from './orderActions';
+import { DeliveryProofDialog, useDeliveryProofRequired } from './components/DeliveryProof';
 import AddressNotFoundDialog, { ADDRESS_NOT_FOUND, INVALID_ADDRESS_REASON } from './AddressNotFoundDialog';
 import DeliveryChoice from './DeliveryChoice';
 import { ghnReady } from './GhnAddressFields';
@@ -339,7 +340,10 @@ export default function OrderListPage() {
   const [ghn, setGhn] = useState(null); // { provinceId, districtId, wardCode, weightG } khi gửi GHN
   const [addressBlocked, setAddressBlocked] = useState(false); // không tìm thấy địa chỉ giao -> không bàn giao
   const [addressAlert, setAddressAlert] = useState(null); // { order, message } khi backend báo không tìm thấy địa chỉ
-  const isOwner = account.role === 'OWNER';
+  // Người nhà xử lý đơn như chủ shop nên dùng chung màn hình
+  const isOwner = ['OWNER', 'FAMILY_MEMBER'].includes(account.role);
+  const [proofOrder, setProofOrder] = useState(null); // đơn đang chờ chụp ảnh minh chứng giao hàng
+  const proofRequired = useDeliveryProofRequired(isOwner);
   const search = useDebounced(q.trim());
 
   const filter = (setter) => (value) => {
@@ -418,7 +422,9 @@ export default function OrderListPage() {
 
   const startAction = (order, action) => {
     setRowError('');
-    if (action.askReason || action.askCarrier) {
+    if (action.askProof && proofRequired) {
+      setProofOrder(order);
+    } else if (action.askReason || action.askCarrier) {
       setReasonChoice('');
       setCustomReason('');
       setCarrier('SELF');
@@ -557,6 +563,7 @@ export default function OrderListPage() {
       onClose={() => setAddressAlert(null)}
       onReject={addressAlert?.order.orderStatus === 'PENDING_CONFIRMATION' ? rejectForInvalidAddress : undefined}
     />
+    <DeliveryProofDialog order={proofOrder} onClose={() => setProofOrder(null)} onDone={refresh} />
     </>
   );
 

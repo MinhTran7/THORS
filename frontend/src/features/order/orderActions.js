@@ -9,7 +9,8 @@ export const OWNER_ACTIONS = {
     { to: 'REJECTED', label: 'Từ chối đơn', askReason: true }
   ],
   AWAITING_PICKUP: [{ to: 'SHIPPING', label: 'Giao hàng', primary: true, askCarrier: true }],
-  SHIPPING: [{ to: 'DELIVERED', label: 'Xác nhận đã giao', primary: true }]
+  // askProof: phải chụp ảnh lúc giao làm minh chứng (khi database đã bật tính năng này)
+  SHIPPING: [{ to: 'DELIVERED', label: 'Xác nhận đã giao', primary: true, askProof: true }]
 };
 
 // Hãng giao tự báo trạng thái về hệ thống: khi đã tạo vận đơn, đơn tự chuyển "Đang giao" lúc hãng lấy
@@ -46,13 +47,13 @@ export const CUSTOMER_ACTIONS = {
   DELIVERED: [{ to: 'COMPLETED', label: 'Đã nhận hàng', primary: true }]
 };
 
-// Hình thức giao: địa chỉ gần thì cửa hàng tự giao, địa chỉ xa mới cần đơn vị vận chuyển
+// Hình thức giao: địa chỉ gần thì cửa hàng tự giao, địa chỉ xa thì gửi GHN (hãng duy nhất đã kết nối API)
 export const CARRIERS = [
   { value: 'SELF', label: 'Cửa hàng tự giao' },
-  { value: 'GHN', label: 'Giao Hàng Nhanh' },
-  { value: 'GHTK', label: 'Giao Hàng Tiết Kiệm' },
-  { value: 'VIETTEL_POST', label: 'Viettel Post' },
-  { value: 'JT', label: 'J&T Express' }
+  { value: 'GHN', label: 'Giao Hàng Nhanh' }
 ];
 
-export const carrierLabel = (code) => CARRIERS.find((c) => c.value === code)?.label ?? code;
+// Hãng không còn chọn được nhưng có thể đã nằm trong đơn cũ, giữ tên để vẫn hiển thị đúng
+const OLD_CARRIER_LABELS = { GHTK: 'Giao Hàng Tiết Kiệm', VIETTEL_POST: 'Viettel Post', JT: 'J&T Express' };
+
+export const carrierLabel = (code) => CARRIERS.find((c) => c.value === code)?.label ?? OLD_CARRIER_LABELS[code] ?? code;

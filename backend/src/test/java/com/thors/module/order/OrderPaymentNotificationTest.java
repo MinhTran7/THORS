@@ -52,6 +52,10 @@ class OrderPaymentNotificationTest {
         verify(notifications)
                 .toRole(eq("OWNER"), eq(NotificationTypes.ORDER_STATUS), eq("Có đơn hàng online mới"), anyString(),
                         eq(NotificationTypes.ENTITY_ORDER), eq(10));
+        // Người nhà xử lý đơn như chủ shop nên cũng được báo
+        verify(notifications)
+                .toRole(eq("FAMILY_MEMBER"), eq(NotificationTypes.ORDER_STATUS), eq("Có đơn hàng online mới"), anyString(),
+                        eq(NotificationTypes.ENTITY_ORDER), eq(10));
     }
 
     @Test

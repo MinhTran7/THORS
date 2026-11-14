@@ -1,19 +1,24 @@
 package com.thors.module.order.controller;
 
+import com.thors.module.order.service.DeliveryProofService;
 import com.thors.module.order.service.OrderService;
 import com.thors.security.SessionAccess;
 import java.time.LocalDate;
+import java.util.List;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/orders")
 public class OrderController {
     private final OrderService service;
+    private final DeliveryProofService deliveryProofs;
     private final SessionAccess sessions;
 
-    public OrderController(OrderService service, SessionAccess sessions) {
+    public OrderController(OrderService service, DeliveryProofService deliveryProofs, SessionAccess sessions) {
         this.service = service;
+        this.deliveryProofs = deliveryProofs;
         this.sessions = sessions;
     }
 
@@ -52,7 +57,7 @@ public class OrderController {
     }
 
     /**
-     * POST /api/orders/{id}/status?status=SHIPPING&carrier=SELF|GHN|GHTK|VIETTEL_POST|JT&reason=&weightG=
+     * POST /api/orders/{id}/status?status=SHIPPING&carrier=SELF|GHN&reason=&weightG=
      *     &ghnDistrictId=&ghnWardCode=
      * (khi gửi GHN: cân nặng gram, bỏ trống = mặc định; Quận-Huyện / Phường-Xã theo GHN Owner chọn)
      */
@@ -65,7 +70,34 @@ public class OrderController {
             @RequestParam(required = false) Integer weightG,
             @RequestParam(required = false) Integer ghnDistrictId,
             @RequestParam(required = false) String ghnWardCode) {
+        // Đã bắt buộc minh chứng thì "Đã giao" phải đi qua POST /{id}/delivered kèm ảnh
+        deliveryProofs.guardStatusChange(status);
         return service.changeStatus(
                 sessions.current(), id, status, reason, carrier, weightG, ghnDistrictId, ghnWardCode);
+    }
+
+    /** GET /api/orders/delivery-proof/required: có bắt buộc ảnh khi xác nhận đã giao không (true/false) */
+    @GetMapping("/delivery-proof/required")
+    Object deliveryProofRequired() {
+        sessions.current();
+        return java.util.Map.of("required", deliveryProofs.required());
+    }
+
+    /** GET /api/orders/{id}/delivery-proof: { required, proof: { imageUrls, note, createdAt, createdByName } | null } */
+    @GetMapping("/{id}/delivery-proof")
+    Object deliveryProof(@PathVariable int id) {
+        return deliveryProofs.view(sessions.current(), id);
+    }
+
+    /**
+     * POST /api/orders/{id}/delivered (multipart): images = 1–3 ảnh JPG/PNG lúc giao, note = ghi chú tùy
+     * chọn. Owner xác nhận đã giao kèm minh chứng.
+     */
+    @PostMapping(value = "/{id}/delivered", consumes = "multipart/form-data")
+    Object confirmDelivered(
+            @PathVariable int id,
+            @RequestPart(value = "images", required = false) List<MultipartFile> images,
+            @RequestParam(required = false) String note) {
+        return deliveryProofs.confirmDelivered(sessions.current(), id, images, note);
     }
 }
