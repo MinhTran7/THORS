@@ -7,6 +7,7 @@ import { STORE_NAME } from 'features/account/constants';
 import { api } from 'services/http';
 import StoreNotificationBell from 'features/notification/StoreNotificationBell';
 import { ThorsLogo } from 'features/auth/components/ShopAuthArt';
+import ImageSearchButton from 'features/imagesearch/ImageSearchButton';
 import { C, FONT_URL, SANS, SERIF, Icon, btnSx, container, focusRing, iconBtnSx, linkSx, srOnly } from 'features/shop/storeTheme';
 
 /**
@@ -327,6 +328,7 @@ function StoreHeader({ categories }) {
               <path d="M20 20l-4-4" />
             </Icon>
           </Box>
+          <ImageSearchButton />
 
           {isCustomer && <StoreNotificationBell />}
 
@@ -418,6 +420,7 @@ function StoreHeader({ categories }) {
                 ...focusRing
               }}
             />
+            <ImageSearchButton variant="text" sx={{ height: 48, border: `1px solid ${C.ink}`, borderLeft: 0, display: { xs: 'none', sm: 'flex' } }} />
             <Box component="button" type="submit" sx={{ ...btnSx('dark'), py: 0, height: 48, px: '28px' }}>
               TÌM
             </Box>
