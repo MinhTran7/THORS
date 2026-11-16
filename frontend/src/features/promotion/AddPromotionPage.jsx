@@ -3,32 +3,38 @@ import { useNavigate } from 'react-router-dom';
 import { createPromotion } from 'services/promotionService';
 import { getProducts } from 'services/productService';
 import { useCrumbs } from '../../layouts/crumbs';
-import PromotionForm, { emptyPromotion, isOnline, productRows } from './PromotionForm';
+import PromotionForm, { emptyPromotion, isActive, KIND, productRows } from './PromotionForm';
 
-export default function AddPromotionPage() {
+export default function AddPromotionPage({ kind = 'PRODUCT' }) {
   const navigate = useNavigate();
-  useCrumbs(['Khuyến mãi', 'Thêm khuyến mãi']);
+  const { base, title, name } = KIND[kind];
+  useCrumbs([title, `Thêm ${name}`]);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (kind !== 'PRODUCT') {
+      setLoading(false);
+      return;
+    }
     getProducts()
-      .then((res) => setProducts(productRows(res).filter(isOnline)))
+      .then((res) => setProducts(productRows(res).filter(isActive)))
       .catch(() => setProducts([]))
       .finally(() => setLoading(false));
-  }, []);
+  }, [kind]);
 
   return (
     <PromotionForm
-      title="Thêm khuyến mãi"
+      kind={kind}
+      title={`Thêm ${name}`}
       initial={emptyPromotion}
       products={products}
       productsLoading={loading}
-      submitLabel="Tạo khuyến mãi"
-      onCancel={() => navigate('/promotions')}
+      submitLabel={`Tạo ${name}`}
+      onCancel={() => navigate(base)}
       onSubmit={async (data) => {
         await createPromotion(data);
-        navigate('/promotions', { state: { successMessage: 'Tạo khuyến mãi thành công.' } });
+        navigate(base, { state: { successMessage: `Tạo ${name} thành công.` } });
       }}
     />
   );

@@ -43,9 +43,7 @@ const C = {
 };
 
 function isCashMethod(method) {
-  if (!method) return true;
-  const m = String(method).toUpperCase();
-  return m === 'CASH' || m.includes('TIEN_MAT') || m.includes('TIỀN MẶT');
+  return !method || method === 'CASH';
 }
 
 const money = (value) => `${Number(value || 0).toLocaleString('vi-VN')} đ`;
@@ -71,12 +69,6 @@ export default function InStoreSaleDetailPage() {
     orderId ? `/sales/in-store/${orderId}` : null,
     () => api(`/sales/in-store/${orderId}`)
   );
-
-  // Lấy danh mục sản phẩm từ hệ thống để làm fallback hình ảnh nếu đơn cũ chưa lưu image_url
-  const { data: productsData } = useSWR('/products', () => api('/products'), {
-    revalidateOnFocus: false
-  });
-  const productList = productsData?.data || (Array.isArray(productsData) ? productsData : []);
 
   const isCash = isCashMethod(data?.paymentMethod);
   const { date, time } = formatDetailDate(data?.orderDate);
@@ -310,19 +302,7 @@ export default function InStoreSaleDetailPage() {
                 if (item.size) variantParts.push(`Size ${item.size}`);
                 const variantText = variantParts.length > 0 ? variantParts.join(' · ') : 'Mặc định';
 
-                // Tìm hình ảnh sản phẩm từ item hoặc từ danh mục products
-                const foundProduct = productList.find(
-                  (p) =>
-                    p.productName === item.productName ||
-                    (item.detailId && p.variants?.some((v) => v.detailId === item.detailId))
-                );
-                const resolvedImage =
-                  item.imageUrl ||
-                  foundProduct?.primaryImageUrl ||
-                  foundProduct?.imageUrl ||
-                  foundProduct?.thumbnailUrl ||
-                  foundProduct?.images?.[0]?.imageUrl ||
-                  '';
+                const resolvedImage = item.imageUrl || '';
 
                 return (
                   <TableRow

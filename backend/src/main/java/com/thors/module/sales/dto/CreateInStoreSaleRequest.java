@@ -6,12 +6,11 @@ import java.util.List;
 public record CreateInStoreSaleRequest(
         List<ItemRequest> items,
         BigDecimal discountAmount,
-        String paymentMethod,
-        String customerName
+        String paymentMethod
 ) {
     public record ItemRequest(
             Integer detailId,
             Integer quantity
     ) {
     }
-}
+}

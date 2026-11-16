@@ -121,9 +121,12 @@ export default createBrowserRouter([
             element: <RequireAuth roles={['CUSTOMER', 'OWNER', 'FAMILY_MEMBER']} />,
             children: [
               { path: '/orders', element: <OrderListPage /> },
-              { path: '/orders/:id', element: <OrderDetailPage /> },
-              { path: '/promotions', element: <PromotionPage /> }
+              { path: '/orders/:id', element: <OrderDetailPage /> }
             ]
+          },
+          {
+            element: <RequireAuth roles={['CUSTOMER', 'OWNER']} />,
+            children: [{ path: '/promotions', element: <PromotionPage /> }]
           },
           {
             // Quản lý địa chỉ giao hàng của Customer
@@ -178,7 +181,11 @@ export default createBrowserRouter([
               // Promotion (của phuoc)
               { path: '/promotions/add', element: <AddPromotionPage /> },
               { path: '/promotions/:promotionId', element: <PromotionDetailPage /> },
-              { path: '/promotions/:promotionId/edit', element: <EditPromotionPage /> }
+              { path: '/promotions/:promotionId/edit', element: <EditPromotionPage /> },
+              { path: '/order-discounts', element: <PromotionPage kind="ORDER" /> },
+              { path: '/order-discounts/add', element: <AddPromotionPage kind="ORDER" /> },
+              { path: '/order-discounts/:promotionId', element: <PromotionDetailPage kind="ORDER" /> },
+              { path: '/order-discounts/:promotionId/edit', element: <EditPromotionPage kind="ORDER" /> }
             ]
           }
         ]
@@ -196,4 +203,4 @@ export default createBrowserRouter([
       </AuthShell>
     )
   }
-]);
+]);

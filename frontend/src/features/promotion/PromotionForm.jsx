@@ -5,12 +5,13 @@ import {
   Button,
   Checkbox,
   CircularProgress,
-  FormControlLabel,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   InputAdornment,
   ListSubheader,
   MenuItem,
-  Radio,
-  RadioGroup,
   Snackbar,
   TextField,
   Typography
@@ -65,8 +66,43 @@ export const emptyPromotion = {
   productIds: []
 };
 
+// Hai loại: khuyến mãi sản phẩm và giảm giá đơn hàng
+export const kindOf = (p) => (Number(p?.minOrderValue) > 0 ? 'ORDER' : 'PRODUCT');
+export const KIND = {
+  PRODUCT: { base: '/promotions', title: 'Khuyến mãi sản phẩm', name: 'khuyến mãi sản phẩm' },
+  ORDER: { base: '/order-discounts', title: 'Giảm giá đơn hàng', name: 'giảm giá đơn hàng' }
+};
+
+// Lý do không sửa được: đang diễn ra hoặc đã kết thúc
+export const lockMessage = (p) => {
+  const now = new Date();
+  if (new Date(p.endDate) <= now) return 'Khuyến mãi đã kết thúc nên không thể chỉnh sửa hay bật lại.';
+  if (new Date(p.startDate) <= now) return 'Khuyến mãi đang diễn ra nên không thể chỉnh sửa.';
+  return '';
+};
+
+export function NoticeDialog({ message, onClose }) {
+  return (
+    <Dialog open={Boolean(message)} onClose={onClose} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 3.5, border: `1px solid ${C.border}`, p: 1 } }}>
+      <DialogTitle sx={{ color: C.text, fontWeight: 700, fontSize: 17, pb: 1 }}>Không thể thực hiện</DialogTitle>
+      <DialogContent>
+        <Typography sx={{ fontSize: 13.5, color: C.muted, lineHeight: 1.6 }}>{message}</Typography>
+      </DialogContent>
+      <DialogActions sx={{ p: 2, pt: 1 }}>
+        <Button
+          variant="contained"
+          onClick={onClose}
+          sx={{ bgcolor: '#8EECF5', color: C.text, boxShadow: 'none', textTransform: 'none', fontWeight: 700, borderRadius: 2, '&:hover': { bgcolor: '#76E5EF', boxShadow: 'none' } }}
+        >
+          Đã hiểu
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 export const productRows = (res) => (Array.isArray(res) ? res : res?.content ?? res?.data ?? []);
-export const isOnline = (p) => p.status === 'ACTIVE' && Number(p.onlineVariantCount || 0) > 0;
+export const isActive = (p) => p.status === 'ACTIVE';
 
 const money = (value) => `${Number(value || 0).toLocaleString('vi-VN')} đ`;
 const getProductId = (product) => Number(product.productId ?? product.id);
@@ -83,7 +119,6 @@ const desktop = { display: { xs: 'none', md: 'block' } };
 
 
 const fromPromotion = (p) => ({
-  kind: Number(p.minOrderValue) > 0 ? 'ORDER' : 'PRODUCT',
   name: p.name,
   description: p.description,
   discountType: p.discountType,
@@ -105,7 +140,7 @@ const nowInput = () => {
 
 const dateText = (value) => new Date(value).toLocaleDateString('vi-VN');
 
-function validate(form, minStart, originalStart, locked) {
+function validate(form, minStart, originalStart) {
   const errors = {};
   if (!form.name.trim()) errors.name = 'Vui lòng nhập tên chương trình.';
   const value = Number(form.discountValue);
@@ -116,7 +151,6 @@ function validate(form, minStart, originalStart, locked) {
   else if (form.startDate !== originalStart && form.startDate < minStart) errors.startDate = 'Thời gian bắt đầu phải từ hiện tại trở đi.';
   if (!form.endDate) errors.endDate = 'Vui lòng chọn thời gian kết thúc.';
   else if (form.startDate && end <= start) errors.endDate = 'Thời gian kết thúc phải sau thời gian bắt đầu.';
-  else if (locked && end <= new Date()) errors.endDate = 'Thời gian kết thúc phải sau thời điểm hiện tại.';
   if (!form.discountValue) errors.discountValue = 'Vui lòng nhập mức giảm.';
   else if (!(value > 0)) errors.discountValue = 'Mức giảm phải lớn hơn 0.';
   else if (form.discountType === 'PERCENT' && value > 100) errors.discountValue = 'Mức giảm theo phần trăm tối đa là 100%.';
@@ -131,12 +165,12 @@ function validate(form, minStart, originalStart, locked) {
   return errors;
 }
 
-function Section({ title, description, locked, children }) {
+function Section({ title, description, children }) {
   return (
     <Box sx={{ '& + &': { borderTop: `1px solid ${C.border}`, pt: 3, mt: 3 } }}>
       <Typography sx={{ fontSize: 16, fontWeight: 800, color: C.text }}>{title}</Typography>
       {description && <Typography sx={{ fontSize: 12.5, color: C.muted, mt: 0.25 }}>{description}</Typography>}
-      <Box component="fieldset" disabled={locked} sx={{ border: 0, p: 0, m: 0, mt: 2, minWidth: 0, ...(locked && { opacity: 0.55, pointerEvents: 'none' }) }}>
+      <Box sx={{ mt: 2, minWidth: 0 }}>
         {children}
       </Box>
     </Box>
@@ -427,8 +461,8 @@ function ProductPicker({ products, loading, all, selected, busy, onChange }) {
   );
 }
 
-export default function PromotionForm({ title, promotionId, initial, products, productsLoading, submitLabel, locked, onSubmit, onCancel }) {
-  const [form, setForm] = useState(() => fromPromotion(initial));
+export default function PromotionForm({ kind, title, promotionId, initial, products, productsLoading, submitLabel, onSubmit, onCancel }) {
+  const [form, setForm] = useState(() => ({ ...fromPromotion(initial), kind }));
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -436,10 +470,11 @@ export default function PromotionForm({ title, promotionId, initial, products, p
   const [others, setOthers] = useState([]);
 
   useEffect(() => {
+    if (kind !== 'PRODUCT') return;
     getActiveProductPromotions(promotionId)
       .then(setOthers)
       .catch(() => setOthers([]));
-  }, [promotionId]);
+  }, [promotionId, kind]);
 
   const set = (patch) => {
     setForm((prev) => ({ ...prev, ...patch }));
@@ -463,7 +498,7 @@ export default function PromotionForm({ title, promotionId, initial, products, p
   const conflictError = conflicts.length
     ? `“${getProductName(products.find((p) => getProductId(p) === conflicts[0]) || {})}”${conflicts.length > 1 ? ` và ${conflicts.length - 1} sản phẩm khác` : ''} đang thuộc khuyến mãi “${busy[conflicts[0]].name}” (${dateText(busy[conflicts[0]].startDate)} – ${dateText(busy[conflicts[0]].endDate)}).`
     : '';
-  const check = () => ({ ...validate(form, minStart, initial.startDate, locked), ...(!locked && form.kind === 'PRODUCT' && conflictError && { productIds: conflictError }) });
+  const check = () => ({ ...validate(form, minStart, initial.startDate), ...(form.kind === 'PRODUCT' && conflictError && { productIds: conflictError }) });
   const errors = submitted ? check() : {};
 
   const formRef = useRef(null);
@@ -502,12 +537,6 @@ export default function PromotionForm({ title, promotionId, initial, products, p
     <Box component="form" ref={formRef} noValidate onSubmit={handleSubmit} sx={{ color: C.text, pb: 4 }}>
       <Typography sx={{ mb: 3, fontSize: { xs: 22, sm: 28 }, fontWeight: 800 }}>{title}</Typography>
 
-      {locked && (
-        <Alert severity="warning" sx={{ mb: 2.5, borderRadius: 2.5, fontSize: 13.5 }}>
-          Khuyến mãi đang diễn ra nên chỉ sửa được tên, mô tả, thời gian kết thúc và giới hạn lượt dùng. Muốn đổi mức giảm hoặc sản phẩm, hãy tắt khuyến mãi này rồi tạo khuyến mãi mới.
-        </Alert>
-      )}
-
       <Snackbar open={Boolean(error)} autoHideDuration={5000} onClose={() => setError('')} anchorOrigin={{ vertical: 'top', horizontal: 'right' }} sx={{ mt: 7 }}>
         <Alert severity="error" onClose={() => setError('')} sx={{ bgcolor: '#FFFFFF', border: `1px solid ${C.border}`, borderLeft: '5px solid #EF4444', fontWeight: 600, fontSize: 13 }}>
           {error}
@@ -541,7 +570,6 @@ export default function PromotionForm({ title, promotionId, initial, products, p
               label="Bắt đầu"
               type="datetime-local"
               value={form.startDate}
-              disabled={locked}
               onChange={(e) => set({ startDate: e.target.value })}
               error={Boolean(errors.startDate)}
               helperText={errors.startDate}
@@ -561,29 +589,7 @@ export default function PromotionForm({ title, promotionId, initial, products, p
           </Box>
         </Section>
 
-        <Section title="Loại giảm giá" locked={locked}>
-          <RadioGroup value={form.kind} onChange={(e) => set({ kind: e.target.value })} sx={{ gap: 1.5 }}>
-            {[
-              ['PRODUCT', 'Giảm giá sản phẩm', 'Cho sản phẩm được chọn hoặc toàn bộ cửa hàng'],
-              ['ORDER', 'Giảm theo đơn hàng', 'Khi tổng tiền đơn đạt mức tối thiểu']
-            ].map(([value, label, hint]) => (
-              <FormControlLabel
-                key={value}
-                value={value}
-                control={<Radio disableRipple sx={{ '&:hover': { bgcolor: 'transparent' }, '&.Mui-checked': { color: C.check } }} />}
-                label={
-                  <Box>
-                    <Typography sx={{ fontSize: 14, fontWeight: 700, color: C.text }}>{label}</Typography>
-                    <Typography sx={{ fontSize: 12.5, color: C.muted }}>{hint}</Typography>
-                  </Box>
-                }
-                sx={{ m: 0, alignItems: 'flex-start', '& .MuiRadio-root': { mt: -0.5 } }}
-              />
-            ))}
-          </RadioGroup>
-        </Section>
-
-        <Section title="Mức giảm" locked={locked}>
+        <Section title="Mức giảm">
           <Segmented
             value={form.discountType}
             options={[
@@ -633,7 +639,7 @@ export default function PromotionForm({ title, promotionId, initial, products, p
         )}
 
         {form.kind === 'PRODUCT' && (
-          <Section title="Sản phẩm được giảm" description="Chọn sản phẩm được giảm, tick “Chọn tất cả” để áp dụng cho toàn bộ cửa hàng." locked={locked}>
+          <Section title="Sản phẩm được giảm" description="Chọn sản phẩm được giảm, tick “Chọn tất cả” để áp dụng cho toàn bộ cửa hàng.">
             <ProductPicker
               products={products}
               loading={productsLoading}

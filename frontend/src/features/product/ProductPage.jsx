@@ -29,7 +29,7 @@ import {
   Typography,
   MenuItem
 } from '@mui/material';
-import { Pager } from 'features/account/components/Blocks';
+import { FilterResetButton, Pager } from 'features/account/components/Blocks';
 
 import {
   EditOutlined,
@@ -49,18 +49,15 @@ import ProductExcelDialog from './ProductExcelDialog';
 const C = {
   text: '#1E293B',
   muted: '#64748B',
-  subtle: '#94A3B8',
   border: '#E2E8F0',
   borderLight: '#F1F5F9',
-  bg: '#F8FAFC',
   surface: '#FFFFFF',
   cyan: '#8EECF5',
   cyanHover: '#76E5EF',
   cyanText: '#0E7490',
   cream: '#FFF7AE',
   creamHover: '#FFF294',
-  creamText: '#713F12',
-  error: '#EF4444'
+  creamText: '#713F12'
 };
 
 const PAGE_SIZE = 8;
@@ -654,16 +651,7 @@ export default function ProductPage() {
           </Select>
         </Box>
 
-        {/* Nút Bỏ lọc */}
-        <Box sx={{ minWidth: 0, display: 'flex' }}>
-          <Button
-            onClick={clearFilters}
-            disabled={busy}
-            sx={{ ...outlineButtonSx, height: 44, px: 2, fontSize: 13, whiteSpace: 'nowrap', bgcolor: C.surface }}
-          >
-            Bỏ lọc
-          </Button>
-        </Box>
+        <FilterResetButton onClick={clearFilters} disabled={busy} />
       </Box>
 
       {/* ─── KHỐI BẢNG DANH SÁCH SẢN PHẨM ─── */}

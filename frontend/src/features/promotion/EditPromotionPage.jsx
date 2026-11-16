@@ -4,7 +4,9 @@ import { Alert, Box, CircularProgress } from '@mui/material';
 import { getPromotionById, updatePromotion } from 'services/promotionService';
 import { getProducts } from 'services/productService';
 import { useCrumbs } from '../../layouts/crumbs';
-import PromotionForm, { isOnline, productRows } from './PromotionForm';
+import PromotionForm, { isActive, KIND, kindOf, productRows } from './PromotionForm';
+
+const idOf = (p) => Number(p.productId ?? p.id);
 
 const toLocal = (value) => {
   const date = new Date(value);
@@ -13,22 +15,35 @@ const toLocal = (value) => {
   return date.toISOString().slice(0, 16);
 };
 
-export default function EditPromotionPage() {
+export default function EditPromotionPage({ kind = 'PRODUCT' }) {
   const navigate = useNavigate();
   const { promotionId } = useParams();
-  useCrumbs(['Khuyến mãi', 'Chỉnh sửa khuyến mãi']);
+  const { base, title, name } = KIND[kind];
+  useCrumbs([title, `Chỉnh sửa ${name}`]);
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    Promise.all([getPromotionById(promotionId), getProducts()])
+    Promise.all([getPromotionById(promotionId), kind === 'PRODUCT' ? getProducts() : []])
       .then(([res, productRes]) => {
         const promotion = res?.data?.data ?? res?.data ?? res;
         if (!promotion?.promotionId) throw new Error('Không tìm thấy thông tin khuyến mãi.');
-        const productIds = (promotion.productIds || []).map(Number);
-        const now = new Date();
+        if (kindOf(promotion) !== kind) {
+          navigate(`${KIND[kindOf(promotion)].base}/${promotionId}/edit`, { replace: true });
+          return;
+        }
+        // Chỉ sửa được khuyến mãi sắp diễn ra
+        if (new Date(promotion.startDate) <= new Date()) {
+          navigate(`${base}/${promotionId}`, { replace: true });
+          return;
+        }
+        // Bỏ sản phẩm đã ngừng bán khỏi danh sách đã chọn
+        const rows = productRows(productRes);
+        const activeIds = new Set(rows.filter(isActive).map(idOf));
+        const oldIds = (promotion.productIds || []).map(Number);
+        const productIds = oldIds.filter((id) => activeIds.has(id));
+        const removedNames = rows.filter((p) => oldIds.includes(idOf(p)) && !activeIds.has(idOf(p))).map((p) => p.productName || p.name);
         setData({
-          locked: promotion.status === 'ACTIVE' && new Date(promotion.startDate) <= now && now < new Date(promotion.endDate),
           initial: {
             name: promotion.name || '',
             description: promotion.description || '',
@@ -42,11 +57,13 @@ export default function EditPromotionPage() {
             applyScope: promotion.applyScope || 'ALL',
             productIds
           },
-          products: productRows(productRes).filter((p) => isOnline(p) || productIds.includes(Number(p.productId ?? p.id)))
+          products: rows.filter(isActive),
+          removedCount: oldIds.length - productIds.length,
+          removedNames
         });
       })
       .catch((err) => setError(err?.message || 'Không thể tải dữ liệu khuyến mãi.'));
-  }, [promotionId]);
+  }, [promotionId, kind, base, navigate]);
 
   if (error) return <Alert severity="error">{error}</Alert>;
   if (!data)
@@ -57,18 +74,26 @@ export default function EditPromotionPage() {
     );
 
   return (
-    <PromotionForm
-      title="Chỉnh sửa khuyến mãi"
-      promotionId={promotionId}
-      initial={data.initial}
-      products={data.products}
-      submitLabel="Lưu thay đổi"
-      locked={data.locked}
-      onCancel={() => navigate(`/promotions/${promotionId}`)}
-      onSubmit={async (form) => {
-        await updatePromotion(promotionId, form);
-        navigate(`/promotions/${promotionId}`);
-      }}
-    />
+    <>
+      {data.removedCount > 0 && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Đã bỏ {data.removedCount} sản phẩm ngừng bán khỏi khuyến mãi
+          {data.removedNames.length ? `: ${data.removedNames.join(', ')}` : ''}. Bấm “Lưu thay đổi” để cập nhật.
+        </Alert>
+      )}
+      <PromotionForm
+        kind={kind}
+        title={`Chỉnh sửa ${name}`}
+        promotionId={promotionId}
+        initial={data.initial}
+        products={data.products}
+        submitLabel="Lưu thay đổi"
+        onCancel={() => navigate(`${base}/${promotionId}`)}
+        onSubmit={async (form) => {
+          await updatePromotion(promotionId, form);
+          navigate(`${base}/${promotionId}`);
+        }}
+      />
+    </>
   );
 }

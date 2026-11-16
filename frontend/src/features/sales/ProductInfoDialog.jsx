@@ -6,7 +6,8 @@ import { api } from '../../services/http';
 
 const num = (value) => Number(value || 0).toLocaleString('vi-VN');
 const money = (value) => (value == null ? '—' : `${num(value)} đ`);
-const columns = { xs: '1.5fr 1fr 0.8fr', md: '1.4fr 1.2fr 1fr 0.6fr 0.8fr 1.8fr' };
+const range = (min, max) => (min === max ? money(min) : `${num(min)} – ${money(max)}`);
+const columns = { xs: '48px 1.2fr 1.4fr 0.7fr', md: '48px 1.2fr 1fr 1.6fr 0.5fr 0.8fr 1.5fr' };
 const label = { fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 0.5 };
 const desktopOnly = { display: { xs: 'none', md: 'block' } };
 
@@ -30,6 +31,7 @@ function Stat({ title, value }) {
 export default function ProductInfoDialog({ line, onClose }) {
   const [data, setData] = useState(null);
   const [stocks, setStocks] = useState({});
+  const [salePrices, setSalePrices] = useState({});
   const [imageIndex, setImageIndex] = useState(0);
   const [error, setError] = useState('');
 
@@ -38,6 +40,7 @@ export default function ProductInfoDialog({ line, onClose }) {
     let active = true;
     setData(null);
     setStocks({});
+    setSalePrices({});
     setImageIndex(0);
     setError('');
     getProductById(line.productId)
@@ -48,6 +51,10 @@ export default function ProductInfoDialog({ line, onClose }) {
         if (active) setStocks(Object.fromEntries(res.variants.map((v, i) => [v.detailId, results[i].value])));
       })
       .catch((err) => active && setError(err.message || 'Không thể tải thông tin sản phẩm.'));
+    // Giá sau khuyến mãi của từng biến thể
+    api(`/sales/in-store/prices/${line.productId}`)
+      .then((res) => active && setSalePrices(res))
+      .catch(() => {});
     return () => {
       active = false;
     };
@@ -59,6 +66,9 @@ export default function ProductInfoDialog({ line, onClose }) {
   const prices = variants.map((v) => v.price).filter((p) => p != null).map(Number);
   const minPrice = Math.min(...prices);
   const maxPrice = Math.max(...prices);
+  const salePriceOf = (v) => (salePrices[v.detailId] != null ? Number(salePrices[v.detailId]) : Number(v.price));
+  const sales = variants.filter((v) => v.price != null).map(salePriceOf);
+  const onSale = sales.some((p, i) => p < prices[i]);
   const totalStock = product?.totalStock ?? variants.reduce((sum, v) => sum + Number(v.stockQuantity || 0), 0);
   const isActive = product?.status === 'ACTIVE';
 
@@ -141,9 +151,12 @@ export default function ProductInfoDialog({ line, onClose }) {
                 </Box>
                 <Typography sx={{ fontSize: 22, fontWeight: 800, lineHeight: 1.3, mt: 1.25 }}>{product.productName}</Typography>
                 {product.sku && <Typography sx={{ fontSize: 12.5, color: '#94A3B8', mt: 0.25 }}>SKU: {product.sku}</Typography>}
-                <Typography sx={{ fontSize: 24, fontWeight: 800, color: '#0E7490', mt: 1.5 }}>
-                  {!prices.length ? 'Chưa có giá' : minPrice === maxPrice ? money(minPrice) : `${num(minPrice)} – ${money(maxPrice)}`}
-                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: 1, mt: 1.5 }}>
+                  {onSale && <Typography sx={{ fontSize: 14, color: '#94A3B8', textDecoration: 'line-through' }}>{range(minPrice, maxPrice)}</Typography>}
+                  <Typography sx={{ fontSize: 24, fontWeight: 800, color: '#0E7490' }}>
+                    {!prices.length ? 'Chưa có giá' : onSale ? range(Math.min(...sales), Math.max(...sales)) : range(minPrice, maxPrice)}
+                  </Typography>
+                </Box>
                 <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.25, mt: 2 }}>
                   <Stat title="Tổng tồn" value={num(totalStock)} />
                   <Stat title="Biến thể" value={variants.length} />
@@ -160,7 +173,8 @@ export default function ProductInfoDialog({ line, onClose }) {
             <Typography sx={{ fontSize: 15, fontWeight: 800, mt: 3.5, mb: 1.25 }}>Biến thể & vị trí lưu kho</Typography>
             <Box sx={{ border: '1px solid #EEF2F6', borderRadius: 3, overflow: 'hidden' }}>
               <Box sx={{ display: 'grid', gridTemplateColumns: columns, gap: 1.5, px: 2, py: 1.25, bgcolor: '#F8FAFC' }}>
-                <Typography sx={label}>Biến thể</Typography>
+                <Typography sx={label}>Size</Typography>
+                <Typography sx={label}>Màu</Typography>
                 <Typography sx={{ ...label, ...desktopOnly }}>Mã vạch</Typography>
                 <Typography sx={label}>Giá</Typography>
                 <Typography sx={{ ...label, ...desktopOnly, textAlign: 'right' }}>Tồn</Typography>
@@ -191,37 +205,27 @@ export default function ProductInfoDialog({ line, onClose }) {
                       opacity: v.status === 'ACTIVE' ? 1 : 0.5
                     }}
                   >
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-                      <Box
-                        sx={{
-                          minWidth: 32,
-                          height: 28,
-                          px: 0.75,
-                          borderRadius: 1.5,
-                          border: '1px solid #E2E8F0',
-                          bgcolor: '#FFFFFF',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontSize: 12,
-                          fontWeight: 800
-                        }}
-                      >
-                        {v.size || '—'}
-                      </Box>
-                      <Box sx={{ minWidth: 0 }}>
-                        <Typography sx={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {v.color || '—'}
-                        </Typography>
-                        {(current || v.status !== 'ACTIVE') && (
-                          <Typography sx={{ fontSize: 11, fontWeight: 700, color: current ? '#0891B2' : '#B91C1C' }}>
-                            {current ? 'Trong hóa đơn' : 'Ngừng bán'}
-                          </Typography>
-                        )}
-                      </Box>
+                    <Typography sx={{ fontSize: 14, fontWeight: 800 }}>{v.size || '—'}</Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap', minWidth: 0 }}>
+                      <Typography sx={{ fontSize: 13, fontWeight: 600 }}>{v.color || '—'}</Typography>
+                      {current && (
+                        <Tag bg="#E0F7FA" color="#0E7490">
+                          Trong hóa đơn
+                        </Tag>
+                      )}
+                      {v.status !== 'ACTIVE' && (
+                        <Tag bg="#FEE2E2" color="#B91C1C">
+                          Ngừng bán
+                        </Tag>
+                      )}
                     </Box>
                     <Typography sx={{ ...desktopOnly, fontSize: 12.5, color: '#64748B', wordBreak: 'break-all' }}>{stock?.barcode || v.code || '—'}</Typography>
-                    <Typography sx={{ fontSize: 13, fontWeight: 700 }}>{money(v.price)}</Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.75, whiteSpace: 'nowrap' }}>
+                      {v.price != null && salePriceOf(v) < Number(v.price) && (
+                        <Typography sx={{ fontSize: 11.5, color: '#94A3B8', textDecoration: 'line-through' }}>{money(v.price)}</Typography>
+                      )}
+                      <Typography sx={{ fontSize: 13, fontWeight: 700 }}>{v.price == null ? '—' : money(salePriceOf(v))}</Typography>
+                    </Box>
                     <Typography sx={{ ...desktopOnly, fontSize: 13, textAlign: 'right' }}>{num(stock?.stock_quantity ?? v.stockQuantity)}</Typography>
                     <Typography sx={{ fontSize: 13, fontWeight: 800, textAlign: 'right', color: available > 0 ? '#0F172A' : '#EF4444' }}>
                       {num(available)}

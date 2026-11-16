@@ -12,6 +12,7 @@ import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -291,6 +292,40 @@ public class PromotionRepository {
         );
 
         return count == null ? 0 : count;
+    }
+
+    // Tìm khuyến mãi sản phẩm đang bật bị trùng sản phẩm và trùng thời gian
+    public Optional<Promotion> findOverlappingProductPromotion(
+            int excludeId,
+            String applyScope,
+            List<Integer> productIds,
+            LocalDateTime startDate,
+            LocalDateTime endDate
+    ) {
+        List<Object> args = new ArrayList<>(List.of(
+                excludeId,
+                Timestamp.valueOf(endDate),
+                Timestamp.valueOf(startDate)
+        ));
+        String productFilter = "";
+
+        if (!"ALL".equals(applyScope)) {
+            productFilter = " AND (apply_scope = 'ALL' OR promotion_id IN (SELECT promotion_id FROM promotion_product WHERE product_id IN ("
+                    + String.join(",", Collections.nCopies(productIds.size(), "?")) + ")))";
+            args.addAll(productIds);
+        }
+
+        return jdbc.query(
+                SELECT_COLUMNS + """
+                         WHERE status = 'ACTIVE'
+                           AND COALESCE(min_order_value, 0) = 0
+                           AND promotion_id <> ?
+                           AND start_date < ?
+                           AND end_date > ?
+                        """ + productFilter + " LIMIT 1",
+                mapper,
+                args.toArray()
+        ).stream().findFirst();
     }
 
     public int updateStatus(int id, String status) {
