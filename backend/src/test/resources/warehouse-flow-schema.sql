@@ -99,6 +99,28 @@ CREATE TABLE stock_count_item (
   count_item_id INT AUTO_INCREMENT PRIMARY KEY, count_id INT NOT NULL, detail_id INT NOT NULL, product_location_id INT,
   system_quantity INT NOT NULL, counted_quantity INT NOT NULL, reason_code VARCHAR(20), note VARCHAR(255),
   CONSTRAINT ck_stock_count_item_1 CHECK (system_quantity >= 0 AND counted_quantity >= 0));
+-- database/migrations/2026-11-16_product_unit.sql
+CREATE TABLE product_unit (
+  unit_id INT AUTO_INCREMENT PRIMARY KEY, detail_id INT NOT NULL, seq INT NOT NULL, serial_code VARCHAR(40) NOT NULL,
+  status VARCHAR(20) NOT NULL, product_location_id INT, in_receipt_item_id INT, out_order_item_id INT,
+  out_receipt_item_id INT, note VARCHAR(255), scanned_at TIMESTAMP, printed_at TIMESTAMP, in_at TIMESTAMP, out_at TIMESTAMP,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT uq_product_unit_serial UNIQUE (serial_code), CONSTRAINT uq_product_unit_seq UNIQUE (detail_id, seq),
+  CONSTRAINT fk_product_unit_detail FOREIGN KEY (detail_id) REFERENCES product_detail (detail_id),
+  CONSTRAINT ck_product_unit_status CHECK (status IN ('PENDING','IN_STOCK','SOLD','RETURNED_SUPPLIER','LOST','VOID')));
+-- database/migrations/2026-11-17_unit_defect.sql (cột lỗi trên product_unit, không có bảng riêng)
+ALTER TABLE product_unit ADD COLUMN defect_status VARCHAR(20);
+ALTER TABLE product_unit ADD COLUMN defect_types VARCHAR(500);
+ALTER TABLE product_unit ADD COLUMN defect_note VARCHAR(500);
+ALTER TABLE product_unit ADD COLUMN defect_source VARCHAR(20);
+ALTER TABLE product_unit ADD COLUMN defect_photos VARCHAR(1000);
+ALTER TABLE product_unit ADD COLUMN defect_by INT;
+ALTER TABLE product_unit ADD COLUMN defect_at TIMESTAMP;
+ALTER TABLE product_unit ADD COLUMN defect_resolved_by INT;
+ALTER TABLE product_unit ADD COLUMN defect_resolved_at TIMESTAMP;
+ALTER TABLE product_unit ADD COLUMN defect_resolve_note VARCHAR(255);
+ALTER TABLE product_unit ADD CONSTRAINT ck_product_unit_defect_status
+  CHECK (defect_status IS NULL OR defect_status IN ('OPEN','FIXED','DISCARDED','RETURNED','SOLD'));
 
 INSERT INTO `role` VALUES (1, 'OWNER'), (2, 'FAMILY_MEMBER'), (3, 'STAFF');
 INSERT INTO `user` VALUES (1, 1, 'Chủ cửa hàng', 'ACTIVE'), (2, 2, 'Người nhà', 'ACTIVE'), (3, 3, 'Nhân viên', 'ACTIVE');

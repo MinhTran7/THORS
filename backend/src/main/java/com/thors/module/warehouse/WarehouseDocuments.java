@@ -431,6 +431,18 @@ public class WarehouseDocuments {
         return header(id);
     }
 
+    static String unitStatus(Object status) {
+        return switch (String.valueOf(status)) {
+            case ProductUnits.PENDING -> "chờ nhận";
+            case ProductUnits.IN_STOCK -> "đang trong kho";
+            case ProductUnits.SOLD -> "đã bán";
+            case ProductUnits.RETURNED_SUPPLIER -> "đã trả nhà cung cấp";
+            case ProductUnits.LOST -> "mất/hỏng";
+            case ProductUnits.VOID -> "tem đã hủy";
+            default -> String.valueOf(status);
+        };
+    }
+
     private static String label(Map<String, Object> v) {
         return v.get("product_name") + " · " + v.get("color") + " · " + v.get("size");
     }
@@ -458,8 +470,34 @@ public class WarehouseDocuments {
         var lines = lines(id);
         Map<String, Object> line;
         int target;
-        if (r.code() != null && !r.code().isBlank()) {
-            String code = r.code().trim().toUpperCase(Locale.ROOT);
+        Integer unit = null;
+        String serial = r.code() == null ? "" : r.code().trim().toUpperCase(Locale.ROOT);
+        var units = ProductUnits.looksSerial(serial) && s.units().ready()
+                ? s.jdbc().queryForList(
+                        "SELECT u.unit_id,u.status,u.scanned_at,u.in_receipt_item_id,i.receipt_id FROM product_unit u"
+                                + " LEFT JOIN stock_receipt_item i ON i.receipt_item_id=u.in_receipt_item_id WHERE u.serial_code=?",
+                        serial)
+                : List.<Map<String, Object>>of();
+        if (!units.isEmpty()) {
+            // Tem serial: đúng chiếc của phiếu này, mỗi tem chỉ đếm một lần.
+            var u = units.get(0);
+            if (!is(u, "status", ProductUnits.PENDING) || u.get("receipt_id") == null || num(u, "receipt_id") != id)
+                throw new ApiException(
+                        409,
+                        "SCAN_WRONG_UNIT",
+                        "Tem " + serial + (is(u, "status", ProductUnits.PENDING) ? " thuộc phiếu nhập khác."
+                                : " không phải tem của đợt nhập này (" + unitStatus(u.get("status")) + ")."));
+            if (u.get("scanned_at") != null)
+                throw new ApiException(409, "SCAN_DUPLICATE", "Tem " + serial + " đã quét rồi, không đếm thêm.");
+            int item = num(u, "in_receipt_item_id");
+            line = lines.stream()
+                    .filter(l -> num(l, "receipt_item_id") == item)
+                    .findFirst()
+                    .orElseThrow(() -> invalid("Tem " + serial + " không thuộc phiếu nhập này."));
+            target = num(line, "scanned_quantity") + 1;
+            unit = num(u, "unit_id");
+        } else if (r.code() != null && !r.code().isBlank()) {
+            String code = serial;
             var found =
                     s.jdbc()
                             .queryForList(
@@ -504,7 +542,20 @@ public class WarehouseDocuments {
                         "UPDATE stock_receipt_item SET scanned_quantity=? WHERE receipt_item_id=?",
                         target,
                         num(line, "receipt_item_id"));
+        if (unit != null)
+            s.jdbc().update("UPDATE product_unit SET scanned_at=CURRENT_TIMESTAMP WHERE unit_id=?", unit);
+        else if (s.units().ready()) {
+            // Bớt số đếm: bỏ đánh dấu các tem quét gần nhất để tem đó quét lại được.
+            var marked = s.jdbc().queryForList(
+                    "SELECT unit_id FROM product_unit WHERE in_receipt_item_id=? AND status='PENDING' AND scanned_at IS NOT NULL"
+                            + " ORDER BY scanned_at DESC,unit_id DESC",
+                    Integer.class,
+                    num(line, "receipt_item_id"));
+            for (int k = target; k < marked.size(); k++)
+                s.jdbc().update("UPDATE product_unit SET scanned_at=NULL WHERE unit_id=?", marked.get(k - target));
+        }
         var result = new HashMap<>(line);
+        if (unit != null) result.put("serial_code", serial);
         result.put("scanned_quantity", target);
         return result;
     }
@@ -553,9 +604,11 @@ public class WarehouseDocuments {
                     scanned = num(l, "scanned_quantity"),
                     src = num(l, "source_receipt_item_id");
             if (scanned == 0) {
+                s.units().voidPending(item, "Phiếu nhập không nhận được hàng của dòng này");
                 s.jdbc().update("DELETE FROM stock_receipt_item WHERE receipt_item_id=?", item);
                 continue;
             }
+            s.units().sync(detail);
             // Another receipt of the same order may have been closed meanwhile. More than the order is
             // only what the Owner accepted while scanning (and never for exchanged goods).
             long base = exchange ? exchanged(src) : num(s.one("SELECT quantity FROM stock_receipt_item WHERE receipt_item_id=?", src), "quantity");
@@ -581,6 +634,7 @@ public class WarehouseDocuments {
                                     scanned)
                     != 1) throw invalid("Tổng tồn vượt giới hạn cho phép.");
             movement(a, detail, scanned, "RECEIPT", item, null, "receipt:" + id + ":" + item, "Nhập theo phiếu #" + id);
+            s.units().receive(item, detail, scanned);
         }
         s.jdbc()
                 .update(
@@ -685,6 +739,7 @@ public class WarehouseDocuments {
             throw invalid(String.format("%s: cần lấy %d nhưng phân bổ vị trí là %d.", label, qty, picked));
         var variant =
                 s.one("SELECT stock_quantity FROM product_detail WHERE detail_id=? FOR UPDATE", detail);
+        s.units().sync(detail);
         long stock = num(variant, "stock_quantity");
         if (stock < qty)
             throw invalid(String.format("%s: tồn hiện tại %d, không đủ trả %d.", label, stock, qty));
@@ -754,6 +809,10 @@ public class WarehouseDocuments {
                                 qty);
         if (changed != 1) throw invalid(label + ": tồn không đủ để xuất trả.");
         s.stockAlert(detail, before);
+        s.units().sync(
+                detail,
+                new ProductUnits.Out(ProductUnits.RETURNED_SUPPLIER, null, item, reason),
+                ProductUnits.EXTERNAL_IN);
     }
 
     /** Status/audit trail and stock movements of one document, from the existing audit/movement logs. */
@@ -869,6 +928,9 @@ public class WarehouseDocuments {
                             target,
                             reason,
                             id);
+            if (is(doc, "receipt_type", "RECEIPT"))
+                for (var l : lines(id))
+                    s.units().voidPending(num(l, "receipt_item_id"), "Phiếu nhập bị hủy/từ chối");
         }
         s.audit(a.id(), "DOCUMENT_" + action.toUpperCase(Locale.ROOT), id, reason);
         return header(id);

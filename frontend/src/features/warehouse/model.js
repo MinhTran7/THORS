@@ -178,6 +178,22 @@ export const countReasonLabel = {
 };
 // Mã sản phẩm SP + 5 số mã sản phẩm, khớp WarehouseInventory.productCode ở backend.
 export const productCode = (id) => `SP${String(id).padStart(5, '0')}`;
+// Serial từng chiếc (bảng product_unit), khớp ProductUnits ở backend.
+export const unitStatusLabel = {
+  PENDING: 'Chờ nhận',
+  IN_STOCK: 'Trong kho',
+  SOLD: 'Đã bán',
+  RETURNED_SUPPLIER: 'Đã trả NCC',
+  LOST: 'Mất / hỏng',
+  VOID: 'Tem đã hủy'
+};
+export const unitStatusColor = { PENDING: 'info', IN_STOCK: 'success', SOLD: 'default', RETURNED_SUPPLIER: 'warning', LOST: 'error', VOID: 'default' };
+// Hàng lỗi từng chiếc (bảng product_unit_defect), khớp WarehouseDefects ở backend.
+export const defectSourceLabel = { SUPPLIER: 'Lỗi từ nhà cung cấp', WAREHOUSE: 'Hư trong kho', CUSTOMER: 'Khách trả lại' };
+export const defectStatusLabel = { OPEN: 'Đang lỗi', FIXED: 'Đã sửa', DISCARDED: 'Đã bỏ', RETURNED: 'Đã trả NCC', SOLD: 'Đã bán' };
+export const defectStatusColor = { OPEN: 'error', FIXED: 'success', DISCARDED: 'default', RETURNED: 'warning', SOLD: 'default' };
+// Tem serial: mỗi chiếc một tem, khóa theo mã serial thay vì theo biến thể.
+export const unitLabel = (u) => ({ ...u, label_key: u.serial_code, barcode: u.serial_code });
 export const skuLabel = (v) => `${v.product_code} · #${v.detail_id}`;
 // Where a stock-card row's source document opens (existing pages, prefilled by id).
 export const docLink = (m) =>

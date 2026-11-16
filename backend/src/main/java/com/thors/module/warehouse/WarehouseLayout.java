@@ -518,6 +518,7 @@ ORDER BY p.product_name,d.color,d.size
             }
         }
 
+        s.units().sync(r.detailId());
         Integer destination = null;
 
         if (r.toShelfId() != null) {
@@ -602,6 +603,7 @@ ORDER BY p.product_name,d.color,d.size
                     r.fromLocationId());
         }
 
+        s.units().sync(r.detailId()); // tổng tồn không đổi: chỉ chuyển serial giữa các ô
         int id = s.insert("""
 INSERT INTO stock_adjustment(detail_id,quantity_change,reason,adjusted_by,movement_type,movement_quantity,source_location_id,destination_location_id,idempotency_key)
 VALUES(?,0,'Sắp xếp vị trí kho',?,'MOVE',?,?,?,?)

@@ -82,6 +82,7 @@ try {
     const state = {
       status: 'APPROVED',
       note: null,
+      units: [],
       lines: [
         line({ receipt_item_id: 21, detail_id: 1, quantity: 3, product_name: 'Áo thun', color: 'Đen', size: 'M', product_id: 10, barcode: 'TH000001' }),
         line({ receipt_item_id: 22, detail_id: 2, quantity: 2, product_name: 'Áo thun', color: 'Đen', size: 'L', product_id: 10, barcode: 'TH000002', source_receipt_item_id: 2 })
@@ -101,6 +102,38 @@ try {
       if (endpoint.startsWith('/api/notifications')) return json([]);
       if (endpoint === '/api/warehouse/snapshot') return json({ variants: [], racks: [], tiers: [], locations: [], images: [] });
       if (endpoint === '/api/warehouse/documents') return json(documents(state));
+      if (endpoint === '/api/warehouse/documents/20/unit-labels') {
+        // Tem serial chờ nhận: đủ số trên phiếu, in lại không sinh mã mới; extra = in thêm cho một dòng.
+        for (const l of state.lines) {
+          const have = state.units.filter((u) => u.in_receipt_item_id === l.receipt_item_id).length;
+          const add = Math.max(0, l.quantity - have) + (body?.itemId === l.receipt_item_id ? body.extra : 0);
+          for (let k = 1; k <= add; k++) {
+            const seq = have + k;
+            state.units.push({
+              unit_id: state.units.length + 1,
+              serial_code: `TH${String(l.detail_id).padStart(6, '0')}-${String(seq).padStart(4, '0')}`,
+              status: 'PENDING',
+              detail_id: l.detail_id,
+              in_receipt_item_id: l.receipt_item_id,
+              product_name: l.product_name,
+              color: l.color,
+              size: l.size,
+              price: 150000
+            });
+          }
+        }
+        return json({ units: state.units.filter((u) => !body?.itemId || u.in_receipt_item_id === body.itemId) });
+      }
+      if (endpoint === '/api/warehouse/units/printed') return json({ updated: body.unitIds.length });
+      if (endpoint === '/api/warehouse/documents/20/scan' && /-\d{4}$/.test(body.code || '')) {
+        const unit = state.units.find((u) => u.serial_code === body.code.toUpperCase());
+        if (!unit) return json({ code: 'BARCODE_NOT_FOUND', message: 'Không tìm thấy.' }, 404);
+        if (unit.scanned) return json({ code: 'SCAN_DUPLICATE', message: `Tem ${unit.serial_code} đã quét rồi, không đếm thêm.` }, 409);
+        unit.scanned = true;
+        const l = state.lines.find((x) => x.receipt_item_id === unit.in_receipt_item_id);
+        l.scanned_quantity += 1;
+        return json({ ...l, serial_code: unit.serial_code });
+      }
       if (endpoint === '/api/warehouse/documents/20/scan') {
         let target;
         let l;
@@ -207,7 +240,35 @@ try {
     assert.ok(calls.some((c) => c.endpoint.endsWith('/receive') && c.body.reason === 'NCC giao thiếu 2 áo M, thừa 1 áo L'));
     await owner.context.close();
   }
-  console.log(`PASS: receipt goods check by scanning (family + owner). Screenshots: ${artifacts}`);
+  // Serial labels: one code per piece, each label counts once, extra label for one line.
+  const serial = await open('FAMILY_MEMBER');
+  {
+    const { page, calls } = serial;
+    await page.getByRole('heading', { name: 'Đã quét 0 / 5' }).waitFor();
+    await page.getByRole('button', { name: 'In tem', exact: true }).click();
+    let dialog = page.getByRole('dialog', { name: 'In tem serial (mỗi chiếc một tem)' });
+    await dialog.getByText('TH000001-0001 … TH000001-0003').waitFor();
+    await dialog.getByText('TH000002-0001 … TH000002-0002').waitFor();
+    await dialog.getByRole('button', { name: 'In ngay 5 tem' }).waitFor();
+    await page.screenshot({ path: path.join(artifacts, 'serial-labels.png'), fullPage: true });
+    await dialog.getByRole('button', { name: 'Đóng' }).click();
+    await dialog.waitFor({ state: 'hidden' });
+    const box = page.getByRole('textbox', { name: 'Mã tem kiểm hàng' });
+    await box.fill('th000001-0002');
+    await box.press('Enter');
+    await page.getByText('TH000001-0002 · Áo thun · Đen · M: đã quét 1 / 3').waitFor();
+    await box.fill('TH000001-0002');
+    await box.press('Enter');
+    await page.getByText('Tem TH000001-0002 đã quét rồi', { exact: false }).waitFor();
+    await page.getByRole('heading', { name: 'Đã quét 1 / 5' }).waitFor();
+    await page.getByRole('button', { name: 'In thêm 1 tem Áo thun · Đen · L' }).click();
+    dialog = page.getByRole('dialog', { name: 'In tem serial (mỗi chiếc một tem)' });
+    await dialog.getByText('TH000002-0003', { exact: true }).waitFor();
+    await dialog.getByRole('button', { name: 'In ngay 1 tem' }).waitFor();
+    assert.ok(calls.some((c) => c.endpoint.endsWith('/unit-labels') && c.body?.itemId === 22 && c.body?.extra === 1));
+    await serial.context.close();
+  }
+  console.log(`PASS: receipt goods check by scanning (family + owner + serial labels). Screenshots: ${artifacts}`);
 } finally {
   await browser?.close();
   server.kill();

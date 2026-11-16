@@ -9,7 +9,7 @@ import { useWarehouse } from './WarehouseContext';
 import { ActionDialog, DataTable, Metrics, Title } from './components';
 import { money, number, stockStateColor, stockStateLabel, variantLabel } from './model';
 import { exportSheet } from './excelWorkbook';
-import BarcodePrintDialog from './BarcodePrintDialog';
+import SerialPrintDialog from './SerialPrintDialog';
 import BarcodeScannerDialog from './BarcodeScannerDialog';
 import useBarcodeScanner from './useBarcodeScanner';
 import InventoryDetail from './InventoryDetail';
@@ -434,11 +434,13 @@ export default function InventoryPage() {
                 label: 'Màu / Size',
                 render: (r) =>
                   r._kind === 'product' ? (
-                    <Typography variant="body2" color="primary">
-                      {number(r.variant_count)} biến thể {r._expanded ? '▲' : '▼'}
+                    <Typography variant="body2" color="text.secondary">
+                      {number(r.variant_count)} biến thể
                     </Typography>
                   ) : (
-                    `${r.color} / ${r.size}`
+                    <Typography variant="body2">
+                      {r.color} / {r.size}
+                    </Typography>
                   )
               },
               { key: 'stock_quantity', label: 'Tổng tồn', align: 'right', render: (r) => <b>{number(r.stock_quantity)}</b> },
@@ -461,32 +463,30 @@ export default function InventoryPage() {
               {
                 key: 'state',
                 label: 'Trạng thái',
-                render: (r) =>
-                  r._kind === 'product' ? (
-                    <Stack spacing={0.5} sx={{ alignItems: 'flex-start' }}>
-                      {r.count_out === r.variant_count ? (
-                        <Chip size="small" variant="outlined" color={stockStateColor.OUT} label={stockStateLabel.OUT} />
-                      ) : !r.count_out && !r.count_low ? (
-                        <Chip size="small" variant="outlined" color={stockStateColor.IN} label={stockStateLabel.IN} />
-                      ) : (
-                        <>
-                          {r.count_out > 0 && (
-                            <Chip size="small" variant="outlined" color={stockStateColor.OUT} label={`${number(r.count_out)} hết hàng`} />
-                          )}
-                          {r.count_low > 0 && (
-                            <Chip size="small" variant="outlined" color={stockStateColor.LOW} label={`${number(r.count_low)} sắp hết`} />
-                          )}
-                        </>
-                      )}
-                    </Stack>
-                  ) : (
-                    <Stack spacing={0.5} sx={{ alignItems: 'flex-start' }}>
+                // Luôn một chip trên một dòng để các dòng cao bằng nhau; ngưỡng tồn xem khi rê chuột hoặc trong chi tiết.
+                render: (r) => {
+                  if (r._kind === 'product') {
+                    const all = r.count_out === r.variant_count;
+                    const parts = [
+                      r.count_out > 0 && `${number(r.count_out)} hết hàng`,
+                      r.count_low > 0 && `${number(r.count_low)} sắp hết`
+                    ].filter(Boolean);
+                    const color = all || r.count_out > 0 ? stockStateColor.OUT : r.count_low > 0 ? stockStateColor.LOW : stockStateColor.IN;
+                    const label = all ? stockStateLabel.OUT : parts.length ? parts.join(' · ') : stockStateLabel.IN;
+                    return <Chip size="small" variant="outlined" color={color} label={label} />;
+                  }
+                  return (
+                    <Tooltip
+                      title={
+                        r.min_stock_quantity == null
+                          ? 'Chưa đặt ngưỡng tồn tối thiểu'
+                          : `Ngưỡng tồn tối thiểu: ${number(r.min_stock_quantity)}`
+                      }
+                    >
                       <Chip size="small" variant="outlined" color={stockStateColor[r.stock_state]} label={stockStateLabel[r.stock_state]} />
-                      <Typography variant="caption" color="text.secondary">
-                        {r.min_stock_quantity == null ? 'Chưa đặt ngưỡng' : `Ngưỡng ${number(r.min_stock_quantity)}`}
-                      </Typography>
-                    </Stack>
-                  )
+                    </Tooltip>
+                  );
+                }
               },
               {
                 key: 'locations',
@@ -504,14 +504,15 @@ export default function InventoryPage() {
                 label: '',
                 render: (r) => {
                   if (r._kind === 'product') {
-                    const printable = r.variants.filter((v) => v.barcode);
+                    // Tem serial: mỗi chiếc trong kho một tem (không cần mã vạch biến thể).
+                    const printable = r.variants.filter((v) => Number(v.stock_quantity) > 0);
                     return (
                       <Stack direction="row" spacing={0.5} sx={{ justifyContent: 'flex-end' }}>
                         <Tooltip
                           title={
                             printable.length
-                              ? `In tem ${number(printable.length)} biến thể của sản phẩm này`
-                              : 'Chưa biến thể nào có mã vạch'
+                              ? `In tem serial cho ${number(r.stock_quantity)} chiếc trong kho`
+                              : 'Sản phẩm đang hết hàng, không có chiếc nào để in tem'
                           }
                         >
                           <span>
@@ -526,19 +527,29 @@ export default function InventoryPage() {
                             </Button>
                           </span>
                         </Tooltip>
+                        {/* Giữ chỗ nút Xóa (ẩn) để nút In tem thẳng cột với các dòng biến thể */}
+                        {owner && (
+                          <Button size="small" tabIndex={-1} aria-hidden sx={{ visibility: 'hidden' }}>
+                            Xóa
+                          </Button>
+                        )}
                       </Stack>
                     );
                   }
                   return (
                     <Stack direction="row" spacing={0.5} sx={{ justifyContent: 'flex-end' }}>
                       <Tooltip
-                        title={r.barcode ? `In tem ${r.barcode}` : 'Chưa có mã vạch — mở Sửa sản phẩm và lưu lại để hệ thống tự gán mã'}
+                        title={
+                          Number(r.stock_quantity) > 0
+                            ? `In tem serial cho ${number(r.stock_quantity)} chiếc trong kho`
+                            : 'Đang hết hàng, không có chiếc nào để in tem'
+                        }
                       >
                         <span>
                           <Button
                             size="small"
                             variant="outlined"
-                            disabled={!r.barcode}
+                            disabled={!(Number(r.stock_quantity) > 0)}
                             onClick={(e) => (e.stopPropagation(), setPrinting([r]))}
                             sx={{ whiteSpace: 'nowrap' }}
                           >
@@ -576,7 +587,7 @@ export default function InventoryPage() {
           }}
         />
       )}
-      {printing && <BarcodePrintDialog variants={printing} onClose={() => setPrinting(null)} />}
+      {printing && <SerialPrintDialog variants={printing} onClose={() => setPrinting(null)} />}
       {scanning && (
         <BarcodeScannerDialog
           scanRequest={scanRequest}

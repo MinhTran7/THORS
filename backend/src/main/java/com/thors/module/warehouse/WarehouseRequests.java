@@ -178,4 +178,20 @@ public final class WarehouseRequests {
     public record Threshold(@Min(0) @Max(1000000) Integer min) {}
 
     public record BarcodeGenerate(@Size(max = 500) List<@Positive Integer> detailIds) {}
+
+    /** Các chiếc vừa in tem serial. */
+    public record UnitsPrinted(@Size(max = 5000) List<@Positive Integer> unitIds) {}
+
+    /** Ghi lỗi cho một chiếc (quét serial). source: SUPPLIER / WAREHOUSE / CUSTOMER. */
+    public record DefectReport(
+            @NotBlank @Size(max = 40) String serial,
+            @NotNull @Size(min = 1, max = 20) List<@NotBlank @Size(max = 60) String> types,
+            @Size(max = 500) String description,
+            @NotBlank @Pattern(regexp = "SUPPLIER|WAREHOUSE|CUSTOMER") String source,
+            @Size(max = 8) List<@NotBlank @Size(max = 40) String> photoKeys) {}
+
+    public record DefectResolve(@Size(max = 255) String note) {}
+
+    /** Tem serial phiếu nhập; itemId + extra = in thêm tem cho một dòng. */
+    public record UnitLabels(@Positive Integer itemId, @Min(1) @Max(1000) Integer extra) {}
 }

@@ -182,13 +182,14 @@ export function DataTable({ columns, rows, empty = 'Chưa có dữ liệu.', onR
     </>
   );
 }
-export function PhotoPicker({ keys, onChange }) {
+// anyone: mọi người dùng kho đều tải ảnh được (ảnh bằng chứng hàng lỗi), không chỉ chủ cửa hàng.
+export function PhotoPicker({ keys, onChange, anyone = false, title = 'Ảnh thực tế tại vị trí (JPG/PNG, tối đa 5 MB/ảnh)' }) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const { owner } = useWarehouse();
   return (
     <Stack spacing={1}>
-      <Typography variant="subtitle2">Ảnh thực tế tại vị trí (JPG/PNG, tối đa 5 MB/ảnh)</Typography>
+      <Typography variant="subtitle2">{title}</Typography>
       <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
         {keys.map((key) => (
           <Stack key={key}>
@@ -204,7 +205,7 @@ export function PhotoPicker({ keys, onChange }) {
           </Stack>
         ))}
       </Stack>
-      <Button component="label" variant="outlined" disabled={!owner || uploading || keys.length >= 8}>
+      <Button component="label" variant="outlined" disabled={(!owner && !anyone) || uploading || keys.length >= 8}>
         {uploading ? 'Đang tải ảnh…' : 'Chọn ảnh'}
         <input
           hidden
