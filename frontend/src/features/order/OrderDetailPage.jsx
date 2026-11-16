@@ -38,6 +38,157 @@ import DeliveryChoice from './DeliveryChoice';
 import { ghnReady } from './GhnAddressFields';
 import { formatVnd, orderStatusMeta, paymentMethodLabel, paymentStatusMeta, preparationMeta, shipmentStatusLabel } from './constants';
 import PayOSPaymentModal from './components/PayOSPaymentModal';
+import RefundAccountForm, { initialRefundAccount, validateRefundAccount } from './components/RefundAccountForm';
+import { generateVietQrUrl } from 'utils/vietqr';
+
+// "Vietcombank · 0123456789 · NGUYEN VAN A"
+const accountText = (a) => [a?.bankName || a?.bankBin, a?.accountNumber, a?.accountName].filter(Boolean).join(' · ');
+
+/** Owner: nhập giúp / sửa tài khoản nhận hoàn của khách (khi khách báo qua điện thoại). */
+function OwnerRefundAccount({ order, onSave }) {
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState(() => initialRefundAccount(order.refundAccount || order.payerAccount));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const save = async () => {
+    const problem = validateRefundAccount(form);
+    if (problem) {
+      setError(problem);
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      await onSave(form);
+      setOpen(false);
+    } catch (e) {
+      setError(e.message || 'Không lưu được tài khoản nhận tiền hoàn.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <Button size="small" onClick={() => setOpen(true)} sx={{ mt: 1, textTransform: 'none', fontWeight: 600 }}>
+        {order.refundAccount ? 'Sửa tài khoản nhận hoàn' : 'Nhập tài khoản nhận hoàn của khách'}
+      </Button>
+    );
+  }
+  return (
+    <Box sx={{ mt: 1.5, p: 2, border: `1px solid ${brand.line}`, borderRadius: 2 }}>
+      <RefundAccountForm value={form} onChange={setForm} disabled={saving} />
+      {error && (
+        <Typography color="error" variant="body2" sx={{ mt: 1 }}>
+          {error}
+        </Typography>
+      )}
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 1.5 }}>
+        <Button size="small" disabled={saving} onClick={() => setOpen(false)}>
+          Hủy
+        </Button>
+        <Button size="small" variant="contained" disableElevation disabled={saving} onClick={save}>
+          {saving ? 'Đang lưu…' : 'Lưu và tạo mã QR'}
+        </Button>
+      </Box>
+    </Box>
+  );
+}
+
+/**
+ * Khách: tài khoản nhận tiền hoàn khi đơn đang "Chờ hoàn tiền". Trên trang chỉ một dòng + nút;
+ * form nhập mở trong hộp thoại (cùng kiểu hộp "Hủy đơn") để trang gọn.
+ */
+function CustomerRefundBox({ order, onSave }) {
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState(() => initialRefundAccount(order.refundAccount || order.payerAccount));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const openDialog = () => {
+    setForm(initialRefundAccount(order.refundAccount || order.payerAccount));
+    setError('');
+    setOpen(true);
+  };
+
+  const save = async () => {
+    const problem = validateRefundAccount(form);
+    if (problem) {
+      setError(problem);
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      await onSave(form);
+      setOpen(false);
+    } catch (e) {
+      setError(e.message || 'Không lưu được tài khoản nhận tiền hoàn.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <>
+      <Box sx={{ mt: 1, fontSize: 14, color: C.muted }}>
+        {order.refundAccount ? (
+          <>
+            Nhận tiền hoàn vào: <strong>{accountText(order.refundAccount)}</strong>
+          </>
+        ) : (
+          'Bạn chưa gửi tài khoản nhận tiền hoàn.'
+        )}{' '}
+        <Button size="small" onClick={openDialog} sx={{ textTransform: 'none', fontWeight: 700, color: C.accent }}>
+          {order.refundAccount ? 'Sửa' : 'Nhập tài khoản'}
+        </Button>
+      </Box>
+
+      <Dialog
+        open={open}
+        onClose={() => !saving && setOpen(false)}
+        fullWidth
+        maxWidth="xs"
+        slotProps={{
+          paper: {
+            sx: {
+              ...storeDialogPaperSx,
+              ...storeInputsSx,
+              '& .MuiButton-root': { borderRadius: '14px', fontFamily: SANS, textTransform: 'none', fontWeight: 700 }
+            }
+          }
+        }}
+      >
+        <DialogTitle>Tài khoản nhận tiền hoàn</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ color: C.muted, mb: 2 }}>
+            Cửa hàng sẽ chuyển trả {formatVnd(order.totalAmount)} vào tài khoản này.
+          </Typography>
+          <RefundAccountForm
+            value={form}
+            onChange={setForm}
+            disabled={saving}
+            prefilled={!order.refundAccount && Boolean(order.payerAccount)}
+          />
+          {error && (
+            <Typography color="error" variant="body2" sx={{ mt: 1 }}>
+              {error}
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button disabled={saving} onClick={() => setOpen(false)}>
+            Quay lại
+          </Button>
+          <Button variant="contained" disableElevation disabled={saving} onClick={save}>
+            {saving ? 'Đang lưu…' : 'Gửi tài khoản'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
+  );
+}
 import CustomerReturnDialog from '../returns/CustomerReturnDialog';
 import {
   C,
@@ -170,7 +321,7 @@ function StoreRow({ label, children, strong = false }) {
   );
 }
 
-function CustomerView({ order, status, actions, busy, onAction, actionError, onPayNow, payLoading, payError, onOpenReturn, back }) {
+function CustomerView({ order, status, actions, busy, onAction, actionError, onPayNow, payLoading, payError, onOpenReturn, back, onSaveRefund }) {
   const payment = paymentStatusMeta(order.paymentStatus);
   const closed = CLOSED.includes(order.orderStatus);
   const completed = COMPLETED_STEPS[order.orderStatus] ?? 0;
@@ -207,6 +358,20 @@ function CustomerView({ order, status, actions, busy, onAction, actionError, onP
             {order.cancelReason && (
               <Box component="p" sx={{ m: 0, mt: 1, fontSize: 15, color: C.muted }}>
                 Lý do: {order.cancelReason}
+              </Box>
+            )}
+            {/* Đơn đã thanh toán online rồi bị hủy: cửa hàng hoàn tiền thủ công */}
+            {order.paymentStatus === 'REFUND_PENDING' && (
+              <>
+                <Box component="p" sx={{ m: 0, mt: 1.5, fontSize: 15, fontWeight: 600, color: C.ink }}>
+                  Cửa hàng sẽ hoàn {formatVnd(order.totalAmount)} cho bạn.
+                </Box>
+                <CustomerRefundBox order={order} onSave={onSaveRefund} />
+              </>
+            )}
+            {order.paymentStatus === 'REFUNDED' && (
+              <Box component="p" sx={{ m: 0, mt: 1.5, fontSize: 15, fontWeight: 600, color: '#15803d' }}>
+                Đã hoàn {formatVnd(order.totalAmount)} cho bạn.
               </Box>
             )}
           </Box>
@@ -353,7 +518,7 @@ function CustomerView({ order, status, actions, busy, onAction, actionError, onP
 
 /* ------------------------------------------------------------------ Chủ shop và người xử lý đơn */
 
-function StaffView({ order, status, actions, busy, onAction, actionError, back, onPayNow, payLoading, payError }) {
+function StaffView({ order, status, actions, busy, onAction, actionError, back, onPayNow, payLoading, payError, onMarkRefunded, refundBusy, canRefund, onSaveRefund }) {
   const payment = paymentStatusMeta(order.paymentStatus);
   const prep = order.preparationStatus && order.preparationStatus !== 'NOT_STARTED' ? preparationMeta(order.preparationStatus) : null;
   const staffView = Boolean(order.customer);
@@ -407,6 +572,60 @@ function StaffView({ order, status, actions, busy, onAction, actionError, back, 
               <StatusPill tone={payment.tone} label={payment.label} />
             </Info>
             {order.orderStatus === 'AWAITING_PAYMENT' && order.paymentExpiresAt && <Info label="Hạn thanh toán">{dateTime(order.paymentExpiresAt)}</Info>}
+            {/* Đã thanh toán online nhưng bị hủy / từ chối: chủ shop chuyển khoản trả lại rồi xác nhận */}
+            {order.paymentStatus === 'REFUND_PENDING' && (
+              <Alert
+                severity="warning"
+                sx={{ mt: 1.5, fontSize: 13 }}
+                action={
+                  canRefund &&
+                  order.refundAccount && (
+                    <Button
+                      color="inherit"
+                      size="small"
+                      disabled={refundBusy}
+                      onClick={onMarkRefunded}
+                      sx={{ fontWeight: 700, textTransform: 'none', whiteSpace: 'nowrap' }}
+                    >
+                      {refundBusy ? 'Đang lưu…' : 'Đã hoàn tiền'}
+                    </Button>
+                  )
+                }
+              >
+                Cần hoàn <strong>{formatVnd(order.totalAmount)}</strong> cho khách.{' '}
+                {order.refundAccount
+                  ? 'Quét mã VietQR bên dưới bằng app ngân hàng để chuyển trả, rồi bấm "Đã hoàn tiền".'
+                  : `Chưa có tài khoản nhận hoàn: chờ khách nhập trong chi tiết đơn, hoặc gọi khách (${order.deliveryPhone || 'SĐT trong đơn'}) rồi nhập giúp bên dưới.`}
+              </Alert>
+            )}
+            {/* Owner nhập / sửa tài khoản nhận hoàn của khách -> ra mã VietQR */}
+            {order.paymentStatus === 'REFUND_PENDING' && canRefund && (
+              <OwnerRefundAccount order={order} onSave={onSaveRefund} />
+            )}
+            {order.paymentStatus === 'REFUND_PENDING' && order.refundAccount && (
+              <Box sx={{ mt: 1.5, display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+                {/* Mã VietQR có sẵn số tiền + nội dung "Hoan tien DH..." */}
+                <Box
+                  component="img"
+                  alt="Mã VietQR hoàn tiền"
+                  src={generateVietQrUrl({
+                    bankCode: order.refundAccount.bankBin,
+                    accountNumber: order.refundAccount.accountNumber,
+                    accountName: order.refundAccount.accountName,
+                    amount: order.totalAmount,
+                    memo: `Hoan tien ${String(order.orderNumber || '').replace(/[^a-zA-Z0-9]/g, '')}`.slice(0, 25),
+                    template: 'compact2'
+                  })}
+                  sx={{ width: 180, height: 230, objectFit: 'contain', border: `1px solid ${brand.line}`, borderRadius: 1.5, bgcolor: '#fff' }}
+                />
+                <Box sx={{ fontSize: 13, display: 'grid', gap: 0.5 }}>
+                  <Box>Ngân hàng: <strong>{order.refundAccount.bankName || order.refundAccount.bankBin}</strong></Box>
+                  <Box>Số tài khoản: <strong>{order.refundAccount.accountNumber}</strong></Box>
+                  <Box>Chủ tài khoản: <strong>{order.refundAccount.accountName}</strong></Box>
+                  <Box>Số tiền: <strong>{formatVnd(order.totalAmount)}</strong></Box>
+                </Box>
+              </Box>
+            )}
             {order.paymentMethod === 'ONLINE' && order.paymentStatus !== 'PAID' && !CLOSED.includes(order.orderStatus) && (
               <Box sx={{ mt: 1.5, pt: 1, borderTop: `1px dashed ${brand.line}` }}>
                 {payError && (
@@ -548,6 +767,9 @@ export default function OrderDetailPage() {
   const [payError, setPayError] = useState('');
 
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
+  const [refundBusy, setRefundBusy] = useState(false);
+  // Tài khoản nhận hoàn khi khách hủy đơn đã thanh toán (null = không cần)
+  const [refundForm, setRefundForm] = useState(null);
   const [returnSuccessMsg, setReturnSuccessMsg] = useState('');
 
   // Tự động kiểm tra trạng thái thanh toán nếu quay lại từ PayOS với URL ?payment=success
@@ -605,10 +827,18 @@ export default function OrderDetailPage() {
       : [];
 
   const run = async (action, why, carrierValue) => {
+    const refund = action.to === 'CANCELLED' ? refundForm : null;
+    if (refund) {
+      const problem = validateRefundAccount(refund);
+      if (problem) {
+        setActionError(problem);
+        return;
+      }
+    }
     setBusy(true);
     setActionError('');
     try {
-      await ordersApi.changeStatus(id, action.to, why, carrierValue, ghn);
+      await ordersApi.changeStatus(id, action.to, why, carrierValue, ghn, refund);
       setDialog(null);
       setReason('');
       await mutate();
@@ -638,6 +868,11 @@ export default function OrderDetailPage() {
 
   const start = (action) => {
     setActionError('');
+    setRefundForm(
+      isCustomer && action.to === 'CANCELLED' && order.paymentMethod === 'ONLINE' && order.paymentStatus === 'PAID'
+        ? initialRefundAccount(order.payerAccount)
+        : null
+    );
     if (action.askReason || action.askCarrier) {
       setReason('');
       setCarrier('SELF');
@@ -646,6 +881,22 @@ export default function OrderDetailPage() {
       setDialog(action);
     } else {
       run(action);
+    }
+  };
+
+  // Owner xác nhận đã chuyển khoản hoàn tiền cho khách
+  const markRefunded = async () => {
+    if (!window.confirm(`Xác nhận đã chuyển khoản trả lại ${formatVnd(order.totalAmount)} cho khách?`)) return;
+    setRefundBusy(true);
+    setActionError('');
+    try {
+      await ordersApi.markRefunded(order.id);
+      await mutate();
+      refreshAllOrders(globalMutate);
+    } catch (e) {
+      setActionError(e.message || 'Không lưu được trạng thái hoàn tiền.');
+    } finally {
+      setRefundBusy(false);
     }
   };
 
@@ -670,9 +921,26 @@ export default function OrderDetailPage() {
         </Alert>
       )}
       {isCustomer ? (
-        <CustomerView {...viewProps} back={back} />
+        <CustomerView
+          {...viewProps}
+          back={back}
+          onSaveRefund={async (account) => {
+            await ordersApi.saveRefundAccount(order.id, account);
+            await mutate();
+          }}
+        />
       ) : (
-        <StaffView {...viewProps} back={back} />
+        <StaffView
+          {...viewProps}
+          back={back}
+          onMarkRefunded={markRefunded}
+          refundBusy={refundBusy}
+          canRefund={account.role === 'OWNER'}
+          onSaveRefund={async (refund) => {
+            await ordersApi.saveRefundAccount(order.id, refund);
+            await mutate();
+          }}
+        />
       )}
 
       <Dialog
@@ -695,8 +963,26 @@ export default function OrderDetailPage() {
               onBlockedChange={setAddressBlocked}
             />
           ) : (
+            <>
+            {['CANCELLED', 'REJECTED'].includes(dialog?.to) && order.paymentMethod === 'ONLINE' && order.paymentStatus === 'PAID' && (
+              <Alert severity="info" sx={{ mb: 1, fontSize: 13 }}>
+                {isCustomer
+                  ? `Đơn đã thanh toán ${formatVnd(order.totalAmount)}. Sau khi hủy, cửa hàng sẽ hoàn tiền vào tài khoản bạn đã dùng để thanh toán.`
+                  : `Khách đã thanh toán ${formatVnd(order.totalAmount)}. Từ chối xong, đơn sẽ ở trạng thái "Chờ hoàn tiền" để bạn hoàn lại cho khách.`}
+              </Alert>
+            )}
+            {refundForm && (
+              <Box sx={{ mb: 2 }}>
+                <RefundAccountForm
+                  value={refundForm}
+                  onChange={setRefundForm}
+                  disabled={busy}
+                  prefilled={Boolean(order.payerAccount?.accountNumber)}
+                />
+              </Box>
+            )}
             <TextField
-              autoFocus
+              autoFocus={!refundForm}
               fullWidth
               multiline
               minRows={2}
@@ -706,6 +992,7 @@ export default function OrderDetailPage() {
               onChange={(e) => setReason(e.target.value)}
               inputProps={{ maxLength: 255 }}
             />
+            </>
           )}
           {actionError && (
             <Typography color="error" variant="body2" sx={{ mt: 1 }}>
@@ -743,6 +1030,7 @@ export default function OrderDetailPage() {
         onSuccess={() => {
           mutate();
         }}
+        onCancelled={() => mutate()}
       />
 
       {/* Modal Trả hàng / Hoàn tiền cho Khách hàng */}

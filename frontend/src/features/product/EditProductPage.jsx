@@ -9,6 +9,7 @@ import {
   CircularProgress,
   Grid,
   IconButton,
+  InputAdornment,
   MenuItem,
   Stack,
   TextField,
@@ -46,6 +47,8 @@ import {
   sortCategoriesAsTree
 } from '../../services/categoryService';
 import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../customer/theme';
+import { formatPriceInput, parsePriceInput } from './priceInput';
+import ProductDescriptionFields from './ProductDescriptionFields';
 
 const inputSx = (hasError) => ({
   '& .MuiOutlinedInput-root': {
@@ -107,7 +110,6 @@ export default function EditProductPage() {
 
   const [form, setForm] = useState({
     productName: '',
-    sku: '',
     categoryId: '',
     description: '',
     variants: []
@@ -140,7 +142,6 @@ export default function EditProductPage() {
 
         setForm({
           productName: product.productName || '',
-          sku: product.sku || '',
           categoryId: String(product.categoryId ?? ''),
           description: product.description || '',
           variants: (variants || []).map((variant) => ({
@@ -250,11 +251,6 @@ export default function EditProductPage() {
       return;
     }
 
-    const sku = form.sku.trim();
-    if (sku && (sku.length < 3 || sku.length > 30 || !/^[A-Z0-9](?:[A-Z0-9-]*[A-Z0-9])?$/.test(sku))) {
-      setError('Mã sản phẩm (SKU) chỉ gồm chữ in hoa, số và dấu "-", dài 3–30 ký tự, không bắt đầu/kết thúc bằng "-".');
-      return;
-    }
 
     if (form.variants.length === 0) {
       setError('Sản phẩm phải có ít nhất một biến thể.');
@@ -306,7 +302,6 @@ export default function EditProductPage() {
       categoryId: Number(form.categoryId),
       productName,
       // Rỗng = giữ nguyên (sản phẩm chưa có mã thì hệ thống tự tạo)
-      sku: sku || null,
       description: form.description.trim(),
       version,
       variants: form.variants.map((variant) => ({
@@ -524,26 +519,6 @@ export default function EditProductPage() {
 
                 <Box>
                   <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>
-                    Mã sản phẩm (SKU)
-                  </Typography>
-                  <TextField
-                    fullWidth
-                    size="small"
-                    placeholder="Để trống để hệ thống tự tạo theo danh mục"
-                    value={form.sku}
-                    onChange={(event) =>
-                      updateField('sku', event.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, ''))
-                    }
-                    slotProps={{ htmlInput: { maxLength: 30 } }}
-                    sx={inputSx(false)}
-                  />
-                  <Typography sx={{ fontSize: 12, color: C.muted, mt: 0.75 }}>
-                    Đổi SKU không đổi mã của các biến thể đã có (tem đã in vẫn dùng được); biến thể thêm mới sẽ dùng SKU mới.
-                  </Typography>
-                </Box>
-
-                <Box>
-                  <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>
                     Danh mục <Box component="span" sx={{ color: C.error }}>*</Box>
                   </Typography>
                   <TextField
@@ -584,17 +559,7 @@ export default function EditProductPage() {
                   <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>
                     Mô tả sản phẩm
                   </Typography>
-                  <TextField
-                    fullWidth
-                    multiline
-                    minRows={4}
-                    placeholder="Mô tả thông tin sản phẩm..."
-                    value={form.description}
-                    onChange={(event) =>
-                      updateField('description', event.target.value)
-                    }
-                    sx={inputSx(false)}
-                  />
+                  <ProductDescriptionFields value={form.description} onChange={(next) => updateField('description', next)} disabled={saving} />
                 </Box>
               </Stack>
             </Card>
@@ -763,19 +728,23 @@ export default function EditProductPage() {
                           fullWidth
                           required
                           size="small"
-                          type="number"
-                          value={variant.price}
+                          // Hiển thị dạng tiền ngay trong ô (250.000), lưu chuỗi chữ số (250000)
+                          placeholder="Ví dụ: 250.000"
+                          value={formatPriceInput(variant.price)}
                           onChange={(event) =>
                             updateVariantField(
                               index,
                               'price',
-                              event.target.value
+                              parsePriceInput(event.target.value)
                             )
                           }
                           slotProps={{
                             htmlInput: {
-                              min: 0,
-                              step: 1000
+                              inputMode: 'numeric',
+                              autoComplete: 'off'
+                            },
+                            input: {
+                              endAdornment: <InputAdornment position="end">₫</InputAdornment>
                             }
                           }}
                           sx={inputSx(false)}

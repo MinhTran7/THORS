@@ -15,6 +15,8 @@ public class Category {
     private String targetGroup;
     // Số danh mục con (chỉ có ý nghĩa với danh mục gốc)
     private int childCount;
+    // Khóa icon tự chọn (null = icon mặc định); cần migration 2026-11-11_category_icon.sql
+    private String icon;
 
     public Category() {
     }
@@ -81,5 +83,13 @@ public class Category {
 
     public void setChildCount(int childCount) {
         this.childCount = childCount;
+    }
+
+    public String getIcon() {
+        return icon;
+    }
+
+    public void setIcon(String icon) {
+        this.icon = icon;
     }
 }

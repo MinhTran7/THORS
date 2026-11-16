@@ -8,6 +8,7 @@ import { useCrumbs } from 'layouts/crumbs';
 import { api, post } from 'services/http';
 import { Photo, isNewProduct, money, priceText } from './ShopCommon';
 import PendingCartHandler from './PendingCartHandler';
+import ShopProductDescription from './ShopProductDescription';
 import { savePending } from './pendingCart';
 import { C, SERIF } from './storeTheme';
 import { ProductCard } from './ShopPage';
@@ -198,7 +199,17 @@ export default function ShopProductPage() {
           {data && (
             <>
               <span>/</span>
-              <span>{data.product.categoryName}</span>
+              {categoryId ? (
+                <Box
+                  component={RouterLink}
+                  to={`/shop/category/${categoryId}`}
+                  sx={{ color: brand.muted, textDecoration: 'none', '&:hover': { color: brand.ink } }}
+                >
+                  {data.product.categoryName}
+                </Box>
+              ) : (
+                <span>{data.product.categoryName}</span>
+              )}
               <span>/</span>
               <Box component="span" sx={{ color: brand.ink, fontWeight: 600 }}>
                 {data.product.productName}
@@ -236,7 +247,27 @@ export default function ShopProductPage() {
           >
             <Box>
               <Box sx={{ position: 'relative' }}>
-                <Photo src={data.images[imageIndex]} name={data.product.productName} sx={{ aspectRatio: '1', borderRadius: '12px' }} />
+                {/* Khung cố định 4:5, ảnh hiện trọn (contain) nên ảnh ngang, dọc hay vuông đều không bị cắt */}
+                {data.images[imageIndex] ? (
+                  <Box
+                    sx={{
+                      aspectRatio: '4 / 5',
+                      borderRadius: '12px',
+                      bgcolor: '#F5F3F0',
+                      overflow: 'hidden',
+                      position: 'relative'
+                    }}
+                  >
+                    <Box
+                      component="img"
+                      src={data.images[imageIndex]}
+                      alt={data.product.productName}
+                      sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
+                    />
+                  </Box>
+                ) : (
+                  <Photo name={data.product.productName} sx={{ aspectRatio: '4 / 5', borderRadius: '12px' }} />
+                )}
                 {isNewProduct(data.product) && (
                   <Box
                     component="span"
@@ -258,25 +289,36 @@ export default function ShopProductPage() {
                 {data.images.map((url, i) => (
                   <Box
                     key={url}
-                    component="img"
-                    src={url}
-                    alt=""
+                    component="button"
+                    type="button"
+                    aria-label={`Xem ảnh ${i + 1}`}
+                    aria-pressed={i === imageIndex}
                     onClick={() => setImageIndex(i)}
                     sx={{
                       width: 64,
-                      height: 64,
-                      objectFit: 'cover',
+                      height: 80,
+                      p: 0,
+                      bgcolor: '#F5F3F0',
                       borderRadius: '8px',
+                      overflow: 'hidden',
+                      position: 'relative',
                       cursor: 'pointer',
                       border: `2px solid ${i === imageIndex ? brand.cyan : 'transparent'}`
                     }}
-                  />
+                  >
+                    <Box component="img" src={url} alt="" sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' }} />
+                  </Box>
                 ))}
               </Box>
             </Box>
 
             <Box>
-              <Typography variant="caption" sx={{ color: brand.muted }}>
+              {/* Tên danh mục: bấm để về trang danh mục đó */}
+              <Typography
+                variant="caption"
+                {...(categoryId ? { component: RouterLink, to: `/shop/category/${categoryId}` } : {})}
+                sx={{ color: brand.muted, textDecoration: 'none', '&:hover': { color: categoryId ? brand.ink : brand.muted } }}
+              >
                 {data.product.categoryName}
               </Typography>
               <Typography variant="h3" sx={{ color: brand.ink }}>
@@ -378,19 +420,8 @@ export default function ShopProductPage() {
           </Box>
         )}
 
-        {/* Mô tả sản phẩm: nằm dưới khung thông tin chung */}
-        {data?.product.description && (
-          <Box component="section" sx={{ mt: { xs: 4, md: 6 } }}>
-            <Typography component="h2" sx={{ fontFamily: SERIF, fontWeight: 400, fontSize: { xs: 26, md: 32 }, color: C.ink, mb: 2 }}>
-              Mô tả sản phẩm
-            </Typography>
-            <Box sx={{ borderTop: `1px solid ${C.line}`, pt: 3 }}>
-              <Typography sx={{ fontSize: 16, lineHeight: 1.8, color: '#3F3A34', whiteSpace: 'pre-line', maxWidth: 820 }}>
-                {data.product.description}
-              </Typography>
-            </Box>
-          </Box>
-        )}
+        {/* Mô tả sản phẩm: nằm dưới khung thông tin chung (Mô tả, Chất liệu & kiểu dáng, Bảo quản, Đổi trả) */}
+        {data?.product.description && <ShopProductDescription description={data.product.description} />}
 
         {/* Gợi ý sản phẩm cùng danh mục */}
         {related.length > 0 && (

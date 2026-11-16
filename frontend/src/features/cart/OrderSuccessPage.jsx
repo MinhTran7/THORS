@@ -145,7 +145,7 @@ export default function OrderSuccessPage() {
               fontWeight: 500,
             }}
           >
-            {paymentMethod === 'ONLINE' ? 'Thanh toán ngay / Xem đơn' : 'Xem đơn hàng'}
+            {paymentMethod === 'ONLINE' && !state?.paid ? 'Thanh toán ngay / Xem đơn' : 'Xem đơn hàng'}
           </Link>
           <Link
             to="/"

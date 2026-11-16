@@ -8,6 +8,7 @@ import {
   FileAddOutlined,
   FileDoneOutlined,
   GiftOutlined,
+  GlobalOutlined,
   HistoryOutlined,
   HomeOutlined,
   IdcardOutlined,
@@ -69,7 +70,10 @@ const OWNER_MENU = [
   {
     label: 'Kênh bán hàng',
     icon: <ShareAltOutlined />,
-    children: [{ to: '/facebook', label: 'Facebook', icon: <FacebookOutlined /> }]
+    children: [
+      { to: '/facebook', label: 'Facebook', icon: <FacebookOutlined /> },
+      { to: '/website', label: 'Website', icon: <GlobalOutlined /> }
+    ]
   },
   {
     label: 'Nhập hàng',
@@ -94,7 +98,7 @@ const OWNER_MENU = [
 ];
 
 // Các trang chỉ OWNER được vào (khớp với RequireAuth roles={['OWNER']} trong routes/index.jsx).
-const OWNER_ONLY = new Set(['/products', '/categories', '/returns', '/family', '/promotions', '/order-discounts']);
+const OWNER_ONLY = new Set(['/products', '/categories', '/returns', '/family', '/promotions', '/order-discounts', '/website']);
 
 const without = (menu, hidden) =>
   menu

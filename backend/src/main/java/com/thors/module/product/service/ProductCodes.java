@@ -15,9 +15,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * Mã sản phẩm (SKU, cột product.sku) và mã biến thể (dùng lại cột product_detail.barcode).
  *
  * <ul>
- *   <li>SKU: chữ in hoa, số, dấu "-"; 3–30 ký tự; không trùng. Để trống thì tự tạo theo danh mục:
- *       "Giày nam" → GN-0001, "Balo" → BAL-0001.</li>
- *   <li>Mã biến thể: SKU-SIZE-MÀU, vd GN-0001-42-DEN (bỏ dấu, viết hoa), tối đa 32 ký tự (giới hạn cột barcode,
+ *   <li>SKU: chữ in hoa, số, dấu "-"; 3–30 ký tự; không trùng. Để trống thì tự tạo dạng TH + 6 chữ số
+ *       (TH000001, TH000002…).</li>
+ *   <li>Mã biến thể: SKU-SIZE-MÀU, vd TH000001-42-DEN (bỏ dấu, viết hoa), tối đa 32 ký tự (giới hạn cột barcode,
  *       khớp định dạng máy quét của module Kho). Mã đã có thì không bao giờ tự đổi để tem đã in vẫn đúng.</li>
  * </ul>
  * Cột product.sku đến từ migration 2026-11-10_product_sku.sql; DB chưa chạy migration thì bỏ qua SKU.
@@ -130,29 +130,54 @@ public class ProductCodes {
         return n != null && n > 0;
     }
 
-    /** SKU kế tiếp cho danh mục: tiền tố + số lớn nhất đang dùng + 1 (vd GN-0003 → GN-0004). */
+    /** Tiền tố SKU tự tạo: TH + 6 chữ số (vd TH000001), cùng kiểu mã của cửa hàng THORS. */
+    static final String SKU_PREFIX = "TH";
+    private static final Pattern NUMBERED_SKU = Pattern.compile(SKU_PREFIX + "(\\d{6,9})");
+
+    /**
+     * SKU kế tiếp: TH + (số lớn nhất trong các SKU dạng TH000123 + 1), đủ 6 chữ số (TH000124).
+     * Không phụ thuộc danh mục; categoryId giữ lại để không đổi API.
+     */
     public String suggestSku(Integer categoryId) {
-        String name = null;
-        if (categoryId != null) {
-            List<String> names = jdbc.queryForList(
-                    "SELECT category_name FROM category WHERE category_id = ?", String.class, categoryId);
-            name = names == null || names.isEmpty() ? null : names.get(0);
-        }
-        String prefix = categoryPrefix(name);
-        Pattern numbered = Pattern.compile(Pattern.quote(prefix) + "-(\\d{1,9})");
         int max = 0;
         List<String> used = jdbc.queryForList(
-                "SELECT sku FROM product WHERE sku LIKE ?", String.class, prefix + "-%");
+                "SELECT sku FROM product WHERE sku LIKE ?", String.class, SKU_PREFIX + "%");
         if (used != null) {
             for (String sku : used) {
-                Matcher m = sku == null ? null : numbered.matcher(sku);
+                Matcher m = sku == null ? null : NUMBERED_SKU.matcher(sku);
                 if (m != null && m.matches()) max = Math.max(max, Integer.parseInt(m.group(1)));
             }
         }
         for (int n = max + 1; ; n++) {
-            String candidate = String.format(Locale.ROOT, "%s-%04d", prefix, n);
+            String candidate = String.format(Locale.ROOT, "%s%06d", SKU_PREFIX, n);
             if (!skuExists(candidate, null)) return candidate;
         }
+    }
+
+    /**
+     * Gán mã cho các biến thể chưa có mã của một sản phẩm: TH + id biến thể đủ 6 chữ số (biến thể #58 -> TH000058),
+     * giống hệt cách module Kho tạo mã vạch (WarehouseBarcodes); mã đã bị dùng thì thêm hậu tố -1, -2…
+     * Mã đã có không bao giờ bị đổi để tem đã in vẫn đúng. Trả về số biến thể vừa được gán mã.
+     */
+    public int assignVariantCodes(int productId) {
+        List<Integer> ids = jdbc.queryForList(
+                "SELECT detail_id FROM product_detail WHERE product_id = ? AND (barcode IS NULL OR barcode = '')"
+                        + " ORDER BY detail_id",
+                Integer.class, productId);
+        if (ids == null) return 0;
+        int assigned = 0;
+        for (Integer id : ids) {
+            if (id == null) continue;
+            String base = String.format(Locale.ROOT, "TH%06d", id);
+            String code = base;
+            for (int n = 1; variantCodeExists(code); n++) {
+                code = base + "-" + n;
+            }
+            assigned += jdbc.update(
+                    "UPDATE product_detail SET barcode = ? WHERE detail_id = ? AND (barcode IS NULL OR barcode = '')",
+                    code, id);
+        }
+        return assigned;
     }
 
     /** Mã biến thể tự tạo, không trùng DB và không trùng các mã đã chọn trong cùng lần lưu. */

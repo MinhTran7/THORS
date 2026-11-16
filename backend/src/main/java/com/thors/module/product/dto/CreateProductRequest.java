@@ -12,7 +12,7 @@ public class CreateProductRequest {
     private String imageUrl;
     private List<VariantRequest> variants;
 
-    // Mã sản phẩm (SKU). Để trống => tự tạo theo danh mục (vd GN-0001)
+    // Mã sản phẩm (SKU). Để trống => tự tạo dạng TH000001
     private String sku;
     // Mở bán online ngay cho mọi biến thể (mặc định tắt)
     private Boolean onlineSalesEnabled;
