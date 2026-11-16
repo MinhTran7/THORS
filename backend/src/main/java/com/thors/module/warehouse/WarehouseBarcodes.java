@@ -78,7 +78,7 @@ public class WarehouseBarcodes {
                 FROM product_detail d JOIN product p ON p.product_id=d.product_id
                 LEFT JOIN (SELECT detail_id,SUM(quantity) AS assigned FROM product_location GROUP BY detail_id) l
                   ON l.detail_id=d.detail_id
-                WHERE d.barcode=?
+                WHERE d.barcode=? AND d.status<>'DELETED'
                 """, code);
         if (rows.isEmpty()) {
             throw new ApiException(404, "BARCODE_NOT_FOUND", "Không tìm thấy hàng hóa có mã vạch này.");

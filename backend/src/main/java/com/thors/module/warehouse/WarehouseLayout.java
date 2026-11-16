@@ -37,6 +37,7 @@ SELECT d.detail_id,d.product_id,d.barcode,d.color,d.size,d.stock_quantity,d.stat
   COALESCE(l.assigned,0) AS assigned_quantity,GREATEST(0,d.stock_quantity-COALESCE(l.assigned,0)) AS unassigned_quantity
 FROM product_detail d JOIN product p ON p.product_id=d.product_id
 LEFT JOIN (SELECT detail_id,SUM(quantity) AS assigned FROM product_location GROUP BY detail_id) l ON l.detail_id=d.detail_id
+WHERE d.status<>'DELETED'
 ORDER BY p.product_name,d.color,d.size
 """);
 

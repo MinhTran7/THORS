@@ -141,8 +141,8 @@ export default function BarcodePrintDialog({ variants, onClose }) {
           {missing.length > 0 && (
             <Alert severity="warning">
               {number(missing.length)} biến thể chưa có mã vạch nên sẽ không được in:{' '}
-              {missing.map((v) => `${v.product_name} · ${v.color} · ${v.size}`).join('; ')}. Chủ cửa hàng bấm “Tạo mã còn thiếu” ở trang Tồn
-              kho trước.
+              {missing.map((v) => `${v.product_name} · ${v.color} · ${v.size}`).join('; ')}. Mở Sửa sản phẩm và lưu lại để hệ thống tự
+              gán mã.
             </Alert>
           )}
 

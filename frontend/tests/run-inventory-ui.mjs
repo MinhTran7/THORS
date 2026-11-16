@@ -231,11 +231,15 @@ try {
   const { page, calls } = owner;
   await page.getByRole('heading', { name: 'Tồn kho', exact: true }).waitFor();
   await page.getByText('3.400.000', { exact: false }).first().waitFor();
-  const filteredRequest = page.waitForRequest((r) => r.url().includes('/api/warehouse/inventory?') && r.url().includes('state=out'));
-  await page.getByRole('button', { name: 'Lọc: Hết hàng' }).click();
-  await page.waitForURL(/state=out/);
+  const filteredRequest = page.waitForRequest((r) => r.url().includes('/api/warehouse/inventory?') && r.url().includes('state=in'));
+  await page.getByRole('button', { name: 'Lọc: Còn hàng' }).click();
+  await page.waitForURL(/state=in/);
   await filteredRequest; // card filters on the backend
   await page.getByRole('button', { name: 'Xóa bộ lọc', exact: true }).click();
+  // Row actions: no separate "Chi tiết" (the row opens it); owner has a soft "Xóa" with a confirmation.
+  assert.equal(await page.getByRole('button', { name: 'Chi tiết', exact: true }).count(), 0);
+  await page.getByRole('button', { name: 'Xóa', exact: true }).first().click();
+  await page.getByRole('dialog', { name: /^Xóa / }).getByRole('button', { name: 'Quay lại', exact: true }).click();
   await page.getByText('SP00005 · #6', { exact: false }).click(); // same name as #3: identified by code
   await page.waitForURL(/detail=6/);
   const detail = page.getByRole('dialog');
@@ -296,7 +300,8 @@ try {
   // Family: no cost anywhere, submits counts.
   const family = await open('FAMILY_MEMBER', '/warehouse/inventory');
   await family.page.getByRole('heading', { name: 'Tồn kho', exact: true }).waitFor();
-  assert.equal(await family.page.getByText('Giá trị tồn kho').count(), 0);
+  assert.equal(await family.page.getByText('Tổng tiền hàng trong kho').count(), 0);
+  assert.equal(await family.page.getByRole('button', { name: 'Xóa', exact: true }).count(), 0, 'only the owner deletes variants');
   assert.equal(await family.page.getByRole('button', { name: /^Tạo mã/ }).count(), 0);
   await family.page.goto(`${baseURL}/warehouse/report`);
   await family.page.getByText('Giá vốn và giá trị tồn chỉ hiển thị cho chủ cửa hàng.').waitFor();

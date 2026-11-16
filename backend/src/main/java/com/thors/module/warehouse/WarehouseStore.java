@@ -134,6 +134,7 @@ public class WarehouseStore {
                         detail,
                         qty)
                 != 1) throw invalid("Biến thể #" + detail + ": tồn vừa thay đổi, hãy tải lại.");
+        stockAlert(detail, stock);
         return taken;
     }
 
@@ -222,12 +223,60 @@ public class WarehouseStore {
         for (var f : fields) if (row.get(f) != null) row.put(f, time(row.get(f)).minus(offset));
     }
 
+    /** One notification for every active Owner (the bell in the header). */
+    public void notifyOwners(String entityType, int entity, String title, String message, String type) {
+        int id =
+                insert(
+                        "INSERT INTO notification(title,message,type,related_entity_type,related_entity_id)"
+                                + " VALUES(?,?,?,?,?)",
+                        title.length() > 200 ? title.substring(0, 200) : title,
+                        message,
+                        type,
+                        entityType,
+                        entity);
+        db.update(
+                "INSERT INTO user_notification(user_id,notification_id) SELECT u.user_id,? FROM `user`"
+                        + " u JOIN `role` r ON r.role_id=u.role_id WHERE r.role_name='OWNER' AND"
+                        + " u.account_status='ACTIVE'",
+                id);
+    }
+
+    /**
+     * Call after stock of a variant went down from {@code before}. Notifies the Owner once when it
+     * runs out (0) or first drops to its minimum stock; replaces the warning panel on the inventory page.
+     */
+    public void stockAlert(int detail, int before) {
+        var v =
+                one(
+                        "SELECT d.stock_quantity,d.min_stock_quantity,d.color,d.size,p.product_name FROM product_detail d"
+                                + " JOIN product p ON p.product_id=d.product_id WHERE d.detail_id=?",
+                        detail);
+        int after = num(v, "stock_quantity");
+        if (after >= before) return;
+        String name = v.get("product_name") + " · " + v.get("color") + " · " + v.get("size");
+        Integer min = v.get("min_stock_quantity") == null ? null : num(v, "min_stock_quantity");
+        if (after == 0)
+            notifyOwners("product_detail", detail, "Hết hàng: " + name, name + " đã hết hàng trong kho.", "STOCK_OUT");
+        else if (min != null && before > min && after <= min)
+            notifyOwners(
+                    "product_detail",
+                    detail,
+                    "Sắp hết hàng: " + name,
+                    name + " chỉ còn " + after + " sản phẩm (ngưỡng tối thiểu " + min + ").",
+                    "STOCK_LOW");
+    }
+
     /** Runs a query that needs database/migrations/2026-11-06_inventory.sql; explains instead of a 500. */
     public <T> T migrated(java.util.function.Supplier<T> action) {
         try {
             return action.get();
         } catch (org.springframework.jdbc.BadSqlGrammarException e) {
             String m = String.valueOf(e.getMostSpecificCause().getMessage()).toLowerCase(Locale.ROOT);
+            if (m.contains("scanned_quantity") || m.contains("expected_quantity") || m.contains("receive_note"))
+                throw new ApiException(
+                        503,
+                        "MIGRATION_REQUIRED",
+                        "Database chưa có phần kiểm hàng bằng quét. Cần chạy database/migrations/2026-11-15_receipt_scan_check.sql.");
             if (m.contains("location_move_request"))
                 throw new ApiException(
                         503,

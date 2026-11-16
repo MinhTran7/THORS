@@ -251,7 +251,7 @@ public class WarehouseInventory {
                   WHERE quantity_change>0 GROUP BY detail_id) fin ON fin.detail_id=d.detail_id
                 LEFT JOIN (SELECT detail_id,SUM(quantity_change) AS total FROM stock_adjustment GROUP BY detail_id) led
                   ON led.detail_id=d.detail_id
-                WHERE (? IS NULL OR d.detail_id=?)
+                WHERE (? IS NULL OR d.detail_id=?) AND d.status<>'DELETED'
                 ORDER BY p.product_name,d.color,d.size,d.detail_id
                 """,
                                 onlyDetail,
@@ -512,6 +512,38 @@ public class WarehouseInventory {
         s.jdbc().update("UPDATE product_detail SET min_stock_quantity=? WHERE detail_id=?", min, detail);
         s.audit(a.id(), "INVENTORY_THRESHOLD", detail, old.get("min_stock_quantity") + " -> " + min);
         return Map.of("detail_id", detail, "min_stock_quantity", min == null ? "" : min);
+    }
+
+    /**
+     * Owner soft-deletes a variant: status becomes DELETED and it disappears from inventory and
+     * pickers, but the row and all its history (documents, stock ledger, orders) stay in the database.
+     * Only a variant with nothing in stock and nothing held for orders can be deleted.
+     */
+    @Transactional
+    public Map<String, Object> deleteVariant(Account a, int detail) {
+        policy.owner(a);
+        s.lock();
+        var v =
+                s.one(
+                        "SELECT d.stock_quantity,d.status,(SELECT COALESCE(SUM(i.reserved_quantity),0) FROM order_item i"
+                                + " WHERE i.detail_id=d.detail_id AND i.reserved_quantity>0) AS held"
+                                + " FROM product_detail d WHERE d.detail_id=? FOR UPDATE",
+                        detail);
+        if ("DELETED".equals(v.get("status"))) return Map.of("detail_id", detail, "status", "DELETED");
+        int stock = num(v, "stock_quantity");
+        if (stock > 0)
+            throw new ApiException(
+                    409,
+                    "VARIANT_HAS_STOCK",
+                    "Còn " + stock + " sản phẩm trong kho. Chỉ xóa được khi tồn bằng 0 (kiểm kê hoặc trả nhà cung cấp trước).");
+        if (((Number) v.get("held")).longValue() > 0)
+            throw new ApiException(409, "VARIANT_HELD", "Biến thể đang được giữ cho đơn hàng, chưa xóa được.");
+        s.jdbc()
+                .update(
+                        "UPDATE product_detail SET status='DELETED',online_sales_enabled=0 WHERE detail_id=?",
+                        detail);
+        s.audit(a.id(), "INVENTORY_VARIANT_DELETE", detail, v.get("status") + " -> DELETED");
+        return Map.of("detail_id", detail, "status", "DELETED");
     }
 
     /** Where a ledger row came from, for "open the source document". */

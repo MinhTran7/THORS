@@ -82,6 +82,12 @@ public class WarehouseController {
         return inventory.detail(sessions.current(), detail);
     }
 
+    /** Soft delete (status = DELETED); nothing is removed from the database. */
+    @PostMapping("/inventory/{detail}/delete")
+    public Object deleteVariant(@PathVariable int detail) {
+        return inventory.deleteVariant(sessions.current(), detail);
+    }
+
     @PutMapping("/inventory/{detail}/threshold")
     public Object threshold(@PathVariable int detail, @Valid @RequestBody Threshold r) {
         return inventory.threshold(sessions.current(), detail, r.min());
@@ -132,10 +138,11 @@ public class WarehouseController {
             @RequestParam(required = false) String q,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String progress,
+            @RequestParam(required = false) String state,
             @RequestParam(required = false) String supplier,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return orders.list(sessions.current(), q, status, progress, supplier, page, size);
+        return orders.list(sessions.current(), q, status, progress, state, supplier, page, size);
     }
 
     @GetMapping("/orders/{id}")
@@ -227,6 +234,18 @@ public class WarehouseController {
                 id,
                 r == null ? null : r.expectedRemaining(),
                 r == null ? null : r.picks());
+    }
+
+    /** Goods check of a receipt waiting for it ("Chờ kiểm hàng"): one scanned label or a typed count. */
+    @PostMapping("/documents/{id}/scan")
+    public Object scan(@PathVariable int id, @Valid @RequestBody Scan r) {
+        return docs.scan(sessions.current(), id, r);
+    }
+
+    /** "Chốt nhận hàng": stock increases by the scanned quantities only. */
+    @PostMapping("/documents/{id}/receive")
+    public Object receive(@PathVariable int id, @Valid @RequestBody(required = false) Receive r) {
+        return docs.receive(sessions.current(), id, r == null ? null : r.reason());
     }
 
     /** Owner approves a supplier return (waits for dispatch; stock unchanged). */

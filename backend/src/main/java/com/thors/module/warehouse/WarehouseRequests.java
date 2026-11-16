@@ -41,6 +41,20 @@ public final class WarehouseRequests {
             @Size(max = 2000) List<@NotNull @Valid Pick> picks) {}
 
     /**
+     * Goods check of a receipt waiting for it: a scanned label {@code code} adds 1 to its line; or
+     * {@code itemId} + {@code quantity} sets the count of a line (typed in, "bớt 1"). {@code over} =
+     * the Owner accepts more than the receipt line.
+     */
+    public record Scan(
+            @Size(max = 64) String code,
+            @Positive Integer itemId,
+            @Min(0) @Max(1000000) Integer quantity,
+            Boolean over) {}
+
+    /** "Chốt nhận hàng": reason is required when the scanned counts differ from the receipt. */
+    public record Receive(@Size(max = 255) String reason) {}
+
+    /**
      * SUPPLIER_RETURN dispatch: how many units of one return line are physically taken from one
      * product_location (locationId) or from the not-yet-placed stock (locationId = null).
      */

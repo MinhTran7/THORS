@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   Dialog,
@@ -30,7 +31,9 @@ import {
   docCode,
   money,
   number,
+  plainText,
   returnableQty,
+  textMatches,
   typeLabel,
   variantLabel,
   when
@@ -54,13 +57,19 @@ function SourceDocumentForm({
   source,
   onClose
 }) {
-  const { data, documents, run } = useWarehouse();
+  const { data, documents, run, owner } = useWarehouse();
+  // Receipts have no separate draft step: the owner records what arrived and it goes into stock at once;
+  // a family member sends it to the owner for confirmation.
+  const isReceipt = type === 'RECEIPT';
 
   const [error, setError] = useState('');
   const [variant, setVariant] = useState('');
   const [excelOpen, setExcelOpen] = useState(false);
   const [excelBusy, setExcelBusy] = useState(false);
   const [importMessage, setImportMessage] = useState('');
+  // Supplier return: which button was pressed. 'draft' only saves; 'approve' (owner) saves and
+  // approves at once; 'submit' (family) saves and sends to the owner.
+  const returnIntent = useRef('draft');
 
   const initialSource =
     document?.source_receipt_id ||
@@ -169,6 +178,12 @@ function SourceDocumentForm({
 
     onSubmit: async (values) => {
       setError('');
+      const intent = type === 'SUPPLIER_RETURN' ? (owner ? returnIntent.current : 'submit') : 'draft';
+      if (intent !== 'draft' && !values.note.trim()) {
+        f.setFieldTouched('note', true, false);
+        setError(owner ? 'Nhập lý do trả hàng trước khi xác nhận phiếu.' : 'Nhập lý do trả hàng trước khi gửi chủ cửa hàng duyệt.');
+        return;
+      }
 
       if (
         values.items.some(
@@ -232,10 +247,20 @@ function SourceDocumentForm({
         return;
       }
 
+      // Remaining per order line as shown on this form; the backend refuses the confirm if another
+      // receipt changed it in the meantime.
+      const expectedRemaining = () =>
+        Object.fromEntries(
+          items
+            .map((i) => (sourceDocument?.items || []).find((x) => x.receipt_item_id === i.sourceItemId))
+            .filter(Boolean)
+            .map((line) => [line.receipt_item_id, Math.max(0, line.quantity - line.handled_quantity)])
+        );
+
       try {
         await run(
-          () =>
-            api(
+          async () => {
+            const saved = await api(
               `/warehouse/documents${
                 document
                   ? `/${document.receipt_id}`
@@ -257,8 +282,30 @@ function SourceDocumentForm({
                   items
                 }
               }
-            ),
-          'Đã lưu phiếu nháp.'
+            );
+            const id = document?.receipt_id ?? saved.receipt_id;
+            if (!isReceipt) {
+              if (intent === 'draft') return saved;
+              try {
+                return await api(`/warehouse/documents/${id}/${intent}`, { method: 'POST' });
+              } catch (e) {
+                // The draft itself is saved; say so, so the user does not create it a second time.
+                throw new Error(`Đã lưu phiếu nháp nhưng chưa ${intent === 'approve' ? 'xác nhận' : 'gửi duyệt'} được: ${e.message}`);
+              }
+            }
+            if (!owner) return api(`/warehouse/documents/${id}/submit`, { method: 'POST' });
+            return api(`/warehouse/documents/${id}/confirm`, {
+              method: 'POST',
+              ...(sourceDocument?.receipt_type === 'PURCHASE_ORDER' ? { body: { expectedRemaining: expectedRemaining() } } : {})
+            });
+          },
+          !isReceipt
+            ? intent === 'approve'
+              ? 'Đã xác nhận phiếu trả, chờ xuất trả.'
+              : intent === 'submit'
+                ? 'Đã gửi chủ cửa hàng duyệt.'
+                : 'Đã lưu phiếu nháp.'
+            : owner ? 'Đã xác nhận phiếu nhập, chờ in tem và quét kiểm hàng.' : 'Đã gửi chủ cửa hàng xác nhận.'
         );
 
         onClose();
@@ -299,7 +346,9 @@ function SourceDocumentForm({
               ? `Sửa ${docCode(document)}`
               : isReturn
                 ? 'Tạo phiếu trả'
-                : `Tạo ${typeLabel[type].toLowerCase()}`}
+                : isReceipt
+                  ? `Nhận hàng${sourceDocument ? ` · ${docCode(sourceDocument)} · ${sourceDocument.manufacturer_name}` : ''}`
+                  : `Tạo ${typeLabel[type].toLowerCase()}`}
           </DialogTitle>
 
           <DialogContent>
@@ -308,7 +357,9 @@ function SourceDocumentForm({
                 {type === 'PURCHASE_ORDER'
                   ? 'Mỗi dòng là một màu/size. Xác nhận phiếu đặt chưa làm tăng tồn kho.'
                   : type === 'RECEIPT'
-                    ? 'Đã điền sẵn lượng còn thiếu; sửa thành số thực nhận từng màu/size (có thể giao nhiều đợt). Phiếu nháp/chờ duyệt chưa tăng tồn; chỉ khi Owner xác nhận, hàng mới vào tổng tồn ở phần chưa xếp vị trí. Đơn giá giữ theo phiếu đặt. Nhận vượt, nhận thay thế màu/size, đổi giá thực nhập và số từ chối tại cửa chưa lưu được trên schema hiện tại.'
+                    ? owner
+                      ? 'Đã điền sẵn số còn chờ nhận; sửa theo số hàng về đợt này (để 0 nếu chưa về). Bấm “Xác nhận phiếu nhập” để phiếu sang “Chờ kiểm hàng”: tồn kho chưa tăng; sau đó in tem, dán lên sản phẩm và quét từng cái, tồn chỉ tăng đúng số đã quét khi chốt nhận hàng. Đơn giá giữ theo phiếu đặt.'
+                      : 'Đã điền sẵn số còn chờ nhận; sửa theo số hàng về đợt này (để 0 nếu chưa về). Phiếu được gửi chủ cửa hàng xác nhận, sau đó in tem và quét để kiểm hàng; tồn kho chỉ tăng đúng số đã quét. Đơn giá giữ theo phiếu đặt.'
                     : 'Chỉ trả các sản phẩm thuộc phiếu nhập đã chọn. Lưu nháp, gửi duyệt hoặc duyệt phiếu chưa làm giảm tồn kho; tồn chỉ giảm khi xác nhận xuất trả, lúc đó bạn chọn vị trí lấy hàng và số lượng lấy ở từng vị trí.'}
               </Alert>
 
@@ -332,25 +383,26 @@ function SourceDocumentForm({
                   }}
                 />
               ) : (
-                <Choice
+                <SourcePicker
                   label={
                     type === 'RECEIPT'
                       ? 'Phiếu nguồn (đơn đặt hàng, hoặc phiếu trả chờ hàng đổi)'
                       : 'Phiếu nhập hàng nguồn'
                   }
+                  placeholder={
+                    isReturn
+                      ? 'Gõ mã phiếu hoặc ngày nhập để tìm'
+                      : 'Gõ mã phiếu hoặc ngày để tìm'
+                  }
+                  options={sources}
                   value={f.values.sourceId}
                   disabled={Boolean(document)}
-                  onChange={(e) => {
+                  onChange={(id) => {
                     setImportMessage('');
-                    f.setFieldValue(
-                      'sourceId',
-                      e.target.value
-                    );
+                    f.setFieldValue('sourceId', id);
                     f.setFieldValue(
                       'items',
-                      isReturn
-                        ? returnLines(e.target.value)
-                        : available(e.target.value)
+                      isReturn ? returnLines(id) : available(id)
                     );
                   }}
                   error={
@@ -361,23 +413,7 @@ function SourceDocumentForm({
                     f.touched.sourceId &&
                     f.errors.sourceId
                   }
-                >
-                  <MenuItem value="">
-                    {isReturn
-                      ? 'Chọn phiếu nhập đã xác nhận'
-                      : 'Chọn phiếu đã xác nhận'}
-                  </MenuItem>
-
-                  {sources.map((d) => (
-                    <MenuItem
-                      key={d.receipt_id}
-                      value={d.receipt_id}
-                    >
-                      {docCode(d)}
-                      {' '}· {d.manufacturer_name}
-                    </MenuItem>
-                  ))}
-                </Choice>
+                />
               )}
 
               {isReturn && sourceDocument && (
@@ -826,15 +862,42 @@ function SourceDocumentForm({
               Quay lại
             </Button>
 
-            <Button
-              type="submit"
-              variant="contained"
-              disabled={f.isSubmitting || excelBusy}
-            >
-              {f.isSubmitting
-                ? 'Đang lưu…'
-                : 'Lưu phiếu nháp'}
-            </Button>
+            {isReturn && owner ? (
+              <>
+                <Button
+                  type="submit"
+                  variant="outlined"
+                  disabled={f.isSubmitting || excelBusy}
+                  onClick={() => (returnIntent.current = 'draft')}
+                >
+                  Lưu phiếu nháp
+                </Button>
+                <Button
+                  type="submit"
+                  variant="contained"
+                  disabled={f.isSubmitting || excelBusy}
+                  onClick={() => (returnIntent.current = 'approve')}
+                >
+                  {f.isSubmitting ? 'Đang lưu…' : 'Xác nhận phiếu'}
+                </Button>
+              </>
+            ) : (
+              <Button
+                type="submit"
+                variant="contained"
+                disabled={f.isSubmitting || excelBusy}
+              >
+                {f.isSubmitting
+                  ? 'Đang lưu…'
+                  : isReturn
+                    ? 'Gửi chủ cửa hàng duyệt'
+                    : !isReceipt
+                      ? 'Lưu phiếu nháp'
+                      : owner
+                        ? 'Xác nhận phiếu nhập'
+                        : 'Gửi chủ cửa hàng xác nhận'}
+              </Button>
+            )}
           </DialogActions>
         </Box>
       </Dialog>
@@ -870,5 +933,130 @@ function SourceDocumentForm({
         />
       )}
     </>
+  );
+}
+// Two-step source picker: supplier first (short list with how many open receipts each has),
+// then only that supplier's receipts, searchable by code or date. Newest first.
+const plain = plainText;
+const sourceDate = (d) => d.confirmed_at || d.receipt_date;
+const shortDate = (v) => (v ? new Date(v).toLocaleDateString('vi-VN') : '');
+const supplierName = (d) => d.manufacturer_name || 'Chưa ghi nhà cung cấp';
+const matches = textMatches;
+
+function SourcePicker({ label, placeholder, options, value, onChange, disabled, error, helperText }) {
+  const sorted = [...options].sort((a, b) => b.receipt_id - a.receipt_id);
+  const selected = sorted.find((d) => d.receipt_id === Number(value)) || null;
+
+  const suppliers = Object.values(
+    sorted.reduce((acc, d) => {
+      const name = supplierName(d);
+      const key = plain(name);
+      acc[key] = acc[key] || { key, name, count: 0, latest: sourceDate(d) };
+      acc[key].count += 1;
+      return acc;
+    }, {})
+  ).sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+
+  const [supplierKey, setSupplierKey] = useState(selected ? plain(supplierName(selected)) : '');
+  const supplier = suppliers.find((s) => s.key === supplierKey) || null;
+  const receipts = supplier ? sorted.filter((d) => plain(supplierName(d)) === supplier.key) : [];
+
+  const chooseSupplier = (s) => {
+    setSupplierKey(s ? s.key : '');
+    if (!s) return onChange('');
+    // Only one open receipt from this supplier: pick it straight away.
+    const own = sorted.filter((d) => plain(supplierName(d)) === s.key);
+    if (own.length === 1) onChange(own[0].receipt_id);
+    else if (selected && plain(supplierName(selected)) !== s.key) onChange('');
+  };
+
+  return (
+    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Field label="1. Nhà cung cấp">
+          <Autocomplete
+            size="small"
+            options={suppliers}
+            value={supplier}
+            disabled={disabled}
+            onChange={(_, s) => chooseSupplier(s)}
+            getOptionLabel={(s) => s.name}
+            isOptionEqualToValue={(o, v) => o.key === v.key}
+            filterOptions={(list, { inputValue }) => list.filter((s) => matches(s.name, inputValue))}
+            noOptionsText="Không có nhà cung cấp nào còn phiếu có thể chọn"
+            slotProps={{ listbox: { style: { maxHeight: 320 } } }}
+            renderOption={(props, s) => {
+              const { key, ...rest } = props;
+              return (
+                <li key={key} {...rest}>
+                  <Stack direction="row" spacing={1} sx={{ width: '100%', alignItems: 'baseline' }}>
+                    <Typography variant="body2" sx={{ flex: 1 }} noWrap>
+                      {s.name}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {s.count} phiếu
+                    </Typography>
+                  </Stack>
+                </li>
+              );
+            }}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                placeholder="Gõ tên nhà cung cấp"
+                error={error && !supplier}
+                slotProps={{ ...params.slotProps, htmlInput: { ...params.slotProps?.htmlInput, 'aria-label': 'Nhà cung cấp' } }}
+              />
+            )}
+          />
+        </Field>
+      </Box>
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Field label={`2. ${label}`}>
+          <Autocomplete
+            size="small"
+            options={receipts}
+            value={selected}
+            disabled={disabled || !supplier}
+            onChange={(_, d) => onChange(d ? d.receipt_id : '')}
+            getOptionLabel={(d) => `${docCode(d)} · ${shortDate(sourceDate(d))}`}
+            isOptionEqualToValue={(o, v) => o.receipt_id === v.receipt_id}
+            filterOptions={(list, { inputValue }) =>
+              list.filter((d) => matches(`${docCode(d)} ${d.receipt_id} ${shortDate(sourceDate(d))}`, inputValue))
+            }
+            noOptionsText="Không tìm thấy phiếu phù hợp"
+            slotProps={{ listbox: { style: { maxHeight: 320 } } }}
+            renderOption={(props, d) => {
+              const { key, ...rest } = props;
+              const qty = (d.items || []).reduce((n, i) => n + Number(i.quantity || 0), 0);
+              return (
+                <li key={key} {...rest}>
+                  <Stack direction="row" spacing={1} sx={{ width: '100%', alignItems: 'baseline' }}>
+                    <Typography variant="body2" sx={{ fontWeight: 600, minWidth: 72 }}>
+                      {docCode(d)}
+                    </Typography>
+                    <Typography variant="body2" sx={{ flex: 1 }}>
+                      {shortDate(sourceDate(d))}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {(d.items || []).length} dòng · {qty} sp
+                    </Typography>
+                  </Stack>
+                </li>
+              );
+            }}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                placeholder={supplier ? placeholder : 'Chọn nhà cung cấp trước'}
+                error={error && Boolean(supplier)}
+                helperText={helperText}
+                slotProps={{ ...params.slotProps, htmlInput: { ...params.slotProps?.htmlInput, 'aria-label': label } }}
+              />
+            )}
+          />
+        </Field>
+      </Box>
+    </Stack>
   );
 }

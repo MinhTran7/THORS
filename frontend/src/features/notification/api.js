@@ -27,10 +27,16 @@ export const notificationsApi = {
 const ENTITY_ROUTES = {
   ORDER: (id) => `/orders/${id}`,
   // Yêu cầu đặt lại mật khẩu của Owner chỉ gửi cho Admin; Admin xử lý ở trang Accounts.
-  USER: () => '/accounts'
+  USER: () => '/accounts',
+  // Thông báo kho: phiếu kho mở bằng ?id= (trang nào cũng mở được mọi loại phiếu), yêu cầu xếp kệ mở trang Vị trí.
+  stock_receipt: (id, item) => (item.type === 'WAREHOUSE_SHORTAGE' ? `/warehouse/orders?id=${id}` : `/warehouse/receipts?id=${id}`),
+  location_move_request: () => '/warehouse/locations',
+  // Hết hàng / sắp hết: mở đúng biến thể ở trang Tồn kho.
+  product_detail: (id) => `/warehouse/inventory?detail=${id}`
 };
 
-export const entityPath = (item) => (item.relatedEntityId != null ? ENTITY_ROUTES[item.relatedEntityType]?.(item.relatedEntityId) : null);
+export const entityPath = (item) =>
+  item.relatedEntityId != null ? ENTITY_ROUTES[item.relatedEntityType]?.(item.relatedEntityId, item) : null;
 
 // Khách hàng: thông báo gắn với đơn thì mở đơn, còn lại (vd. bảo mật tài khoản) mở trang chi tiết thông báo
 export const customerNotificationPath = (item) => entityPath(item) ?? `/notifications/${item.id}`;

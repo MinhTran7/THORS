@@ -29,12 +29,13 @@ CREATE TABLE stock_receipt (
   receipt_id INT AUTO_INCREMENT PRIMARY KEY, receipt_type VARCHAR(20) NOT NULL, source_receipt_id INT,
   manufacturer_name VARCHAR(200), created_by INT NOT NULL, receipt_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   note VARCHAR(255), status VARCHAR(30) NOT NULL DEFAULT 'DRAFT', confirmed_by INT, confirmed_at TIMESTAMP,
-  rejection_reason VARCHAR(255), closed_at TIMESTAMP, close_reason VARCHAR(255), paid_before_tracking DECIMAL(12,0),
+  rejection_reason VARCHAR(255), closed_at TIMESTAMP, close_reason VARCHAR(255), paid_before_tracking DECIMAL(12,0), receive_note VARCHAR(255),
   CONSTRAINT fk_receipt_source FOREIGN KEY (source_receipt_id) REFERENCES stock_receipt (receipt_id),
-  CONSTRAINT ck_stock_receipt_1 CHECK (status IN ('DRAFT','PENDING_CONFIRMATION','CONFIRMED','REJECTED','CANCELLED','CLOSED')));
+  CONSTRAINT ck_stock_receipt_1 CHECK (status IN ('DRAFT','PENDING_CONFIRMATION','APPROVED','CONFIRMED','REJECTED','CANCELLED','CLOSED')));
 CREATE TABLE stock_receipt_item (
   receipt_item_id INT AUTO_INCREMENT PRIMARY KEY, receipt_id INT NOT NULL, detail_id INT NOT NULL,
   source_receipt_item_id INT, quantity INT NOT NULL, unit_price DECIMAL(12,0) NOT NULL,
+  scanned_quantity INT NOT NULL DEFAULT 0, expected_quantity INT,
   CONSTRAINT fk_receipt_item_source FOREIGN KEY (source_receipt_item_id) REFERENCES stock_receipt_item (receipt_item_id),
   CONSTRAINT fk_stock_receipt_item_receipt_id FOREIGN KEY (receipt_id) REFERENCES stock_receipt (receipt_id),
   CONSTRAINT fk_stock_receipt_item_detail_id FOREIGN KEY (detail_id) REFERENCES product_detail (detail_id),

@@ -4,6 +4,7 @@ import com.thors.common.ApiException;
 import com.thors.module.account.entity.Account;
 import com.thors.module.product.dto.CreateProductRequest;
 import com.thors.module.product.repository.ProductRepository;
+import com.thors.module.product.service.ProductCodes;
 import com.thors.module.product.service.ProductService;
 import com.thors.module.warehouse.WarehouseRequests.*;
 import static com.thors.module.warehouse.WarehouseStore.copy;
@@ -169,11 +170,20 @@ public class WarehouseCatalog {
                             size)
                     > 0) {
                 existing.add(color.toLowerCase(Locale.ROOT) + "\u0000" + size.toLowerCase(Locale.ROOT));
+                s.jdbc()
+                        .update(
+                                "UPDATE product_detail SET status='ACTIVE' WHERE product_id=? AND LOWER(color)=LOWER(?)"
+                                        + " AND LOWER(size)=LOWER(?) AND status='DELETED'",
+                                productId,
+                                color,
+                                size);
                 continue;
             }
             productRepository.insertNewVariant(productId, size, color, v.salePrice());
             created++;
         }
+        // Biến thể mới có mã vạch ngay, không cần bấm "Tạo mã" ở Tồn kho
+        if (created > 0) new ProductCodes(s.jdbc()).fillMissingVariantCodes(productId);
         if (created > 0)
             s.audit(a.id(), "CATALOG_QUICK_VARIANT", productId, "added " + created + " variants");
         return result(productId, variants, existing);

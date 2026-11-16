@@ -3,12 +3,12 @@ import useSWR, { mutate as mutateGlobal } from 'swr';
 import { Alert, Button, CircularProgress, Stack } from '@mui/material';
 import { api } from 'services/http';
 import { useAuth } from 'features/auth/AuthProvider';
+import { refreshNotifications } from 'features/notification/api';
 const Context = createContext();
 export function WarehouseProvider({ children }) {
   const { account } = useAuth();
   const snapshot = useSWR('/warehouse/snapshot', api, { revalidateOnFocus: true });
   const documents = useSWR('/warehouse/documents', api, { revalidateOnFocus: true });
-  const notices = useSWR('/warehouse/notifications', api);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
@@ -16,7 +16,8 @@ export function WarehouseProvider({ children }) {
     await Promise.all([
       snapshot.mutate(),
       documents.mutate(),
-      notices.mutate(),
+      // Warehouse notices live in the shared notification bell; refresh its count too.
+      refreshNotifications(),
       // Order list/detail/picker, per-document history/settlements and supplier credit views are
       // computed by the backend; refresh them as well.
       mutateGlobal(
@@ -58,8 +59,6 @@ export function WarehouseProvider({ children }) {
       value={{
         data: snapshot.data,
         documents: documents.data,
-        notices: notices.data || [],
-        noticeError: notices.error,
         owner: account.role === 'OWNER',
         account,
         reload,

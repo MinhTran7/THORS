@@ -215,7 +215,7 @@ export default function InventoryDetail({ id, onClose, onChanged }) {
               size="small"
               variant="outlined"
               disabled={!v.barcode}
-              title={v.barcode ? undefined : 'Biến thể chưa có mã vạch. Owner bấm “Tạo mã còn thiếu” ở trang Tồn kho.'}
+              title={v.barcode ? undefined : 'Biến thể chưa có mã vạch. Mở Sửa sản phẩm và lưu lại để hệ thống tự gán mã.'}
               onClick={() => setPrinting(true)}
             >
               In tem

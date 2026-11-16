@@ -5,7 +5,7 @@ import useSWR from 'swr';
 import MainCard from 'components/MainCard';
 import { api } from 'services/http';
 import { useWarehouse } from './WarehouseContext';
-import { DataTable, Metrics, Title } from './components';
+import { ActionDialog, DataTable, Metrics, Title } from './components';
 import { money, number, skuLabel, stockStateColor, stockStateLabel, variantLabel } from './model';
 import { exportSheet } from './excelWorkbook';
 import BarcodePrintDialog from './BarcodePrintDialog';
@@ -57,16 +57,16 @@ function exportColumns(owner) {
 }
 
 export default function InventoryPage() {
-  const { owner, busy, run, data: snapshot } = useWarehouse();
+  const { owner, data: snapshot, reload: reloadWarehouse } = useWarehouse();
   const [params, setParams] = useSearchParams();
   const [query, setQuery] = useState(params.get('q') || '');
   const [selected, setSelected] = useState({});
   // Variants open in the print dialog: the selected rows, or the one row whose "In tem" was clicked.
   const [printing, setPrinting] = useState(null);
+  const [deleting, setDeleting] = useState(null); // variant row waiting for "Xóa" confirmation
   const [scanning, setScanning] = useState(false);
   // A code read by a USB/Bluetooth scanner anywhere on this page: opens the lookup with that code.
   const [scanRequest, setScanRequest] = useState(null);
-  const [notice, setNotice] = useState('');
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState('');
 
@@ -109,27 +109,6 @@ export default function InventoryPage() {
       label: `${snapshot.racks.find((r) => r.rack_id === t.rack_id)?.rack_code || '?'}${t.level_number}`
     }))
     .sort((a, b) => a.label.localeCompare(b.label, 'vi'));
-
-  const generate = async () => {
-    const missing = selectedRows.filter((r) => !r.barcode).map((r) => r.detail_id);
-    try {
-      const result = await run(() =>
-        api('/warehouse/barcodes/generate', { method: 'POST', body: missing.length ? { detailIds: missing } : {} })
-      );
-      setNotice(
-        result.generated
-          ? `Đã tạo ${number(result.generated)} mã vạch mới: ${result.codes.join(', ')}.`
-          : 'Không có biến thể nào cần tạo mã.'
-      );
-      const fresh = await api('/warehouse/inventory?all=true');
-      setSelected((prev) =>
-        Object.fromEntries(Object.keys(prev).map((id) => [id, fresh.items.find((r) => String(r.detail_id) === id) || prev[id]]))
-      );
-      mutate();
-    } catch {
-      /* WarehouseContext shows the API error. */
-    }
-  };
 
   const exportExcel = async () => {
     setExportError('');
@@ -174,7 +153,7 @@ export default function InventoryPage() {
     <>
       <Title
         title="Tồn kho"
-        subtitle="Tổng tồn = Đã xếp vị trí + Chưa xếp vị trí. Có thể bán = Tổng tồn − Đang giữ cho đơn. Hàng đang đặt chưa tính vào tồn."
+        subtitle="Số lượng hàng đang có trong kho cửa hàng."
         action={
           <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
             <Button component={Link} to="/warehouse/counts">
@@ -188,31 +167,16 @@ export default function InventoryPage() {
       />
       <Metrics
         loading={!data}
-        columns={owner ? 5 : 4}
+        columns={owner ? 3 : 2}
         items={[
-          ['Tổng tồn thực tế', m.stock, 'Bấm để bỏ lọc trạng thái', () => update({ state: '' }), !state],
-          ['Đã xếp vị trí', m.assigned, 'Tại kệ / tầng'],
-          [
-            'Chưa xếp vị trí',
-            m.unassigned,
-            `${number(m.count_unassigned)} biến thể cần xếp · bấm để lọc`,
-            () => toggleState('unassigned'),
-            state === 'unassigned'
-          ],
-          ['Đang giữ cho đơn', m.held, `Có thể bán: ${number(m.available)}`],
-          ['Hàng đang đặt', m.incoming, 'Còn chờ nhận từ phiếu đặt đã xác nhận'],
-          ['Còn hàng', m.count_in, 'Biến thể có tồn > 0', () => toggleState('in'), state === 'in'],
-          ['Hết hàng', m.count_out, 'Biến thể tồn = 0', () => toggleState('out'), state === 'out'],
-          ['Sắp hết', m.count_low, 'Có thể bán ≤ ngưỡng tối thiểu', () => toggleState('low'), state === 'low'],
-          ['Biến thể', m.variants, filtered ? 'Theo tìm kiếm / bộ lọc' : 'Toàn bộ kho cửa hàng'],
+          ['Tổng tồn thực tế', m.stock, 'Tổng số sản phẩm trong kho', () => update({ state: '' }), !state],
+          ['Còn hàng', m.count_in, 'Số mẫu (màu/size) còn hàng · bấm để lọc', () => toggleState('in'), state === 'in'],
           ...(owner
             ? [
                 [
-                  'Giá trị tồn kho',
+                  'Tổng tiền hàng trong kho',
                   0,
-                  m.unvalued_quantity
-                    ? `${number(m.unvalued_quantity)} sản phẩm (${number(m.unvalued_variants)} biến thể) chưa đủ cơ sở giá vốn — không tính`
-                    : 'Giá vốn bình quân gia quyền liên hoàn',
+                  m.unvalued_quantity ? `Chưa tính ${number(m.unvalued_quantity)} sản phẩm chưa có giá nhập` : 'Tính theo giá nhập',
                   null,
                   false,
                   money(m.stock_value)
@@ -221,76 +185,6 @@ export default function InventoryPage() {
             : [])
         ]}
       />
-      <MainCard title="Cảnh báo" sx={{ mb: 2 }}>
-        {!data && !error && <Typography color="text.secondary">Đang tải tồn kho…</Typography>}
-        <Stack spacing={1} sx={{ display: data ? undefined : 'none' }}>
-          {m.count_out > 0 && (
-            <Alert severity="error" action={<Button onClick={() => update({ state: 'out' })}>Xem</Button>}>
-              {number(m.count_out)} biến thể hết hàng (căn cứ: tổng tồn = 0).
-            </Alert>
-          )}
-          {m.count_low > 0 && (
-            <Alert severity="warning" action={<Button onClick={() => update({ state: 'low' })}>Xem</Button>}>
-              {number(m.count_low)} biến thể dưới / chạm ngưỡng tối thiểu (căn cứ: số có thể bán = tồn − đang giữ).
-            </Alert>
-          )}
-          {m.count_noThreshold > 0 && (
-            <Alert severity="info" action={<Button onClick={() => update({ state: 'noThreshold' })}>Xem</Button>}>
-              {number(m.count_noThreshold)} biến thể chưa thiết lập ngưỡng tối thiểu — chưa đánh giá sắp hết.
-              {owner ? ' Đặt ngưỡng trong chi tiết biến thể.' : ''}
-            </Alert>
-          )}
-          {m.unassigned > 0 && (
-            <Alert severity="warning" action={<Button onClick={() => update({ state: 'unassigned' })}>Lọc hàng cần xếp</Button>}>
-              {number(m.unassigned)} sản phẩm ({number(m.count_unassigned)} biến thể) chưa xếp vị trí.
-            </Alert>
-          )}
-          {m.hold_shortage > 0 && (
-            <Alert severity="error">
-              {number(m.hold_shortage)} biến thể có số đang giữ cho đơn lớn hơn tổng tồn — cần xử lý các đơn này.
-            </Alert>
-          )}
-          <Alert
-            severity={m.count_slow ? 'warning' : 'success'}
-            icon={false}
-            action={
-              <Button disabled={!m.count_slow} onClick={() => update({ state: 'slow' })}>
-                Xem
-              </Button>
-            }
-          >
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { sm: 'center' } }}>
-              <span>Tồn lâu — không phát sinh xuất bán từ</span>
-              <TextField
-                select
-                size="small"
-                value={slowDays}
-                onChange={(e) => update({ slowDays: e.target.value })}
-                slotProps={{ select: { inputProps: { 'aria-label': 'Số ngày không bán' } } }}
-              >
-                {[30, 60, 90, 180, 365].map((d) => (
-                  <MenuItem key={d} value={d}>
-                    {d} ngày
-                  </MenuItem>
-                ))}
-              </TextField>
-              <span>: {number(m.count_slow)} biến thể.</span>
-            </Stack>
-            {m.slow_unknown > 0 && (
-              <Typography variant="caption" sx={{ display: 'block' }}>
-                {number(m.slow_unknown)} biến thể còn hàng nhưng chưa có lịch sử nhập/bán — chưa đủ dữ liệu để đánh giá, không tính vào tồn
-                lâu.
-              </Typography>
-            )}
-          </Alert>
-          {m.ledger_gaps > 0 && (
-            <Alert severity="info">
-              {number(m.ledger_gaps)} biến thể có lịch sử kho cũ không đầy đủ (tồn hiện tại khác tổng các biến động đã ghi). Hệ thống không
-              tạo lịch sử giả để bù; báo cáo kỳ của các biến thể này được đánh dấu.
-            </Alert>
-          )}
-        </Stack>
-      </MainCard>
       <MainCard>
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mb: 2, flexWrap: 'wrap', gap: 1, alignItems: { sm: 'center' } }}>
           <Tooltip describeChild title="Có máy quét USB/Bluetooth: không cần bấm, cứ bóp cò quét tem trên trang này là ra kết quả.">
@@ -305,28 +199,12 @@ export default function InventoryPage() {
               </Button>
             </span>
           </Tooltip>
-          {owner && (
-            <Button
-              variant="outlined"
-              disabled={busy || (selectedRows.length ? selectedRows.every((r) => r.barcode) : !m.missing_barcode)}
-              onClick={generate}
-            >
-              {selectedRows.length
-                ? `Tạo mã cho mục đã chọn (${number(selectedRows.filter((r) => !r.barcode).length)})`
-                : `Tạo mã còn thiếu (${number(m.missing_barcode)})`}
-            </Button>
-          )}
           {selectedRows.length > 0 && <Button onClick={() => setSelected({})}>Bỏ chọn</Button>}
           <Box sx={{ flex: 1 }} />
           <Button variant="outlined" disabled={exporting || !data} onClick={exportExcel}>
             {exporting ? 'Đang xuất…' : 'Xuất Excel'}
           </Button>
         </Stack>
-        {notice && (
-          <Alert severity="success" sx={{ mb: 2 }} onClose={() => setNotice('')}>
-            {notice}
-          </Alert>
-        )}
         {exportError && (
           <Alert severity="error" sx={{ mb: 2 }} onClose={() => setExportError('')}>
             {exportError}
@@ -378,6 +256,21 @@ export default function InventoryPage() {
               </MenuItem>
             ))}
           </TextField>
+          {state === 'slow' && (
+            <TextField
+              select
+              size="small"
+              value={slowDays}
+              onChange={(e) => update({ slowDays: e.target.value })}
+              slotProps={{ select: { inputProps: { 'aria-label': 'Số ngày không bán' } } }}
+            >
+              {[30, 60, 90, 180, 365].map((d) => (
+                <MenuItem key={d} value={d}>
+                  {d} ngày
+                </MenuItem>
+              ))}
+            </TextField>
+          )}
           <TextField
             select
             size="small"
@@ -520,7 +413,7 @@ export default function InventoryPage() {
                 label: '',
                 render: (r) => (
                   <Stack direction="row" spacing={0.5} sx={{ justifyContent: 'flex-end' }}>
-                    <Tooltip title={r.barcode ? `In tem ${r.barcode}` : 'Chưa có mã vạch — chủ cửa hàng bấm “Tạo mã” trước'}>
+                    <Tooltip title={r.barcode ? `In tem ${r.barcode}` : 'Chưa có mã vạch — mở Sửa sản phẩm và lưu lại để hệ thống tự gán mã'}>
                       <span>
                         <Button
                           size="small"
@@ -533,9 +426,11 @@ export default function InventoryPage() {
                         </Button>
                       </span>
                     </Tooltip>
-                    <Button size="small" onClick={(e) => (e.stopPropagation(), update({ detail: r.detail_id, page: value('page') }))}>
-                      Chi tiết
-                    </Button>
+                    {owner && (
+                      <Button size="small" color="error" onClick={(e) => (e.stopPropagation(), setDeleting(r))}>
+                        Xóa
+                      </Button>
+                    )}
                   </Stack>
                 )
               }
@@ -544,6 +439,22 @@ export default function InventoryPage() {
         )}
       </MainCard>
       {detail && <InventoryDetail id={detail} onClose={() => update({ detail: '', page: value('page') })} onChanged={() => mutate()} />}
+      {deleting && (
+        <ActionDialog
+          title={`Xóa ${variantLabel(deleting)}?`}
+          text={
+            Number(deleting.stock_quantity) > 0
+              ? `Biến thể này còn ${number(deleting.stock_quantity)} sản phẩm trong kho nên chưa xóa được. Hãy kiểm kê về 0 hoặc trả nhà cung cấp trước.`
+              : 'Biến thể sẽ bị ẩn khỏi tồn kho và các danh sách chọn hàng. Dữ liệu và lịch sử (phiếu nhập, đơn hàng, thẻ kho) vẫn được giữ nguyên trong hệ thống. Thêm lại đúng màu/size này cho sản phẩm sẽ khôi phục biến thể.'
+          }
+          onClose={() => setDeleting(null)}
+          onConfirm={async () => {
+            await api(`/warehouse/inventory/${deleting.detail_id}/delete`, { method: 'POST' });
+            await mutate();
+            reloadWarehouse();
+          }}
+        />
+      )}
       {printing && <BarcodePrintDialog variants={printing} onClose={() => setPrinting(null)} />}
       {scanning && (
         <BarcodeScannerDialog

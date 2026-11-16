@@ -9,6 +9,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  IconButton,
   Link as MuiLink,
   Stack,
   Table,
@@ -18,6 +19,7 @@ import {
   TableRow,
   Typography
 } from '@mui/material';
+import { CloseOutlined } from '@ant-design/icons';
 import { api } from 'services/http';
 import { useWarehouse } from './WarehouseContext';
 import { Status } from './components';
@@ -65,8 +67,11 @@ export default function OrderDetail({ id, onClose, onEdit, onAction, onOpenDocum
 
   return (
     <Dialog open onClose={onClose} fullWidth maxWidth="xl">
-      <DialogTitle>
+      <DialogTitle sx={{ pr: 7 }}>
         {orderCode(d.receipt_id)} · Phiếu đặt hàng nhập <Status value={d.status} /> <Progress value={d.progress} />
+        <IconButton aria-label="Đóng" onClick={onClose} sx={{ position: 'absolute', right: 12, top: 12 }}>
+          <CloseOutlined />
+        </IconButton>
       </DialogTitle>
       <DialogContent>
         <Stack spacing={2}>
@@ -148,7 +153,6 @@ export default function OrderDetail({ id, onClose, onEdit, onAction, onOpenDocum
         </Stack>
       </DialogContent>
       <DialogActions sx={{ flexWrap: 'wrap', gap: 1 }}>
-        <Button onClick={onClose}>Đóng</Button>
         {(owner || mine) && d.status === 'DRAFT' && raw && (
           <Button disabled={busy} onClick={() => onEdit(raw)}>
             Sửa nháp

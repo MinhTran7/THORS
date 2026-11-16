@@ -201,12 +201,14 @@ public class WarehouseCounts {
                                     location,
                                     num(l, "system_quantity"))
                             != 1) throw invalid("Vị trí vừa thay đổi, hãy tải lại.");
+            int before = s.jdbc().queryForObject("SELECT stock_quantity FROM product_detail WHERE detail_id=?", Integer.class, detail);
             if (s.jdbc().update(
                             "UPDATE product_detail SET stock_quantity=stock_quantity+? WHERE detail_id=? AND stock_quantity+?>=0",
                             diff,
                             detail,
                             diff)
                     != 1) throw invalid("Tồn của biến thể #" + detail + " không thể âm.");
+            if (diff < 0) s.stockAlert(detail, before);
             s.jdbc().update(
                     """
                 INSERT INTO stock_adjustment(detail_id,quantity_change,reason,adjusted_by,movement_type,movement_quantity,source_location_id,idempotency_key)
