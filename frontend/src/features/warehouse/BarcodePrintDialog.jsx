@@ -27,6 +27,7 @@ import { CloseOutlined, MinusOutlined, PlusOutlined } from '@ant-design/icons';
 import {
   DEFAULT_LABEL_OPTIONS,
   downloadLabelsPdf,
+  labelKey,
   LABEL_TEMPLATES,
   MAX_LABELS,
   previewDocument,
@@ -77,15 +78,29 @@ const SHOW_FIELDS = [
   ['showShop', 'Tên cửa hàng']
 ];
 
+/** Serial labels grouped by variant for the table: one row per variant, not one per piece. */
+function groupUnits(units) {
+  const groups = new Map();
+  for (const u of units) {
+    const g = groups.get(u.detail_id) || { ...u, units: [] };
+    g.units.push(u);
+    groups.set(u.detail_id, g);
+  }
+  return [...groups.values()];
+}
+
 /**
  * Print barcode labels for one or more variants. Variants without a code are listed but not printed
  * (the owner creates codes on the Tồn kho page first). Template and display options are remembered
  * per browser.
+ * serial: `variants` are pieces (unitLabel(...)), one label each; onPrinted(items) runs after a print/PDF.
  */
-export default function BarcodePrintDialog({ variants, onClose }) {
-  const [items, setItems] = useState(() => variants.filter((v) => v.barcode));
-  const missing = useMemo(() => variants.filter((v) => !v.barcode), [variants]);
-  const [quantities, setQuantities] = useState(() => Object.fromEntries(variants.map((v) => [v.detail_id, defaultQuantity(v)])));
+export default function BarcodePrintDialog({ variants, onClose, serial = false, onPrinted, header }) {
+  const [items, setItems] = useState(() => (serial ? variants : variants.filter((v) => v.barcode)));
+  const missing = useMemo(() => (serial ? [] : variants.filter((v) => !v.barcode)), [variants, serial]);
+  const [quantities, setQuantities] = useState(() =>
+    Object.fromEntries(variants.map((v) => [labelKey(v), serial ? 1 : defaultQuantity(v)]))
+  );
   const [options, setOptionsState] = useState(loadOptions);
   const [error, setError] = useState('');
   // '' | 'print' | 'pdf' — which action is running.
@@ -102,7 +117,7 @@ export default function BarcodePrintDialog({ variants, onClose }) {
   const step = (id, delta) => setQuantity(id, Math.max(1, (Number.parseInt(quantities[id], 10) || 0) + delta));
   const fill = (fn) => {
     const zero = items.filter((v) => fn(v) < 1);
-    setQuantities((previous) => ({ ...previous, ...Object.fromEntries(items.map((v) => [v.detail_id, Math.max(1, fn(v))])) }));
+    setQuantities((previous) => ({ ...previous, ...Object.fromEntries(items.map((v) => [labelKey(v), Math.max(1, fn(v))])) }));
     setError(zero.length ? `${number(zero.length)} biến thể có số lượng 0 nên được đặt 1 tem. Bỏ dòng đó nếu không cần in.` : '');
   };
 
@@ -115,17 +130,21 @@ export default function BarcodePrintDialog({ variants, onClose }) {
   }
   const template = templateOf(options.template);
   const sheets = template.kind === 'roll' ? Math.ceil(total / template.cols) : 0;
-  const preview = useMemo(() => previewDocument(items, options), [items, options]);
+  // Serial: a few sample labels are enough (each piece only differs by its number).
+  const shown = useMemo(() => (serial ? items.slice(0, 4) : items), [serial, items]);
+  const preview = useMemo(() => previewDocument(shown, options), [shown, options]);
   const previewHeight = Math.min(
     260,
-    28 + Math.ceil(items.length / Math.max(1, Math.floor(700 / (template.w * 3.8 + 12)))) * (template.h * 3.8 + 12)
+    28 + Math.ceil(shown.length / Math.max(1, Math.floor(700 / (template.w * 3.8 + 12)))) * (template.h * 3.8 + 12)
   );
+  const groups = useMemo(() => (serial ? groupUnits(items) : []), [serial, items]);
 
   const runAction = async (action, fn) => {
     setError('');
     setBusyAction(action);
     try {
       await fn(items, quantities, options);
+      await onPrinted?.(items);
     } catch (err) {
       setError(err.message || 'Không tạo được bản in. Vui lòng thử lại.');
     } finally {
@@ -135,9 +154,10 @@ export default function BarcodePrintDialog({ variants, onClose }) {
 
   return (
     <Dialog open onClose={() => !printing && onClose()} fullWidth maxWidth="md">
-      <DialogTitle>In tem mã vạch</DialogTitle>
+      <DialogTitle>{serial ? 'In tem serial (mỗi chiếc một tem)' : 'In tem mã vạch'}</DialogTitle>
       <DialogContent dividers>
         <Stack spacing={2.5}>
+          {header}
           {missing.length > 0 && (
             <Alert severity="warning">
               {number(missing.length)} biến thể chưa có mã vạch nên sẽ không được in:{' '}
@@ -152,16 +172,60 @@ export default function BarcodePrintDialog({ variants, onClose }) {
               spacing={1}
               sx={{ mb: 1, alignItems: { sm: 'center' }, justifyContent: 'space-between' }}
             >
-              <Typography variant="subtitle1">1. Số lượng tem</Typography>
-              <ButtonGroup size="small" variant="outlined" disabled={!items.length}>
-                {FILL_MODES.map(([key, label, fn]) => (
-                  <Button key={key} onClick={() => fill(fn)}>
-                    {label}
-                  </Button>
-                ))}
-              </ButtonGroup>
+              <Typography variant="subtitle1">{serial ? '1. Các chiếc cần in tem' : '1. Số lượng tem'}</Typography>
+              {!serial && (
+                <ButtonGroup size="small" variant="outlined" disabled={!items.length}>
+                  {FILL_MODES.map(([key, label, fn]) => (
+                    <Button key={key} onClick={() => fill(fn)}>
+                      {label}
+                    </Button>
+                  ))}
+                </ButtonGroup>
+              )}
             </Stack>
-            {items.length ? (
+            {serial && items.length > 0 ? (
+              <Box sx={{ overflowX: 'auto', border: 1, borderColor: 'divider', borderRadius: 1 }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Hàng hóa</TableCell>
+                      <TableCell>Mã serial</TableCell>
+                      <TableCell align="right">Số tem</TableCell>
+                      <TableCell sx={{ width: 40 }} />
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {groups.map((g) => (
+                      <TableRow key={g.detail_id}>
+                        <TableCell>
+                          <Typography variant="subtitle2">{g.product_name}</Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {g.color} · Size {g.size}
+                          </Typography>
+                        </TableCell>
+                        <TableCell sx={{ fontFamily: 'monospace' }}>
+                          {g.units.length === 1 ? g.units[0].serial_code : `${g.units[0].serial_code} … ${g.units.at(-1).serial_code}`}
+                        </TableCell>
+                        <TableCell align="right">{number(g.units.length)}</TableCell>
+                        <TableCell>
+                          {groups.length > 1 && (
+                            <Tooltip title="Bỏ khỏi lần in này">
+                              <IconButton
+                                size="small"
+                                aria-label={`Bỏ ${g.product_name} ${g.color} ${g.size}`}
+                                onClick={() => setItems((previous) => previous.filter((x) => x.detail_id !== g.detail_id))}
+                              >
+                                <CloseOutlined />
+                              </IconButton>
+                            </Tooltip>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Box>
+            ) : items.length ? (
               <Box sx={{ overflowX: 'auto', border: 1, borderColor: 'divider', borderRadius: 1 }}>
                 <Table size="small">
                   <TableHead>
@@ -190,14 +254,14 @@ export default function BarcodePrintDialog({ variants, onClose }) {
                         </TableCell>
                         <TableCell align="center">
                           <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', justifyContent: 'center' }}>
-                            <IconButton size="small" aria-label={`Bớt 1 tem ${v.barcode}`} onClick={() => step(v.detail_id, -1)}>
+                            <IconButton size="small" aria-label={`Bớt 1 tem ${v.barcode}`} onClick={() => step(labelKey(v), -1)}>
                               <MinusOutlined />
                             </IconButton>
                             <TextField
                               size="small"
                               type="number"
-                              value={quantities[v.detail_id]}
-                              onChange={(e) => setQuantity(v.detail_id, e.target.value)}
+                              value={quantities[labelKey(v)]}
+                              onChange={(e) => setQuantity(labelKey(v), e.target.value)}
                               onFocus={(e) => e.target.select()}
                               slotProps={{
                                 htmlInput: {
@@ -210,7 +274,7 @@ export default function BarcodePrintDialog({ variants, onClose }) {
                               }}
                               sx={{ width: 80 }}
                             />
-                            <IconButton size="small" aria-label={`Thêm 1 tem ${v.barcode}`} onClick={() => step(v.detail_id, 1)}>
+                            <IconButton size="small" aria-label={`Thêm 1 tem ${v.barcode}`} onClick={() => step(labelKey(v), 1)}>
                               <PlusOutlined />
                             </IconButton>
                           </Stack>
@@ -234,7 +298,7 @@ export default function BarcodePrintDialog({ variants, onClose }) {
                 </Table>
               </Box>
             ) : (
-              <Alert severity="info">Không có biến thể nào có mã vạch để in.</Alert>
+              <Alert severity="info">{serial ? 'Không có chiếc nào cần in tem.' : 'Không có biến thể nào có mã vạch để in.'}</Alert>
             )}
           </Box>
 
@@ -309,7 +373,7 @@ export default function BarcodePrintDialog({ variants, onClose }) {
           {items.length > 0 && (
             <Box>
               <Typography variant="subtitle1" sx={{ mb: 1 }}>
-                Xem trước (kích thước thật, mỗi biến thể một mẫu)
+                {serial ? 'Xem trước (kích thước thật, vài tem đầu)' : 'Xem trước (kích thước thật, mỗi biến thể một mẫu)'}
               </Typography>
               <Box
                 component="iframe"

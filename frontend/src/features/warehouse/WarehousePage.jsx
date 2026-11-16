@@ -8,6 +8,7 @@ import SuppliersPage from './SuppliersPage';
 import OrdersPage from './OrdersPage';
 import CountsPage from './CountsPage';
 import ReportPage from './ReportPage';
+import DefectsPage from './DefectsPage';
 // Warehouse notices are shown in the shared notification bell in the header, not on this page.
 function Content() {
   const { owner } = useWarehouse();
@@ -41,5 +42,7 @@ export const warehouseRoutes = [
   { path: 'report', element: <ReportPage /> },
   { path: 'layout', element: <LocationsPage key="layout" editLayout /> },
   { path: 'locations', element: <LocationsPage key="locations" /> },
-  { path: 'suppliers', element: <SuppliersPage /> }
+  { path: 'suppliers', element: <SuppliersPage /> },
+  // Hiện trong menu Bán hàng → Xử lý hàng lỗi (layouts/navigation.jsx)
+  { path: 'defects', element: <DefectsPage /> }
 ];

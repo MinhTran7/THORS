@@ -27,7 +27,8 @@ import {
   SwapOutlined,
   TeamOutlined,
   UnorderedListOutlined,
-  UserOutlined
+  UserOutlined,
+  WarningOutlined
 } from '@ant-design/icons';
 
 
@@ -54,6 +55,7 @@ const OWNER_MENU = [
       { to: '/in-store-sales/history', label: 'Đơn hàng tại quầy', icon: <FileDoneOutlined /> },
       { to: '/orders', label: 'Đơn hàng online', icon: <MobileOutlined /> },
       { to: '/returns', label: 'Đổi trả', icon: <SwapOutlined /> },
+      { to: '/warehouse/defects', label: 'Xử lý hàng lỗi', icon: <WarningOutlined /> },
       promotions
     ]
   },

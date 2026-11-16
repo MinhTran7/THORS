@@ -344,6 +344,27 @@ public class WarehouseInventory {
             int page,
             int pageSize,
             boolean all) {
+        return list(a, q, color, size, categoryId, shelfId, state, slowDays, sort, page, pageSize, all, false);
+    }
+
+    /**
+     * Same as {@link #list} with {@code group=true}: items are products, each holding its matching
+     * variants (already filtered and sorted) and their summed quantities; paging counts products.
+     */
+    public Map<String, Object> list(
+            Account a,
+            String q,
+            String color,
+            String size,
+            Integer categoryId,
+            Integer shelfId,
+            String state,
+            Integer slowDays,
+            String sort,
+            int page,
+            int pageSize,
+            boolean all,
+            boolean group) {
         policy.view(a);
         if (state != null && !state.isBlank() && !STATES.contains(state))
             throw new ApiException(400, "INVENTORY_FILTER", "Bộ lọc trạng thái tồn không hợp lệ.");
@@ -411,12 +432,15 @@ public class WarehouseInventory {
             case "stock_desc" -> byStock.reversed().thenComparing(byName);
             default -> byName;
         });
-        int size2 = all ? Math.max(1, rows.size()) : Math.max(1, Math.min(pageSize, 100));
+        // group=true: one line per product (its variants inside), paged by product.
+        List<Map<String, Object>> lines = group && !all ? groupByProduct(rows, sort) : rows;
+        int size2 = all ? Math.max(1, lines.size()) : Math.max(1, Math.min(pageSize, 100));
         int pageNo = all ? 0 : Math.max(0, page);
-        int from = Math.min(rows.size(), pageNo * size2);
+        int from = Math.min(lines.size(), pageNo * size2);
         var result = new LinkedHashMap<String, Object>();
-        result.put("items", rows.subList(from, Math.min(rows.size(), from + size2)));
-        result.put("total", rows.size());
+        result.put("items", lines.subList(from, Math.min(lines.size(), from + size2)));
+        result.put("total", lines.size());
+        result.put("total_variants", rows.size());
         result.put("page", pageNo);
         result.put("size", size2);
         result.put("metrics", metrics);
@@ -428,6 +452,55 @@ public class WarehouseInventory {
         result.put(
                 "categories",
                 s.jdbc().queryForList("SELECT category_id,category_name FROM category ORDER BY category_name"));
+        return result;
+    }
+
+    /**
+     * One line per product from already filtered + sorted variant rows. Name sorts keep the order of
+     * the first variant; stock sorts use the product total. Quantities are summed over the variants
+     * shown, locations are merged by label, and the state is counted per variant (out / low / in).
+     */
+    @SuppressWarnings("unchecked")
+    static List<Map<String, Object>> groupByProduct(List<Map<String, Object>> rows, String sort) {
+        var groups = new LinkedHashMap<Integer, Map<String, Object>>();
+        for (var r : rows) {
+            var g = groups.computeIfAbsent(num(r, "product_id"), id -> {
+                var n = new LinkedHashMap<String, Object>();
+                n.put("product_id", id);
+                n.put("product_code", r.get("product_code"));
+                n.put("product_name", r.get("product_name"));
+                n.put("category_name", r.get("category_name"));
+                for (var k : List.of("stock_quantity", "assigned_quantity", "unassigned_quantity", "held_quantity",
+                        "available_quantity", "incoming_quantity", "count_in", "count_low", "count_out"))
+                    n.put(k, 0L);
+                n.put("locations", new LinkedHashMap<String, Long>());
+                n.put("variants", new ArrayList<Map<String, Object>>());
+                return n;
+            });
+            for (var k : List.of("stock_quantity", "assigned_quantity", "unassigned_quantity", "held_quantity",
+                    "available_quantity", "incoming_quantity"))
+                g.put(k, (long) g.get(k) + ((Number) r.get(k)).longValue());
+            String counter = "count_" + String.valueOf(r.get("stock_state")).toLowerCase(Locale.ROOT);
+            g.put(counter, (long) g.get(counter) + 1);
+            var merged = (Map<String, Long>) g.get("locations");
+            for (var p : (List<Map<String, Object>>) r.get("locations"))
+                merged.merge(String.valueOf(p.get("label")), ((Number) p.get("quantity")).longValue(), Long::sum);
+            ((List<Map<String, Object>>) g.get("variants")).add(r);
+        }
+        var result = new ArrayList<Map<String, Object>>();
+        for (var g : groups.values()) {
+            var merged = (Map<String, Long>) g.get("locations");
+            var places = new ArrayList<Map<String, Object>>();
+            merged.entrySet().stream()
+                    .sorted(Map.Entry.<String, Long>comparingByValue().reversed().thenComparing(Map.Entry.comparingByKey()))
+                    .forEach(e -> places.add(Map.of("label", e.getKey(), "quantity", e.getValue())));
+            g.put("locations", places);
+            g.put("variant_count", ((List<?>) g.get("variants")).size());
+            result.add(g);
+        }
+        Comparator<Map<String, Object>> byStock = Comparator.comparing(g -> (long) g.get("stock_quantity"));
+        if ("stock_asc".equals(sort)) result.sort(byStock);
+        else if ("stock_desc".equals(sort)) result.sort(byStock.reversed());
         return result;
     }
 

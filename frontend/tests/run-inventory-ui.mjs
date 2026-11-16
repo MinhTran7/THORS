@@ -120,10 +120,42 @@ try {
       if (endpoint === '/api/warehouse/documents' || endpoint === '/api/warehouse/notifications') return json([]);
       if (endpoint === '/api/warehouse/inventory') {
         const state = u.searchParams.get('state');
-        const items = variants.filter((v) => !state || (state === 'out' ? v.stock_quantity === 0 : state === 'in' ? v.stock_quantity > 0 : true)).map(strip);
+        const flat = variants.filter((v) => !state || (state === 'out' ? v.stock_quantity === 0 : state === 'in' ? v.stock_quantity > 0 : true)).map(strip);
+        // group=true (trang Tồn kho): mỗi sản phẩm một dòng, biến thể nằm trong `variants` — như WarehouseInventory.groupByProduct.
+        const grouped = u.searchParams.get('group') === 'true' && u.searchParams.get('all') !== 'true';
+        const sum = (list, k) => list.reduce((s, v) => s + Number(v[k]), 0);
+        // Danh sách gom có thêm biến thể Đen/L hết hàng của SP00005 để sản phẩm này có 2 biến thể (xổ xuống được).
+        const extra = strip(
+          row({ detail_id: 7, color: 'Đen', size: 'L', barcode: 'TH000007', stock_quantity: 0, assigned_quantity: 0, unassigned_quantity: 0, held_quantity: 0, available_quantity: 0, incoming_quantity: 0, stock_state: 'OUT', locations: [] })
+        );
+        const listed = grouped && (!state || state === 'out') ? [...flat, extra] : flat;
+        const items = !grouped
+          ? flat
+          : [...new Set(listed.map((v) => v.product_id))].map((id) => {
+              const list = listed.filter((v) => v.product_id === id);
+              const count = (st) => list.filter((v) => v.stock_state === st).length;
+              return {
+                product_id: id,
+                product_code: list[0].product_code,
+                product_name: list[0].product_name,
+                category_name: list[0].category_name,
+                ...Object.fromEntries(
+                  ['stock_quantity', 'assigned_quantity', 'unassigned_quantity', 'held_quantity', 'available_quantity', 'incoming_quantity'].map(
+                    (k) => [k, sum(list, k)]
+                  )
+                ),
+                count_in: count('IN'),
+                count_low: count('LOW'),
+                count_out: count('OUT'),
+                locations: list.flatMap((v) => v.locations).map(({ label, quantity }) => ({ label, quantity })),
+                variant_count: list.length,
+                variants: list
+              };
+            });
         return json({
           items,
           total: items.length,
+          total_variants: grouped ? listed.length : flat.length,
           page: 0,
           size: 20,
           colors: ['Trắng'],
@@ -159,6 +191,32 @@ try {
           unheld_pending: [],
           incoming: [{ order_id: 5, order_code: 'PD00005', supplier: 'NCC A', ordered: 90, received: 80, remaining: 10 }]
         });
+      if (endpoint === '/api/warehouse/units') {
+        const unit = (seq, status, extra) => ({
+          unit_id: seq,
+          serial_code: `TH000006-${String(seq).padStart(4, '0')}`,
+          seq,
+          status,
+          detail_id: 6,
+          product_name: 'Áo baby doll',
+          color: 'Trắng',
+          size: 'M',
+          ...extra
+        });
+        const all = [
+          unit(1, 'SOLD', { order_id: 60, order_number: 'ORD-1', out_at: '2026-11-10T08:00:00' }),
+          unit(2, 'IN_STOCK', { location: 'B2', in_receipt_id: 6, printed_at: '2026-11-12T08:00:00' }),
+          unit(3, 'IN_STOCK', { location: null })
+        ];
+        const status = new URL(request.url()).searchParams.get('status');
+        return json({
+          units: all.filter((u) => !status || u.status === status),
+          truncated: false,
+          counts: { IN_STOCK: 2, SOLD: 1 },
+          unprinted: 1
+        });
+      }
+      if (endpoint === '/api/warehouse/units/printed') return json({ updated: request.postDataJSON().unitIds.length });
       if (endpoint === '/api/warehouse/inventory/6/threshold') return json({ detail_id: 6, min_stock_quantity: request.postDataJSON().min });
       if (endpoint === '/api/warehouse/history/6')
         return json({
@@ -236,11 +294,25 @@ try {
   await page.waitForURL(/state=in/);
   await filteredRequest; // card filters on the backend
   await page.getByRole('button', { name: 'Xóa bộ lọc', exact: true }).click();
+  // Tầng 1: mỗi sản phẩm một dòng, biến thể đang đóng (không lọc). Hai sản phẩm trùng tên vẫn là 2 dòng, phân biệt bằng mã SP.
+  assert.ok(calls.some((c) => c.endpoint === '/api/warehouse/inventory' && c.query.group === 'true'), 'list asks for grouped rows');
+  await page.getByText('2 sản phẩm · 3 biến thể', { exact: false }).waitFor();
+  assert.equal(await page.getByText('TH000006', { exact: true }).count(), 0, 'variants start collapsed');
+  // SP00003 chỉ có 1 biến thể: một dòng, không có nút xổ, hiện luôn mã biến thể và nút Xóa.
+  assert.equal(await page.locator('tr[aria-expanded]').count(), 1, 'only the product with several variants can expand');
+  await page.getByText('SP00003 · Chưa có mã vạch', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Xóa', exact: true }).count(), 1, 'delete only on a variant line');
+  // Tầng 2: bấm dòng sản phẩm để xổ biến thể.
+  await page.getByText('SP00005', { exact: false }).click();
+  await page.getByText('TH000006', { exact: true }).waitFor();
+  assert.equal(await page.locator('tr[aria-expanded="true"]').count(), 1);
+  await page.screenshot({ path: path.join(artifacts, 'inventory-grouped.png'), fullPage: true });
   // Row actions: no separate "Chi tiết" (the row opens it); owner has a soft "Xóa" with a confirmation.
   assert.equal(await page.getByRole('button', { name: 'Chi tiết', exact: true }).count(), 0);
   await page.getByRole('button', { name: 'Xóa', exact: true }).first().click();
   await page.getByRole('dialog', { name: /^Xóa / }).getByRole('button', { name: 'Quay lại', exact: true }).click();
-  await page.getByText('SP00005 · #6', { exact: false }).click(); // same name as #3: identified by code
+  // Tầng 3: bấm biến thể để mở chi tiết.
+  await page.getByText('TH000006', { exact: true }).click();
   await page.waitForURL(/detail=6/);
   const detail = page.getByRole('dialog');
   await detail.getByText('Giá vốn bình quân', { exact: false }).waitFor();
@@ -249,6 +321,20 @@ try {
   await page.waitForFunction(() => true);
   await delay(300);
   assert.deepEqual(calls.find((c) => c.endpoint === '/api/warehouse/inventory/6/threshold')?.body, { min: 0 }, 'threshold 0 is sent as 0, not cleared');
+  // Mã từng chiếc: serial trong kho, lọc theo trạng thái, in lại tem chưa in.
+  await detail.getByRole('tab', { name: /Mã từng chiếc/ }).click();
+  await detail.getByText('TH000006-0002').waitFor();
+  await detail.getByText('Chưa xếp').waitFor();
+  assert.equal(await detail.getByText('TH000006-0001').count(), 0, 'đang lọc Trong kho');
+  assert.ok(calls.some((c) => c.endpoint === '/api/warehouse/units' && c.query.status === 'IN_STOCK' && c.query.detail === '6'));
+  await detail.getByRole('button', { name: 'In tem chưa in (1)' }).click();
+  const unitPrint = page.getByRole('dialog', { name: 'In tem serial (mỗi chiếc một tem)' });
+  await unitPrint.getByText('TH000006-0003', { exact: true }).waitFor();
+  await unitPrint.getByRole('button', { name: 'Đóng', exact: true }).click();
+  await unitPrint.waitFor({ state: 'hidden' });
+  await detail.getByRole('button', { name: 'Đã bán (1)' }).click();
+  await detail.getByRole('link', { name: 'ORD-1' }).waitFor();
+  await page.screenshot({ path: path.join(artifacts, 'inventory-units.png'), fullPage: true });
   await detail.getByRole('tab', { name: /Đơn giữ/ }).click();
   await detail.getByText('ORD-1').waitFor();
   await detail.getByText('PD00005').waitFor();

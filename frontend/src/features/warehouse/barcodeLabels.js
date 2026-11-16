@@ -60,12 +60,15 @@ export function barcodeSvg(code) {
   return svg.outerHTML;
 }
 
+/** Khóa của một mẫu tem: mã serial (mỗi chiếc một tem) hoặc biến thể. */
+export const labelKey = (v) => v.label_key ?? v.detail_id;
+
 export function validateLabelQuantities(variants, quantities) {
   if (!variants.length) throw new Error('Hãy chọn ít nhất một biến thể cần in tem.');
   let total = 0;
   for (const variant of variants) {
     if (!variant.barcode) throw new Error('Có biến thể chưa có mã vạch. Chủ cửa hàng cần tạo mã trước khi in.');
-    const quantity = Number(quantities[variant.detail_id]);
+    const quantity = Number(quantities[labelKey(variant)]);
     if (!Number.isSafeInteger(quantity) || quantity < 1) throw new Error('Số tem của mỗi biến thể phải là số nguyên lớn hơn 0.');
     total += quantity;
     if (total > MAX_LABELS) throw new Error(`Mỗi lần in tối đa ${MAX_LABELS.toLocaleString('vi-VN')} tem. Hãy chia thành nhiều lần in.`);
@@ -128,7 +131,7 @@ function sheetCss(t) {
 
 /** The expanded list of labels, in print order (each variant repeated by its quantity). */
 function expand(variants, quantities) {
-  return variants.flatMap((v) => Array.from({ length: Number(quantities[v.detail_id]) }, () => v));
+  return variants.flatMap((v) => Array.from({ length: Number(quantities[labelKey(v)]) }, () => v));
 }
 
 export function labelDocument(variants, quantities, options = DEFAULT_LABEL_OPTIONS) {
@@ -136,8 +139,8 @@ export function labelDocument(variants, quantities, options = DEFAULT_LABEL_OPTI
   const o = typeof options === 'string' ? { ...DEFAULT_LABEL_OPTIONS, template: options } : { ...DEFAULT_LABEL_OPTIONS, ...options };
   const t = templateOf(o.template);
   // Same variant → same markup; build it once and repeat.
-  const cache = new Map(variants.map((v) => [v.detail_id, labelHtml(v, o)]));
-  const all = expand(variants, quantities).map((v) => cache.get(v.detail_id));
+  const cache = new Map(variants.map((v) => [labelKey(v), labelHtml(v, o)]));
+  const all = expand(variants, quantities).map((v) => cache.get(labelKey(v)));
   let body;
   if (t.kind === 'roll') {
     const rows = [];
@@ -329,7 +332,7 @@ export async function labelPdf(variants, quantities, options = DEFAULT_LABEL_OPT
   const size = t.kind === 'roll' ? [t.pageW, t.h] : [210, 297];
   const doc = new jsPDF({ unit: 'mm', format: size, orientation: size[0] > size[1] ? 'landscape' : 'portrait', compress: true });
   doc.setProperties({ title: 'Tem mã vạch THORS', creator: 'THORS' });
-  const art = new Map(variants.map((v) => [v.detail_id, { ...renderLabelText(v, o, t), bits: barcodeBits(v.barcode) }]));
+  const art = new Map(variants.map((v) => [labelKey(v), { ...renderLabelText(v, o, t), bits: barcodeBits(v.barcode) }]));
   const labels = expand(variants, quantities);
   const spots = layout(labels.length, t);
   let page = 0;
@@ -339,14 +342,14 @@ export async function labelPdf(variants, quantities, options = DEFAULT_LABEL_OPT
       doc.addPage(size, size[0] > size[1] ? 'landscape' : 'portrait');
       page = spot.page;
     }
-    const a = art.get(v.detail_id);
+    const a = art.get(labelKey(v));
     if (o.cutLines && t.kind === 'a4') {
       doc.setDrawColor(190);
       doc.setLineWidth(0.1);
       doc.rect(spot.x, spot.y, t.w, t.h);
     }
     // Same alias → the text image is stored once per variant, however many labels repeat it.
-    doc.addImage(a.png, 'PNG', spot.x, spot.y, t.w, t.h, `label-${v.detail_id}`, 'FAST');
+    doc.addImage(a.png, 'PNG', spot.x, spot.y, t.w, t.h, `label-${labelKey(v)}`, 'FAST');
     const module = a.bars.w / a.bits.length;
     doc.setFillColor(0, 0, 0);
     for (let b = 0; b < a.bits.length; ) {

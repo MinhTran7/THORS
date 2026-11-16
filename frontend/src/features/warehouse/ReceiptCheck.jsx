@@ -1,12 +1,13 @@
 import { useRef, useState } from 'react';
 import { Alert, Box, Button, Chip, IconButton, Stack, TextField, Tooltip, Typography } from '@mui/material';
-import { MinusOutlined } from '@ant-design/icons';
+import { MinusOutlined, PlusOutlined } from '@ant-design/icons';
 import { api } from 'services/http';
 import { useWarehouse } from './WarehouseContext';
 import { ActionDialog, DataTable } from './components';
 import BarcodePrintDialog from './BarcodePrintDialog';
+import { markPrinted } from './SerialPrintDialog';
 import useBarcodeScanner from './useBarcodeScanner';
-import { docCode, number, variantLabel } from './model';
+import { docCode, number, productCode, unitLabel, variantLabel } from './model';
 
 const scannedOf = (i) => Number(i.scanned_quantity || 0);
 
@@ -29,7 +30,8 @@ export default function ReceiptCheck({ doc, readOnly }) {
   const [code, setCode] = useState('');
   const [notice, setNotice] = useState(null);
   const [overCode, setOverCode] = useState('');
-  const [printing, setPrinting] = useState(false);
+  // null | 'variants' (database chưa có serial: tem mã biến thể như cũ) | danh sách tem serial
+  const [printing, setPrinting] = useState(null);
   const [closing, setClosing] = useState(false);
   const [sending, setSending] = useState(false);
   const queue = useRef(Promise.resolve());
@@ -46,7 +48,7 @@ export default function ReceiptCheck({ doc, readOnly }) {
         const line = await api(`/warehouse/documents/${doc.receipt_id}/scan`, { method: 'POST', body });
         setNotice({
           severity: scannedOf(line) > Number(line.quantity) ? 'warning' : 'success',
-          text: `${variantLabel(line)}: đã quét ${number(line.scanned_quantity)} / ${number(line.quantity)}`
+          text: `${line.serial_code ? `${line.serial_code} · ` : ''}${variantLabel(line)}: đã quét ${number(line.scanned_quantity)} / ${number(line.quantity)}`
         });
         setOverCode('');
         await reload();
@@ -69,10 +71,23 @@ export default function ReceiptCheck({ doc, readOnly }) {
 
   useBarcodeScanner(scan, !readOnly && !printing && !closing);
 
+  // Tem serial: mỗi chiếc một mã (in lại không sinh mã mới). extra = in thêm tem cho một dòng (hàng giao thừa, tem hỏng).
+  const openLabels = async (line) => {
+    setNotice(null);
+    try {
+      const body = line ? { itemId: line.receipt_item_id, extra: 1 } : undefined;
+      const { units } = await api(`/warehouse/documents/${doc.receipt_id}/unit-labels`, { method: 'POST', body });
+      setPrinting((line ? units.slice(-1) : units).map(unitLabel));
+    } catch (e) {
+      if (e.status === 503 && !line) setPrinting('variants');
+      else setNotice({ severity: 'error', text: e.message });
+    }
+  };
+
   // Labels default to the quantity on the receipt; spare labels are fine, only scanned ones count.
   const printable = lines.map((i) => ({
     ...i,
-    product_code: `SP${String(i.product_id).padStart(5, '0')}`,
+    product_code: productCode(i.product_id),
     unassigned_quantity: i.quantity,
     stock_quantity: i.quantity
   }));
@@ -80,12 +95,13 @@ export default function ReceiptCheck({ doc, readOnly }) {
   return (
     <Stack spacing={2}>
       <Alert severity="info">
-        Phiếu đang <b>chờ kiểm hàng</b>: tồn kho chưa tăng. In tem, dán lên từng sản phẩm rồi quét từng cái. Bấm “Chốt nhận hàng” để đưa
-        đúng số đã quét vào kho; phần chênh lệch cần chủ cửa hàng chốt kèm lý do.
+        Phiếu đang <b>chờ kiểm hàng</b>: tồn kho chưa tăng. In tem (mỗi chiếc một mã serial riêng), dán lên từng sản phẩm rồi quét từng
+        tem; một tem chỉ được đếm một lần. Bấm “Chốt nhận hàng” để đưa đúng số đã quét vào kho, tem in thừa tự hủy; phần chênh lệch cần chủ
+        cửa hàng chốt kèm lý do.
       </Alert>
       {!readOnly && (
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ alignItems: { sm: 'center' } }}>
-          <Button variant="outlined" onClick={() => setPrinting(true)}>
+          <Button variant="outlined" onClick={() => openLabels()}>
             In tem
           </Button>
           <TextField
@@ -159,6 +175,15 @@ export default function ReceiptCheck({ doc, readOnly }) {
                   </Tooltip>
                 )}
                 <b>{number(scannedOf(i))}</b>
+                {!readOnly && (
+                  <Tooltip title="In thêm 1 tem serial cho dòng này (hàng giao thừa, tem hỏng)">
+                    <span>
+                      <IconButton size="small" aria-label={`In thêm 1 tem ${variantLabel(i)}`} onClick={() => openLabels(i)}>
+                        <PlusOutlined />
+                      </IconButton>
+                    </span>
+                  </Tooltip>
+                )}
               </Stack>
             )
           },
@@ -184,7 +209,10 @@ export default function ReceiptCheck({ doc, readOnly }) {
       {!readOnly && differences.length > 0 && !owner && scanned > 0 && (
         <Alert severity="warning">Số quét khác số trên phiếu. Báo chủ cửa hàng kiểm tra và chốt phần chênh lệch.</Alert>
       )}
-      {printing && <BarcodePrintDialog variants={printable} onClose={() => setPrinting(false)} />}
+      {printing === 'variants' && <BarcodePrintDialog variants={printable} onClose={() => setPrinting(null)} />}
+      {Array.isArray(printing) && (
+        <BarcodePrintDialog serial variants={printing} onClose={() => setPrinting(null)} onPrinted={markPrinted} />
+      )}
       {closing && (
         <ActionDialog
           title={`Chốt nhận hàng ${docCode(doc)}`}
