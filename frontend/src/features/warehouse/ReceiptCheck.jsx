@@ -6,7 +6,7 @@ import { useWarehouse } from './WarehouseContext';
 import { ActionDialog, DataTable } from './components';
 import BarcodePrintDialog from './BarcodePrintDialog';
 import useBarcodeScanner from './useBarcodeScanner';
-import { docCode, number, variantLabel } from './model';
+import { docCode, number, productCode, variantLabel } from './model';
 
 const scannedOf = (i) => Number(i.scanned_quantity || 0);
 
@@ -72,7 +72,7 @@ export default function ReceiptCheck({ doc, readOnly }) {
   // Labels default to the quantity on the receipt; spare labels are fine, only scanned ones count.
   const printable = lines.map((i) => ({
     ...i,
-    product_code: `SP${String(i.product_id).padStart(5, '0')}`,
+    product_code: productCode(i.product_id),
     unassigned_quantity: i.quantity,
     stock_quantity: i.quantity
   }));

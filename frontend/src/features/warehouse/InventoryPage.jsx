@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Alert, Box, Button, Checkbox, Chip, CircularProgress, MenuItem, Stack, TextField, Tooltip, Typography } from '@mui/material';
+import { DownOutlined, RightOutlined } from '@ant-design/icons';
 import useSWR from 'swr';
 import MainCard from 'components/MainCard';
 import { api } from 'services/http';
 import { useWarehouse } from './WarehouseContext';
 import { ActionDialog, DataTable, Metrics, Title } from './components';
-import { money, number, skuLabel, stockStateColor, stockStateLabel, variantLabel } from './model';
+import { money, number, stockStateColor, stockStateLabel, variantLabel } from './model';
 import { exportSheet } from './excelWorkbook';
 import BarcodePrintDialog from './BarcodePrintDialog';
 import BarcodeScannerDialog from './BarcodeScannerDialog';
@@ -87,20 +88,51 @@ export default function InventoryPage() {
 
   const qs = new URLSearchParams();
   FILTERS.forEach((k) => value(k) && qs.set(k, value(k)));
-  const { data, error, isLoading, mutate } = useSWR(`/warehouse/inventory?${qs}`, api, { keepPreviousData: true });
-  const rows = data?.items || [];
+  // Tầng 1: mỗi sản phẩm một dòng (server gom và phân trang theo sản phẩm); tầng 2: bấm để xổ các biến thể;
+  // tầng 3: bấm một biến thể để mở chi tiết.
+  const { data, error, isLoading, mutate } = useSWR(`/warehouse/inventory?${qs}&group=true`, api, { keepPreviousData: true });
+  const products = data?.items || [];
+  const rows = products.flatMap((p) => p.variants || []);
   const m = data?.metrics || {};
   const state = value('state');
   const slowDays = Number(value('slowDays')) || 30;
   const filtered = FILTERS.some((k) => !['page', 'pageSize', 'sort'].includes(k) && value(k));
-  const detail = Number(value('detail')) || null;
-  useBarcodeScanner(
-    (code) => {
-      setScanRequest({ code, n: Date.now() });
-      setScanning(true);
-    },
-    !printing && !detail
+  // Đang lọc/tìm thì mở sẵn các sản phẩm để thấy ngay biến thể khớp; flip = các sản phẩm người dùng bấm đổi trạng thái.
+  const [flip, setFlip] = useState(() => new Set());
+  const filterKey = FILTERS.filter((k) => !['page', 'pageSize', 'sort'].includes(k))
+    .map((k) => value(k))
+    .join('|');
+  useEffect(() => setFlip(new Set()), [filterKey]);
+  const isOpen = (id) => filtered !== flip.has(id);
+  const toggleOpen = (id) =>
+    setFlip((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  // Sản phẩm chỉ có 1 biến thể (khớp bộ lọc): hiện thẳng biến thể đó trên một dòng, không xổ xuống, bấm là mở chi tiết.
+  const lines = products.flatMap((p) =>
+    p.variants.length === 1
+      ? [{ ...p.variants[0], _kind: 'single', _key: `p${p.product_id}` }]
+      : [
+          { ...p, _kind: 'product', _key: `p${p.product_id}`, _expanded: isOpen(p.product_id) },
+          ...(isOpen(p.product_id)
+            ? p.variants.map((v) => ({ ...v, _kind: 'variant', _key: `v${v.detail_id}`, _sx: { bgcolor: 'action.hover' } }))
+            : [])
+        ]
   );
+  const setChecked = (variants, checked) =>
+    setSelected((prev) => {
+      const next = { ...prev };
+      variants.forEach((r) => (checked ? (next[r.detail_id] = r) : delete next[r.detail_id]));
+      return next;
+    });
+  const detail = Number(value('detail')) || null;
+  useBarcodeScanner((code) => {
+    setScanRequest({ code, n: Date.now() });
+    setScanning(true);
+  }, !printing && !detail);
   const selectedRows = Object.values(selected);
   const toggleState = (s) => update({ state: state === s ? '' : s });
   const shelves = snapshot.tiers
@@ -295,7 +327,9 @@ export default function InventoryPage() {
           </Button>
         </Stack>
         <Stack direction="row" spacing={1} sx={{ mb: 1, alignItems: 'center' }}>
-          <Typography color="text.secondary">{data ? `${number(data.total)} kết quả` : ''}</Typography>
+          <Typography color="text.secondary">
+            {data ? `${number(data.total)} sản phẩm · ${number(data.total_variants ?? rows.length)} biến thể (màu/size)` : ''}
+          </Typography>
           {isLoading && <CircularProgress size={16} aria-label="Đang tải tồn kho" />}
         </Stack>
         {error ? (
@@ -308,9 +342,9 @@ export default function InventoryPage() {
           </Stack>
         ) : (
           <DataTable
-            rows={rows}
-            empty={filtered ? 'Không có biến thể nào khớp bộ lọc.' : 'Chưa có biến thể sản phẩm nào.'}
-            onRow={(r) => update({ detail: r.detail_id, page: value('page') })}
+            rows={lines}
+            empty={filtered ? 'Không có sản phẩm nào khớp bộ lọc.' : 'Chưa có sản phẩm nào.'}
+            onRow={(r) => (r._kind === 'product' ? toggleOpen(r.product_id) : update({ detail: r.detail_id, page: value('page') }))}
             server={{
               total: data.total,
               page: data.page,
@@ -336,35 +370,77 @@ export default function InventoryPage() {
                     }
                   />
                 ),
-                render: (r) => (
-                  <Checkbox
-                    checked={Boolean(selected[r.detail_id])}
-                    onClick={(e) => e.stopPropagation()}
-                    slotProps={{ input: { 'aria-label': `Chọn ${variantLabel(r)}` } }}
-                    onChange={(e) =>
-                      setSelected((prev) => {
-                        const next = { ...prev };
-                        if (e.target.checked) next[r.detail_id] = r;
-                        else delete next[r.detail_id];
-                        return next;
-                      })
-                    }
-                  />
-                )
+                render: (r) => {
+                  if (r._kind === 'product') {
+                    const all = r.variants.every((v) => selected[v.detail_id]);
+                    return (
+                      <Checkbox
+                        checked={all}
+                        indeterminate={!all && r.variants.some((v) => selected[v.detail_id])}
+                        onClick={(e) => e.stopPropagation()}
+                        slotProps={{ input: { 'aria-label': `Chọn mọi biến thể của ${r.product_name}` } }}
+                        onChange={(e) => setChecked(r.variants, e.target.checked)}
+                      />
+                    );
+                  }
+                  return (
+                    <Checkbox
+                      checked={Boolean(selected[r.detail_id])}
+                      onClick={(e) => e.stopPropagation()}
+                      slotProps={{ input: { 'aria-label': `Chọn ${variantLabel(r)}` } }}
+                      onChange={(e) => setChecked([r], e.target.checked)}
+                    />
+                  );
+                }
               },
               {
                 key: 'name',
                 label: 'Sản phẩm',
-                render: (r) => (
-                  <>
-                    <Typography variant="subtitle2">{r.product_name}</Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {skuLabel(r)} · {r.barcode || 'Chưa có mã vạch'}
-                    </Typography>
-                  </>
-                )
+                render: (r) =>
+                  r._kind === 'product' ? (
+                    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                      <Box component="span" sx={{ color: 'text.secondary', fontSize: 12, width: 12 }} aria-hidden>
+                        {r._expanded ? <DownOutlined /> : <RightOutlined />}
+                      </Box>
+                      <Box>
+                        <Typography variant="subtitle2">{r.product_name}</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {r.product_code}
+                          {r.category_name ? ` · ${r.category_name}` : ''}
+                        </Typography>
+                      </Box>
+                    </Stack>
+                  ) : r._kind === 'single' ? (
+                    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                      <Box component="span" sx={{ width: 12 }} aria-hidden />
+                      <Box>
+                        <Typography variant="subtitle2">{r.product_name}</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {r.product_code} · {r.barcode || 'Chưa có mã vạch'}
+                        </Typography>
+                      </Box>
+                    </Stack>
+                  ) : (
+                    <Box sx={{ pl: 3.5 }}>
+                      <Typography variant="body2">{r.barcode || 'Chưa có mã vạch'}</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Bấm để xem chi tiết
+                      </Typography>
+                    </Box>
+                  )
               },
-              { key: 'variant', label: 'Màu / Size', render: (r) => `${r.color} / ${r.size}` },
+              {
+                key: 'variant',
+                label: 'Màu / Size',
+                render: (r) =>
+                  r._kind === 'product' ? (
+                    <Typography variant="body2" color="primary">
+                      {number(r.variant_count)} biến thể {r._expanded ? '▲' : '▼'}
+                    </Typography>
+                  ) : (
+                    `${r.color} / ${r.size}`
+                  )
+              },
               { key: 'stock_quantity', label: 'Tổng tồn', align: 'right', render: (r) => <b>{number(r.stock_quantity)}</b> },
               {
                 key: 'placed',
@@ -373,10 +449,7 @@ export default function InventoryPage() {
                 render: (r) => (
                   <>
                     {number(r.assigned_quantity)} /{' '}
-                    <Typography
-                      component="span"
-                      color={r.unassigned_quantity > 0 ? 'warning.main' : 'inherit'}
-                    >
+                    <Typography component="span" color={r.unassigned_quantity > 0 ? 'warning.main' : 'inherit'}>
                       {number(Math.max(0, Number(r.unassigned_quantity)))}
                     </Typography>
                   </>
@@ -388,14 +461,32 @@ export default function InventoryPage() {
               {
                 key: 'state',
                 label: 'Trạng thái',
-                render: (r) => (
-                  <Stack spacing={0.5} sx={{ alignItems: 'flex-start' }}>
-                    <Chip size="small" variant="outlined" color={stockStateColor[r.stock_state]} label={stockStateLabel[r.stock_state]} />
-                    <Typography variant="caption" color="text.secondary">
-                      {r.min_stock_quantity == null ? 'Chưa đặt ngưỡng' : `Ngưỡng ${number(r.min_stock_quantity)}`}
-                    </Typography>
-                  </Stack>
-                )
+                render: (r) =>
+                  r._kind === 'product' ? (
+                    <Stack spacing={0.5} sx={{ alignItems: 'flex-start' }}>
+                      {r.count_out === r.variant_count ? (
+                        <Chip size="small" variant="outlined" color={stockStateColor.OUT} label={stockStateLabel.OUT} />
+                      ) : !r.count_out && !r.count_low ? (
+                        <Chip size="small" variant="outlined" color={stockStateColor.IN} label={stockStateLabel.IN} />
+                      ) : (
+                        <>
+                          {r.count_out > 0 && (
+                            <Chip size="small" variant="outlined" color={stockStateColor.OUT} label={`${number(r.count_out)} hết hàng`} />
+                          )}
+                          {r.count_low > 0 && (
+                            <Chip size="small" variant="outlined" color={stockStateColor.LOW} label={`${number(r.count_low)} sắp hết`} />
+                          )}
+                        </>
+                      )}
+                    </Stack>
+                  ) : (
+                    <Stack spacing={0.5} sx={{ alignItems: 'flex-start' }}>
+                      <Chip size="small" variant="outlined" color={stockStateColor[r.stock_state]} label={stockStateLabel[r.stock_state]} />
+                      <Typography variant="caption" color="text.secondary">
+                        {r.min_stock_quantity == null ? 'Chưa đặt ngưỡng' : `Ngưỡng ${number(r.min_stock_quantity)}`}
+                      </Typography>
+                    </Stack>
+                  )
               },
               {
                 key: 'locations',
@@ -411,28 +502,58 @@ export default function InventoryPage() {
               {
                 key: 'open',
                 label: '',
-                render: (r) => (
-                  <Stack direction="row" spacing={0.5} sx={{ justifyContent: 'flex-end' }}>
-                    <Tooltip title={r.barcode ? `In tem ${r.barcode}` : 'Chưa có mã vạch — mở Sửa sản phẩm và lưu lại để hệ thống tự gán mã'}>
-                      <span>
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          disabled={!r.barcode}
-                          onClick={(e) => (e.stopPropagation(), setPrinting([r]))}
-                          sx={{ whiteSpace: 'nowrap' }}
+                render: (r) => {
+                  if (r._kind === 'product') {
+                    const printable = r.variants.filter((v) => v.barcode);
+                    return (
+                      <Stack direction="row" spacing={0.5} sx={{ justifyContent: 'flex-end' }}>
+                        <Tooltip
+                          title={
+                            printable.length
+                              ? `In tem ${number(printable.length)} biến thể của sản phẩm này`
+                              : 'Chưa biến thể nào có mã vạch'
+                          }
                         >
-                          In tem
+                          <span>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              disabled={!printable.length}
+                              onClick={(e) => (e.stopPropagation(), setPrinting(printable))}
+                              sx={{ whiteSpace: 'nowrap' }}
+                            >
+                              In tem
+                            </Button>
+                          </span>
+                        </Tooltip>
+                      </Stack>
+                    );
+                  }
+                  return (
+                    <Stack direction="row" spacing={0.5} sx={{ justifyContent: 'flex-end' }}>
+                      <Tooltip
+                        title={r.barcode ? `In tem ${r.barcode}` : 'Chưa có mã vạch — mở Sửa sản phẩm và lưu lại để hệ thống tự gán mã'}
+                      >
+                        <span>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            disabled={!r.barcode}
+                            onClick={(e) => (e.stopPropagation(), setPrinting([r]))}
+                            sx={{ whiteSpace: 'nowrap' }}
+                          >
+                            In tem
+                          </Button>
+                        </span>
+                      </Tooltip>
+                      {owner && (
+                        <Button size="small" color="error" onClick={(e) => (e.stopPropagation(), setDeleting(r))}>
+                          Xóa
                         </Button>
-                      </span>
-                    </Tooltip>
-                    {owner && (
-                      <Button size="small" color="error" onClick={(e) => (e.stopPropagation(), setDeleting(r))}>
-                        Xóa
-                      </Button>
-                    )}
-                  </Stack>
-                )
+                      )}
+                    </Stack>
+                  );
+                }
               }
             ]}
           />

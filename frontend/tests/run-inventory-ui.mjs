@@ -120,10 +120,42 @@ try {
       if (endpoint === '/api/warehouse/documents' || endpoint === '/api/warehouse/notifications') return json([]);
       if (endpoint === '/api/warehouse/inventory') {
         const state = u.searchParams.get('state');
-        const items = variants.filter((v) => !state || (state === 'out' ? v.stock_quantity === 0 : state === 'in' ? v.stock_quantity > 0 : true)).map(strip);
+        const flat = variants.filter((v) => !state || (state === 'out' ? v.stock_quantity === 0 : state === 'in' ? v.stock_quantity > 0 : true)).map(strip);
+        // group=true (trang Tồn kho): mỗi sản phẩm một dòng, biến thể nằm trong `variants` — như WarehouseInventory.groupByProduct.
+        const grouped = u.searchParams.get('group') === 'true' && u.searchParams.get('all') !== 'true';
+        const sum = (list, k) => list.reduce((s, v) => s + Number(v[k]), 0);
+        // Danh sách gom có thêm biến thể Đen/L hết hàng của SP00005 để sản phẩm này có 2 biến thể (xổ xuống được).
+        const extra = strip(
+          row({ detail_id: 7, color: 'Đen', size: 'L', barcode: 'TH000007', stock_quantity: 0, assigned_quantity: 0, unassigned_quantity: 0, held_quantity: 0, available_quantity: 0, incoming_quantity: 0, stock_state: 'OUT', locations: [] })
+        );
+        const listed = grouped && (!state || state === 'out') ? [...flat, extra] : flat;
+        const items = !grouped
+          ? flat
+          : [...new Set(listed.map((v) => v.product_id))].map((id) => {
+              const list = listed.filter((v) => v.product_id === id);
+              const count = (st) => list.filter((v) => v.stock_state === st).length;
+              return {
+                product_id: id,
+                product_code: list[0].product_code,
+                product_name: list[0].product_name,
+                category_name: list[0].category_name,
+                ...Object.fromEntries(
+                  ['stock_quantity', 'assigned_quantity', 'unassigned_quantity', 'held_quantity', 'available_quantity', 'incoming_quantity'].map(
+                    (k) => [k, sum(list, k)]
+                  )
+                ),
+                count_in: count('IN'),
+                count_low: count('LOW'),
+                count_out: count('OUT'),
+                locations: list.flatMap((v) => v.locations).map(({ label, quantity }) => ({ label, quantity })),
+                variant_count: list.length,
+                variants: list
+              };
+            });
         return json({
           items,
           total: items.length,
+          total_variants: grouped ? listed.length : flat.length,
           page: 0,
           size: 20,
           colors: ['Trắng'],
@@ -236,11 +268,25 @@ try {
   await page.waitForURL(/state=in/);
   await filteredRequest; // card filters on the backend
   await page.getByRole('button', { name: 'Xóa bộ lọc', exact: true }).click();
+  // Tầng 1: mỗi sản phẩm một dòng, biến thể đang đóng (không lọc). Hai sản phẩm trùng tên vẫn là 2 dòng, phân biệt bằng mã SP.
+  assert.ok(calls.some((c) => c.endpoint === '/api/warehouse/inventory' && c.query.group === 'true'), 'list asks for grouped rows');
+  await page.getByText('2 sản phẩm · 3 biến thể', { exact: false }).waitFor();
+  assert.equal(await page.getByText('TH000006', { exact: true }).count(), 0, 'variants start collapsed');
+  // SP00003 chỉ có 1 biến thể: một dòng, không có nút xổ, hiện luôn mã biến thể và nút Xóa.
+  assert.equal(await page.locator('tr[aria-expanded]').count(), 1, 'only the product with several variants can expand');
+  await page.getByText('SP00003 · Chưa có mã vạch', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Xóa', exact: true }).count(), 1, 'delete only on a variant line');
+  // Tầng 2: bấm dòng sản phẩm để xổ biến thể.
+  await page.getByText('SP00005', { exact: false }).click();
+  await page.getByText('TH000006', { exact: true }).waitFor();
+  assert.equal(await page.locator('tr[aria-expanded="true"]').count(), 1);
+  await page.screenshot({ path: path.join(artifacts, 'inventory-grouped.png'), fullPage: true });
   // Row actions: no separate "Chi tiết" (the row opens it); owner has a soft "Xóa" with a confirmation.
   assert.equal(await page.getByRole('button', { name: 'Chi tiết', exact: true }).count(), 0);
   await page.getByRole('button', { name: 'Xóa', exact: true }).first().click();
   await page.getByRole('dialog', { name: /^Xóa / }).getByRole('button', { name: 'Quay lại', exact: true }).click();
-  await page.getByText('SP00005 · #6', { exact: false }).click(); // same name as #3: identified by code
+  // Tầng 3: bấm biến thể để mở chi tiết.
+  await page.getByText('TH000006', { exact: true }).click();
   await page.waitForURL(/detail=6/);
   const detail = page.getByRole('dialog');
   await detail.getByText('Giá vốn bình quân', { exact: false }).waitFor();

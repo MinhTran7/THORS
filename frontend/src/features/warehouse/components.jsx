@@ -151,8 +151,9 @@ export function DataTable({ columns, rows, empty = 'Chưa có dữ liệu.', onR
                 <TableRow
                   hover
                   key={row._key ?? row.detail_id ?? row.receipt_id ?? index}
+                  aria-expanded={row._expanded}
                   onClick={onRow ? () => onRow(row) : undefined}
-                  sx={{ cursor: onRow ? 'pointer' : 'default' }}
+                  sx={{ cursor: onRow ? 'pointer' : 'default', ...row._sx }}
                 >
                   {columns.map((c) => (
                     <TableCell key={c.key} align={c.align}>

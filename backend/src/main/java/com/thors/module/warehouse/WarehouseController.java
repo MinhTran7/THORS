@@ -63,8 +63,10 @@ public class WarehouseController {
             @RequestParam(required = false) String sort,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize,
-            @RequestParam(defaultValue = "false") boolean all) {
-        return inventory.list(sessions.current(), q, color, size, categoryId, shelfId, state, slowDays, sort, page, pageSize, all);
+            @RequestParam(defaultValue = "false") boolean all,
+            @RequestParam(defaultValue = "false") boolean group) {
+        return inventory.list(
+                sessions.current(), q, color, size, categoryId, shelfId, state, slowDays, sort, page, pageSize, all, group);
     }
 
     @GetMapping("/inventory/report")

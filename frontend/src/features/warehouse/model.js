@@ -176,6 +176,8 @@ export const countReasonLabel = {
   FOUND: 'Tìm thấy hàng',
   MISSING_DOCUMENT: 'Thiếu chứng từ (nhập/bán/trả chưa ghi)'
 };
+// Mã sản phẩm SP + 5 số mã sản phẩm, khớp WarehouseInventory.productCode ở backend.
+export const productCode = (id) => `SP${String(id).padStart(5, '0')}`;
 export const skuLabel = (v) => `${v.product_code} · #${v.detail_id}`;
 // Where a stock-card row's source document opens (existing pages, prefilled by id).
 export const docLink = (m) =>
