@@ -38,8 +38,11 @@ public class ImageSearchProperties {
     /** Số sản phẩm gợi ý luôn trả về (báo cáo: luôn hiện 3-5 gợi ý vì hạng 1 đúng 93% kể cả ảnh mờ). */
     private int suggestions = 5;
 
-    /** Chu kỳ cập nhật danh sách ảnh sản phẩm (phút). */
-    private int refreshMinutes = 10;
+    /**
+     * Chu kỳ đọc lại danh sách ảnh sản phẩm (phút): sản phẩm / ảnh mới được đưa vào so sánh chậm nhất sau khoảng
+     * chu kỳ này + 30 giây. Mỗi lần chỉ là 1 câu SELECT + tính vector cho ảnh mới (~0,35 giây/ảnh) nên đặt ngắn vẫn nhẹ.
+     */
+    private int refreshMinutes = 2;
 
     /** Số lượt tìm chạy cùng lúc tối đa; quá thì trả lỗi "đang bận" để máy chủ không bị quá tải. */
     private int maxConcurrentSearches = 4;

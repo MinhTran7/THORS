@@ -119,4 +119,4 @@ thors:
     match-threshold: 0.808
     color-confidence: 0.6
     suggestions: 5
-    refresh-minutes: 10
+    refresh-minutes: 2 # sản phẩm / ảnh mới được đưa vào tìm kiếm chậm nhất sau ~2,5 phút

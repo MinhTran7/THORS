@@ -105,8 +105,8 @@ public class ImageSearchEngine {
         }
     }
 
-    /** Cập nhật định kỳ danh sách ảnh sản phẩm (ảnh mới / đổi / xóa). */
-    @Scheduled(fixedDelay = 60_000L, initialDelay = 120_000L)
+    /** Cập nhật định kỳ danh sách ảnh sản phẩm (ảnh mới / đổi / xóa). Kiểm tra mỗi 30 giây, đủ chu kỳ refresh-minutes thì chạy. */
+    @Scheduled(fixedDelay = 30_000L, initialDelay = 60_000L)
     public void scheduledRefresh() {
         if (encoder == null || state == State.DISABLED) return;
         long due = lastRefreshMillis + TimeUnit.MINUTES.toMillis(Math.max(1, props.getRefreshMinutes()));
