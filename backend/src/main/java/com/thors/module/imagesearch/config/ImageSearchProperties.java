@@ -29,8 +29,17 @@ public class ImageSearchProperties {
     /** Thư mục lưu file mô hình và vector ảnh sản phẩm đã tính (để khởi động lại không phải tính lại). */
     private String cacheDir = Path.of(System.getProperty("user.home"), ".thors", "image-search").toString();
 
-    /** Điểm giống tối thiểu để khẳng định "shop có mẫu này" (cách A trong báo cáo lần 4). */
+    /**
+     * Điểm giống tối thiểu để coi là "giống" sản phẩm của shop (cách A trong báo cáo lần 4). Từ mức này đến
+     * confidentThreshold chỉ nói "có sản phẩm khá giống", không khẳng định cùng mẫu.
+     */
     private double matchThreshold = 0.808;
+
+    /**
+     * Điểm giống tối thiểu để KHẲNG ĐỊNH "shop có mẫu này" (kèm màu / tồn kho). Số liệu lần 4: với 0,85 không còn ảnh
+     * đồ không bán nào bị khẳng định nhầm (dép xám trơn dep1 = 0,834 trước đây bị nói là "có mẫu" Dép Bánh Mì).
+     */
+    private double confidentThreshold = 0.85;
 
     /** Chỉ kết luận "không có màu này" khi AI chắc về màu ít nhất mức này (xác suất 0..1). */
     private double colorConfidence = 0.6;
@@ -60,6 +69,8 @@ public class ImageSearchProperties {
     public void setCacheDir(String cacheDir) { this.cacheDir = cacheDir; }
     public double getMatchThreshold() { return matchThreshold; }
     public void setMatchThreshold(double matchThreshold) { this.matchThreshold = matchThreshold; }
+    public double getConfidentThreshold() { return confidentThreshold; }
+    public void setConfidentThreshold(double confidentThreshold) { this.confidentThreshold = confidentThreshold; }
     public double getColorConfidence() { return colorConfidence; }
     public void setColorConfidence(double colorConfidence) { this.colorConfidence = colorConfidence; }
     public int getSuggestions() { return suggestions; }

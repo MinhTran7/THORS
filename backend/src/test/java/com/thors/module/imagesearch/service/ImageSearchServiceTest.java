@@ -163,6 +163,19 @@ class ImageSearchServiceTest {
         }
 
         @Test
+        @DisplayName("0,808 <= điểm < 0,85: chỉ nói 'khá giống', không khẳng định cùng mẫu, không kết luận màu (ca dép xám dep1)")
+        void similarButNotSure() throws Exception {
+            nextQuery = new float[] {0.83f, 0.5577f, 0};
+            ImageSearchResult r = service.search(jpeg());
+            assertEquals("SIMILAR", r.status());
+            assertEquals(53, r.product().productId());
+            assertTrue(r.message().contains("có thể không phải cùng mẫu"), r.message());
+            assertNull(r.detectedColor());
+            assertTrue(r.product().colors().stream().noneMatch(ImageSearchResult.ColorStock::matches));
+            assertEquals(List.of(61, 62), r.suggestions().stream().map(ImageSearchResult.Product::productId).toList());
+        }
+
+        @Test
         @DisplayName("Điểm < 0,808: chưa có mẫu này nhưng vẫn gợi ý sản phẩm gần giống")
         void notFoundStillSuggests() throws Exception {
             nextQuery = new float[] {0.8f, 0.6f, 0};

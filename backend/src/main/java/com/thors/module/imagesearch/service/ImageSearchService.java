@@ -31,8 +31,11 @@ import java.util.stream.Collectors;
 /**
  * Tìm sản phẩm bằng ảnh khách chụp. Ảnh chỉ xử lý trong bộ nhớ, không lưu lại.
  *
- * Cách quyết định (theo báo cáo đánh giá lần 4, 15/11/2026):
- *  - Điểm giống của sản phẩm hạng 1 >= ngưỡng (0,808) thì mới khẳng định "shop có mẫu này" (cách A).
+ * Cách quyết định (theo báo cáo đánh giá lần 4, 15/11/2026), theo điểm giống của sản phẩm hạng 1:
+ *  - >= 0,85 (confident-threshold): khẳng định "shop có mẫu này" kèm màu / tồn kho.
+ *  - 0,808 (match-threshold) .. 0,85: "có sản phẩm khá giống" (SIMILAR), không khẳng định cùng mẫu.
+ *    Lý do: dép xám trơn (shop không bán) được 0,834 với Dép Bánh Mì; nâng hẳn ngưỡng lên thì mất nhiều ảnh đúng.
+ *  - < 0,808: chưa có mẫu này.
  *  - Luôn trả kèm các sản phẩm gần giống, vì kể cả ảnh mờ / lệch, hạng 1 vẫn đúng ~93%.
  *  - Chỉ nói "không có màu này" khi AI chắc về màu (>= 60%) và mọi màu trong DB đều quy đổi được.
  */
@@ -133,9 +136,17 @@ public class ImageSearchService {
         }
 
         Map<String, Object> bestCard = cards.get(best.productId());
+        List<ColorTotal> totals = colorTotals(shopRepository.findVariants(best.productId()));
+        if (best.score() < Math.max(props.getConfidentThreshold(), props.getMatchThreshold())) {
+            // Giống nhưng chưa đủ chắc là cùng mẫu: hiện sản phẩm giống nhất, không khẳng định, không kết luận về màu
+            List<ColorStock> plain = totals.stream().map(t -> new ColorStock(t.color(), t.stock(), false)).toList();
+            return new ImageSearchResult("SIMILAR",
+                    "Sản phẩm giống nhất trong shop là \"" + str(bestCard.get("productName"))
+                            + "\", nhưng có thể không phải cùng mẫu. Bạn so lại ảnh giúp nhé.",
+                    card(bestCard, best.score(), plain), null, suggestions);
+        }
         ProductGroup group = ProductGroup.of(str(bestCard.get("categoryName")), str(bestCard.get("productName")));
         ColorClassifier.Guess guess = colors.guess(vector, group);
-        List<ColorTotal> totals = colorTotals(shopRepository.findVariants(best.productId()));
         Decision d = decide(guess, totals, props.getColorConfidence());
 
         List<ColorStock> colorStocks = totals.stream()

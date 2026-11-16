@@ -116,7 +116,8 @@ thors:
   image-search:
     enabled: ${IMAGE_SEARCH_ENABLED:false}
     cache-dir: ${IMAGE_SEARCH_CACHE_DIR:${user.home}/.thors/image-search}
-    match-threshold: 0.808
+    match-threshold: 0.808 # từ mức này: "có sản phẩm khá giống"
+    confident-threshold: 0.85 # từ mức này mới khẳng định "shop có mẫu này"
     color-confidence: 0.6
     suggestions: 5
     refresh-minutes: 2 # sản phẩm / ảnh mới được đưa vào tìm kiếm chậm nhất sau ~2,5 phút

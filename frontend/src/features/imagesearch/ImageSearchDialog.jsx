@@ -15,6 +15,8 @@ const STATUS = {
   AVAILABLE: { title: 'Shop có mẫu này', bg: '#E8F3EA', fg: '#1E5B2A' },
   OUT_OF_STOCK: { title: 'Có mẫu này nhưng đang hết hàng', bg: '#FBF1DF', fg: '#7A4B00' },
   COLOR_UNAVAILABLE: { title: 'Có mẫu này nhưng khác màu', bg: '#FBF1DF', fg: '#7A4B00' },
+  // Giống nhưng AI chưa chắc là cùng mẫu (điểm 0,808 - 0,85): không khẳng định "shop có mẫu này"
+  SIMILAR: { title: 'Có sản phẩm khá giống', bg: '#EEF1F5', fg: '#2B3A4F' },
   NOT_FOUND: { title: 'Shop chưa có mẫu này', bg: C.sand, fg: C.ink }
 };
 
@@ -33,14 +35,16 @@ function ProductLink({ product, onNavigate, children, sx }) {
   );
 }
 
-function MatchedProduct({ product, detectedColor, onNavigate }) {
+function MatchedProduct({ product, detectedColor, onNavigate, label }) {
   return (
     <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', flexWrap: { xs: 'wrap', sm: 'nowrap' } }}>
       <ProductLink product={product} onNavigate={onNavigate} sx={{ flex: '0 0 140px' }}>
         <Photo src={product.imageUrl} name={product.productName} sx={{ width: 140, aspectRatio: '3 / 4', bgcolor: C.photo }} />
       </ProductLink>
       <Box sx={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
-        <Box sx={{ fontSize: 12, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{product.categoryName}</Box>
+        <Box sx={{ fontSize: 12, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          {label ? `${label} · ${product.categoryName}` : product.categoryName}
+        </Box>
         <ProductLink product={product} onNavigate={onNavigate} sx={{ fontWeight: 600, fontSize: 17 }}>
           {product.productName}
         </ProductLink>
@@ -301,7 +305,14 @@ export default function ImageSearchDialog({ open, onClose }) {
               </Box>
             </Box>
 
-            {result.product && <MatchedProduct product={result.product} detectedColor={result.detectedColor} onNavigate={onClose} />}
+            {result.product && (
+              <MatchedProduct
+                product={result.product}
+                detectedColor={result.detectedColor}
+                onNavigate={onClose}
+                label={result.status === 'SIMILAR' ? 'Giống nhất' : ''}
+              />
+            )}
 
             <Suggestions
               items={result.suggestions}

@@ -8,6 +8,7 @@ import java.util.List;
  *  AVAILABLE          shop có mẫu này và còn hàng (đúng màu nếu nhận ra màu)
  *  OUT_OF_STOCK       có mẫu này nhưng hết hàng (hoặc hết đúng màu khách chụp)
  *  COLOR_UNAVAILABLE  có mẫu này nhưng không có màu khách chụp
+ *  SIMILAR            có sản phẩm khá giống nhưng chưa chắc cùng mẫu (product = sản phẩm giống nhất, không có detectedColor)
  *  NOT_FOUND          chưa có mẫu này (vẫn kèm sản phẩm gần giống)
  */
 public record ImageSearchResult(
