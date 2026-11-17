@@ -231,6 +231,7 @@ function StoreHeader({ categories }) {
         ['/profile', 'Tài khoản của tôi'],
         ['/orders', 'Đơn hàng'],
         ['/addresses', 'Địa chỉ giao hàng'],
+        ['/body-profile', 'Số đo của tôi'],
         ['/notifications', 'Thông báo'],
         ['/promotions', 'Khuyến mãi']
       ]

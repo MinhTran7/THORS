@@ -8,6 +8,7 @@ import { useCrumbs } from 'layouts/crumbs';
 import { api, post } from 'services/http';
 import { Photo, isNewProduct, money, priceText } from './ShopCommon';
 import PendingCartHandler from './PendingCartHandler';
+import SizeAdvisor from 'features/fitting/SizeAdvisor';
 import { savePending } from './pendingCart';
 import { C, SERIF } from './storeTheme';
 import { ProductCard } from './ShopPage';
@@ -304,6 +305,20 @@ export default function ShopProductPage() {
                   <Chip key={s} label={s} clickable disabled={sizeDisabled(s)} onClick={() => pick(size, setSize, s)} sx={chipSx(s === size)} />
                 ))}
               </Box>
+
+              {/* Gợi ý size theo số đo khách (module fitting); sản phẩm chưa có bảng size thì không hiện */}
+              <SizeAdvisor
+                productId={productId}
+                selectedSize={size}
+                isCustomer={isCustomer}
+                isLoggedIn={Boolean(account)}
+                onChoose={(s) => {
+                  setSize(s);
+                  if (color && !variants.some((v) => v.size === s && v.color === color && v.stock > 0)) setColor('');
+                  setQty(1);
+                  setError('');
+                }}
+              />
 
               <Typography variant="subtitle2" sx={{ mb: 1 }}>
                 Màu sắc

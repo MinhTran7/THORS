@@ -58,6 +58,8 @@ import FacebookPOSPage from 'features/facebook/FacebookPOSPage';
 import CustomerAddressPage from 'features/customer/CustomerAddressPage';
 import AddAddressPage from 'features/customer/AddAddressPage';
 import EditAddressPage from 'features/customer/EditAddressPage';
+// Số đo cơ thể (gợi ý size / thử đồ ảo)
+import BodyProfilePage from 'features/fitting/BodyProfilePage';
 
 // Shop management
 import ShopPage from 'features/shop/ShopPage';
@@ -133,7 +135,8 @@ export default createBrowserRouter([
             children: [
               { path: '/addresses', element: <CustomerAddressPage /> },
               { path: '/addresses/new', element: <AddAddressPage /> },
-              { path: '/addresses/:id/edit', element: <EditAddressPage /> }
+              { path: '/addresses/:id/edit', element: <EditAddressPage /> },
+              { path: '/body-profile', element: <BodyProfilePage /> }
             ]
           },
           {

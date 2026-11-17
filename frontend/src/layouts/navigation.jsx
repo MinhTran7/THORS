@@ -27,7 +27,8 @@ import {
   SwapOutlined,
   TeamOutlined,
   UnorderedListOutlined,
-  UserOutlined
+  UserOutlined,
+  ColumnHeightOutlined
 } from '@ant-design/icons';
 
 
@@ -108,6 +109,7 @@ export const NAVIGATION = {
     promotions,
     { to: '/orders', label: 'Đơn hàng', icon: <ShoppingOutlined /> },
     { to: '/addresses', label: 'Địa chỉ của tôi', icon: <EnvironmentOutlined /> },
+    { to: '/body-profile', label: 'Số đo của tôi', icon: <ColumnHeightOutlined /> },
     profile
   ]
 };
