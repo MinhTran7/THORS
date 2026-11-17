@@ -34,7 +34,9 @@ public class ShopPromotionRepository {
         INNER JOIN category c ON c.category_id = p.category_id AND c.status = 'ACTIVE'
         INNER JOIN product_detail pd
             ON pd.product_id = p.product_id AND pd.status = 'ACTIVE' AND pd.online_sales_enabled = 1
-        WHERE pr.status = 'ACTIVE' AND CURDATE() BETWEEN pr.start_date AND pr.end_date
+        -- So với thời điểm hiện tại (NOW), không phải đầu ngày (CURDATE): khuyến mãi hết hạn lúc 18:09 hôm nay
+        -- thì sau 18:09 không còn hiện. Chỉ lấy khuyến mãi đang bật (status = 'ACTIVE').
+        WHERE pr.status = 'ACTIVE' AND NOW() BETWEEN pr.start_date AND pr.end_date
         GROUP BY p.product_id, p.product_name, c.category_name,
                  pr.promotion_id, pr.name, pr.discount_type, pr.discount_value, pr.max_discount_amount
         ORDER BY pr.promotion_id DESC

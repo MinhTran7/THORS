@@ -1,4 +1,21 @@
 import { useEffect, useState } from 'react';
+
+// Chiều cao banner trên máy tính = phần màn hình còn lại dưới header (không chừa khoảng trắng phía dưới)
+function useFillHeight() {
+  const [height, setHeight] = useState(null);
+  useEffect(() => {
+    const measure = () => {
+      const header = document.querySelector('header');
+      if (!header) return;
+      const top = header.offsetTop + header.offsetHeight;
+      setHeight(`max(520px, calc(100svh - ${Math.round(top)}px))`);
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
+  return height;
+}
 import { keyframes } from '@emotion/react';
 import { Link as RouterLink } from 'react-router-dom';
 import { Box } from '@mui/material';
@@ -17,7 +34,8 @@ import { C, SERIF, Icon, btnSx, container, eyebrowSx, focusRing, iconBtnSx } fro
  * Rê chuột hoặc focus vào banner thì tạm dừng; người dùng bật "giảm chuyển động" thì không tự chạy.
  */
 
-const PER_KIND = 4; // số sản phẩm tối đa mỗi loại
+const PER_KIND = 4; // số sản phẩm khuyến mãi tối đa
+const TOTAL = 5; // banner luôn có 5 slide; thiếu khuyến mãi thì lấy thêm hàng mới bù vào
 const INTERVAL_MS = 5000;
 // Banner tràn hết bề ngang màn hình (kiểu Coolmate)
 const HEIGHT = { xs: 660, md: 'clamp(560px, 72vh, 760px)' };
@@ -65,7 +83,8 @@ function SlideFrame({ kind, active, children, image }) {
     >
       <Box
         sx={{
-          flex: { xs: '0 0 auto', md: '1 1 0' },
+          // Phần chữ rộng hơn ảnh một chút để tên dài đỡ xuống dòng
+          flex: { xs: '0 0 auto', md: '1.2 1 0' },
           minWidth: 0,
           p: { xs: '32px 24px 88px', md: `72px 56px 112px ${EDGE}` },
           display: 'flex',
@@ -78,11 +97,12 @@ function SlideFrame({ kind, active, children, image }) {
       </Box>
       <Box
         sx={{
-          flex: { xs: '1 1 0', md: '1.15 1 0' },
+          flex: { xs: '1 1 0', md: '1 1 0' },
           minHeight: 0,
           position: 'relative',
           overflow: 'hidden',
-          bgcolor: kind === 'promo' ? '#3A1212' : '#CFC6BA'
+          // Nền sáng trung tính để ảnh sản phẩm (thường nền trắng/xám nhạt) hòa vào, không lộ viền
+          bgcolor: '#F3F1EE'
         }}
       >
         {image}
@@ -98,7 +118,8 @@ function SlideImage({ src, name, kind }) {
         component="img"
         src={src}
         alt={name}
-        sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+        // contain: hiện trọn sản phẩm, không bị cắt mất phần đầu (mũ áo, quai túi...)
+        sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' }}
       />
     );
   }
@@ -121,7 +142,7 @@ const titleSx = {
   fontSize: { xs: 32, sm: 40, md: 'clamp(40px, 4.5vw, 58px)' },
   lineHeight: 1.08,
   display: '-webkit-box',
-  WebkitLineClamp: 2,
+  WebkitLineClamp: 3,
   WebkitBoxOrient: 'vertical',
   overflow: 'hidden'
 };
@@ -161,6 +182,20 @@ function IntroSlide() {
   );
 }
 
+// Tên sản phẩm: phần trong ngoặc xuống dòng riêng, vd "Áo Khoác Nam" / "(Form Basic Có Mũ)"
+function ProductTitle({ name }) {
+  const text = String(name || '');
+  const cut = text.indexOf(' (');
+  if (cut <= 0) return text;
+  return (
+    <>
+      {text.slice(0, cut)}
+      <br />
+      {text.slice(cut + 1)}
+    </>
+  );
+}
+
 function ProductSlide({ p, active }) {
   const theme = THEME[p.kind];
   const tab = active ? 0 : -1;
@@ -181,7 +216,7 @@ function ProductSlide({ p, active }) {
       </Box>
 
       <Box component="h2" sx={titleSx}>
-        {p.productName}
+        <ProductTitle name={p.productName} />
       </Box>
 
       {p.kind === 'promo' ? (
@@ -354,13 +389,14 @@ function VoucherSlide({ voucher, active }) {
   );
 }
 
-// Nút mũi tên đè lên ảnh: viền trắng, nền trong suốt; nút "sau" nền trắng (kiểu Coolmate)
-const arrowSx = (solid) => ({
+// Nút mũi tên trong suốt kiểu Coolmate: viền trắng, mũi tên trắng, nền tối mờ để vẫn thấy trên ảnh sáng
+const arrowSx = () => ({
   ...iconBtnSx,
-  border: '1px solid #FFFFFF',
-  bgcolor: solid ? '#FFFFFF' : 'rgba(0,0,0,.18)',
-  color: solid ? C.primary : '#FFFFFF',
-  '&:hover': { bgcolor: '#FFFFFF', color: C.primary }
+  border: '1px solid rgba(255,255,255,.9)',
+  bgcolor: 'rgba(0,0,0,.18)',
+  color: '#FFFFFF',
+  backdropFilter: 'blur(2px)',
+  '&:hover': { bgcolor: 'rgba(0,0,0,.35)', color: '#FFFFFF' }
 });
 
 // Lưu tạm slide đã tải để lần sau quay lại trang chủ hiện ngay, không phải chờ tải lại
@@ -384,6 +420,7 @@ function LoadingSlide() {
 }
 
 export default function ShopBanner({ voucher = null }) {
+  const fillHeight = useFillHeight();
   const [slides, setSlides] = useState(cachedSlides || []);
   const [loaded, setLoaded] = useState(Boolean(cachedSlides));
   const [index, setIndex] = useState(0);
@@ -392,7 +429,7 @@ export default function ShopBanner({ voucher = null }) {
   useEffect(() => {
     let alive = true;
     Promise.all([
-      api(`/shop/products?page=0&size=${PER_KIND}&sort=newest`)
+      api(`/shop/products?page=0&size=${TOTAL + PER_KIND}&sort=newest`)
         .then((d) => d.items || [])
         .catch(() => []),
       api(`/shop/promotions?size=${PER_KIND}`)
@@ -403,7 +440,8 @@ export default function ShopBanner({ voucher = null }) {
       const promoIds = new Set(promos.map((p) => p.productId));
       const newSlides = news.filter((p) => !promoIds.has(p.productId)).map((p) => ({ ...p, kind: 'new' }));
       const promoSlides = promos.map((p) => ({ ...p, kind: 'promo' }));
-      const next = interleave(newSlides, promoSlides);
+      // Xen kẽ hàng mới / khuyến mãi; khuyến mãi ít thì phần còn lại là hàng mới (đủ TOTAL slide)
+      const next = interleave(newSlides.slice(0, Math.max(TOTAL - promoSlides.length, Math.ceil(TOTAL / 2))), promoSlides);
       cachedSlides = next;
       setSlides(next);
       setLoaded(true);
@@ -414,7 +452,7 @@ export default function ShopBanner({ voucher = null }) {
   }, []);
 
   // Có voucher thì đứng đầu, sau đó là các slide sản phẩm
-  const allSlides = voucher ? [{ kind: 'voucher', productId: 'voucher', productName: voucher.name }, ...slides] : slides;
+  const allSlides = (voucher ? [{ kind: 'voucher', productId: 'voucher', productName: voucher.name }, ...slides] : slides).slice(0, TOTAL);
   const count = allSlides.length;
   // Voucher tải xong sau thì số slide thay đổi; giữ vị trí hiện tại trong phạm vi
   const current = count ? index % count : 0;
@@ -443,7 +481,7 @@ export default function ShopBanner({ voucher = null }) {
       }}
       sx={{ position: 'relative' }}
     >
-      <Box sx={{ position: 'relative', height: HEIGHT, overflow: 'hidden' }}>
+      <Box sx={{ position: 'relative', height: fillHeight ? { xs: HEIGHT.xs, md: fillHeight } : HEIGHT, overflow: 'hidden' }}>
         {/* Đang tải: khung chờ; tải xong mà chưa có sản phẩm: banner giới thiệu; có sản phẩm: chạy slide */}
         {!loaded && !voucher ? (
           <LoadingSlide />

@@ -5,7 +5,7 @@ import { useAuth } from 'features/auth/AuthProvider';
 import { buyNow as goBuyNow, stashBuyNow } from 'features/cart/checkout';
 import { useCrumbs } from 'layouts/crumbs';
 import { api, post } from 'services/http';
-import { Photo, isNewProduct, money, priceText } from './ShopCommon';
+import { Photo, colorHex, isNewProduct, money, priceText } from './ShopCommon';
 import PendingCartHandler from './PendingCartHandler';
 import ShopProductDescription from './ShopProductDescription';
 import { getImageColors, imagesForColor } from 'features/product/productDescription';
@@ -44,6 +44,7 @@ export default function ShopProductPage() {
   const [imageIndex, setImageIndex] = useState(0);
   const [size, setSize] = useState('');
   const [color, setColor] = useState('');
+  const [hoverColor, setHoverColor] = useState(''); // màu đang rê chuột (hiện tên cạnh chữ Màu sắc)
   const [qty, setQty] = useState(1);
   const [needLogin, setNeedLogin] = useState(''); // '' | 'cart' | 'buy'
   const [loadError, setLoadError] = useState('');
@@ -355,13 +356,68 @@ export default function ShopProductPage() {
                 ))}
               </Box>
 
-              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+              {/* Màu sắc dạng chấm tròn: rê chuột / chọn để xem tên màu, chọn màu thì ảnh đổi sang ảnh của màu đó */}
+              <Typography variant="subtitle2" sx={{ mb: 1.25 }}>
                 Màu sắc
+                {(hoverColor || color) && (
+                  <Box component="span" sx={{ fontWeight: 400, color: C.muted }}>
+                    : {hoverColor || color}
+                  </Box>
+                )}
               </Typography>
-              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
-                {colors.map((c) => (
-                  <Chip key={c} label={c} clickable disabled={colorDisabled(c)} onClick={() => pick(color, setColor, c)} sx={chipSx(c === color)} />
-                ))}
+              <Box role="radiogroup" aria-label="Màu sắc" sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', mb: 2.5 }}>
+                {colors.map((c) => {
+                  const selected = c === color;
+                  const disabled = colorDisabled(c);
+                  const hex = colorHex(c) || '#D6D2CC';
+                  const light = ['#FFFFFF', '#F3EAD8', '#E3D3B5', '#F8C8D4', '#C9C9C9'].includes(hex.toUpperCase());
+                  return (
+                    <Box
+                      key={c}
+                      component="button"
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      aria-label={disabled ? `${c} (hết hàng)` : c}
+                      title={disabled ? `${c} — hết hàng` : c}
+                      disabled={disabled}
+                      onClick={() => pick(color, setColor, c)}
+                      onMouseEnter={() => setHoverColor(c)}
+                      onMouseLeave={() => setHoverColor('')}
+                      onFocus={() => setHoverColor(c)}
+                      onBlur={() => setHoverColor('')}
+                      sx={{
+                        position: 'relative',
+                        width: 44,
+                        height: 44,
+                        p: 0,
+                        borderRadius: '50%',
+                        bgcolor: hex,
+                        // Vòng ngoài: màu đang chọn có viền đen dày cách 3px; màu sáng có viền mảnh để thấy được trên nền trắng
+                        border: light ? `1px solid ${C.line}` : '1px solid transparent',
+                        boxShadow: selected ? `0 0 0 3px #FFFFFF, 0 0 0 5px ${C.ink}` : 'none',
+                        cursor: disabled ? 'not-allowed' : 'pointer',
+                        opacity: disabled ? 0.45 : 1,
+                        transition: 'box-shadow .15s',
+                        '&:hover:not(:disabled)': { boxShadow: selected ? `0 0 0 3px #FFFFFF, 0 0 0 5px ${C.ink}` : `0 0 0 3px #FFFFFF, 0 0 0 4px ${C.muted}` },
+                        '&:focus-visible': { outline: `2px solid ${C.accent}`, outlineOffset: 6 },
+                        // Hết hàng: gạch chéo
+                        ...(disabled && {
+                          '&::after': {
+                            content: '""',
+                            position: 'absolute',
+                            left: '50%',
+                            top: 4,
+                            bottom: 4,
+                            width: 1.5,
+                            bgcolor: light ? C.muted : '#FFFFFF',
+                            transform: 'translateX(-50%) rotate(45deg)'
+                          }
+                        })
+                      }}
+                    />
+                  );
+                })}
               </Box>
 
               {variant && (
