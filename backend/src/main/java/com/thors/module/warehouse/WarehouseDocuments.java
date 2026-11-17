@@ -2,6 +2,7 @@ package com.thors.module.warehouse;
 
 import static com.thors.module.warehouse.WarehouseStore.*;
 
+import com.thors.common.ApiException;
 import com.thors.module.account.entity.Account;
 import com.thors.module.warehouse.WarehouseRequests.*;
 import java.math.BigDecimal;
@@ -88,7 +89,7 @@ public class WarehouseDocuments {
                 s.jdbc()
                         .queryForList(
                                 """
-                SELECT i.*,p.product_name,d.color,d.size,COALESCE(h.done,0) AS handled_quantity,
+                SELECT i.*,p.product_name,d.color,d.size,d.barcode,d.price,d.product_id,COALESCE(h.done,0) AS handled_quantity,
                   COALESCE(a.held,0) AS reserved_quantity,COALESCE(ex.qty,0) AS exchanged_quantity
                 FROM stock_receipt_item i JOIN product_detail d ON d.detail_id=i.detail_id
                 LEFT JOIN (SELECT return_item_id,SUM(quantity) AS qty FROM supplier_settlement
@@ -385,7 +386,9 @@ public class WarehouseDocuments {
     }
 
     /**
-     * Owner confirmation. PURCHASE_ORDER/RECEIPT: DRAFT|PENDING → CONFIRMED. SUPPLIER_RETURN: this is
+     * Owner confirmation. PURCHASE_ORDER: DRAFT|PENDING → CONFIRMED. RECEIPT: DRAFT|PENDING → APPROVED
+     * ("Chờ kiểm hàng"): stock is unchanged until labels are scanned and the goods check is closed
+     * ({@link #receive}). SUPPLIER_RETURN: this is
      * "Xác nhận xuất trả" (the only place a return reduces stock); from DRAFT|PENDING it first runs the
      * same approval as {@link #approve} ("Xác nhận và xuất trả").
      */
@@ -396,6 +399,7 @@ public class WarehouseDocuments {
         var doc = header(id);
         if (is(doc, "status", "CONFIRMED")) return doc;
         if (is(doc, "receipt_type", "SUPPLIER_RETURN")) return dispatch(a, doc, picks);
+        if (is(doc, "receipt_type", "RECEIPT") && is(doc, "status", "APPROVED")) return doc;
         if (!is(doc, "status", "PENDING_CONFIRMATION") && !is(doc, "status", "DRAFT"))
             throw invalid("Phiếu không ở trạng thái có thể xác nhận.");
         // Receipt of replacement goods for a supplier return (exchange) instead of a purchase order.
@@ -405,27 +409,16 @@ public class WarehouseDocuments {
             checkStale(id, expectedRemaining);
         validateExisting(doc);
         if (is(doc, "receipt_type", "RECEIPT")) {
-            for (var line : lines(id)) {
-                int detail = num(line, "detail_id"), qty = num(line, "quantity");
-                int changed =
-                        s.jdbc()
-                                .update(
-                                        "UPDATE product_detail SET stock_quantity=stock_quantity+? WHERE detail_id=?"
-                                                + " AND stock_quantity<=2147483647-?",
-                                        qty,
-                                        detail,
-                                        qty);
-                if (changed != 1) throw invalid("Tổng tồn vượt giới hạn cho phép.");
-                movement(
-                        a,
-                        detail,
-                        qty,
-                        "RECEIPT",
-                        num(line, "receipt_item_id"),
-                        null,
-                        "receipt:" + id + ":" + num(line, "receipt_item_id"),
-                        "Nhập theo phiếu #" + id);
-            }
+            s.migrated(
+                    () -> s.jdbc().update("UPDATE stock_receipt_item SET scanned_quantity=0 WHERE receipt_id=?", id));
+            s.jdbc()
+                    .update(
+                            "UPDATE stock_receipt SET status='APPROVED',confirmed_by=?,confirmed_at=CURRENT_TIMESTAMP"
+                                    + " WHERE receipt_id=?",
+                            a.id(),
+                            id);
+            s.audit(a.id(), "DOCUMENT_CONFIRM", id, "RECEIPT");
+            return header(id);
         }
         s.jdbc()
                 .update(
@@ -435,9 +428,225 @@ public class WarehouseDocuments {
                         a.id(),
                         id);
         s.audit(a.id(), "DOCUMENT_CONFIRM", id, (String) doc.get("receipt_type"));
-        if (is(doc, "receipt_type", "RECEIPT") && !exchange) {
-            // A purchase confirmed from now on starts with nothing paid; payments are recorded
-            // separately. Receipts confirmed before payment tracking keep NULL (= not declared).
+        return header(id);
+    }
+
+    static String unitStatus(Object status) {
+        return switch (String.valueOf(status)) {
+            case ProductUnits.PENDING -> "chờ nhận";
+            case ProductUnits.IN_STOCK -> "đang trong kho";
+            case ProductUnits.SOLD -> "đã bán";
+            case ProductUnits.RETURNED_SUPPLIER -> "đã trả nhà cung cấp";
+            case ProductUnits.LOST -> "mất/hỏng";
+            case ProductUnits.VOID -> "tem đã hủy";
+            default -> String.valueOf(status);
+        };
+    }
+
+    private static String label(Map<String, Object> v) {
+        return v.get("product_name") + " · " + v.get("color") + " · " + v.get("size");
+    }
+
+    private Map<String, Object> waitingCheck(int id) {
+        var doc = header(id);
+        if (!is(doc, "receipt_type", "RECEIPT") || !is(doc, "status", "APPROVED"))
+            throw invalid("Phiếu nhập không ở trạng thái chờ kiểm hàng.");
+        return doc;
+    }
+
+    /**
+     * Goods check: one scanned label adds 1 to its line, or a line count is set directly (typed in,
+     * "bớt 1"). A label of a variant not on the receipt is refused (wrong goods delivered). More than
+     * the receipt line is refused unless the Owner accepts it ({@code over}).
+     */
+    public Map<String, Object> scan(Account a, int id, Scan r) {
+        policy.create(a, "RECEIPT");
+        s.lock();
+        waitingCheck(id);
+        return s.migrated(() -> scanLine(a, id, r));
+    }
+
+    private Map<String, Object> scanLine(Account a, int id, Scan r) {
+        var lines = lines(id);
+        Map<String, Object> line;
+        int target;
+        Integer unit = null;
+        String serial = r.code() == null ? "" : r.code().trim().toUpperCase(Locale.ROOT);
+        var units = ProductUnits.looksSerial(serial) && s.units().ready()
+                ? s.jdbc().queryForList(
+                        "SELECT u.unit_id,u.status,u.scanned_at,u.in_receipt_item_id,i.receipt_id FROM product_unit u"
+                                + " LEFT JOIN stock_receipt_item i ON i.receipt_item_id=u.in_receipt_item_id WHERE u.serial_code=?",
+                        serial)
+                : List.<Map<String, Object>>of();
+        if (!units.isEmpty()) {
+            // Tem serial: đúng chiếc của phiếu này, mỗi tem chỉ đếm một lần.
+            var u = units.get(0);
+            if (!is(u, "status", ProductUnits.PENDING) || u.get("receipt_id") == null || num(u, "receipt_id") != id)
+                throw new ApiException(
+                        409,
+                        "SCAN_WRONG_UNIT",
+                        "Tem " + serial + (is(u, "status", ProductUnits.PENDING) ? " thuộc phiếu nhập khác."
+                                : " không phải tem của đợt nhập này (" + unitStatus(u.get("status")) + ")."));
+            if (u.get("scanned_at") != null)
+                throw new ApiException(409, "SCAN_DUPLICATE", "Tem " + serial + " đã quét rồi, không đếm thêm.");
+            int item = num(u, "in_receipt_item_id");
+            line = lines.stream()
+                    .filter(l -> num(l, "receipt_item_id") == item)
+                    .findFirst()
+                    .orElseThrow(() -> invalid("Tem " + serial + " không thuộc phiếu nhập này."));
+            target = num(line, "scanned_quantity") + 1;
+            unit = num(u, "unit_id");
+        } else if (r.code() != null && !r.code().isBlank()) {
+            String code = serial;
+            var found =
+                    s.jdbc()
+                            .queryForList(
+                                    "SELECT d.detail_id,d.color,d.size,p.product_name FROM product_detail d"
+                                            + " JOIN product p ON p.product_id=d.product_id WHERE d.barcode=?",
+                                    code);
+            if (found.isEmpty())
+                throw new ApiException(404, "BARCODE_NOT_FOUND", "Không tìm thấy hàng hóa có mã " + code + ".");
+            int detail = num(found.get(0), "detail_id");
+            line =
+                    lines.stream()
+                            .filter(l -> num(l, "detail_id") == detail)
+                            .findFirst()
+                            .orElseThrow(
+                                    () ->
+                                            new ApiException(
+                                                    409,
+                                                    "SCAN_NOT_IN_RECEIPT",
+                                                    label(found.get(0))
+                                                            + " không có trong phiếu nhập này. Kiểm tra lại hàng giao"
+                                                            + " (sai mẫu/màu/size?)."));
+            target = num(line, "scanned_quantity") + 1;
+        } else if (r.itemId() != null && r.quantity() != null) {
+            line =
+                    lines.stream()
+                            .filter(l -> num(l, "receipt_item_id") == r.itemId())
+                            .findFirst()
+                            .orElseThrow(() -> invalid("Dòng hàng không thuộc phiếu nhập này."));
+            target = r.quantity();
+        } else throw invalid("Cần mã tem, hoặc dòng hàng và số lượng.");
+        int expected = num(line, "quantity");
+        if (target > expected && !(Boolean.TRUE.equals(r.over()) && "OWNER".equals(a.role())))
+            throw new ApiException(
+                    409,
+                    "SCAN_OVER",
+                    label(line)
+                            + ": phiếu chỉ có "
+                            + expected
+                            + " sản phẩm, đã quét đủ. Không cộng thêm; nhận thừa cần chủ cửa hàng đồng ý.");
+        s.jdbc()
+                .update(
+                        "UPDATE stock_receipt_item SET scanned_quantity=? WHERE receipt_item_id=?",
+                        target,
+                        num(line, "receipt_item_id"));
+        if (unit != null)
+            s.jdbc().update("UPDATE product_unit SET scanned_at=CURRENT_TIMESTAMP WHERE unit_id=?", unit);
+        else if (s.units().ready()) {
+            // Bớt số đếm: bỏ đánh dấu các tem quét gần nhất để tem đó quét lại được.
+            var marked = s.jdbc().queryForList(
+                    "SELECT unit_id FROM product_unit WHERE in_receipt_item_id=? AND status='PENDING' AND scanned_at IS NOT NULL"
+                            + " ORDER BY scanned_at DESC,unit_id DESC",
+                    Integer.class,
+                    num(line, "receipt_item_id"));
+            for (int k = target; k < marked.size(); k++)
+                s.jdbc().update("UPDATE product_unit SET scanned_at=NULL WHERE unit_id=?", marked.get(k - target));
+        }
+        var result = new HashMap<>(line);
+        if (unit != null) result.put("serial_code", serial);
+        result.put("scanned_quantity", target);
+        return result;
+    }
+
+    /**
+     * "Chốt nhận hàng": the only place a receipt increases stock, by the scanned quantities. Each line
+     * becomes what was scanned (expected_quantity keeps the number on the receipt); lines with nothing
+     * scanned are dropped, so the purchase order still shows them as missing. A difference needs a
+     * reason and the Owner; a family member can close a check only when everything matches.
+     */
+    public Map<String, Object> receive(Account a, int id, String reason) {
+        policy.create(a, "RECEIPT");
+        s.lock();
+        var doc = header(id);
+        if (is(doc, "receipt_type", "RECEIPT") && is(doc, "status", "CONFIRMED")) return doc;
+        waitingCheck(id);
+        return s.migrated(() -> closeCheck(a, doc, reason));
+    }
+
+    private Map<String, Object> closeCheck(Account a, Map<String, Object> doc, String reason) {
+        int id = num(doc, "receipt_id");
+        var lines = lines(id);
+        var diffs = new ArrayList<String>();
+        long total = 0;
+        for (var l : lines) {
+            int qty = num(l, "quantity"), scanned = num(l, "scanned_quantity");
+            total += scanned;
+            if (scanned != qty) diffs.add(label(l) + ": phiếu " + qty + ", quét " + scanned);
+        }
+        if (total == 0) throw invalid("Chưa quét sản phẩm nào. Nếu hàng chưa về, hãy hủy phiếu nhập.");
+        String note = reason == null ? "" : reason.trim();
+        if (!diffs.isEmpty()) {
+            if (!"OWNER".equals(a.role()))
+                throw new ApiException(
+                        403,
+                        "WAREHOUSE_FORBIDDEN",
+                        "Số quét khác số trên phiếu (" + String.join("; ", diffs) + "). Chủ cửa hàng cần chốt phần chênh lệch.");
+            if (note.isEmpty())
+                throw invalid("Số quét khác số trên phiếu (" + String.join("; ", diffs) + "). Nhập lý do chênh lệch.");
+        }
+        boolean exchange = exchangeSource(header(num(doc, "source_receipt_id")));
+        for (var l : lines) {
+            int item = num(l, "receipt_item_id"),
+                    detail = num(l, "detail_id"),
+                    qty = num(l, "quantity"),
+                    scanned = num(l, "scanned_quantity"),
+                    src = num(l, "source_receipt_item_id");
+            if (scanned == 0) {
+                s.units().voidPending(item, "Phiếu nhập không nhận được hàng của dòng này");
+                s.jdbc().update("DELETE FROM stock_receipt_item WHERE receipt_item_id=?", item);
+                continue;
+            }
+            s.units().sync(detail);
+            // Another receipt of the same order may have been closed meanwhile. More than the order is
+            // only what the Owner accepted while scanning (and never for exchanged goods).
+            long base = exchange ? exchanged(src) : num(s.one("SELECT quantity FROM stock_receipt_item WHERE receipt_item_id=?", src), "quantity");
+            long left = Math.max(0, base - handled(src, "RECEIPT"));
+            if (scanned > left && (exchange || scanned <= qty))
+                throw invalid(
+                        String.format(
+                                "%s: nguồn chỉ còn chờ nhận %d nhưng đã quét %d. Có đợt nhập khác vừa được chốt;"
+                                        + " hãy kiểm lại số quét.",
+                                label(l), left, scanned));
+            s.jdbc()
+                    .update(
+                            "UPDATE stock_receipt_item SET quantity=?,expected_quantity=? WHERE receipt_item_id=?",
+                            scanned,
+                            qty,
+                            item);
+            if (s.jdbc()
+                            .update(
+                                    "UPDATE product_detail SET stock_quantity=stock_quantity+? WHERE detail_id=?"
+                                            + " AND stock_quantity<=2147483647-?",
+                                    scanned,
+                                    detail,
+                                    scanned)
+                    != 1) throw invalid("Tổng tồn vượt giới hạn cho phép.");
+            movement(a, detail, scanned, "RECEIPT", item, null, "receipt:" + id + ":" + item, "Nhập theo phiếu #" + id);
+            s.units().receive(item, detail, scanned);
+        }
+        s.jdbc()
+                .update(
+                        "UPDATE stock_receipt SET status='CONFIRMED',confirmed_by=?,confirmed_at=CURRENT_TIMESTAMP,"
+                                + "receive_note=? WHERE receipt_id=?",
+                        a.id(),
+                        note.isEmpty() ? null : note,
+                        id);
+        String summary = (diffs.isEmpty() ? "Khớp phiếu" : String.join("; ", diffs) + " · Lý do: " + note);
+        s.audit(a.id(), "DOCUMENT_RECEIVE", id, summary.length() > 500 ? summary.substring(0, 500) : summary);
+        if (!exchange) {
+            // A purchase received from now on starts with nothing paid; payments are recorded separately.
             s.jdbc()
                     .update(
                             "UPDATE stock_receipt SET paid_before_tracking=0 WHERE receipt_id=? AND"
@@ -530,6 +739,7 @@ public class WarehouseDocuments {
             throw invalid(String.format("%s: cần lấy %d nhưng phân bổ vị trí là %d.", label, qty, picked));
         var variant =
                 s.one("SELECT stock_quantity FROM product_detail WHERE detail_id=? FOR UPDATE", detail);
+        s.units().sync(detail);
         long stock = num(variant, "stock_quantity");
         if (stock < qty)
             throw invalid(String.format("%s: tồn hiện tại %d, không đủ trả %d.", label, stock, qty));
@@ -588,6 +798,7 @@ public class WarehouseDocuments {
                     "return:" + item + ":" + p.locationId(),
                     reason);
         }
+        int before = s.jdbc().queryForObject("SELECT stock_quantity FROM product_detail WHERE detail_id=?", Integer.class, detail);
         int changed =
                 s.jdbc()
                         .update(
@@ -597,6 +808,11 @@ public class WarehouseDocuments {
                                 detail,
                                 qty);
         if (changed != 1) throw invalid(label + ": tồn không đủ để xuất trả.");
+        s.stockAlert(detail, before);
+        s.units().sync(
+                detail,
+                new ProductUnits.Out(ProductUnits.RETURNED_SUPPLIER, null, item, reason),
+                ProductUnits.EXTERNAL_IN);
     }
 
     /** Status/audit trail and stock movements of one document, from the existing audit/movement logs. */
@@ -662,9 +878,9 @@ public class WarehouseDocuments {
                 throw invalid("Chỉ đóng đơn đặt đã xác nhận.");
             if (s.count(
                     "SELECT COUNT(*) FROM stock_receipt WHERE source_receipt_id=? AND"
-                            + " receipt_type='RECEIPT' AND status IN ('DRAFT','PENDING_CONFIRMATION')",
+                            + " receipt_type='RECEIPT' AND status IN ('DRAFT','PENDING_CONFIRMATION','APPROVED')",
                     id)
-                    > 0) throw invalid("Cần xử lý các phiếu nhập nháp/chờ xác nhận trước khi đóng đơn đặt.");
+                    > 0) throw invalid("Cần xử lý các phiếu nhập nháp/chờ xác nhận/chờ kiểm hàng trước khi đóng đơn đặt.");
             s.jdbc()
                     .update(
                             "UPDATE stock_receipt SET status='CLOSED',closed_at=CURRENT_TIMESTAMP,close_reason=?"
@@ -677,10 +893,10 @@ public class WarehouseDocuments {
             // A confirmed order may still be cancelled while nothing was actually received.
             if (s.count(
                     "SELECT COUNT(*) FROM stock_receipt WHERE source_receipt_id=? AND"
-                            + " receipt_type='RECEIPT' AND status IN ('DRAFT','PENDING_CONFIRMATION')",
+                            + " receipt_type='RECEIPT' AND status IN ('DRAFT','PENDING_CONFIRMATION','APPROVED')",
                     id)
                     > 0)
-                throw invalid("Cần xử lý các phiếu nhập nháp/chờ xác nhận trước khi hủy đơn đặt.");
+                throw invalid("Cần xử lý các phiếu nhập nháp/chờ xác nhận/chờ kiểm hàng trước khi hủy đơn đặt.");
             if (s.count(
                     "SELECT COUNT(*) FROM stock_receipt WHERE source_receipt_id=? AND"
                             + " receipt_type='RECEIPT' AND status='CONFIRMED'",
@@ -696,9 +912,10 @@ public class WarehouseDocuments {
                             reason,
                             id);
         } else {
-            // An approved supplier return has not touched stock yet, so it can still be cancelled.
+            // An approved supplier return / a receipt waiting for its goods check has not touched
+            // stock yet, so it can still be cancelled.
             var cancellable =
-                    is(doc, "receipt_type", "SUPPLIER_RETURN")
+                    !is(doc, "receipt_type", "PURCHASE_ORDER")
                             ? Set.of("DRAFT", "PENDING_CONFIRMATION", "APPROVED")
                             : Set.of("DRAFT", "PENDING_CONFIRMATION");
             if (("reject".equals(action) && !is(doc, "status", "PENDING_CONFIRMATION"))
@@ -711,6 +928,9 @@ public class WarehouseDocuments {
                             target,
                             reason,
                             id);
+            if (is(doc, "receipt_type", "RECEIPT"))
+                for (var l : lines(id))
+                    s.units().voidPending(num(l, "receipt_item_id"), "Phiếu nhập bị hủy/từ chối");
         }
         s.audit(a.id(), "DOCUMENT_" + action.toUpperCase(Locale.ROOT), id, reason);
         return header(id);
@@ -783,19 +1003,6 @@ public class WarehouseDocuments {
     }
 
     private void notifyOwners(int entity, String title, String message, String type) {
-        int id =
-                s.insert(
-                        "INSERT INTO notification(title,message,type,related_entity_type,related_entity_id)"
-                                + " VALUES(?,?,?,'stock_receipt',?)",
-                        title,
-                        message,
-                        type,
-                        entity);
-        s.jdbc()
-                .update(
-                        "INSERT INTO user_notification(user_id,notification_id) SELECT u.user_id,? FROM `user`"
-                                + " u JOIN `role` r ON r.role_id=u.role_id WHERE r.role_name='OWNER' AND"
-                                + " u.account_status='ACTIVE'",
-                        id);
+        s.notifyOwners("stock_receipt", entity, title, message, type);
     }
 }

@@ -21,7 +21,8 @@ import useSWR from 'swr';
 import { api } from 'services/http';
 import { useWarehouse } from './WarehouseContext';
 import { DataTable } from './components';
-import BarcodePrintDialog from './BarcodePrintDialog';
+import SerialPrintDialog from './SerialPrintDialog';
+import UnitList from './UnitList';
 import { docLink, money, movementLabel, number, orderCode, skuLabel, stockStateColor, stockStateLabel, when } from './model';
 
 function Figure({ label, value, hint }) {
@@ -214,8 +215,8 @@ export default function InventoryDetail({ id, onClose, onChanged }) {
             <Button
               size="small"
               variant="outlined"
-              disabled={!v.barcode}
-              title={v.barcode ? undefined : 'Biến thể chưa có mã vạch. Owner bấm “Tạo mã còn thiếu” ở trang Tồn kho.'}
+              disabled={!(v.stock_quantity > 0)}
+              title={v.stock_quantity > 0 ? 'In tem serial cho các chiếc trong kho' : 'Đang hết hàng'}
               onClick={() => setPrinting(true)}
             >
               In tem
@@ -232,6 +233,7 @@ export default function InventoryDetail({ id, onClose, onChanged }) {
           <>
             <Tabs value={tab} onChange={(_, t) => setTab(t)} variant="scrollable" sx={{ mb: 2 }}>
               <Tab label="Tổng quan" />
+              <Tab label={`Mã từng chiếc (${number(v.stock_quantity)})`} />
               <Tab label={`Vị trí (${v.location_rows.filter((l) => l.quantity > 0).length})`} />
               <Tab label={`Đơn giữ & đang đặt (${v.holds.length + v.incoming.length})`} />
               <Tab label="Lịch sử biến động tồn kho" />
@@ -307,7 +309,8 @@ export default function InventoryDetail({ id, onClose, onChanged }) {
                 </Stack>
               </Stack>
             )}
-            {tab === 1 && (
+            {tab === 1 && <UnitList variant={v} />}
+            {tab === 2 && (
               <DataTable
                 rows={[
                   ...v.location_rows.map((l) => ({ ...l, _key: l.product_location_id })),
@@ -336,7 +339,7 @@ export default function InventoryDetail({ id, onClose, onChanged }) {
                 ]}
               />
             )}
-            {tab === 2 && (
+            {tab === 3 && (
               <Stack spacing={2}>
                 <Typography variant="subtitle1">Đơn đang giữ hàng</Typography>
                 <DataTable
@@ -391,8 +394,8 @@ export default function InventoryDetail({ id, onClose, onChanged }) {
                 />
               </Stack>
             )}
-            {tab === 3 && <StockCard id={id} kind="stock" />}
-            {tab === 4 && <StockCard id={id} kind="move" />}
+            {tab === 4 && <StockCard id={id} kind="stock" />}
+            {tab === 5 && <StockCard id={id} kind="move" />}
           </>
         )}
       </DialogContent>
@@ -401,7 +404,7 @@ export default function InventoryDetail({ id, onClose, onChanged }) {
       </DialogActions>
     </Dialog>
     {/* Rendered after the detail dialog so it opens on top of it. */}
-    {printing && v && <BarcodePrintDialog variants={[v]} onClose={() => setPrinting(false)} />}
+    {printing && v && <SerialPrintDialog variants={[v]} onClose={() => setPrinting(false)} />}
     </>
   );
 }

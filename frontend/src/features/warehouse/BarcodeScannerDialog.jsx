@@ -15,7 +15,7 @@ import {
   Typography
 } from '@mui/material';
 import { api } from 'services/http';
-import { number, variantLabel } from './model';
+import { docCode, number, unitStatusLabel, variantLabel, when } from './model';
 
 function cameraError(error) {
   if (error.name === 'NotAllowedError' || error.name === 'SecurityError')
@@ -180,10 +180,10 @@ export default function BarcodeScannerDialog({ onClose, scanRequest }) {
                 fullWidth
                 autoFocus
                 inputRef={input}
-                placeholder="Quét hoặc nhập mã, ví dụ TH000054"
+                placeholder="Quét hoặc nhập mã, ví dụ TH000054 hoặc TH000054-0001"
                 value={code}
                 onChange={(event) => setCode(event.target.value)}
-                slotProps={{ htmlInput: { maxLength: 32, autoComplete: 'off', spellCheck: false } }}
+                slotProps={{ htmlInput: { maxLength: 40, autoComplete: 'off', spellCheck: false } }}
               />
               <Button type="submit" variant="contained" disabled={loading || !code.trim()} sx={{ flexShrink: 0 }}>
                 {loading ? 'Đang tìm…' : 'Tìm hàng'}
@@ -203,6 +203,25 @@ export default function BarcodeScannerDialog({ onClose, scanRequest }) {
               )}
               <Typography variant="h5">{variantLabel(result.variant)}</Typography>
               <Typography>{result.variant.barcode}</Typography>
+              {result.unit && (
+                <Alert severity={result.unit.status === 'IN_STOCK' ? 'success' : 'warning'} icon={false}>
+                  <b>Chiếc {result.unit.serial_code}</b>: {unitStatusLabel[result.unit.status] || result.unit.status}
+                  {result.unit.status === 'IN_STOCK' && ` · ${result.unit.location || 'chưa xếp vị trí'}`}
+                  {result.unit.in_receipt_id
+                    ? ` · nhập theo ${docCode({ receipt_type: 'RECEIPT', receipt_id: result.unit.in_receipt_id })}`
+                    : ' · hàng tồn trước khi có serial'}
+                  {result.unit.order_number && ` · bán ở đơn ${result.unit.order_number}`}
+                  {result.unit.out_receipt_id &&
+                    ` · trả NCC theo ${docCode({ receipt_type: 'SUPPLIER_RETURN', receipt_id: result.unit.out_receipt_id })}`}
+                  {result.unit.out_at && ` (${when(result.unit.out_at)})`}
+                </Alert>
+              )}
+              {result.unit?.defect_id && (
+                <Alert severity="error" icon={false}>
+                  <b>Đang báo lỗi:</b> {result.unit.defect_types}
+                  {result.unit.defect_description ? ` — ${result.unit.defect_description}` : ''}
+                </Alert>
+              )}
               <Typography>
                 Tổng tồn: {number(result.variant.stock_quantity)} · Chưa xếp: {number(result.variant.unassigned_quantity)}
               </Typography>

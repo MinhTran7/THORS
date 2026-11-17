@@ -84,6 +84,23 @@ class WarehouseOrderFlowTest {
         database.shutdown();
     }
 
+    /**
+     * Owner confirmation as before the goods check existed: a receipt now waits in APPROVED
+     * ("Chờ kiểm hàng"), so everything on it is scanned and the check closed right away.
+     */
+    private Map<String, Object> confirmAll(int id, Map<Integer, Integer> expected) {
+        var doc = run(() -> docs.confirm(OWNER, id, expected));
+        if ("APPROVED".equals(doc.get("status")) && "RECEIPT".equals(doc.get("receipt_type"))) {
+            db.update("UPDATE stock_receipt_item SET scanned_quantity=quantity WHERE receipt_id=?", id);
+            return run(() -> docs.receive(OWNER, id, null));
+        }
+        return doc;
+    }
+
+    private Map<String, Object> confirmAll(int id) {
+        return confirmAll(id, null);
+    }
+
     private <T> T run(Supplier<T> action) {
         return tx.execute(status -> action.get());
     }
@@ -112,7 +129,7 @@ class WarehouseOrderFlowTest {
 
     private int confirmedOrder(String supplier, int... detailQtyPrice) {
         int po = order(supplier, detailQtyPrice);
-        run(() -> docs.confirm(OWNER, po));
+        confirmAll(po);
         return po;
     }
 
@@ -137,11 +154,98 @@ class WarehouseOrderFlowTest {
         return ((Number) row.get(key)).longValue();
     }
 
+    private ApiException scanFails(Account who, int receipt, String code) {
+        return fails(() -> docs.scan(who, receipt, new Scan(code, null, null, null)));
+    }
+
+    private int scanned(int receipt, int detail) {
+        return db.queryForObject("SELECT scanned_quantity FROM stock_receipt_item WHERE receipt_id=? AND detail_id=?",
+                Integer.class, receipt, detail);
+    }
+
+    @Test
+    void confirmedReceiptWaitsForTheGoodsCheckAndOnlyScannedGoodsEnterStock() {
+        int po = confirmedOrder("A", 1, 3, 50000, 2, 2, 50000);
+        db.update("UPDATE product_detail SET barcode='TH000001' WHERE detail_id=1");
+        db.update("UPDATE product_detail SET barcode='TH000002' WHERE detail_id=2");
+        db.update("UPDATE product_detail SET barcode='TH000003' WHERE detail_id=3");
+        int r = id(run(() -> docs.create(FAMILY, new Document("RECEIPT", po, null, null, List.of(
+                new Line(1, 3, BigDecimal.valueOf(50000), line(po, 1)),
+                new Line(2, 2, BigDecimal.valueOf(50000), line(po, 2)))))));
+
+        assertTrue(fails(() -> docs.scan(FAMILY, r, new Scan("TH000001", null, null, null))).getMessage().contains("chờ kiểm hàng"),
+                "a draft is not checked yet");
+        run(() -> docs.confirm(OWNER, r));
+        assertEquals("APPROVED", db.queryForObject("SELECT status FROM stock_receipt WHERE receipt_id=?", String.class, r));
+        assertEquals(0, stock(1), "confirming the receipt only puts it in the goods check");
+        assertEquals(0, db.queryForObject("SELECT COUNT(*) FROM stock_adjustment", Integer.class));
+
+        // Family scans the labels stuck on the goods.
+        for (int i = 0; i < 3; i++) run(() -> docs.scan(FAMILY, r, new Scan("th000001", null, null, null)));
+        assertEquals("SCAN_OVER", scanFails(FAMILY, r, "TH000001").code, "4th label of a line of 3 is not counted");
+        assertEquals(3, scanned(r, 1));
+        assertEquals("SCAN_NOT_IN_RECEIPT", scanFails(FAMILY, r, "TH000003").code, "wrong variant delivered");
+        assertEquals("BARCODE_NOT_FOUND", scanFails(FAMILY, r, "XX999").code);
+        run(() -> docs.scan(FAMILY, r, new Scan("TH000002", null, null, null)));
+        run(() -> docs.scan(FAMILY, r, new Scan("TH000002", null, null, null)));
+        int item2 = db.queryForObject("SELECT receipt_item_id FROM stock_receipt_item WHERE receipt_id=? AND detail_id=2",
+                Integer.class, r);
+        run(() -> docs.scan(FAMILY, r, new Scan(null, item2, 1, null))); // "bớt 1": one label was scanned twice
+        assertEquals(1, scanned(r, 2));
+
+        // A difference: family cannot close the check, the owner must, with a reason.
+        assertEquals("WAREHOUSE_FORBIDDEN", fails(() -> docs.receive(FAMILY, r, "thiếu")).code);
+        assertTrue(fails(() -> docs.receive(OWNER, r, " ")).getMessage().contains("lý do"));
+        assertEquals(0, stock(1));
+        run(() -> docs.receive(OWNER, r, "NCC giao thiếu 1 áo L"));
+        assertEquals(3, stock(1));
+        assertEquals(1, stock(2), "stock increases by what was scanned, not by the receipt");
+        assertEquals("CONFIRMED", db.queryForObject("SELECT status FROM stock_receipt WHERE receipt_id=?", String.class, r));
+        assertEquals(1, db.queryForObject("SELECT quantity FROM stock_receipt_item WHERE receipt_id=? AND detail_id=2",
+                Integer.class, r));
+        assertEquals(2, db.queryForObject("SELECT expected_quantity FROM stock_receipt_item WHERE receipt_id=? AND detail_id=2",
+                Integer.class, r));
+        assertEquals("NCC giao thiếu 1 áo L",
+                db.queryForObject("SELECT receive_note FROM stock_receipt WHERE receipt_id=?", String.class, r));
+        assertEquals(1L, n(orderLine(po, 2), "remaining_quantity"), "the order still waits for the missing one");
+        run(() -> docs.receive(OWNER, r, null)); // repeated request
+        assertEquals(3, stock(1));
+        assertEquals("WAREHOUSE_SHORTAGE", db.queryForObject(
+                "SELECT type FROM notification ORDER BY notification_id DESC LIMIT 1", String.class));
+    }
+
+    @Test
+    void ownerMayAcceptExtraGoodsAndFamilyClosesAMatchingCheck() {
+        int po = confirmedOrder("A", 1, 2, 50000);
+        db.update("UPDATE product_detail SET barcode='TH000001' WHERE detail_id=1");
+        int r = receipt(FAMILY, po, 1, 2);
+        run(() -> docs.confirm(OWNER, r));
+        assertTrue(fails(() -> docs.receive(FAMILY, r, null)).getMessage().contains("Chưa quét"));
+        run(() -> docs.scan(FAMILY, r, new Scan("TH000001", null, null, null)));
+        run(() -> docs.scan(FAMILY, r, new Scan("TH000001", null, null, null)));
+        assertEquals("SCAN_OVER", scanFails(FAMILY, r, "TH000001").code);
+        assertEquals("SCAN_OVER", fails(() -> docs.scan(FAMILY, r, new Scan("TH000001", null, null, true))).code,
+                "only the owner accepts extra goods");
+        run(() -> docs.scan(OWNER, r, new Scan("TH000001", null, null, true)));
+        assertEquals(3, scanned(r, 1));
+        run(() -> docs.scan(FAMILY, r, new Scan(null, line(r, 1), 2, null)));
+        run(() -> docs.receive(FAMILY, r, null)); // everything matches: family may close it
+        assertEquals(2, stock(1));
+
+        // A receipt waiting for its check keeps the order open and can still be cancelled.
+        int po2 = confirmedOrder("A", 3, 5, 50000);
+        int r2 = receipt(OWNER, po2, 3, 5);
+        run(() -> docs.confirm(OWNER, r2));
+        assertTrue(fails(() -> docs.end(OWNER, po2, "close", "x")).getMessage().contains("chờ kiểm hàng"));
+        run(() -> docs.end(OWNER, r2, "cancel", "hàng chưa về"));
+        assertEquals(0, stock(3));
+    }
+
     @Test
     void directOrderWithManyVariantsConfirmsWithoutTouchingStock() {
         int po = order("Công ty May A", 1, 10, 50000, 2, 20, 52000, 3, 5, 61000, 4, 7, 70000, 5, 9, 80000);
         assertEquals(5, db.queryForObject("SELECT COUNT(*) FROM stock_receipt_item WHERE receipt_id=?", Integer.class, po));
-        run(() -> docs.confirm(OWNER, po));
+        confirmAll(po);
         assertEquals(0, db.queryForObject("SELECT SUM(stock_quantity) FROM product_detail", Integer.class));
         assertEquals(0, db.queryForObject("SELECT COUNT(*) FROM stock_adjustment", Integer.class));
         var view = run(() -> orders.detail(OWNER, po));
@@ -160,13 +264,13 @@ class WarehouseOrderFlowTest {
         assertEquals(0, stock(1), "draft/pending receipt must not change stock");
         assertEquals(100, n(orderLine(po, 1), "remaining_quantity"));
         assertEquals(60, n(orderLine(po, 1), "pending_receipt_quantity"));
-        run(() -> docs.confirm(OWNER, first));
+        confirmAll(first);
         assertEquals(60, stock(1));
         assertEquals("PARTIAL", run(() -> orders.detail(OWNER, po)).get("progress"));
         assertEquals(40, n(orderLine(po, 1), "remaining_quantity"));
         int second = receipt(OWNER, po, 1, 40);
         assertEquals(60, stock(1));
-        run(() -> docs.confirm(OWNER, second));
+        confirmAll(second);
         assertEquals(100, stock(1));
         var line = orderLine(po, 1);
         assertEquals(100, n(line, "ordered_quantity"), "ordered quantity is never rewritten");
@@ -181,8 +285,8 @@ class WarehouseOrderFlowTest {
     @Test
     void receiveSixtyAndTwentyFiveThenCloseShortfallKeepsHistory() {
         int po = confirmedOrder("A", 1, 100, 50000);
-        run(() -> docs.confirm(OWNER, receipt(OWNER, po, 1, 60)));
-        run(() -> docs.confirm(OWNER, receipt(OWNER, po, 1, 25)));
+        confirmAll(receipt(OWNER, po, 1, 60));
+        confirmAll(receipt(OWNER, po, 1, 25));
         int draft = receipt(OWNER, po, 1, 5);
         assertTrue(fails(() -> docs.end(OWNER, po, "close", "NCC hết hàng")).getMessage().contains("nháp"));
         run(() -> docs.end(OWNER, draft, "cancel", "Không giao"));
@@ -201,7 +305,7 @@ class WarehouseOrderFlowTest {
     @Test
     void overDeliveryIsBlockedWithFullNumbersAndNoStockChange() {
         int po = confirmedOrder("A", 1, 100, 50000);
-        run(() -> docs.confirm(OWNER, receipt(OWNER, po, 1, 60)));
+        confirmAll(receipt(OWNER, po, 1, 60));
         for (var who : List.of(FAMILY, OWNER)) {
             var e = fails(() -> receipt(who, po, 1, 50));
             assertTrue(e.getMessage().contains("đặt 100, đã nhập 60, còn thiếu 40, lần này 50, vượt 10"), e.getMessage());
@@ -231,14 +335,14 @@ class WarehouseOrderFlowTest {
         var draft = run(() -> orders.detail(OWNER, po));
         assertEquals("DRAFT", draft.get("status"));
         assertEquals("NOT_APPLICABLE", draft.get("progress"), "a draft order has no receiving obligation yet");
-        run(() -> docs.confirm(OWNER, po)); // DRAFT -> CONFIRMED, no PENDING step required
+        confirmAll(po); // DRAFT -> CONFIRMED, no PENDING step required
         var confirmed = run(() -> orders.detail(OWNER, po));
         assertEquals("CONFIRMED", confirmed.get("status"));
         assertEquals("NOT_RECEIVED", confirmed.get("progress"));
         assertEquals(100L, n(confirmed, "remaining_quantity"), "after confirmation the whole ordered quantity is missing");
 
         int ownerDraft = receipt(OWNER, po, 1, 30);
-        run(() -> docs.confirm(OWNER, ownerDraft)); // owner's draft receipt confirmed without submit
+        confirmAll(ownerDraft); // owner's draft receipt confirmed without submit
         assertEquals(30, stock(1));
 
         int familyDraft = receipt(FAMILY, po, 1, 20);
@@ -250,7 +354,7 @@ class WarehouseOrderFlowTest {
         assertEquals(30, stock(1), "family can never increase stock");
         assertEquals("WAREHOUSE_FORBIDDEN", fails(() -> docs.submit(FAMILY, order("A", 2, 1, 1000))).code,
                 "family cannot submit a purchase order someone else drafted");
-        run(() -> docs.confirm(OWNER, familyDraft));
+        confirmAll(familyDraft);
         assertEquals(50, stock(1));
     }
 
@@ -258,9 +362,9 @@ class WarehouseOrderFlowTest {
     void doubleConfirmAndRetryIncreaseStockOnce() {
         int po = confirmedOrder("A", 1, 10, 50000);
         int r = receipt(OWNER, po, 1, 10);
-        run(() -> docs.confirm(OWNER, r));
-        run(() -> docs.confirm(OWNER, r));
-        run(() -> docs.confirm(OWNER, r, Map.of(line(po, 1), 10)));
+        confirmAll(r);
+        confirmAll(r);
+        confirmAll(r, Map.of(line(po, 1), 10));
         assertEquals(10, stock(1));
         assertEquals(1, db.queryForObject("SELECT COUNT(*) FROM stock_adjustment", Integer.class));
     }
@@ -272,14 +376,14 @@ class WarehouseOrderFlowTest {
         int b = receipt(FAMILY, po, 1, 60);
         int c = receipt(FAMILY, po, 1, 30);
         int src = line(po, 1);
-        run(() -> docs.confirm(OWNER, a, Map.of(src, 100)));
+        confirmAll(a, Map.of(src, 100));
         var over = fails(() -> docs.confirm(OWNER, b));
         assertTrue(over.getMessage().contains("vượt 20"), over.getMessage());
         var stale = fails(() -> docs.confirm(OWNER, c, Map.of(src, 100)));
         assertEquals("WAREHOUSE_STALE", stale.code);
         assertTrue(stale.getMessage().contains("hiện tại 40"));
         assertEquals(60, stock(1));
-        run(() -> docs.confirm(OWNER, c, Map.of(src, 40)));
+        confirmAll(c, Map.of(src, 40));
         assertEquals(90, stock(1));
     }
 
@@ -295,7 +399,7 @@ class WarehouseOrderFlowTest {
             results.add(pool.submit(() -> {
                 start.await();
                 try {
-                    run(() -> docs.confirm(OWNER, r));
+                    confirmAll(r);
                     return true;
                 } catch (ApiException e) {
                     return false;
@@ -319,7 +423,7 @@ class WarehouseOrderFlowTest {
         int withDraft = confirmedOrder("A", 1, 10, 50000);
         int draft = receipt(FAMILY, withDraft, 1, 5);
         assertTrue(fails(() -> docs.end(OWNER, withDraft, "cancel", "x")).getMessage().contains("nháp"));
-        run(() -> docs.confirm(OWNER, draft));
+        confirmAll(draft);
         assertTrue(fails(() -> docs.end(OWNER, withDraft, "cancel", "x")).getMessage().contains("nhập thực tế"));
         assertEquals(5, stock(1));
         assertTrue(fails(() -> docs.end(FAMILY, withDraft, "cancel", "x")).code.equals("WAREHOUSE_FORBIDDEN"));
@@ -328,7 +432,7 @@ class WarehouseOrderFlowTest {
     @Test
     void copyCreatesDraftWithLinesButNoHistory() {
         int po = confirmedOrder("A", 1, 10, 50000, 2, 4, 30000);
-        run(() -> docs.confirm(OWNER, receipt(OWNER, po, 1, 10)));
+        confirmAll(receipt(OWNER, po, 1, 10));
         int copy = id(run(() -> docs.copy(OWNER, po)));
         var view = run(() -> orders.detail(OWNER, copy));
         assertEquals("DRAFT", view.get("status"));
@@ -376,7 +480,7 @@ class WarehouseOrderFlowTest {
         assertEquals("PENDING_CONFIRMATION",
                 db.queryForObject("SELECT status FROM stock_receipt WHERE receipt_id=?", String.class, po));
         assertEquals(8, db.queryForObject("SELECT SUM(quantity) FROM stock_receipt_item WHERE receipt_id=?", Integer.class, po));
-        run(() -> docs.confirm(OWNER, po));
+        confirmAll(po);
         assertEquals("CONFIRMED",
                 db.queryForObject("SELECT status FROM stock_receipt WHERE receipt_id=?", String.class, po));
         assertEquals(before, stock(1), "a purchase order never changes stock");
@@ -395,7 +499,7 @@ class WarehouseOrderFlowTest {
         confirmedOrder("Xưởng B", 1, 50, 48000);                       // other supplier still open
         int closed = confirmedOrder("Xưởng B", 4, 30, 1000);
         run(() -> docs.end(OWNER, closed, "close", "ngừng"));          // closed: no open obligation
-        run(() -> docs.confirm(OWNER, receipt(OWNER, confirmedA, 1, 30)));
+        confirmAll(receipt(OWNER, confirmedA, 1, 30));
 
         var history = run(() -> orders.variants(OWNER, "  công ty  may a ", "history", null, null, null, 0, 10));
         var items = (List<Map<String, Object>>) history.get("items");
@@ -430,7 +534,7 @@ class WarehouseOrderFlowTest {
     void orderListIsFilteredAndPagedOnBackend() {
         for (int i = 0; i < 25; i++) order(i % 2 == 0 ? "A" : "B", 1, 1, 1000);
         int po = confirmedOrder("A", 1, 10, 1000);
-        run(() -> docs.confirm(OWNER, receipt(OWNER, po, 1, 4)));
+        confirmAll(receipt(OWNER, po, 1, 4));
         var page = run(() -> orders.list(OWNER, null, null, null, null, 1, 10));
         assertEquals(26, page.get("total"));
         assertEquals(10, ((List<?>) page.get("items")).size());
@@ -477,7 +581,7 @@ class WarehouseOrderFlowTest {
         assertEquals(0, stock(newDetail), "creating catalog or confirming the order does not add stock");
         assertEquals(0, new BigDecimal("360000").compareTo(
                 db.queryForObject("SELECT price FROM product_detail WHERE detail_id=?", BigDecimal.class, newDetail)));
-        run(() -> docs.confirm(OWNER, receipt(OWNER, po, newDetail, 12)));
+        confirmAll(receipt(OWNER, po, newDetail, 12));
         assertEquals(12, stock(newDetail));
         assertEquals(0, new BigDecimal("360000").compareTo(
                 db.queryForObject("SELECT price FROM product_detail WHERE detail_id=?", BigDecimal.class, newDetail)),
@@ -497,7 +601,7 @@ class WarehouseOrderFlowTest {
         assertEquals(0, new BigDecimal("1250000").compareTo((BigDecimal) view.get("total_amount")));
         assertEquals(15L, n(view, "ordered_quantity"));
         assertEquals(0, new BigDecimal("80000").compareTo((BigDecimal) orderLine(po, l).get("unit_price")));
-        run(() -> docs.confirm(OWNER, po));
+        confirmAll(po);
         for (int[] d : new int[][] {{l, 120000}, {xl, 130000}}) {
             assertEquals(0, stock(d[0]), "creating catalogue / confirming the order does not add stock");
             assertEquals(0, db.queryForObject("SELECT online_sales_enabled FROM product_detail WHERE detail_id=?", Integer.class, d[0]));
@@ -559,7 +663,7 @@ class WarehouseOrderFlowTest {
     void supplierReturnIsRejectedByDumpConstraint() {
         int po = confirmedOrder("A", 1, 10, 50000);
         int r = receipt(OWNER, po, 1, 10);
-        run(() -> docs.confirm(OWNER, r));
+        confirmAll(r);
         int src = line(r, 1);
         assertThrows(Exception.class, () -> run(() -> docs.create(OWNER,
                 new Document("SUPPLIER_RETURN", r, null, "Lỗi may", List.of(new Line(1, 2, BigDecimal.valueOf(50000), src))))));
@@ -574,7 +678,7 @@ class WarehouseOrderFlowTest {
         schema(true);
         int po = confirmedOrder("A", 1, qty, 50000);
         int r = receipt(OWNER, po, 1, qty);
-        run(() -> docs.confirm(OWNER, r));
+        confirmAll(r);
         return r;
     }
 
@@ -812,10 +916,10 @@ class WarehouseOrderFlowTest {
         int r = receivedStock(10); // supplier A, receipt worth 500.000
         int po2 = confirmedOrder("  a ", 2, 4, 30000); // same supplier, other spelling
         int r2 = receipt(OWNER, po2, 2, 4); // worth 120.000
-        run(() -> docs.confirm(OWNER, r2));
+        confirmAll(r2);
         int poB = confirmedOrder("B", 3, 2, 10000);
         int rB = receipt(OWNER, poB, 3, 2);
-        run(() -> docs.confirm(OWNER, rB));
+        confirmAll(rB);
         int ret = dispatchedReturn(r, 4); // 200.000
         assertTrue(fails(() -> settle("DEBT_OFFSET", ret, rB, BigDecimal.valueOf(10000), null)).getMessage().contains("cùng nhà cung cấp"));
         settle("DEBT_OFFSET", ret, r, BigDecimal.valueOf(50000), null);
@@ -861,8 +965,8 @@ class WarehouseOrderFlowTest {
                 List.of(new Line(1, 2, BigDecimal.valueOf(50000), item))))));
         assertEquals("A", db.queryForObject("SELECT manufacturer_name FROM stock_receipt WHERE receipt_id=?", String.class, exReceipt));
         assertEquals(6, stock(1), "draft exchange receipt does not touch stock");
-        run(() -> docs.confirm(OWNER, exReceipt));
-        run(() -> docs.confirm(OWNER, exReceipt));
+        confirmAll(exReceipt);
+        confirmAll(exReceipt);
         assertEquals(8, stock(1), "replacement counted once through the receipt flow");
         assertEquals(1, db.queryForObject("SELECT COUNT(*) FROM stock_adjustment WHERE movement_type='RECEIPT' AND receipt_item_id IN"
                 + " (SELECT receipt_item_id FROM stock_receipt_item WHERE receipt_id=?)", Integer.class, exReceipt));
@@ -895,15 +999,14 @@ class WarehouseOrderFlowTest {
         var supplier = run(() -> settlements.credits(OWNER)).get(0);
         assertEquals(0, new BigDecimal("300000").compareTo((BigDecimal) supplier.get("payment_amount")));
         assertEquals(0, new BigDecimal("100000").compareTo((BigDecimal) supplier.get("debt_amount")));
-
-        // A receipt confirmed before payment tracking: debt unknown, nothing can be recorded until declared.
+        // A receipt confirmed before payment tracking (old/Excel data): counted as fully paid until declared otherwise.
         int po2 = confirmedOrder("A", 2, 4, 30000);
         int old = receipt(OWNER, po2, 2, 4);
-        run(() -> docs.confirm(OWNER, old));
+        confirmAll(old);
         db.update("UPDATE stock_receipt SET paid_before_tracking=NULL WHERE receipt_id=?", old);
-        assertNull(doc(old).get("debt_amount"));
-        assertEquals(1, run(() -> settlements.credits(OWNER)).get(0).get("undeclared_receipts"));
-        assertTrue(fails(() -> settle("PAYMENT", null, old, BigDecimal.ONE, "CASH")).getMessage().contains("chưa khai báo"));
+        assertEquals(0, BigDecimal.ZERO.compareTo((BigDecimal) doc(old).get("debt_amount")));
+        assertEquals(0, run(() -> settlements.credits(OWNER)).get(0).get("undeclared_receipts"));
+        assertNotNull(fails(() -> settle("PAYMENT", null, old, BigDecimal.ONE, "CASH")), "nothing left to pay");
         assertTrue(fails(() -> settlements.declareBasis(OWNER, old, BigDecimal.valueOf(120001))).getMessage().contains("tối đa 120.000"));
         assertEquals("WAREHOUSE_FORBIDDEN", fails(() -> settlements.declareBasis(FAMILY, old, BigDecimal.ZERO)).code);
         run(() -> settlements.declareBasis(OWNER, old, BigDecimal.valueOf(20000)));

@@ -41,6 +41,20 @@ public final class WarehouseRequests {
             @Size(max = 2000) List<@NotNull @Valid Pick> picks) {}
 
     /**
+     * Goods check of a receipt waiting for it: a scanned label {@code code} adds 1 to its line; or
+     * {@code itemId} + {@code quantity} sets the count of a line (typed in, "bớt 1"). {@code over} =
+     * the Owner accepts more than the receipt line.
+     */
+    public record Scan(
+            @Size(max = 64) String code,
+            @Positive Integer itemId,
+            @Min(0) @Max(1000000) Integer quantity,
+            Boolean over) {}
+
+    /** "Chốt nhận hàng": reason is required when the scanned counts differ from the receipt. */
+    public record Receive(@Size(max = 255) String reason) {}
+
+    /**
      * SUPPLIER_RETURN dispatch: how many units of one return line are physically taken from one
      * product_location (locationId) or from the not-yet-placed stock (locationId = null).
      */
@@ -164,4 +178,20 @@ public final class WarehouseRequests {
     public record Threshold(@Min(0) @Max(1000000) Integer min) {}
 
     public record BarcodeGenerate(@Size(max = 500) List<@Positive Integer> detailIds) {}
+
+    /** Các chiếc vừa in tem serial. */
+    public record UnitsPrinted(@Size(max = 5000) List<@Positive Integer> unitIds) {}
+
+    /** Ghi lỗi cho một chiếc (quét serial). source: SUPPLIER / WAREHOUSE / CUSTOMER. */
+    public record DefectReport(
+            @NotBlank @Size(max = 40) String serial,
+            @NotNull @Size(min = 1, max = 20) List<@NotBlank @Size(max = 60) String> types,
+            @Size(max = 500) String description,
+            @NotBlank @Pattern(regexp = "SUPPLIER|WAREHOUSE|CUSTOMER") String source,
+            @Size(max = 8) List<@NotBlank @Size(max = 40) String> photoKeys) {}
+
+    public record DefectResolve(@Size(max = 255) String note) {}
+
+    /** Tem serial phiếu nhập; itemId + extra = in thêm tem cho một dòng. */
+    public record UnitLabels(@Positive Integer itemId, @Min(1) @Max(1000) Integer extra) {}
 }

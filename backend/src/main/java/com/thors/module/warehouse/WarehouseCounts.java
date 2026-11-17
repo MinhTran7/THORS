@@ -194,6 +194,7 @@ public class WarehouseCounts {
             int diff = num(l, "counted_quantity") - num(l, "system_quantity");
             if (diff == 0) continue;
             Integer location = l.get("product_location_id") == null ? null : num(l, "product_location_id");
+            s.units().sync(detail);
             if (location != null
                     && s.jdbc().update(
                                     "UPDATE product_location SET quantity=?,updated_at=CURRENT_TIMESTAMP WHERE product_location_id=? AND quantity=?",
@@ -201,12 +202,14 @@ public class WarehouseCounts {
                                     location,
                                     num(l, "system_quantity"))
                             != 1) throw invalid("Vị trí vừa thay đổi, hãy tải lại.");
+            int before = s.jdbc().queryForObject("SELECT stock_quantity FROM product_detail WHERE detail_id=?", Integer.class, detail);
             if (s.jdbc().update(
                             "UPDATE product_detail SET stock_quantity=stock_quantity+? WHERE detail_id=? AND stock_quantity+?>=0",
                             diff,
                             detail,
                             diff)
                     != 1) throw invalid("Tồn của biến thể #" + detail + " không thể âm.");
+            if (diff < 0) s.stockAlert(detail, before);
             s.jdbc().update(
                     """
                 INSERT INTO stock_adjustment(detail_id,quantity_change,reason,adjusted_by,movement_type,movement_quantity,source_location_id,idempotency_key)
@@ -221,6 +224,11 @@ public class WarehouseCounts {
                     Math.abs(diff),
                     location,
                     "count:" + id + ":" + num(l, "count_item_id"));
+            // Đếm thiếu: chiếc nhập sớm nhất ở đúng ô đó thành Mất/hỏng. Đếm thừa: chiếc mất gần nhất quay lại, thiếu thì sinh mã mới (cần in tem).
+            s.units().sync(
+                    detail,
+                    new ProductUnits.Out(ProductUnits.LOST, null, null, trim("Kiểm kê " + code(id))),
+                    new ProductUnits.In(List.of(ProductUnits.LOST), null, trim("Kiểm kê " + code(id) + ": đếm thừa")));
             int stock = num(s.one("SELECT stock_quantity FROM product_detail WHERE detail_id=?", detail), "stock_quantity");
             int held = s.held(detail);
             if (held > stock)

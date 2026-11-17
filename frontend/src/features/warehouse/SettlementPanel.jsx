@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import useSWR from 'swr';
-import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Stack, Typography } from '@mui/material';
+import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Stack, Tooltip, Typography } from '@mui/material';
 import { api } from 'services/http';
 import { useWarehouse } from './WarehouseContext';
 import { ActionDialog, Choice, DataTable, Field } from './components';
@@ -28,7 +28,7 @@ const code = (prefix, id) => `${prefix}${String(id).padStart(5, '0')}`;
 
 const intro = {
   PAYMENT: 'Ghi nhận số tiền cửa hàng đã thanh toán cho phiếu nhập này. Có thể thanh toán nhiều lần đến khi hết nợ.',
-  REFUND: 'Ghi nhận số tiền nhà cung cấp đã hoàn lại. Có thể ghi nhiều lần cho đến khi đủ giá trị trả.',
+  REFUND: 'Ghi nhận số tiền nhà cung cấp đã trả lại cho cửa hàng. Có thể ghi nhiều lần cho đến khi trả đủ.',
   DEBT_OFFSET: 'Trừ giá trị hàng trả vào số còn nợ của một phiếu nhập cùng nhà cung cấp.',
   CREDIT_HOLD: 'Nhà cung cấp giữ lại số tiền này để đối trừ vào công nợ các phiếu nhập sau.',
   EXCHANGE:
@@ -90,7 +90,7 @@ function SettlementDialog({ doc, type, info, onClose }) {
   return (
     <Dialog open onClose={() => !waiting && onClose()} fullWidth maxWidth="sm">
       <DialogTitle>
-        {settlementTypeLabel[type]} · {docCode(doc)}
+        {type === 'REFUND' ? 'Ghi nhận NCC trả tiền' : settlementTypeLabel[type]} · {docCode(doc)}
       </DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ pt: 1 }}>
@@ -191,7 +191,7 @@ function SettlementDialog({ doc, type, info, onClose }) {
                       requestKey: requestKey.current
                     }
                   }),
-                `Đã ghi nhận: ${settlementTypeLabel[type].toLowerCase()}.`
+                type === 'REFUND' ? 'Đã ghi nhận tiền NCC trả.' : `Đã ghi nhận: ${settlementTypeLabel[type].toLowerCase()}.`
               );
               onClose();
             } catch (e) {
@@ -280,7 +280,7 @@ export default function SettlementPanel({ doc, readOnly = false }) {
   if (isReturn && doc.status !== 'CONFIRMED')
     return (
       <Typography color="text.secondary">
-        Xử lý tiền (hoàn tiền, giảm công nợ, giữ đối trừ) và đổi hàng thực hiện sau khi xác nhận xuất trả.
+        Theo dõi tiền nhà cung cấp trả lại bắt đầu sau khi xác nhận xuất trả.
       </Typography>
     );
   if (error) return <Alert severity="error">{error.message}</Alert>;
@@ -298,25 +298,24 @@ export default function SettlementPanel({ doc, readOnly = false }) {
   const known = debt && debt.debt_amount !== null && debt.debt_amount !== undefined;
   const figures = isReturn
     ? [
-        ['Giá trị trả', money(doc.total_amount)],
-        ['Đã nhận hoàn tiền', money(doc.refund_amount)],
-        ['Đã giảm công nợ', money(doc.debt_offset_amount)],
-        ['Giữ tiền đối trừ', money(doc.credit_hold_amount)],
-        ['Giá trị hàng đổi', money(doc.exchange_amount)],
-        ['Còn chưa xử lý', money(open)]
+        // Chỉ 3 số: NCC phải trả lại bao nhiêu, đã trả bao nhiêu, còn nợ bao nhiêu.
+        // "Đã trả" tính mọi khoản đã xử lý (kể cả đối trừ / đổi hàng ghi nhận trước đây) để khớp với "Còn nợ".
+        ['NCC phải trả', money(doc.total_amount)],
+        ['Đã trả', money(Number(doc.total_amount || 0) - open)],
+        ['Còn nợ', money(open)]
       ]
     : [
-        ['Giá trị phiếu nhập', money(debt.value)],
-        ['Đã trả trước khi theo dõi', debt.paid_before_tracking === null ? 'Chưa khai báo' : money(debt.paid_before_tracking)],
-        ['Đã thanh toán', money(debt.paid_amount)],
-        ['Đã đối trừ (hàng trả / tiền giữ)', money(debt.offset_amount)],
-        ['Còn nợ', known ? money(debt.debt_amount) : 'Chưa xác định'],
-        ['Tiền đối trừ NCC đang giữ', money(credit)]
+        ['Tổng tiền phiếu', money(debt.value)],
+        // Đã trả = mọi khoản làm giảm nợ: thanh toán, trả trước khi theo dõi, đối trừ hàng trả / tiền giữ.
+        ['Đã trả', known ? money(Number(debt.value) - Number(debt.debt_amount)) : 'Chưa xác định'],
+        ['Còn nợ', known ? money(debt.debt_amount) : 'Chưa xác định']
       ];
+  // Chỉ nhắc khi có: phần "Đã trả" không phải tiền mặt/chuyển khoản, và tiền NCC đang giữ của mình.
+  const offsetNote = !isReturn && Number(debt.offset_amount) > 0 ? `gồm ${money(debt.offset_amount)} đối trừ bằng hàng trả / tiền giữ` : '';
   return (
     <Stack spacing={1.5}>
       <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-        <Typography variant="subtitle2">{isReturn ? 'Xử lý tiền / đổi hàng' : 'Công nợ nhà cung cấp'}</Typography>
+        <Typography variant="subtitle2">{isReturn ? 'Tiền nhà cung cấp trả lại' : 'Công nợ nhà cung cấp'}</Typography>
         {isReturn && <SettlementStatus value={doc.settlement_status} />}
       </Stack>
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(3, 1fr)' }, gap: 1 }}>
@@ -326,6 +325,13 @@ export default function SettlementPanel({ doc, readOnly = false }) {
           </Typography>
         ))}
       </Box>
+      {!isReturn && (offsetNote || credit > 0) && (
+        <Typography variant="caption" color="text.secondary">
+          {[offsetNote && `Đã trả ${offsetNote}.`, credit > 0 && `Nhà cung cấp đang giữ ${money(credit)} tiền đối trừ của cửa hàng.`]
+            .filter(Boolean)
+            .join(' ')}
+        </Typography>
+      )}
       {isReturn &&
         doc.items
           .filter((i) => Number(i.exchanged_quantity) > 0)
@@ -345,16 +351,9 @@ export default function SettlementPanel({ doc, readOnly = false }) {
       )}
       {canAct && isReturn && open > 0 && (
         <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
-          {['REFUND', 'DEBT_OFFSET', 'CREDIT_HOLD'].map((t) => (
-            <Button key={t} size="small" variant="outlined" disabled={busy} onClick={() => setDialog(t)}>
-              {settlementTypeLabel[t]}
-            </Button>
-          ))}
-          {doc.items.some((i) => exchangeLeft(i) > 0) && (
-            <Button size="small" variant="outlined" disabled={busy} onClick={() => setDialog('EXCHANGE')}>
-              {settlementTypeLabel.EXCHANGE}
-            </Button>
-          )}
+          <Button size="small" variant="outlined" disabled={busy} onClick={() => setDialog('REFUND')}>
+            Ghi nhận NCC trả tiền
+          </Button>
         </Stack>
       )}
       {canAct && !isReturn && (
@@ -381,9 +380,19 @@ export default function SettlementPanel({ doc, readOnly = false }) {
           rows={data.entries.map((e) => ({ ...e, _key: e.settlement_id }))}
           columns={[
             { key: 'transaction_date', label: 'Ngày', render: (e) => new Date(e.transaction_date).toLocaleDateString('vi-VN') },
-            { key: 'type', label: 'Loại', render: (e) => settlementTypeLabel[e.settlement_type] },
+            {
+              key: 'type',
+              label: 'Loại',
+              render: (e) => (isReturn && e.settlement_type === 'REFUND' ? 'NCC trả tiền' : settlementTypeLabel[e.settlement_type])
+            },
             { key: 'detail', label: 'Chi tiết', render: (e) => entryDetail(e, doc.receipt_id) },
-            { key: 'amount', label: 'Số tiền', align: 'right', render: (e) => money(e.amount) },
+            {
+              key: 'amount',
+              label: 'Số tiền',
+              align: 'right',
+              // Dòng đã hủy: gạch ngang để thấy ngay là không còn được tính.
+              render: (e) => (e.voided_at ? <s>{money(e.amount)}</s> : money(e.amount))
+            },
             { key: 'note', label: 'Ghi chú', render: (e) => e.note || '—' },
             { key: 'creator_name', label: 'Người ghi nhận', render: (e) => `${e.creator_name} · ${when(e.created_at)}` },
             {
@@ -395,9 +404,11 @@ export default function SettlementPanel({ doc, readOnly = false }) {
                     Đã hủy · {e.voider_name} · {e.void_reason}
                   </Typography>
                 ) : canAct ? (
-                  <Button size="small" color="error" disabled={busy} onClick={() => setVoiding(e)}>
-                    Hủy bút toán
-                  </Button>
+                  <Tooltip title="Dùng khi ghi nhầm: dòng này giữ lại trong lịch sử nhưng không còn được tính tiền.">
+                    <Button size="small" color="error" disabled={busy} onClick={() => setVoiding(e)}>
+                      {isReturn ? 'Hủy dòng này' : 'Hủy lần trả này'}
+                    </Button>
+                  </Tooltip>
                 ) : (
                   'Hiệu lực'
                 )
@@ -409,12 +420,16 @@ export default function SettlementPanel({ doc, readOnly = false }) {
       {basis && <BasisDialog doc={doc} debt={debt} onClose={() => setBasis(false)} />}
       {voiding && (
         <ActionDialog
-          title={`Hủy bút toán ${settlementTypeLabel[voiding.settlement_type].toLowerCase()} ${money(voiding.amount)}`}
-          text="Bút toán được giữ lại trong lịch sử với trạng thái đã hủy và không còn được tính vào công nợ / số đã xử lý."
+          title={`Hủy ${isReturn ? 'dòng' : 'lần trả'} ${settlementTypeLabel[voiding.settlement_type].toLowerCase()} ${money(voiding.amount)}?`}
+          text={
+            isReturn
+              ? 'Dòng này vẫn giữ trong lịch sử với chữ “Đã hủy” nhưng không còn được tính vào số đã xử lý. Nhập lý do hủy:'
+              : `Số tiền ${money(voiding.amount)} sẽ không được tính vào “Đã trả” nữa (dòng vẫn giữ trong lịch sử với chữ “Đã hủy”). Nhập lý do hủy:`
+          }
           reason
           onClose={() => setVoiding(null)}
           onConfirm={(reason) =>
-            run(() => api(`/warehouse/settlements/${voiding.settlement_id}/void`, { method: 'POST', body: { reason } }), 'Đã hủy bút toán.')
+            run(() => api(`/warehouse/settlements/${voiding.settlement_id}/void`, { method: 'POST', body: { reason } }), isReturn ? 'Đã hủy dòng.' : 'Đã hủy lần trả.')
           }
         />
       )}
