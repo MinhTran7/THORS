@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link as RouterLink, useNavigate, useOutletContext, useParams } from 'react-router-dom';
 import { Box, Button, Chip, Typography } from '@mui/material';
 import { useAuth } from 'features/auth/AuthProvider';
-import { brand } from 'features/account/tokens';
 import { buyNow as goBuyNow, stashBuyNow } from 'features/cart/checkout';
 import { useCrumbs } from 'layouts/crumbs';
 import { api, post } from 'services/http';
@@ -185,16 +184,18 @@ export default function ShopProductPage() {
   const authPath = (path) => (needLogin === 'buy' ? `${path}?returnTo=${encodeURIComponent('/checkout')}` : path);
 
   const chipSx = (selected) => ({
-    bgcolor: selected ? brand.cyan : 'transparent',
-    border: `1px solid ${selected ? brand.cyan : brand.line}`
+    bgcolor: selected ? C.primary : 'transparent',
+    color: selected ? '#FFFFFF' : C.ink,
+    border: `1px solid ${selected ? C.primary : C.line}`,
+    '&:hover': { bgcolor: selected ? C.primaryDark : C.sand }
   });
 
   return (
     // Header + footer do StorefrontLayout lo
     <Box>
       <Box sx={{ maxWidth: 1320, mx: 'auto', boxSizing: 'border-box', px: { xs: '16px', sm: '40px' }, py: { xs: 3, md: 5 } }}>
-        <Box component="nav" aria-label="Breadcrumb" sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', fontSize: 13, color: brand.muted, mb: 2 }}>
-          <Box component={RouterLink} to="/" sx={{ color: brand.muted, textDecoration: 'none', '&:hover': { color: brand.ink } }}>
+        <Box component="nav" aria-label="Breadcrumb" sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', fontSize: 13, color: C.muted, mb: 2 }}>
+          <Box component={RouterLink} to="/" sx={{ color: C.muted, textDecoration: 'none', '&:hover': { color: C.ink } }}>
             Trang chủ
           </Box>
           {data && (
@@ -204,7 +205,7 @@ export default function ShopProductPage() {
                 <Box
                   component={RouterLink}
                   to={`/shop/category/${categoryId}`}
-                  sx={{ color: brand.muted, textDecoration: 'none', '&:hover': { color: brand.ink } }}
+                  sx={{ color: C.muted, textDecoration: 'none', '&:hover': { color: C.ink } }}
                 >
                   {data.product.categoryName}
                 </Box>
@@ -212,20 +213,20 @@ export default function ShopProductPage() {
                 <span>{data.product.categoryName}</span>
               )}
               <span>/</span>
-              <Box component="span" sx={{ color: brand.ink, fontWeight: 600 }}>
+              <Box component="span" sx={{ color: C.ink, fontWeight: 600 }}>
                 {data.product.productName}
               </Box>
             </>
           )}
         </Box>
 
-        {!data && !loadError && <Typography sx={{ color: brand.muted }}>Đang tải sản phẩm...</Typography>}
+        {!data && !loadError && <Typography sx={{ color: C.muted }}>Đang tải sản phẩm...</Typography>}
         {loadError && (
           <Box sx={{ textAlign: 'center', py: 8 }}>
             <Typography variant="h5" sx={{ mb: 1 }}>
               Không tìm thấy sản phẩm
             </Typography>
-            <Typography variant="body2" sx={{ color: brand.muted, mb: 2 }}>
+            <Typography variant="body2" sx={{ color: C.muted, mb: 2 }}>
               Sản phẩm không tồn tại hoặc hiện không được bán online.
             </Typography>
             <Button variant="contained" component={RouterLink} to="/">
@@ -238,7 +239,7 @@ export default function ShopProductPage() {
           <Box
             sx={{
               bgcolor: '#fff',
-              border: `1px solid ${brand.line}`,
+              border: `1px solid ${C.line}`,
               borderRadius: '14px',
               p: { xs: 2, md: 3 },
               display: 'grid',
@@ -304,7 +305,7 @@ export default function ShopProductPage() {
                       overflow: 'hidden',
                       position: 'relative',
                       cursor: 'pointer',
-                      border: `2px solid ${i === imageIndex ? brand.cyan : 'transparent'}`
+                      border: `2px solid ${i === imageIndex ? C.primary : 'transparent'}`
                     }}
                   >
                     <Box component="img" src={url} alt="" sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' }} />
@@ -318,11 +319,11 @@ export default function ShopProductPage() {
               <Typography
                 variant="caption"
                 {...(categoryId ? { component: RouterLink, to: `/shop/category/${categoryId}` } : {})}
-                sx={{ color: brand.muted, textDecoration: 'none', '&:hover': { color: categoryId ? brand.ink : brand.muted } }}
+                sx={{ color: C.muted, textDecoration: 'none', '&:hover': { color: categoryId ? C.ink : C.muted } }}
               >
                 {data.product.categoryName}
               </Typography>
-              <Typography variant="h3" sx={{ color: brand.ink }}>
+              <Typography variant="h3" sx={{ color: C.ink }}>
                 {data.product.productName}
               </Typography>
 
@@ -359,7 +360,7 @@ export default function ShopProductPage() {
               {variant && (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
                   <Typography variant="subtitle2">Số lượng</Typography>
-                  <Box sx={{ display: 'inline-flex', border: `1px solid ${brand.line}`, borderRadius: '10px', overflow: 'hidden' }}>
+                  <Box sx={{ display: 'inline-flex', border: `1px solid ${C.line}`, overflow: 'hidden' }}>
                     <Button onClick={() => setQty(Math.max(1, qty - 1))} disabled={qty <= 1} sx={{ minWidth: 36 }}>
                       −
                     </Button>
@@ -368,7 +369,7 @@ export default function ShopProductPage() {
                       +
                     </Button>
                   </Box>
-                  <Typography variant="caption" sx={{ color: brand.muted }}>
+                  <Typography variant="caption" sx={{ color: C.muted }}>
                     Còn {variant.stock} sản phẩm
                   </Typography>
                 </Box>
@@ -395,7 +396,7 @@ export default function ShopProductPage() {
                   </Button>
                 </Box>
               ) : (
-                <Typography variant="body2" sx={{ color: brand.muted }}>
+                <Typography variant="body2" sx={{ color: C.muted }}>
                   Chỉ tài khoản khách hàng mới mua được.
                 </Typography>
               )}
@@ -427,7 +428,7 @@ export default function ShopProductPage() {
         {/* Gợi ý sản phẩm cùng danh mục */}
         {related.length > 0 && (
           <Box component="section" sx={{ mt: { xs: 6, md: 9 } }}>
-            <Typography component="h2" sx={{ fontFamily: SERIF, fontWeight: 400, fontSize: { xs: 32, md: 40 }, color: C.ink, mb: { xs: 3, md: 4 } }}>
+            <Typography component="h2" sx={{ fontFamily: SERIF, fontWeight: 700, fontSize: { xs: 28, md: 36 }, color: C.ink, mb: { xs: 3, md: 4 } }}>
               Có thể bạn sẽ thích
             </Typography>
             <Box

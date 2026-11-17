@@ -19,7 +19,10 @@ import { C, SERIF, Icon, btnSx, container, eyebrowSx, focusRing, iconBtnSx } fro
 
 const PER_KIND = 4; // số sản phẩm tối đa mỗi loại
 const INTERVAL_MS = 5000;
-const HEIGHT = { xs: 660, md: 600 };
+// Banner tràn hết bề ngang màn hình (kiểu Coolmate)
+const HEIGHT = { xs: 660, md: 'clamp(560px, 72vh, 760px)' };
+// Lề trái phần chữ canh thẳng với nội dung trang (khung 1320px, lề 40px)
+const EDGE = 'max(40px, calc((100vw - 1320px) / 2 + 40px))';
 
 // Mỗi loại slide một tông màu
 const THEME = {
@@ -64,7 +67,7 @@ function SlideFrame({ kind, active, children, image }) {
         sx={{
           flex: { xs: '0 0 auto', md: '1 1 0' },
           minWidth: 0,
-          p: { xs: '32px 24px', md: '72px 56px' },
+          p: { xs: '32px 24px 88px', md: `72px 56px 112px ${EDGE}` },
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
@@ -114,8 +117,8 @@ function SlideImage({ src, name, kind }) {
 const titleSx = {
   m: 0,
   fontFamily: SERIF,
-  fontWeight: 400,
-  fontSize: { xs: 34, sm: 44, md: 'clamp(44px, 5vw, 64px)' },
+  fontWeight: 700,
+  fontSize: { xs: 32, sm: 40, md: 'clamp(40px, 4.5vw, 58px)' },
   lineHeight: 1.08,
   display: '-webkit-box',
   WebkitLineClamp: 2,
@@ -351,12 +354,13 @@ function VoucherSlide({ voucher, active }) {
   );
 }
 
-const arrowSx = (dark) => ({
+// Nút mũi tên đè lên ảnh: viền trắng, nền trong suốt; nút "sau" nền trắng (kiểu Coolmate)
+const arrowSx = (solid) => ({
   ...iconBtnSx,
-  border: `1px solid ${C.ink}`,
-  bgcolor: dark ? C.ink : '#FFFFFF',
-  color: dark ? '#FFFFFF' : C.ink,
-  '&:hover': { opacity: 0.85 }
+  border: '1px solid #FFFFFF',
+  bgcolor: solid ? '#FFFFFF' : 'rgba(0,0,0,.18)',
+  color: solid ? C.primary : '#FFFFFF',
+  '&:hover': { bgcolor: '#FFFFFF', color: C.primary }
 });
 
 // Lưu tạm slide đã tải để lần sau quay lại trang chủ hiện ngay, không phải chờ tải lại
@@ -414,6 +418,8 @@ export default function ShopBanner({ voucher = null }) {
   const count = allSlides.length;
   // Voucher tải xong sau thì số slide thay đổi; giữ vị trí hiện tại trong phạm vi
   const current = count ? index % count : 0;
+  // Slide nền sáng (hàng mới, nền be) thì chấm chuyển màu tối cho dễ thấy
+  const onLight = allSlides[current]?.kind === 'new';
 
   useEffect(() => {
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -435,7 +441,7 @@ export default function ShopBanner({ voucher = null }) {
       onBlur={(e) => {
         if (!e.currentTarget.contains(e.relatedTarget)) setPaused(false);
       }}
-      sx={{ ...container, pt: 4 }}
+      sx={{ position: 'relative' }}
     >
       <Box sx={{ position: 'relative', height: HEIGHT, overflow: 'hidden' }}>
         {/* Đang tải: khung chờ; tải xong mà chưa có sản phẩm: banner giới thiệu; có sản phẩm: chạy slide */}
@@ -455,7 +461,21 @@ export default function ShopBanner({ voucher = null }) {
       </Box>
 
       {count > 1 && (
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, mt: 2 }}>
+        // Thanh chấm + mũi tên nằm đè lên đáy banner, canh theo khung nội dung
+        <Box
+          sx={{
+            ...container,
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            bottom: { xs: 20, md: 32 },
+            zIndex: 2,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 2
+          }}
+        >
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             {allSlides.map((p, i) => (
               <Box
@@ -480,13 +500,13 @@ export default function ShopBanner({ voucher = null }) {
                     display: 'block',
                     width: '100%',
                     height: 2,
-                    bgcolor: i === current ? C.ink : '#CFCAC2',
+                    bgcolor: onLight ? (i === current ? C.primary : 'rgba(17,17,17,.25)') : i === current ? '#FFFFFF' : 'rgba(255,255,255,.5)',
                     transition: 'background-color .25s'
                   }
                 }}
               />
             ))}
-            <Box component="span" sx={{ ml: 1, fontSize: 13, color: C.muted, fontVariantNumeric: 'tabular-nums' }}>
+            <Box component="span" sx={{ ml: 1, fontSize: 13, whiteSpace: 'nowrap', color: onLight ? C.muted : '#FFFFFF', fontVariantNumeric: 'tabular-nums' }}>
               {String(current + 1).padStart(2, '0')} / {String(count).padStart(2, '0')}
             </Box>
           </Box>

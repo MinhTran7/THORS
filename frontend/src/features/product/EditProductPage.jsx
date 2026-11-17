@@ -151,7 +151,7 @@ export default function EditProductPage() {
             size: variant.size || '',
             color: variant.color || '',
             price: String(variant.price ?? ''),
-            // Đã có tồn kho / lịch sử bán, nhập kho: chỉ được sửa giá
+            // Đã có tồn kho / lịch sử bán, nhập kho: khóa size, vẫn sửa được màu và giá
             locked: Boolean(Number(variant.locked ?? 0)),
             stockQuantity: Number(variant.stockQuantity ?? 0)
           }))
@@ -643,7 +643,7 @@ export default function EditProductPage() {
                       </Typography>
 
                       {variant.locked && (
-                        <Tooltip title="Biến thể đã có tồn kho hoặc lịch sử bán/nhập kho. Đổi size/màu sẽ làm lệch hàng thật trên kệ và mã vạch đã in, nên chỉ được sửa giá. Cần size/màu khác hãy thêm biến thể mới.">
+                        <Tooltip title="Biến thể đã có tồn kho hoặc lịch sử bán/nhập kho nên không đổi được size (sẽ lệch hàng thật trên kệ). Màu sắc vẫn sửa được để chữa tên màu nhập sai; tem mã vạch đã in vẫn ghi màu cũ. Cần size khác hãy thêm biến thể mới.">
                           <Box
                             sx={{
                               display: 'inline-flex',
@@ -661,7 +661,7 @@ export default function EditProductPage() {
                             }}
                           >
                             <LockOutlined style={{ fontSize: 12 }} />
-                            Chỉ sửa được giá · Tồn {variant.stockQuantity}
+                            Khóa size · Tồn {variant.stockQuantity}
                           </Box>
                         </Tooltip>
                       )}
@@ -707,7 +707,6 @@ export default function EditProductPage() {
                           fullWidth
                           required
                           size="small"
-                          disabled={variant.locked}
                           value={variant.color}
                           onChange={(event) =>
                             updateVariantField(
@@ -935,7 +934,7 @@ export default function EditProductPage() {
                 }}
               >
                 Các biến thể sẵn có sẽ giữ nguyên mã định danh, số lượng tồn kho và thiết lập bán online. Các biến thể mới thêm sẽ có số lượng tồn kho khởi tạo là 0.
-                Biến thể đã có tồn kho hoặc lịch sử bán/nhập kho chỉ được sửa giá. Nếu người khác vừa sửa sản phẩm này, hệ thống sẽ yêu cầu tải lại trước khi lưu.
+                Biến thể đã có tồn kho hoặc lịch sử bán/nhập kho không đổi được size, chỉ sửa được màu và giá. Nếu người khác vừa sửa sản phẩm này, hệ thống sẽ yêu cầu tải lại trước khi lưu.
               </Typography>
             </Box>
           </Stack>

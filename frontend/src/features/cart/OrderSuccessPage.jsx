@@ -1,5 +1,12 @@
 import { Link, Navigate, useLocation } from "react-router-dom";
 
+// Đồng màu với giao diện cửa hàng (features/shop/storeTheme): màu chủ đạo đỏ đô, chữ đen, viền be, nút vuông
+const INK = "#111111";
+const PRIMARY = "#8A2B2B"; // đỏ đô — màu chủ đạo
+const MUTED = "#5C5650";
+const LINE = "#E6E3DE";
+const SANS = "'Be Vietnam Pro', system-ui, sans-serif";
+
 const money = (n) => `${new Intl.NumberFormat("vi-VN").format(n || 0)} ₫`;
 
 const PAYMENT_LABEL = {
@@ -39,8 +46,8 @@ function SuccessIcon({ size = 88 }) {
       aria-label="Đặt hàng thành công"
       style={{ display: "block", margin: "0 auto 16px" }}
     >
-      <circle cx="26" cy="26" r="26" fill="#16a34a" opacity="0.15" />
-      <circle cx="26" cy="26" r="20" fill="#16a34a" />
+      <circle cx="26" cy="26" r="26" fill="#F6ECEA" />
+      <circle cx="26" cy="26" r="20" fill={PRIMARY} />
       <path
         className="os-tick"
         d="M16 27 L23 34 L36 19"
@@ -58,7 +65,7 @@ function SuccessIcon({ size = 88 }) {
 function Row({ label, value }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
-      <span style={{ color: "#6b7280", flexShrink: 0 }}>{label}</span>
+      <span style={{ color: MUTED, flexShrink: 0 }}>{label}</span>
       <span style={{ fontWeight: 500, textAlign: "right" }}>{value}</span>
     </div>
   );
@@ -81,16 +88,16 @@ export default function OrderSuccessPage() {
           maxWidth: 520,
           width: "100%",
           background: "#fff",
-          borderRadius: 12,
+          border: `1px solid ${LINE}`,
           padding: 32,
           textAlign: "center",
-          boxShadow: "0 1px 4px rgba(0,0,0,.08)",
+          color: INK,
         }}
       >
         <SuccessIcon />
 
-        <h1 style={{ margin: "0 0 8px" }}>Đặt hàng thành công!</h1>
-        <p style={{ color: "#6b7280", margin: "0 0 24px" }}>
+        <h1 style={{ margin: "0 0 8px", fontFamily: SANS, fontWeight: 700, fontSize: 30 }}>Đặt hàng thành công!</h1>
+        <p style={{ color: MUTED, margin: "0 0 24px", lineHeight: 1.6 }}>
           Cảm ơn bạn đã mua sắm tại THORS. Cửa hàng sẽ sớm xác nhận và giao hàng cho bạn.
         </p>
 
@@ -100,7 +107,7 @@ export default function OrderSuccessPage() {
             flexDirection: "column",
             gap: 12,
             textAlign: "left",
-            borderTop: "1px solid #eee",
+            borderTop: `1px solid ${LINE}`,
             paddingTop: 16,
           }}
         >
@@ -120,12 +127,12 @@ export default function OrderSuccessPage() {
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "baseline",
-                borderTop: "1px solid #eee",
+                borderTop: `1px solid ${LINE}`,
                 paddingTop: 12,
               }}
             >
               <span style={{ fontWeight: 600 }}>Tổng thanh toán</span>
-              <span style={{ fontSize: 24, fontWeight: 700, color: "#1677ff" }}>
+              <span style={{ fontSize: 24, fontWeight: 700, color: INK }}>
                 {money(total)}
               </span>
             </div>
@@ -137,12 +144,14 @@ export default function OrderSuccessPage() {
             to={orderId ? `/orders/${orderId}` : "/orders"}
             style={{
               flex: 1,
-              padding: 12,
-              borderRadius: 6,
-              background: "#1677ff",
+              padding: 14,
+              background: PRIMARY,
               color: "#fff",
               textDecoration: "none",
-              fontWeight: 500,
+              fontWeight: 600,
+              fontSize: 14,
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
             }}
           >
             {paymentMethod === 'ONLINE' && !state?.paid ? 'Thanh toán ngay / Xem đơn' : 'Xem đơn hàng'}
@@ -151,12 +160,14 @@ export default function OrderSuccessPage() {
             to="/"
             style={{
               flex: 1,
-              padding: 12,
-              borderRadius: 6,
-              border: "1px solid #1677ff",
-              color: "#1677ff",
+              padding: 13,
+              border: `1px solid ${PRIMARY}`,
+              color: PRIMARY,
               textDecoration: "none",
-              fontWeight: 500,
+              fontWeight: 600,
+              fontSize: 14,
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
             }}
           >
             Tiếp tục mua sắm
