@@ -180,6 +180,17 @@ function normalizeCategories(response) {
   return [];
 }
 
+// Nhớ trạng thái danh sách sản phẩm trong phiên làm việc (đóng tab thì mất)
+const LIST_STATE_KEY = 'thors:product-list';
+function readListState() {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(LIST_STATE_KEY));
+    return value && typeof value === 'object' ? value : {};
+  } catch {
+    return {};
+  }
+}
+
 export default function ProductPage() {
   const navigate = useNavigate();
 
@@ -199,15 +210,26 @@ export default function ProductPage() {
   // STATES - SEARCH AND FILTER
   // ==========================================
 
-  const [activeTab, setActiveTab] = useState('ACTIVE');
-  const [search, setSearch] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('ALL');
+  // Tab, ô tìm, danh mục và trang đang xem được nhớ lại (sessionStorage) để khi vào chi tiết / sửa sản phẩm
+  // rồi bấm "Quay lại danh sách sản phẩm" thì về đúng trang chứa sản phẩm đó.
+  const [saved] = useState(readListState);
+  const [activeTab, setActiveTab] = useState(saved.activeTab ?? 'ACTIVE');
+  const [search, setSearch] = useState(saved.search ?? '');
+  const [categoryFilter, setCategoryFilter] = useState(saved.categoryFilter ?? 'ALL');
 
   // ==========================================
   // STATES - PAGINATION
   // ==========================================
 
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(saved.page ?? 1);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(LIST_STATE_KEY, JSON.stringify({ activeTab, search, categoryFilter, page }));
+    } catch {
+      // trình duyệt chặn sessionStorage thì thôi, không nhớ trang
+    }
+  }, [activeTab, search, categoryFilter, page]);
 
   // Menu "⋯" của từng dòng (ẩn/hiện sản phẩm, bật/tắt bán online)
   const [menuAnchor, setMenuAnchor] = useState(null);

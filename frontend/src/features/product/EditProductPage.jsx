@@ -49,6 +49,7 @@ import {
 import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../customer/theme';
 import { formatPriceInput, parsePriceInput } from './priceInput';
 import ProductDescriptionFields from './ProductDescriptionFields';
+import { getImageColors, sameColor, setImageColor } from './productDescription';
 
 const inputSx = (hasError) => ({
   '& .MuiOutlinedInput-root': {
@@ -387,6 +388,13 @@ export default function EditProductPage() {
   // ==========================================
   // LOADING
   // ==========================================
+
+  // Màu của các biến thể (không trùng, không phân biệt hoa/thường) để gắn cho từng ảnh
+  const variantColors = form.variants
+    .map((v) => String(v.color || '').trim())
+    .filter(Boolean)
+    .filter((c, i, list) => list.findIndex((x) => sameColor(x, c)) === i);
+  const imageColors = getImageColors(form.description);
 
   if (loading) {
     return (
@@ -812,10 +820,17 @@ export default function EditProductPage() {
                 {imageBusy ? 'Đang cập nhật ảnh...' : 'Thêm ảnh'}
               </Button>
 
+              {images.length > 0 && variantColors.length > 0 && (
+                <Typography sx={{ fontSize: 12.5, color: C.muted, mb: 1.5, lineHeight: 1.5 }}>
+                  Chọn màu cho từng ảnh: khách chọn màu nào trên website thì hiện ảnh của màu đó. Bấm "Lưu thay đổi" để lưu phần chọn màu.
+                </Typography>
+              )}
+
               {images.length > 0 ? (
                 <Grid container spacing={1.5}>
                   {images.map((image) => {
                     const isPrimary = Boolean(Number(image.isPrimary));
+                    const imageColor = imageColors[image.imageUrl] || '';
 
                     return (
                       <Grid
@@ -890,6 +905,27 @@ export default function EditProductPage() {
                             </Tooltip>
                           </Stack>
                         </Box>
+                        {/* Ảnh này thuộc màu nào (để trống = dùng cho mọi màu) */}
+                        {variantColors.length > 0 && (
+                          <TextField
+                            select
+                            fullWidth
+                            size="small"
+                            value={variantColors.find((c) => sameColor(c, imageColor)) || ''}
+                            onChange={(event) => updateField('description', setImageColor(form.description, image.imageUrl, event.target.value))}
+                            slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': 'Màu của ảnh' } }}
+                            sx={{ mt: 0.75, ...inputSx(false), '& .MuiOutlinedInput-root': { ...inputSx(false)['& .MuiOutlinedInput-root'], minHeight: 34, fontSize: 12.5 } }}
+                          >
+                            <MenuItem value="">
+                              <em>Mọi màu</em>
+                            </MenuItem>
+                            {variantColors.map((c) => (
+                              <MenuItem key={c} value={c}>
+                                {c}
+                              </MenuItem>
+                            ))}
+                          </TextField>
+                        )}
                       </Grid>
                     );
                   })}

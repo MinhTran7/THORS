@@ -8,6 +8,7 @@ import { api, post } from 'services/http';
 import { Photo, isNewProduct, money, priceText } from './ShopCommon';
 import PendingCartHandler from './PendingCartHandler';
 import ShopProductDescription from './ShopProductDescription';
+import { getImageColors, imagesForColor } from 'features/product/productDescription';
 import { savePending } from './pendingCart';
 import { C, SERIF } from './storeTheme';
 import { ProductCard } from './ShopPage';
@@ -46,6 +47,9 @@ export default function ShopProductPage() {
   const [qty, setQty] = useState(1);
   const [needLogin, setNeedLogin] = useState(''); // '' | 'cart' | 'buy'
   const [loadError, setLoadError] = useState('');
+
+  // Chọn màu khác thì về ảnh đầu tiên của màu đó
+  useEffect(() => setImageIndex(0), [color]);
 
   // Đường dẫn trên header chung (khi đã đăng nhập)
   useCrumbs(['Trang chủ', data?.product?.productName ?? 'Chi tiết sản phẩm']);
@@ -138,7 +142,7 @@ export default function ShopProductPage() {
       productId: Number(data?.product?.productId || productId),
       variantId: variant.detailId,
       productName: data.product.productName,
-      imageUrl: data.images?.[0],
+      imageUrl: shownImages[0] ?? data.images?.[0],
       size: variant.size,
       color: variant.color,
       unitPrice: variant.price,
@@ -189,6 +193,9 @@ export default function ShopProductPage() {
     border: `1px solid ${selected ? C.primary : C.line}`,
     '&:hover': { bgcolor: selected ? C.primaryDark : C.sand }
   });
+
+  // Ảnh theo màu đang chọn (chủ shop gắn màu cho ảnh ở trang Sửa sản phẩm); màu chưa có ảnh riêng thì hiện tất cả
+  const shownImages = data ? imagesForColor(data.images || [], getImageColors(data.product?.description), color) : [];
 
   return (
     // Header + footer do StorefrontLayout lo
@@ -250,7 +257,7 @@ export default function ShopProductPage() {
             <Box>
               <Box sx={{ position: 'relative' }}>
                 {/* Khung cố định 4:5, ảnh hiện trọn (contain) nên ảnh ngang, dọc hay vuông đều không bị cắt */}
-                {data.images[imageIndex] ? (
+                {shownImages[imageIndex] ? (
                   <Box
                     sx={{
                       aspectRatio: '4 / 5',
@@ -262,7 +269,7 @@ export default function ShopProductPage() {
                   >
                     <Box
                       component="img"
-                      src={data.images[imageIndex]}
+                      src={shownImages[imageIndex]}
                       alt={data.product.productName}
                       sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
                     />
@@ -288,7 +295,7 @@ export default function ShopProductPage() {
                 )}
               </Box>
               <Box sx={{ display: 'flex', gap: 1, mt: 1.5, flexWrap: 'wrap' }}>
-                {data.images.map((url, i) => (
+                {shownImages.map((url, i) => (
                   <Box
                     key={url}
                     component="button"
