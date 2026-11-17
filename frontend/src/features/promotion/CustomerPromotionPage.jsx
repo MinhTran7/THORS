@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Box, Button, CircularProgress, Dialog, IconButton, InputAdornment, Tab, Tabs, TextField } from '@mui/material';
 import { SearchOutlined, CloseOutlined } from '@ant-design/icons';
 import { getPromotions } from 'services/promotionService';
+import { kindOf } from './PromotionForm';
 import { useCrumbs } from '../../layouts/crumbs';
 import { StoreAccountShell } from 'features/account/components/StoreAccount';
 import { C, RADIUS, SANS } from 'features/shop/storeTheme';
@@ -41,6 +42,9 @@ const timeLeft = (end) => {
 };
 
 const isUpcoming = (p) => new Date(p.startDate) > new Date();
+
+// Chỉ hiện mã giảm giá đơn hàng đang bật và chưa hết hạn
+const isVoucher = (p) => kindOf(p) === 'ORDER' && p.status === 'ACTIVE' && new Date(p.endDate) > new Date();
 
 const matchTab = (p, tab) =>
   tab === 'ALL' ||
@@ -189,7 +193,7 @@ export default function CustomerPromotionPage() {
     let active = true;
     const load = () =>
       getPromotions()
-        .then((res) => active && setPromotions(Array.isArray(res) ? res : res?.data || []))
+        .then((res) => active && setPromotions((Array.isArray(res) ? res : res?.data || []).filter(isVoucher)))
         .catch((err) => console.error('Lỗi tải danh sách khuyến mãi:', err))
         .finally(() => active && setLoading(false));
     load();
