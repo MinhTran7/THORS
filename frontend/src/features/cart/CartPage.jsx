@@ -291,8 +291,8 @@ padding:16px 20px;border-bottom:1px solid var(--line)}
 .thc-row-head{font-size:13px;color:var(--mute);padding:12px 20px;background:#fdfcf6;border-radius:14px 14px 0 0}
 .thc-c{text-align:center}
 .thc-prod{display:flex;gap:14px;align-items:center;min-width:0}
-.thc-thumb{flex:none;width:64px;height:64px;border-radius:12px;background:var(--cy);display:grid;place-items:center;
-font-size:24px;font-weight:700;color:#0f4c57}
+.thc-thumb{flex:none;position:relative;width:64px;height:64px;border-radius:12px;overflow:hidden;background:var(--cy);
+display:grid;place-items:center;font-size:24px;font-weight:700;color:#0f4c57}
 .thc-name{font-weight:600;font-size:15px;line-height:1.35}
 .thc-variant{font-size:13px;color:var(--mute);margin-top:2px}
 .thc-low{display:inline-block;margin-top:6px;font-size:12px;background:var(--warn);border:1px solid var(--warn-l);
@@ -337,7 +337,8 @@ transform:rotate(45deg) translate(-1px,-1px)}
 .thc-dialog h3{margin:0 0 8px;font-size:18px}
 .thc-dialog p{margin:0 0 20px;color:var(--mute);font-size:14px;line-height:1.5}
 .thc-dialog-actions{display:flex;gap:10px;justify-content:flex-end}
-.thc-thumb img{width:100%;height:100%;object-fit:cover;border-radius:12px}
+/* Ảnh phủ kín ô 64x64, cắt phần thừa (ảnh dọc không bị kéo dài xuống dòng dưới) */
+.thc-thumb img{position:absolute;inset:0;display:block;width:100%;height:100%;object-fit:cover}
 .thc-bad{display:inline-block;margin-top:6px;font-size:12px;color:var(--red);background:#fdecea;border-radius:6px;padding:2px 8px}
 .thc-err{margin-bottom:16px;background:var(--warn);border:1px solid var(--warn-l);border-radius:10px;padding:10px 14px;font-size:14px}
 .thc-row-off .thc-prod,.thc-row-off .thc-price,.thc-row-off .thc-sub{opacity:.55}

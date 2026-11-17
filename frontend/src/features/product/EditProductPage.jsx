@@ -48,6 +48,7 @@ import {
 } from '../../services/categoryService';
 import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../customer/theme';
 import { formatPriceInput, parsePriceInput } from './priceInput';
+import ProductDescriptionFields from './ProductDescriptionFields';
 
 const inputSx = (hasError) => ({
   '& .MuiOutlinedInput-root': {
@@ -558,17 +559,7 @@ export default function EditProductPage() {
                   <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>
                     Mô tả sản phẩm
                   </Typography>
-                  <TextField
-                    fullWidth
-                    multiline
-                    minRows={4}
-                    placeholder="Mô tả thông tin sản phẩm..."
-                    value={form.description}
-                    onChange={(event) =>
-                      updateField('description', event.target.value)
-                    }
-                    sx={inputSx(false)}
-                  />
+                  <ProductDescriptionFields value={form.description} onChange={(next) => updateField('description', next)} disabled={saving} />
                 </Box>
               </Stack>
             </Card>

@@ -22,6 +22,62 @@ export function isNewProduct(product) {
   return Date.now() - created < NEW_DAYS * 24 * 60 * 60 * 1000;
 }
 
+/* ---------- Cây danh mục (danh mục lớn + danh mục con) ---------- */
+
+const foldName = (name) => (name || '').normalize('NFC').toLowerCase().trim();
+
+/**
+ * Gom danh mục thành cây: [{ ...danhMucLon, children: [{ ...danhMucCon, children: [...] }] }].
+ * Có parentId (API /shop/categories trả về) thì dựa vào parentId.
+ * Không có thì đoán theo tên (xem bên dưới).
+ */
+export function categoryTree(categories = []) {
+  const byId = new Map(categories.map((c) => [c.categoryId, c]));
+  let parentOf;
+  if (categories.some((c) => c.parentId != null)) {
+    parentOf = (c) => (c.parentId != null && byId.has(c.parentId) ? byId.get(c.parentId) : null);
+  } else {
+    // Danh mục cha = danh mục cùng chữ đầu, có các từ nằm hết trong tên này và nhiều từ nhất.
+    // vd "Giày Da Nam" -> "Giày nam" (gồm "giày", "nam") -> "Giày"; "Giày cao gót" -> "Giày".
+    const words = new Map(categories.map((c) => [c.categoryId, foldName(c.categoryName).split(/\s+/).filter(Boolean)]));
+    parentOf = (c) => {
+      const mine = words.get(c.categoryId);
+      let best = null;
+      for (const other of categories) {
+        const theirs = words.get(other.categoryId);
+        if (other === c || theirs.length === 0 || theirs.length >= mine.length || theirs[0] !== mine[0]) continue;
+        if (!theirs.every((w) => mine.includes(w))) continue;
+        if (!best || theirs.length > words.get(best.categoryId).length) best = other;
+      }
+      return best;
+    };
+  }
+  // Dữ liệu lỗi có vòng lặp (A là cha B, B là cha A) thì coi như danh mục gốc
+  const loops = (c) => {
+    const seen = new Set([c.categoryId]);
+    for (let cur = parentOf(c); cur; cur = parentOf(cur)) {
+      if (seen.has(cur.categoryId)) return true;
+      seen.add(cur.categoryId);
+    }
+    return false;
+  };
+  const nodes = new Map(categories.map((c) => [c.categoryId, { ...c, children: [] }]));
+  const roots = [];
+  categories.forEach((c) => {
+    const parent = loops(c) ? null : parentOf(c);
+    (parent ? nodes.get(parent.categoryId).children : roots).push(nodes.get(c.categoryId));
+  });
+  const byName = (a, b) => (a.categoryName || '').localeCompare(b.categoryName || '', 'vi');
+  const sortDeep = (list) => {
+    list.sort(byName).forEach((n) => sortDeep(n.children));
+    return list;
+  };
+  return sortDeep(roots);
+}
+
+// Mọi danh mục con, cháu... của một nút trong cây (không gồm chính nó)
+export const descendantsOf = (node) => node.children.flatMap((c) => [c, ...descendantsOf(c)]);
+
 /* ---------- Màu sắc sản phẩm (chấm màu dưới thẻ sản phẩm) ---------- */
 
 // Tên màu (tiếng Việt, viết thường, không dấu) -> mã màu. Màu lạ không có trong bảng thì hiện chấm xám nhạt.

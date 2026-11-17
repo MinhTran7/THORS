@@ -42,6 +42,7 @@ import {
 } from '../../services/categoryService';
 import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../customer/theme';
 import CategoryPicker from './CategoryPicker';
+import ProductDescriptionFields from './ProductDescriptionFields';
 import { formatPriceInput, parsePriceInput } from './priceInput';
 
 const MAX_IMAGES = 10;
@@ -683,16 +684,7 @@ export default function AddProductPage() {
                       Mô tả sản phẩm
                     </FieldLabel>
 
-                    <TextField
-                      fullWidth
-                      multiline
-                      rows={4}
-                      placeholder="Mô tả chất liệu, kiểu dáng, hướng dẫn sử dụng và bảo quản..."
-                      value={description}
-                      onChange={(event) => setDescription(event.target.value)}
-                      disabled={saving}
-                      sx={inputSx(false)}
-                    />
+                    <ProductDescriptionFields value={description} onChange={setDescription} disabled={saving} />
 
                     <Typography
                       sx={{
@@ -701,7 +693,7 @@ export default function AddProductPage() {
                         mt: 0.75
                       }}
                     >
-                      Mô tả chi tiết giúp nhân viên tư vấn và khách hàng nắm rõ đặc điểm sản phẩm.
+                      Các mục để trống sẽ không hiện trên website. Mô tả chi tiết giúp khách hàng nắm rõ đặc điểm sản phẩm.
                     </Typography>
                   </Box>
                 </Stack>

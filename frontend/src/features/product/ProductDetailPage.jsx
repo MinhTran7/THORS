@@ -31,6 +31,7 @@ import { getProductById, setVariantOnline } from '../../services/productService'
 import { useAuth } from 'features/auth/AuthProvider';
 import SizeChartEditor from 'features/fitting/SizeChartEditor';
 import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../customer/theme';
+import { descriptionToText } from './productDescription';
 
 // Switch thu nhỏ theo Design System
 const switchSx = {
@@ -450,7 +451,7 @@ export default function ProductDetailPage() {
                   lineHeight: 1.7
                 }}
               >
-                {product.description || 'Chưa có thông tin mô tả cho sản phẩm này.'}
+                {descriptionToText(product.description) || 'Chưa có thông tin mô tả cho sản phẩm này.'}
               </Typography>
 
               {/* PRICE INFORMATION */}
