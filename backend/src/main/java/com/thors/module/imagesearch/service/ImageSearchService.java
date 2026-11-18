@@ -6,6 +6,7 @@ import com.thors.module.imagesearch.color.ColorNames;
 import com.thors.module.imagesearch.color.ProductGroup;
 import com.thors.module.imagesearch.config.ImageSearchProperties;
 import com.thors.module.imagesearch.model.ImageDecoder;
+import com.thors.module.imagesearch.model.ImageEncoder;
 import com.thors.module.imagesearch.repository.ImageSearchRepository;
 import com.thors.module.imagesearch.repository.ImageSearchRepository.ProductRoot;
 import com.thors.module.imagesearch.service.CatalogIndex.ProductScore;
@@ -32,6 +33,7 @@ import java.util.stream.Collectors;
 /**
  * Tìm sản phẩm bằng ảnh khách chụp. Ảnh chỉ xử lý trong bộ nhớ, không lưu lại.
  *
+ * Điểm giống = trung bình điểm ảnh gốc và điểm ảnh đã xóa nền (xem CatalogIndex, BackgroundRemover).
  * Cách quyết định (theo báo cáo đánh giá lần 4, 15/11/2026), theo điểm giống của sản phẩm hạng 1:
  *  - >= 0,85 (confident-threshold): khẳng định "shop có mẫu này" kèm màu / tồn kho.
  *  - 0,808 (match-threshold) .. 0,85: "có sản phẩm khá giống" (SIMILAR), không khẳng định cùng mẫu.
@@ -96,25 +98,25 @@ public class ImageSearchService {
         } catch (IOException e) {
             throw new ApiException(400, "IMAGE_INVALID", "Không đọc được ảnh. Vui lòng chụp lại hoặc chọn ảnh JPG / PNG.");
         }
-        float[] vector;
+        ImageEncoder.Vectors vectors;
         boolean acquired = false;
         try {
             acquired = slots.tryAcquire(3, TimeUnit.SECONDS);
             if (!acquired) {
                 throw new ApiException(429, "IMAGE_SEARCH_BUSY", "Hệ thống đang bận, vui lòng thử lại sau vài giây.");
             }
-            vector = engine.encoder().encode(image);
+            vectors = engine.encoder().encodeBoth(image);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new ApiException(503, "IMAGE_SEARCH_BUSY", "Hệ thống đang bận, vui lòng thử lại.");
         } finally {
             if (acquired) slots.release();
         }
-        return answer(vector);
+        return answer(vectors);
     }
 
-    ImageSearchResult answer(float[] vector) {
-        List<ProductScore> ranked = engine.index().rank(vector);
+    ImageSearchResult answer(ImageEncoder.Vectors vectors) {
+        List<ProductScore> ranked = engine.index().rank(vectors);
         // Sản phẩm vừa bị ẩn khỏi web (chưa kịp cập nhật chỉ mục) thì bỏ qua
         Map<Integer, ProductRoot> roots = repository.findVisibleProductRoots().stream()
                 .collect(Collectors.toMap(ProductRoot::productId, r -> r, (a, b) -> a));
@@ -157,7 +159,8 @@ public class ImageSearchService {
                     card(bestCard, best.score(), plain), null, suggestions, category);
         }
         ProductGroup group = ProductGroup.of(str(bestCard.get("categoryName")), str(bestCard.get("productName")));
-        ColorClassifier.Guess guess = colors.guess(vector, group);
+        // Màu đoán trên ảnh gốc (cách đã đánh giá ở lần 1-4)
+        ColorClassifier.Guess guess = colors.guess(vectors.original(), group);
         Decision d = decide(guess, totals, props.getColorConfidence());
 
         List<ColorStock> colorStocks = totals.stream()

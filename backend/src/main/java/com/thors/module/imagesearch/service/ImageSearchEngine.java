@@ -1,6 +1,7 @@
 package com.thors.module.imagesearch.service;
 
 import com.thors.module.imagesearch.config.ImageSearchProperties;
+import com.thors.module.imagesearch.model.BackgroundRemover;
 import com.thors.module.imagesearch.model.ImageDecoder;
 import com.thors.module.imagesearch.model.ImageEncoder;
 import com.thors.module.imagesearch.model.ModelFiles;
@@ -91,7 +92,13 @@ public class ImageSearchEngine {
             message = "Đang tải mô hình AI...";
             Path dir = Path.of(props.getCacheDir());
             Path model = ModelFiles.ensureModel(dir, props.getModelUrl(), props.getModelSha256());
-            encoder = new OnnxImageEncoder(model);
+            BackgroundRemover remover = null;
+            if (props.isBackgroundRemoval()) {
+                Path u2net = ModelFiles.ensureModel(dir, "u2net.onnx", props.getBackgroundModelUrl(),
+                        props.getBackgroundModelSha256());
+                remover = new BackgroundRemover(u2net);
+            }
+            encoder = new OnnxImageEncoder(model, remover);
             if (index.load(indexFile(), modelId())) {
                 log.info("Đã đọc {} vector ảnh sản phẩm từ cache.", index.size());
                 state = State.READY; // dùng được ngay, rồi cập nhật ảnh mới bên dưới
@@ -141,7 +148,7 @@ public class ImageSearchEngine {
         }
     }
 
-    private float[] embedCatalogImage(CatalogImage img) {
+    private ImageEncoder.Vectors embedCatalogImage(CatalogImage img) {
         try {
             HttpRequest req = HttpRequest.newBuilder(URI.create(img.imageUrl())).timeout(Duration.ofSeconds(30)).GET().build();
             HttpResponse<InputStream> res = http.send(req, HttpResponse.BodyHandlers.ofInputStream());
@@ -157,7 +164,7 @@ public class ImageSearchEngine {
                 log.warn("Ảnh sản phẩm {} quá lớn, bỏ qua", img.imageId());
                 return null;
             }
-            return encoder.encode(ImageDecoder.decode(bytes));
+            return encoder.encodeBoth(ImageDecoder.decode(bytes));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return null;
@@ -172,7 +179,9 @@ public class ImageSearchEngine {
     }
 
     private String modelId() {
-        return "siglip-b16:" + props.getModelSha256();
+        // Đổi cách xử lý ảnh (xóa nền) thì vector cũ không dùng được nữa -> tính lại
+        return "siglip-b16:" + props.getModelSha256()
+                + (props.isBackgroundRemoval() ? ":u2net-cut-v1:" + props.getBackgroundModelSha256() : "");
     }
 
     public State state() {

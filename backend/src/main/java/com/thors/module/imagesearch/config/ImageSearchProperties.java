@@ -26,6 +26,19 @@ public class ImageSearchProperties {
     /** SHA-256 của file mô hình, để chắc tải về không bị hỏng hay bị thay. */
     private String modelSha256 = "7287a8e9cbf4f2eedd66e8dc5cf584be03108f4e4a24331879ac6ef7ac7c878f";
 
+    /**
+     * Xóa nền trước khi so (chỉ giữ sản phẩm), cho cả ảnh khách lẫn ảnh shop. Điểm giống = trung bình điểm ảnh gốc và
+     * điểm ảnh đã xóa nền. Thử nghiệm 18/11/2026 (results/2026-11-18_xoanen): hạng 1 đúng 147/148 (trước 146),
+     * tìm thấy 125 (trước 122), ảnh đồ không bán bị báo giống 3/20 (trước 4); váy ren đen xếp đúng váy tầng ren lên đầu.
+     * Tốn thêm ~0,25 giây/lượt tìm và một mô hình ~176 MB.
+     */
+    private boolean backgroundRemoval = true;
+
+    /** Mô hình xóa nền U²-Net (bản rembg dùng, Apache-2.0). */
+    private String backgroundModelUrl = "https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net.onnx";
+
+    private String backgroundModelSha256 = "8d10d2f3bb75ae3b6d527c77944fc5e7dcd94b29809d47a739a7a728a912b491";
+
     /** Thư mục lưu file mô hình và vector ảnh sản phẩm đã tính (để khởi động lại không phải tính lại). */
     private String cacheDir = Path.of(System.getProperty("user.home"), ".thors", "image-search").toString();
 
@@ -65,6 +78,12 @@ public class ImageSearchProperties {
     public void setModelUrl(String modelUrl) { this.modelUrl = modelUrl; }
     public String getModelSha256() { return modelSha256; }
     public void setModelSha256(String modelSha256) { this.modelSha256 = modelSha256; }
+    public boolean isBackgroundRemoval() { return backgroundRemoval; }
+    public void setBackgroundRemoval(boolean backgroundRemoval) { this.backgroundRemoval = backgroundRemoval; }
+    public String getBackgroundModelUrl() { return backgroundModelUrl; }
+    public void setBackgroundModelUrl(String backgroundModelUrl) { this.backgroundModelUrl = backgroundModelUrl; }
+    public String getBackgroundModelSha256() { return backgroundModelSha256; }
+    public void setBackgroundModelSha256(String backgroundModelSha256) { this.backgroundModelSha256 = backgroundModelSha256; }
     public String getCacheDir() { return cacheDir; }
     public void setCacheDir(String cacheDir) { this.cacheDir = cacheDir; }
     public double getMatchThreshold() { return matchThreshold; }

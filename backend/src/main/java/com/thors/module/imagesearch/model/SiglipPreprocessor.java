@@ -7,46 +7,80 @@ import java.awt.image.BufferedImage;
  *  1. Ảnh lớn hơn 768 px thì thu nhỏ giữ tỉ lệ cho vừa 768 x 768 (PIL Image.thumbnail).
  *  2. Resize về 224 x 224 (không giữ tỉ lệ).
  *  3. Đổi về [-1, 1] theo (x / 255 - 0.5) / 0.5, xếp kênh R, G, B (NCHW).
- * Resize viết lại theo thuật toán bicubic của Pillow (ImagingResample): lọc ngang trước, làm tròn về 0..255,
+ * Resize viết lại theo thuật toán của Pillow (ImagingResample): lọc ngang trước, làm tròn về 0..255,
  * rồi lọc dọc, có khử răng cưa khi thu nhỏ. Java2D không làm vậy nên vector sẽ lệch so với lúc chọn ngưỡng.
+ * Bộ lọc Lanczos dùng cho mô hình xóa nền (rembg resize bằng LANCZOS).
  */
 public final class SiglipPreprocessor {
 
     public static final int SIZE = 224;
     public static final int THUMBNAIL = 768;
     private static final double BICUBIC_A = -0.5;
-    private static final double BICUBIC_SUPPORT = 2.0;
 
     private SiglipPreprocessor() {}
 
+    /** Ảnh RGB dạng 3 kênh 0..255 (R, G, B), mỗi kênh width*height điểm theo hàng. */
+    public record Pixels(int width, int height, int[][] channels) {
+
+        public static Pixels of(BufferedImage image) {
+            int w = image.getWidth();
+            int h = image.getHeight();
+            int[] argb = image.getRGB(0, 0, w, h, null, 0, w);
+            // Tách 3 kênh (bỏ kênh alpha giống PIL convert("RGB"))
+            int[][] channels = new int[3][w * h];
+            for (int i = 0; i < argb.length; i++) {
+                int p = argb[i];
+                channels[0][i] = (p >> 16) & 0xFF;
+                channels[1][i] = (p >> 8) & 0xFF;
+                channels[2][i] = p & 0xFF;
+            }
+            return new Pixels(w, h, channels);
+        }
+
+        /** Resize như PIL Image.resize((outW, outH), filter), không giữ tỉ lệ. */
+        public Pixels resize(int outW, int outH, Filter filter) {
+            Kernel hk = Kernel.of(width, outW, filter);
+            Kernel vk = Kernel.of(height, outH, filter);
+            int[][] out = new int[channels.length][];
+            for (int c = 0; c < channels.length; c++) {
+                out[c] = resample(channels[c], width, height, outW, outH, hk, vk);
+            }
+            return new Pixels(outW, outH, out);
+        }
+    }
+
+    /** Bộ lọc resize của Pillow. */
+    public enum Filter {
+        BICUBIC(2.0), LANCZOS(3.0);
+
+        final double support;
+
+        Filter(double support) {
+            this.support = support;
+        }
+
+        double apply(double x) {
+            return this == BICUBIC ? bicubic(x) : lanczos(x);
+        }
+    }
+
     /** Trả về mảng 3 x 224 x 224 (R rồi G rồi B), giá trị trong [-1, 1]. */
     public static float[] toTensor(BufferedImage image) {
-        int w = image.getWidth();
-        int h = image.getHeight();
-        int[] argb = image.getRGB(0, 0, w, h, null, 0, w);
-        // Tách 3 kênh (bỏ kênh alpha giống PIL convert("RGB"))
-        int[][] channels = new int[3][w * h];
-        for (int i = 0; i < argb.length; i++) {
-            int p = argb[i];
-            channels[0][i] = (p >> 16) & 0xFF;
-            channels[1][i] = (p >> 8) & 0xFF;
-            channels[2][i] = p & 0xFF;
-        }
-        int[] thumb = thumbnailSize(w, h, THUMBNAIL);
-        if (thumb != null) {
-            Kernel th = Kernel.of(w, thumb[0]);
-            Kernel tv = Kernel.of(h, thumb[1]);
-            for (int c = 0; c < 3; c++) {
-                channels[c] = resample(channels[c], w, h, thumb[0], thumb[1], th, tv);
-            }
-            w = thumb[0];
-            h = thumb[1];
-        }
-        Kernel horizontal = Kernel.of(w, SIZE);
-        Kernel vertical = Kernel.of(h, SIZE);
+        return toTensor(thumbnail(Pixels.of(image)));
+    }
+
+    /** Bước 1: ảnh lớn hơn 768 px thì thu nhỏ giữ tỉ lệ (PIL Image.thumbnail((768, 768))). */
+    public static Pixels thumbnail(Pixels p) {
+        int[] thumb = thumbnailSize(p.width(), p.height(), THUMBNAIL);
+        return thumb == null ? p : p.resize(thumb[0], thumb[1], Filter.BICUBIC);
+    }
+
+    /** Bước 2 + 3 (không thu nhỏ trước): resize 224 x 224 bicubic rồi chuẩn hóa về [-1, 1]. */
+    public static float[] toTensor(Pixels p) {
+        Pixels small = p.resize(SIZE, SIZE, Filter.BICUBIC);
         float[] out = new float[3 * SIZE * SIZE];
         for (int c = 0; c < 3; c++) {
-            int[] resized = resample(channels[c], w, h, SIZE, SIZE, horizontal, vertical);
+            int[] resized = small.channels()[c];
             int base = c * SIZE * SIZE;
             for (int i = 0; i < resized.length; i++) {
                 out[base + i] = (float) ((resized[i] / 255.0 - 0.5) / 0.5);
@@ -129,6 +163,22 @@ public final class SiglipPreprocessor {
         return 0.0;
     }
 
+    /** Lanczos 3 thùy như Pillow (sinc cắt ở |x| < 3). */
+    static double lanczos(double x) {
+        if (-3.0 <= x && x < 3.0) {
+            return sinc(x) * sinc(x / 3);
+        }
+        return 0.0;
+    }
+
+    private static double sinc(double x) {
+        if (x == 0.0) {
+            return 1.0;
+        }
+        x = x * Math.PI;
+        return Math.sin(x) / x;
+    }
+
     /** Hệ số lọc cho mỗi điểm đầu ra (giống precompute_coeffs của Pillow). */
     static final class Kernel {
         final int[] start;
@@ -140,9 +190,13 @@ public final class SiglipPreprocessor {
         }
 
         static Kernel of(int inSize, int outSize) {
+            return of(inSize, outSize, Filter.BICUBIC);
+        }
+
+        static Kernel of(int inSize, int outSize, Filter filter) {
             double scale = (double) inSize / outSize;
             double filterScale = Math.max(scale, 1.0);
-            double support = BICUBIC_SUPPORT * filterScale;
+            double support = filter.support * filterScale;
             int[] start = new int[outSize];
             double[][] weights = new double[outSize][];
             for (int xx = 0; xx < outSize; xx++) {
@@ -152,7 +206,7 @@ public final class SiglipPreprocessor {
                 double[] k = new double[xmax];
                 double total = 0;
                 for (int x = 0; x < xmax; x++) {
-                    double w = bicubic((x + xmin - center + 0.5) / filterScale);
+                    double w = filter.apply((x + xmin - center + 0.5) / filterScale);
                     k[x] = w;
                     total += w;
                 }

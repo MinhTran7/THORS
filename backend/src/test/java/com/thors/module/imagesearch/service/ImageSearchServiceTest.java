@@ -136,12 +136,12 @@ class ImageSearchServiceTest {
             // 4 sản phẩm: 53, 61, 63 thuộc danh mục gốc Balo; 62 thuộc Dép (không được gợi ý khi chụp balo)
             engine.index().sync(List.of(new CatalogImage(1, 53, "a"), new CatalogImage(2, 61, "b"), new CatalogImage(3, 62, "c"),
                             new CatalogImage(4, 63, "d")),
-                    img -> switch (img.productId()) {
+                    img -> new ImageEncoder.Vectors(switch (img.productId()) {
                         case 53 -> new float[] {1, 0, 0};
                         case 61 -> new float[] {0, 1, 0};
                         case 62 -> new float[] {0, 0, 1};
                         default -> new float[] {0, -1, 0};
-                    });
+                    }, null));
             engine.markReady();
             when(repo.findVisibleProductRoots()).thenReturn(List.of(
                     new ProductRoot(53, 5, "Balo"), new ProductRoot(61, 5, "Balo"),

@@ -26,17 +26,22 @@ public final class ModelFiles {
 
     private ModelFiles() {}
 
-    /** Trả về đường dẫn file mô hình đã kiểm tra; tải về nếu chưa có hoặc file cũ bị hỏng. */
+    /** Mô hình SigLIP (tên file giữ như cũ để không phải tải lại). */
     public static Path ensureModel(Path dir, String url, String sha256) throws IOException {
+        return ensureModel(dir, "siglip-b16-vision-fp16.onnx", url, sha256);
+    }
+
+    /** Trả về đường dẫn file mô hình đã kiểm tra; tải về nếu chưa có hoặc file cũ bị hỏng. */
+    public static Path ensureModel(Path dir, String fileName, String url, String sha256) throws IOException {
         Files.createDirectories(dir);
-        Path target = dir.resolve("siglip-b16-vision-fp16.onnx");
+        Path target = dir.resolve(fileName);
         if (Files.exists(target)) {
             if (sha256 == null || sha256.isBlank() || sha256.equalsIgnoreCase(sha256Of(target))) {
                 return target;
             }
             log.warn("File mô hình {} không đúng SHA-256, tải lại.", target);
         }
-        log.info("Đang tải mô hình tìm ảnh (~180 MB) từ {} ...", url);
+        log.info("Đang tải mô hình {} (~180 MB) từ {} ...", fileName, url);
         Path tmp = Files.createTempFile(dir, "model-", ".part");
         try {
             HttpClient client = HttpClient.newBuilder()

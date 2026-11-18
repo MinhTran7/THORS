@@ -109,8 +109,8 @@ thors:
     client-id: ${PAYOS_CLIENT_ID:}
     api-key: ${PAYOS_API_KEY:}
     checksum-key: ${PAYOS_CHECKSUM_KEY:}
-  # Tìm sản phẩm bằng ảnh (khách chụp ảnh ở thanh tìm kiếm). Tắt mặc định: bật sẽ tự tải mô hình AI ~180 MB
-  # về thư mục cache-dir lần đầu và dùng thêm ~400 MB RAM. Bật trên máy mình: thêm
+  # Tìm sản phẩm bằng ảnh (khách chụp ảnh ở thanh tìm kiếm). Tắt mặc định: bật sẽ tự tải 2 mô hình AI
+  # (SigLIP ~180 MB + xóa nền U2-Net ~176 MB) về thư mục cache-dir lần đầu và dùng thêm ~700 MB RAM. Bật trên máy mình: thêm
   #   thors.image-search.enabled=true   vào backend/local.properties
   # Ngưỡng và mô hình lấy từ báo cáo đánh giá 12-15/11/2026; các giá trị khác xem ImageSearchProperties.
   image-search:
@@ -119,5 +119,6 @@ thors:
     match-threshold: 0.808 # từ mức này: "có sản phẩm khá giống"
     confident-threshold: 0.85 # từ mức này mới khẳng định "shop có mẫu này"
     color-confidence: 0.6
+    background-removal: true # xóa nền (chỉ giữ sản phẩm) trước khi so, cả ảnh khách lẫn ảnh shop
     suggestions: 5
     refresh-minutes: 2 # sản phẩm / ảnh mới được đưa vào tìm kiếm chậm nhất sau ~2,5 phút
