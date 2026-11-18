@@ -6,6 +6,7 @@ import static org.mockito.Mockito.*;
 
 import com.thors.common.ApiException;
 import com.thors.module.imagesearch.color.ColorClassifier;
+import com.thors.module.imagesearch.color.TypeClassifier;
 import com.thors.module.imagesearch.config.ImageSearchProperties;
 import com.thors.module.imagesearch.model.ImageEncoder;
 import com.thors.module.imagesearch.repository.ImageSearchRepository;
@@ -210,6 +211,34 @@ class ImageSearchServiceTest {
             assertNull(r.product());
             assertEquals(List.of(53, 61), r.suggestions().stream().map(ImageSearchResult.Product::productId).toList());
             verify(shop, never()).findVariants(anyInt());
+        }
+
+        @Test
+        @DisplayName("Chưa có mẫu này: gợi ý theo loại hàng AI đoán trong ảnh, không theo sản phẩm hạng 1 (giày trắng ra balo)")
+        void notFoundUsesGuessedType() throws Exception {
+            ImageSearchService typed = new ImageSearchService(engine, props, repo, shop, ColorClassifier.loadDefault(),
+                    v -> new TypeClassifier.Guess("dép", 0.9));
+            nextQuery = new float[] {0.8f, 0.6f, 0};
+            ImageSearchResult r = typed.search(jpeg());
+            assertEquals("NOT_FOUND", r.status());
+            assertEquals("Dép", r.suggestionCategory());
+            assertEquals(List.of(62), r.suggestions().stream().map(ImageSearchResult.Product::productId).toList());
+
+            // loại đoán được nhưng shop không có danh mục đó -> giữ danh mục của sản phẩm hạng 1
+            ImageSearchService unknown = new ImageSearchService(engine, props, repo, shop, ColorClassifier.loadDefault(),
+                    v -> new TypeClassifier.Guess("Ví", 0.9));
+            assertEquals("Balo", unknown.search(jpeg()).suggestionCategory());
+        }
+
+        @Test
+        @DisplayName("Đã tìm thấy sản phẩm: gợi ý theo danh mục của sản phẩm đó, bỏ qua loại AI đoán")
+        void matchedIgnoresGuessedType() throws Exception {
+            ImageSearchService typed = new ImageSearchService(engine, props, repo, shop, ColorClassifier.loadDefault(),
+                    v -> new TypeClassifier.Guess("Dép", 0.9));
+            nextQuery = new float[] {0.9f, 0.43589f, 0};
+            ImageSearchResult r = typed.search(jpeg());
+            assertEquals("Balo", r.suggestionCategory());
+            assertEquals(List.of(61, 63), r.suggestions().stream().map(ImageSearchResult.Product::productId).toList());
         }
 
         @Test

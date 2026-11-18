@@ -4,6 +4,7 @@ import com.thors.common.ApiException;
 import com.thors.module.imagesearch.color.ColorClassifier;
 import com.thors.module.imagesearch.color.ColorNames;
 import com.thors.module.imagesearch.color.ProductGroup;
+import com.thors.module.imagesearch.color.TypeClassifier;
 import com.thors.module.imagesearch.config.ImageSearchProperties;
 import com.thors.module.imagesearch.model.ImageDecoder;
 import com.thors.module.imagesearch.model.ImageEncoder;
@@ -28,6 +29,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -51,21 +53,29 @@ public class ImageSearchService {
     private final ImageSearchRepository repository;
     private final ShopRepository shopRepository;
     private final ColorClassifier colors;
+    /** Đoán loại hàng (danh mục gốc) trong ảnh khách; null = không dùng. */
+    private final Function<float[], TypeClassifier.Guess> types;
     private final Semaphore slots;
 
     @Autowired
     public ImageSearchService(ImageSearchEngine engine, ImageSearchProperties props, ImageSearchRepository repository,
                               ShopRepository shopRepository) {
-        this(engine, props, repository, shopRepository, ColorClassifier.loadDefault());
+        this(engine, props, repository, shopRepository, ColorClassifier.loadDefault(), TypeClassifier.loadDefault()::guess);
     }
 
     ImageSearchService(ImageSearchEngine engine, ImageSearchProperties props, ImageSearchRepository repository,
                        ShopRepository shopRepository, ColorClassifier colors) {
+        this(engine, props, repository, shopRepository, colors, null);
+    }
+
+    ImageSearchService(ImageSearchEngine engine, ImageSearchProperties props, ImageSearchRepository repository,
+                       ShopRepository shopRepository, ColorClassifier colors, Function<float[], TypeClassifier.Guess> types) {
         this.engine = engine;
         this.props = props;
         this.repository = repository;
         this.shopRepository = shopRepository;
         this.colors = colors;
+        this.types = types;
         this.slots = new Semaphore(Math.max(1, props.getMaxConcurrentSearches()));
     }
 
@@ -124,9 +134,8 @@ public class ImageSearchService {
 
         ProductScore best = visible.isEmpty() ? null : visible.get(0);
         boolean matched = best != null && best.score() >= props.getMatchThreshold();
-        // Gợi ý chỉ lấy sản phẩm cùng danh mục gốc với sản phẩm giống nhất (chụp dép thì gợi ý dép, không gợi ý áo).
-        // Hạng 1 đúng loại hàng kể cả khi ảnh mờ / lệch, nên dùng nó để chọn danh mục cả khi "chưa có mẫu này".
-        ProductRoot root = best == null ? null : roots.get(best.productId());
+        // Gợi ý chỉ lấy sản phẩm cùng danh mục gốc (chụp dép thì gợi ý dép, không gợi ý áo).
+        ProductRoot root = suggestionRoot(best, matched, roots, vectors);
         List<ProductScore> picked = visible.stream()
                 .skip(matched ? 1 : 0)
                 .filter(s -> roots.get(s.productId()).rootCategoryId() == root.rootCategoryId())
@@ -169,6 +178,24 @@ public class ImageSearchService {
         DetectedColor detected = guess == null ? null
                 : new DetectedColor(guess.name(), round(guess.probability()), d.colorChecked());
         return new ImageSearchResult(d.status(), d.message(), card(bestCard, best.score(), colorStocks), detected, suggestions, category);
+    }
+
+    /**
+     * Danh mục gốc để lấy gợi ý. Đã tìm thấy (>= match-threshold): danh mục của sản phẩm đó.
+     * Chưa có mẫu này: danh mục theo loại hàng AI đoán trong ảnh (nếu shop có danh mục đó), vì sản phẩm hạng 1 có thể
+     * khác loại - giày da trắng (giay1.jpg) giống ảnh balo da trắng của p55 hơn giày của shop.
+     */
+    private ProductRoot suggestionRoot(ProductScore best, boolean matched, Map<Integer, ProductRoot> roots,
+                                       ImageEncoder.Vectors vectors) {
+        ProductRoot top = best == null ? null : roots.get(best.productId());
+        if (matched || types == null || roots.isEmpty()) {
+            return top;
+        }
+        String guessed = ProductGroup.fold(types.apply(vectors.original()).type());
+        return roots.values().stream()
+                .filter(r -> ProductGroup.fold(r.rootCategoryName()).equals(guessed))
+                .findFirst()
+                .orElse(top);
     }
 
     // ------------------------------------------------------------------ quyết định trạng thái (tách riêng để test)
