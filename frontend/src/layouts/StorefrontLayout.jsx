@@ -342,7 +342,8 @@ function StoreHeader({ categories }) {
     ? [
         // Đơn hàng nằm ngay trên header; thông báo xem ở chuông, khuyến mãi ở menu "Khuyến mãi"
         ['/profile', 'Tài khoản của tôi'],
-        ['/addresses', 'Địa chỉ giao hàng']
+        ['/addresses', 'Địa chỉ giao hàng'],
+        ['/body-profile', 'Số đo của tôi']
       ]
     : [
         ['/workspace', 'Trang quản lý'],
@@ -443,6 +444,10 @@ function StoreHeader({ categories }) {
           })}
           <Box component={RouterLink} to="/promotions" sx={{ ...linkSx, color: C.teal, fontWeight: 600 }}>
             Khuyến mãi
+          </Box>
+          {/* Phối đồ theo dịp / ngân sách (module outfit) */}
+          <Box component={RouterLink} to="/outfit" sx={{ ...linkSx, fontWeight: 600 }}>
+            Phối đồ
           </Box>
         </Box>
 

@@ -7,6 +7,7 @@ import { useCrumbs } from 'layouts/crumbs';
 import { api, post } from 'services/http';
 import { Photo, colorHex, isNewProduct, money, priceText } from './ShopCommon';
 import PendingCartHandler from './PendingCartHandler';
+import SizeAdvisor from 'features/fitting/SizeAdvisor';
 import ShopProductDescription from './ShopProductDescription';
 import { getImageColors, imagesForColor } from 'features/product/productDescription';
 import { savePending } from './pendingCart';
@@ -355,6 +356,19 @@ export default function ShopProductPage() {
                 ))}
               </Box>
 
+              {/* Gợi ý size theo số đo khách (module fitting); sản phẩm chưa có bảng size thì không hiện */}
+              <SizeAdvisor
+                productId={productId}
+                selectedSize={size}
+                isCustomer={isCustomer}
+                isLoggedIn={Boolean(account)}
+                onChoose={(s) => {
+                  setSize(s);
+                  if (color && !variants.some((v) => v.size === s && v.color === color && v.stock > 0)) setColor('');
+                  setQty(1);
+                  setError('');
+                }}
+              />
               {/* Màu sắc dạng chấm tròn: rê chuột / chọn để xem tên màu, chọn màu thì ảnh đổi sang ảnh của màu đó */}
               <Typography variant="subtitle2" sx={{ mb: 1.25 }}>
                 Màu sắc

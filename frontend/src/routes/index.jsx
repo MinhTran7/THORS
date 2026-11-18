@@ -59,6 +59,9 @@ import FacebookPOSPage from 'features/facebook/FacebookPOSPage';
 import CustomerAddressPage from 'features/customer/CustomerAddressPage';
 import AddAddressPage from 'features/customer/AddAddressPage';
 import EditAddressPage from 'features/customer/EditAddressPage';
+// Số đo cơ thể (gợi ý size / thử đồ ảo)
+import BodyProfilePage from 'features/fitting/BodyProfilePage';
+import OutfitPage from 'features/outfit/OutfitPage';
 
 // Shop management
 import ShopPage from 'features/shop/ShopPage';
@@ -98,6 +101,8 @@ export default createBrowserRouter([
       { path: '/shop/best-sellers', element: <ShopCollectionPage key="best" collection="best_selling" /> },
       { path: '/shop/new-arrivals', element: <ShopCollectionPage key="new" collection="newest" /> },
       { path: '/shop/sale', element: <ShopCollectionPage key="sale" collection="sale" /> },
+      // Phối đồ theo dịp / ngân sách (module outfit)
+      { path: '/outfit', element: <OutfitPage /> },
       { path: '/tracking/:orderNumber', element: <OrderTrackingPage /> },
       {
         element: <RequireAuth />,
@@ -135,7 +140,8 @@ export default createBrowserRouter([
             children: [
               { path: '/addresses', element: <CustomerAddressPage /> },
               { path: '/addresses/new', element: <AddAddressPage /> },
-              { path: '/addresses/:id/edit', element: <EditAddressPage /> }
+              { path: '/addresses/:id/edit', element: <EditAddressPage /> },
+              { path: '/body-profile', element: <BodyProfilePage /> }
             ]
           },
           {

@@ -1,0 +1,54 @@
+{
+  "heightCm": 159.7,
+  "minY": 0.0005,
+  "measures": {
+    "bust": {
+      "atHeightRatio": 0.728,
+      "section": {
+        "cx": 0,
+        "cz": 0.0547,
+        "rx": 0.1371,
+        "rz": 0.104
+      },
+      "baseCm": 86,
+      "incrCm": 103.3,
+      "decrCm": 71.1,
+      "keys": {
+        "incr": "measure-bust-circ-incr",
+        "decr": "measure-bust-circ-decr"
+      }
+    },
+    "waist": {
+      "atHeightRatio": 0.642,
+      "section": {
+        "cx": 0,
+        "cz": 0.0562,
+        "rx": 0.1131,
+        "rz": 0.0772
+      },
+      "baseCm": 62.8,
+      "incrCm": 72.5,
+      "decrCm": 53.5,
+      "keys": {
+        "incr": "measure-waist-circ-incr",
+        "decr": "measure-waist-circ-decr"
+      }
+    },
+    "hips": {
+      "atHeightRatio": 0.494,
+      "section": {
+        "cx": 0,
+        "cz": 0.0178,
+        "rx": 0.1728,
+        "rz": 0.0978
+      },
+      "baseCm": 91.7,
+      "incrCm": 109.4,
+      "decrCm": 82.9,
+      "keys": {
+        "incr": "measure-hips-circ-incr",
+        "decr": "measure-hips-circ-decr"
+      }
+    }
+  }
+}

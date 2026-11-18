@@ -11,6 +11,7 @@ const STOREFRONT_PATHS = [
   '/shop/best-sellers',
   '/shop/new-arrivals',
   '/shop/sale',
+  '/outfit',
   '/shop/products/:productId',
   '/cart',
   '/checkout',
@@ -30,6 +31,7 @@ const CUSTOMER_STOREFRONT_PATHS = [
   '/addresses',
   '/addresses/new',
   '/addresses/:id/edit',
+  '/body-profile',
   '/promotions'
 ];
 
