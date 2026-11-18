@@ -10,6 +10,7 @@ import com.thors.module.imagesearch.config.ImageSearchProperties;
 import com.thors.module.imagesearch.model.ImageEncoder;
 import com.thors.module.imagesearch.repository.ImageSearchRepository;
 import com.thors.module.imagesearch.repository.ImageSearchRepository.CatalogImage;
+import com.thors.module.imagesearch.repository.ImageSearchRepository.ProductRoot;
 import com.thors.module.imagesearch.service.ImageSearchService.ColorTotal;
 import com.thors.module.imagesearch.service.ImageSearchService.Decision;
 import com.thors.module.shop.repository.ShopRepository;
@@ -123,14 +124,19 @@ class ImageSearchServiceTest {
             shop = mock(ShopRepository.class);
             ImageEncoder fake = image -> nextQuery;
             engine = new ImageSearchEngine(props, repo, fake);
-            // 3 sản phẩm, mỗi sản phẩm một hướng vector
-            engine.index().sync(List.of(new CatalogImage(1, 53, "a"), new CatalogImage(2, 61, "b"), new CatalogImage(3, 62, "c")),
+            // 4 sản phẩm: 53, 61, 63 thuộc danh mục gốc Balo; 62 thuộc Dép (không được gợi ý khi chụp balo)
+            engine.index().sync(List.of(new CatalogImage(1, 53, "a"), new CatalogImage(2, 61, "b"), new CatalogImage(3, 62, "c"),
+                            new CatalogImage(4, 63, "d")),
                     img -> switch (img.productId()) {
                         case 53 -> new float[] {1, 0, 0};
                         case 61 -> new float[] {0, 1, 0};
-                        default -> new float[] {0, 0, 1};
+                        case 62 -> new float[] {0, 0, 1};
+                        default -> new float[] {0, -1, 0};
                     });
             engine.markReady();
+            when(repo.findVisibleProductRoots()).thenReturn(List.of(
+                    new ProductRoot(53, 5, "Balo"), new ProductRoot(61, 5, "Balo"),
+                    new ProductRoot(62, 7, "Dép"), new ProductRoot(63, 5, "Balo")));
             when(repo.findProductCards(anyCollection())).thenAnswer(inv -> {
                 List<Map<String, Object>> rows = new ArrayList<>();
                 for (Integer id : inv.<Collection<Integer>>getArgument(0)) {
@@ -151,7 +157,7 @@ class ImageSearchServiceTest {
         }
 
         @Test
-        @DisplayName("Điểm >= 0,808: báo có mẫu, kèm màu và tồn kho; gợi ý không lặp lại sản phẩm khớp")
+        @DisplayName("Điểm >= 0,85: báo có mẫu, kèm màu và tồn kho; gợi ý cùng danh mục gốc, không lặp lại sản phẩm khớp")
         void matchedProduct() throws Exception {
             nextQuery = new float[] {0.9f, 0.43589f, 0};
             ImageSearchResult r = service.search(jpeg());
@@ -159,7 +165,18 @@ class ImageSearchServiceTest {
             assertEquals(53, r.product().productId());
             assertEquals(0.9, r.product().score(), 1e-3);
             assertEquals(2, r.product().colors().size());
-            assertEquals(List.of(61, 62), r.suggestions().stream().map(ImageSearchResult.Product::productId).toList());
+            assertEquals(List.of(61, 63), r.suggestions().stream().map(ImageSearchResult.Product::productId).toList());
+            assertEquals("Balo", r.suggestionCategory());
+        }
+
+        @Test
+        @DisplayName("Sản phẩm khác danh mục không được gợi ý dù điểm cao hơn (chụp dép không gợi ý áo)")
+        void suggestionsStayInCategory() throws Exception {
+            nextQuery = new float[] {0.9f, 0.1f, 0.42f};
+            ImageSearchResult r = service.search(jpeg());
+            assertEquals(53, r.product().productId());
+            // 62 (Dép) giống thứ 2 nhưng khác danh mục -> bỏ; còn 61, 63 cùng Balo
+            assertEquals(List.of(61, 63), r.suggestions().stream().map(ImageSearchResult.Product::productId).toList());
         }
 
         @Test
@@ -172,7 +189,7 @@ class ImageSearchServiceTest {
             assertTrue(r.message().contains("có thể không phải cùng mẫu"), r.message());
             assertNull(r.detectedColor());
             assertTrue(r.product().colors().stream().noneMatch(ImageSearchResult.ColorStock::matches));
-            assertEquals(List.of(61, 62), r.suggestions().stream().map(ImageSearchResult.Product::productId).toList());
+            assertEquals(List.of(61, 63), r.suggestions().stream().map(ImageSearchResult.Product::productId).toList());
         }
 
         @Test

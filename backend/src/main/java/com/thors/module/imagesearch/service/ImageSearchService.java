@@ -7,6 +7,7 @@ import com.thors.module.imagesearch.color.ProductGroup;
 import com.thors.module.imagesearch.config.ImageSearchProperties;
 import com.thors.module.imagesearch.model.ImageDecoder;
 import com.thors.module.imagesearch.repository.ImageSearchRepository;
+import com.thors.module.imagesearch.repository.ImageSearchRepository.ProductRoot;
 import com.thors.module.imagesearch.service.CatalogIndex.ProductScore;
 import com.thors.module.imagesearch.service.ImageSearchResult.ColorStock;
 import com.thors.module.imagesearch.service.ImageSearchResult.DetectedColor;
@@ -36,7 +37,8 @@ import java.util.stream.Collectors;
  *  - 0,808 (match-threshold) .. 0,85: "có sản phẩm khá giống" (SIMILAR), không khẳng định cùng mẫu.
  *    Lý do: dép xám trơn (shop không bán) được 0,834 với Dép Bánh Mì; nâng hẳn ngưỡng lên thì mất nhiều ảnh đúng.
  *  - < 0,808: chưa có mẫu này.
- *  - Luôn trả kèm các sản phẩm gần giống, vì kể cả ảnh mờ / lệch, hạng 1 vẫn đúng ~93%.
+ *  - Luôn trả kèm các sản phẩm gần giống cùng danh mục gốc (Dép / Giày / Balo...) với sản phẩm hạng 1,
+ *    vì kể cả ảnh mờ / lệch, hạng 1 vẫn đúng ~93%.
  *  - Chỉ nói "không có màu này" khi AI chắc về màu (>= 60%) và mọi màu trong DB đều quy đổi được.
  */
 @Service
@@ -113,26 +115,35 @@ public class ImageSearchService {
 
     ImageSearchResult answer(float[] vector) {
         List<ProductScore> ranked = engine.index().rank(vector);
-        int wanted = Math.max(1, props.getSuggestions()) + 1;
-        List<ProductScore> top = ranked.subList(0, Math.min(ranked.size(), wanted * 2));
-        Map<Integer, Map<String, Object>> cards = repository.findProductCards(
-                        top.stream().map(ProductScore::productId).toList()).stream()
-                .collect(Collectors.toMap(r -> ((Number) r.get("productId")).intValue(), r -> r, (a, b) -> a));
         // Sản phẩm vừa bị ẩn khỏi web (chưa kịp cập nhật chỉ mục) thì bỏ qua
-        List<ProductScore> visible = top.stream().filter(s -> cards.containsKey(s.productId())).toList();
+        Map<Integer, ProductRoot> roots = repository.findVisibleProductRoots().stream()
+                .collect(Collectors.toMap(ProductRoot::productId, r -> r, (a, b) -> a));
+        List<ProductScore> visible = ranked.stream().filter(s -> roots.containsKey(s.productId())).toList();
 
         ProductScore best = visible.isEmpty() ? null : visible.get(0);
         boolean matched = best != null && best.score() >= props.getMatchThreshold();
-        List<Product> suggestions = visible.stream()
+        // Gợi ý chỉ lấy sản phẩm cùng danh mục gốc với sản phẩm giống nhất (chụp dép thì gợi ý dép, không gợi ý áo).
+        // Hạng 1 đúng loại hàng kể cả khi ảnh mờ / lệch, nên dùng nó để chọn danh mục cả khi "chưa có mẫu này".
+        ProductRoot root = best == null ? null : roots.get(best.productId());
+        List<ProductScore> picked = visible.stream()
                 .skip(matched ? 1 : 0)
+                .filter(s -> roots.get(s.productId()).rootCategoryId() == root.rootCategoryId())
                 .limit(props.getSuggestions())
+                .toList();
+        List<Integer> ids = new ArrayList<>(picked.stream().map(ProductScore::productId).toList());
+        if (matched) ids.add(0, best.productId());
+        Map<Integer, Map<String, Object>> cards = repository.findProductCards(ids).stream()
+                .collect(Collectors.toMap(r -> ((Number) r.get("productId")).intValue(), r -> r, (a, b) -> a));
+        List<Product> suggestions = picked.stream()
+                .filter(s -> cards.containsKey(s.productId()))
                 .map(s -> card(cards.get(s.productId()), s.score(), null))
                 .toList();
-        if (!matched) {
+        String category = root == null || root.rootCategoryName().isBlank() ? null : root.rootCategoryName();
+        if (!matched || !cards.containsKey(best.productId())) {
             return new ImageSearchResult("NOT_FOUND",
                     suggestions.isEmpty() ? "Shop chưa có mẫu này."
                             : "Shop chưa có mẫu này. Bạn có thể xem các sản phẩm gần giống bên dưới.",
-                    null, null, suggestions);
+                    null, null, suggestions, category);
         }
 
         Map<String, Object> bestCard = cards.get(best.productId());
@@ -143,7 +154,7 @@ public class ImageSearchService {
             return new ImageSearchResult("SIMILAR",
                     "Sản phẩm giống nhất trong shop là \"" + str(bestCard.get("productName"))
                             + "\", nhưng có thể không phải cùng mẫu. Bạn so lại ảnh giúp nhé.",
-                    card(bestCard, best.score(), plain), null, suggestions);
+                    card(bestCard, best.score(), plain), null, suggestions, category);
         }
         ProductGroup group = ProductGroup.of(str(bestCard.get("categoryName")), str(bestCard.get("productName")));
         ColorClassifier.Guess guess = colors.guess(vector, group);
@@ -154,7 +165,7 @@ public class ImageSearchService {
                 .toList();
         DetectedColor detected = guess == null ? null
                 : new DetectedColor(guess.name(), round(guess.probability()), d.colorChecked());
-        return new ImageSearchResult(d.status(), d.message(), card(bestCard, best.score(), colorStocks), detected, suggestions);
+        return new ImageSearchResult(d.status(), d.message(), card(bestCard, best.score(), colorStocks), detected, suggestions, category);
     }
 
     // ------------------------------------------------------------------ quyết định trạng thái (tách riêng để test)

@@ -1,10 +1,13 @@
 package com.thors.module.imagesearch.repository;
 
+import org.springframework.jdbc.BadSqlGrammarException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -39,6 +42,39 @@ public class ImageSearchRepository {
             WHERE pi.deleted_at IS NULL AND pi.image_url IS NOT NULL AND
             """ + VISIBLE + " ORDER BY pi.product_id, pi.is_primary DESC, pi.image_id",
                 (rs, i) -> new CatalogImage(rs.getLong("image_id"), rs.getInt("product_id"), rs.getString("image_url")));
+    }
+
+    /** Danh mục gốc (cấp trên cùng, vd "Dép", "Balo") của một sản phẩm. */
+    public record ProductRoot(int productId, int rootCategoryId, String rootCategoryName) {}
+
+    /**
+     * Danh mục gốc của mọi sản phẩm còn hiện trên web. Danh mục có thể lồng nhiều cấp
+     * (Dép → Dép nữ → Dép Đế Thấp Nữ) nên đi ngược parent_id đến gốc.
+     * DB chưa chạy migration category_hierarchy (chưa có parent_id) thì mỗi danh mục là gốc của chính nó.
+     */
+    public List<ProductRoot> findVisibleProductRoots() {
+        Map<Integer, Integer> parent = new HashMap<>();
+        Map<Integer, String> name = new HashMap<>();
+        try {
+            jdbcTemplate.query("SELECT category_id, parent_id, category_name FROM category", rs -> {
+                int id = rs.getInt("category_id");
+                int p = rs.getInt("parent_id");
+                if (!rs.wasNull()) parent.put(id, p);
+                name.put(id, rs.getString("category_name"));
+            });
+        } catch (BadSqlGrammarException e) {
+            jdbcTemplate.query("SELECT category_id, category_name FROM category",
+                    rs -> { name.put(rs.getInt("category_id"), rs.getString("category_name")); });
+        }
+        List<ProductRoot> out = new ArrayList<>();
+        jdbcTemplate.query("SELECT p.product_id, p.category_id FROM product p WHERE " + VISIBLE, rs -> {
+            int root = rs.getInt("category_id");
+            for (int depth = 0; depth < 10 && parent.containsKey(root); depth++) {
+                root = parent.get(root);
+            }
+            out.add(new ProductRoot(rs.getInt("product_id"), root, name.getOrDefault(root, "")));
+        });
+        return out;
     }
 
     /** Thông tin hiển thị thẻ sản phẩm (tên, danh mục, ảnh chính, giá thấp/cao nhất) của các sản phẩm còn hiện trên web. */

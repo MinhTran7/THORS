@@ -10,13 +10,17 @@ import java.util.List;
  *  COLOR_UNAVAILABLE  có mẫu này nhưng không có màu khách chụp
  *  SIMILAR            có sản phẩm khá giống nhưng chưa chắc cùng mẫu (product = sản phẩm giống nhất, không có detectedColor)
  *  NOT_FOUND          chưa có mẫu này (vẫn kèm sản phẩm gần giống)
+ *
+ * suggestions: sản phẩm gần giống nhất CÙNG danh mục gốc với sản phẩm giống nhất (suggestionCategory, vd "Dép"),
+ * để chụp dép thì không gợi ý áo. suggestionCategory null = không lọc được theo danh mục.
  */
 public record ImageSearchResult(
         String status,
         String message,
         Product product,
         DetectedColor detectedColor,
-        List<Product> suggestions) {
+        List<Product> suggestions,
+        String suggestionCategory) {
 
     /** Thẻ sản phẩm. colors chỉ có ở sản phẩm khớp. score: điểm giống 0..1. */
     public record Product(

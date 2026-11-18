@@ -317,7 +317,11 @@ export default function ImageSearchDialog({ open, onClose }) {
             <Suggestions
               items={result.suggestions}
               onNavigate={onClose}
-              title={result.product ? 'Sản phẩm khác gần giống' : 'Có thể bạn đang tìm'}
+              title={
+                result.suggestionCategory
+                  ? `${result.product ? 'Sản phẩm khác' : 'Có thể bạn đang tìm'} trong danh mục ${result.suggestionCategory}`
+                  : result.product ? 'Sản phẩm khác gần giống' : 'Có thể bạn đang tìm'
+              }
             />
 
             <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
