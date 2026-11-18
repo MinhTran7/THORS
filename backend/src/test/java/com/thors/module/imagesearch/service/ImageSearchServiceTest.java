@@ -58,7 +58,16 @@ class ImageSearchServiceTest {
         void colorNotSold() {
             Decision d = ImageSearchService.decide(new ColorClassifier.Guess("vang", "Vàng", "vang", 0.85), redPinkNavy, 0.6);
             assertEquals("COLOR_UNAVAILABLE", d.status());
-            assertEquals("Shop có mẫu này nhưng không có màu vàng. Màu đang có: Đỏ, Hồng, Xanh Đậm.", d.message());
+            assertEquals("Shop có mẫu này nhưng không có màu vàng. Màu còn hàng: Đỏ, Hồng.", d.message());
+        }
+
+        @Test
+        @DisplayName("Không có màu này và màu shop bán cũng hết hàng: không nói 'màu đang có' (ca váy ren vàng / p74 Trắng = 0)")
+        void colorNotSoldAndRestOutOfStock() {
+            Decision d = ImageSearchService.decide(new ColorClassifier.Guess("vang", "Vàng", "vang", 0.99),
+                    List.of(new ColorTotal("Trắng", "trang", 0)), 0.6);
+            assertEquals("COLOR_UNAVAILABLE", d.status());
+            assertEquals("Shop có mẫu này nhưng không có màu vàng. Shop chỉ bán màu Trắng và hiện đang hết hàng.", d.message());
         }
 
         @Test

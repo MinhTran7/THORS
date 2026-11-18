@@ -191,7 +191,9 @@ public class ImageSearchService {
         List<ColorTotal> same = totals.stream().filter(t -> guess.family().equals(t.family())).toList();
         if (same.isEmpty()) {
             return new Decision("COLOR_UNAVAILABLE", "Shop có mẫu này nhưng không có màu " + guess.name().toLowerCase()
-                    + ". Màu đang có: " + names(totals) + ".", true);
+                    + (inStock.isEmpty()
+                            ? ". Shop chỉ bán màu " + names(totals) + " và hiện đang hết hàng."
+                            : ". Màu còn hàng: " + inStock + "."), true);
         }
         int sameStock = same.stream().mapToInt(ColorTotal::stock).sum();
         if (sameStock > 0) {
