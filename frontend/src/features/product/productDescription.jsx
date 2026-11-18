@@ -2,6 +2,7 @@
  * Mô tả sản phẩm có cấu trúc (kiểu Coolmate): mô tả ngắn, điểm nổi bật có biểu tượng,
  * Chất liệu & kiểu dáng, Bảo quản, Đổi trả.
  *
+ * Kèm theo imageColors: ảnh nào thuộc màu nào ({ đường dẫn ảnh: tên màu }) để trang khách đổi ảnh theo màu đang chọn.
  * Lưu vào cột product.description (TEXT) dưới dạng JSON {"v":1,...}. Mô tả cũ (chữ thường) vẫn đọc được:
  * cả đoạn được coi là "mô tả ngắn". Chỉ nhập mỗi mô tả ngắn thì vẫn lưu chữ thường như trước.
  */
@@ -14,7 +15,8 @@ export const EMPTY_DESCRIPTION = {
   suitable: '', // Phù hợp
   features: '', // Tính năng
   care: '', // Bảo quản — mỗi dòng một ý
-  returns: '' // Đổi trả — mỗi dòng một ý
+  returns: '', // Đổi trả — mỗi dòng một ý
+  imageColors: {} // { imageUrl: 'Be' } — ảnh thuộc màu nào (không có = dùng cho mọi màu)
 };
 
 export const SPEC_FIELDS = [
@@ -64,7 +66,12 @@ export function parseDescription(text) {
       if (data && typeof data === 'object' && data.v) {
         const result = { ...EMPTY_DESCRIPTION };
         Object.keys(EMPTY_DESCRIPTION).forEach((key) => {
-          if (key === 'highlights') {
+          if (key === 'imageColors') {
+            result.imageColors =
+              data.imageColors && typeof data.imageColors === 'object'
+                ? Object.fromEntries(Object.entries(data.imageColors).filter(([, c]) => typeof c === 'string' && c.trim()))
+                : {};
+          } else if (key === 'highlights') {
             result.highlights = Array.isArray(data.highlights) ? data.highlights.filter((k) => HIGHLIGHTS.some((h) => h.key === k)) : [];
           } else if (typeof data[key] === 'string') {
             result[key] = data[key];
@@ -83,9 +90,47 @@ export function parseDescription(text) {
 export function serializeDescription(desc) {
   const d = { ...EMPTY_DESCRIPTION, ...desc };
   const hasStructured =
-    d.highlights.length > 0 || ['material', 'fit', 'suitable', 'features', 'care', 'returns'].some((key) => d[key].trim());
+    d.highlights.length > 0 ||
+    Object.keys(d.imageColors || {}).length > 0 ||
+    ['material', 'fit', 'suitable', 'features', 'care', 'returns'].some((key) => d[key].trim());
   if (!hasStructured) return d.intro;
   return JSON.stringify({ v: 1, ...d });
+}
+
+// So sánh tên màu không phân biệt hoa/thường, dấu ("Đen" = "đen" = "den")
+export const sameColor = (a, b) => {
+  const f = (x) =>
+    String(x || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/đ/g, 'd')
+      .replace(/\s+/g, ' ')
+      .trim();
+  return f(a) !== '' && f(a) === f(b);
+};
+
+/** Ảnh nào thuộc màu nào: { imageUrl: 'Be' } */
+export const getImageColors = (text) => parseDescription(text).imageColors;
+
+/** Gắn (color = '' thì bỏ gắn) màu cho một ảnh, trả về chuỗi mô tả mới để lưu. */
+export function setImageColor(text, imageUrl, color) {
+  const d = parseDescription(text);
+  const imageColors = { ...d.imageColors };
+  if (color) imageColors[imageUrl] = color;
+  else delete imageColors[imageUrl];
+  return serializeDescription({ ...d, imageColors });
+}
+
+/**
+ * Ảnh hiển thị cho màu đang chọn: ảnh gắn đúng màu đó đứng trước, sau đó là ảnh không gắn màu.
+ * Chưa chọn màu, hoặc màu đó chưa có ảnh riêng -> giữ nguyên toàn bộ ảnh.
+ */
+export function imagesForColor(images, imageColors, color) {
+  if (!color || !images?.length) return images || [];
+  const matched = images.filter((url) => sameColor(imageColors[url], color));
+  if (matched.length === 0) return images;
+  return [...matched, ...images.filter((url) => !imageColors[url])];
 }
 
 /** Mỗi dòng một ý, bỏ dòng trống và dấu gạch đầu dòng gõ tay ("- ", "• "). */

@@ -49,6 +49,7 @@ import {
 import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../customer/theme';
 import { formatPriceInput, parsePriceInput } from './priceInput';
 import ProductDescriptionFields from './ProductDescriptionFields';
+import { getImageColors, sameColor, setImageColor } from './productDescription';
 
 const inputSx = (hasError) => ({
   '& .MuiOutlinedInput-root': {
@@ -151,7 +152,7 @@ export default function EditProductPage() {
             size: variant.size || '',
             color: variant.color || '',
             price: String(variant.price ?? ''),
-            // Đã có tồn kho / lịch sử bán, nhập kho: chỉ được sửa giá
+            // Đã có tồn kho / lịch sử bán, nhập kho: khóa size, vẫn sửa được màu và giá
             locked: Boolean(Number(variant.locked ?? 0)),
             stockQuantity: Number(variant.stockQuantity ?? 0)
           }))
@@ -387,6 +388,13 @@ export default function EditProductPage() {
   // ==========================================
   // LOADING
   // ==========================================
+
+  // Màu của các biến thể (không trùng, không phân biệt hoa/thường) để gắn cho từng ảnh
+  const variantColors = form.variants
+    .map((v) => String(v.color || '').trim())
+    .filter(Boolean)
+    .filter((c, i, list) => list.findIndex((x) => sameColor(x, c)) === i);
+  const imageColors = getImageColors(form.description);
 
   if (loading) {
     return (
@@ -643,7 +651,7 @@ export default function EditProductPage() {
                       </Typography>
 
                       {variant.locked && (
-                        <Tooltip title="Biến thể đã có tồn kho hoặc lịch sử bán/nhập kho. Đổi size/màu sẽ làm lệch hàng thật trên kệ và mã vạch đã in, nên chỉ được sửa giá. Cần size/màu khác hãy thêm biến thể mới.">
+                        <Tooltip title="Biến thể đã có tồn kho hoặc lịch sử bán/nhập kho nên không đổi được size (sẽ lệch hàng thật trên kệ). Màu sắc vẫn sửa được để chữa tên màu nhập sai; tem mã vạch đã in vẫn ghi màu cũ. Cần size khác hãy thêm biến thể mới.">
                           <Box
                             sx={{
                               display: 'inline-flex',
@@ -661,7 +669,7 @@ export default function EditProductPage() {
                             }}
                           >
                             <LockOutlined style={{ fontSize: 12 }} />
-                            Chỉ sửa được giá · Tồn {variant.stockQuantity}
+                            Khóa size · Tồn {variant.stockQuantity}
                           </Box>
                         </Tooltip>
                       )}
@@ -707,7 +715,6 @@ export default function EditProductPage() {
                           fullWidth
                           required
                           size="small"
-                          disabled={variant.locked}
                           value={variant.color}
                           onChange={(event) =>
                             updateVariantField(
@@ -813,10 +820,17 @@ export default function EditProductPage() {
                 {imageBusy ? 'Đang cập nhật ảnh...' : 'Thêm ảnh'}
               </Button>
 
+              {images.length > 0 && variantColors.length > 0 && (
+                <Typography sx={{ fontSize: 12.5, color: C.muted, mb: 1.5, lineHeight: 1.5 }}>
+                  Chọn màu cho từng ảnh: khách chọn màu nào trên website thì hiện ảnh của màu đó. Bấm "Lưu thay đổi" để lưu phần chọn màu.
+                </Typography>
+              )}
+
               {images.length > 0 ? (
                 <Grid container spacing={1.5}>
                   {images.map((image) => {
                     const isPrimary = Boolean(Number(image.isPrimary));
+                    const imageColor = imageColors[image.imageUrl] || '';
 
                     return (
                       <Grid
@@ -891,6 +905,27 @@ export default function EditProductPage() {
                             </Tooltip>
                           </Stack>
                         </Box>
+                        {/* Ảnh này thuộc màu nào (để trống = dùng cho mọi màu) */}
+                        {variantColors.length > 0 && (
+                          <TextField
+                            select
+                            fullWidth
+                            size="small"
+                            value={variantColors.find((c) => sameColor(c, imageColor)) || ''}
+                            onChange={(event) => updateField('description', setImageColor(form.description, image.imageUrl, event.target.value))}
+                            slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': 'Màu của ảnh' } }}
+                            sx={{ mt: 0.75, ...inputSx(false), '& .MuiOutlinedInput-root': { ...inputSx(false)['& .MuiOutlinedInput-root'], minHeight: 34, fontSize: 12.5 } }}
+                          >
+                            <MenuItem value="">
+                              <em>Mọi màu</em>
+                            </MenuItem>
+                            {variantColors.map((c) => (
+                              <MenuItem key={c} value={c}>
+                                {c}
+                              </MenuItem>
+                            ))}
+                          </TextField>
+                        )}
                       </Grid>
                     );
                   })}
@@ -935,7 +970,7 @@ export default function EditProductPage() {
                 }}
               >
                 Các biến thể sẵn có sẽ giữ nguyên mã định danh, số lượng tồn kho và thiết lập bán online. Các biến thể mới thêm sẽ có số lượng tồn kho khởi tạo là 0.
-                Biến thể đã có tồn kho hoặc lịch sử bán/nhập kho chỉ được sửa giá. Nếu người khác vừa sửa sản phẩm này, hệ thống sẽ yêu cầu tải lại trước khi lưu.
+                Biến thể đã có tồn kho hoặc lịch sử bán/nhập kho không đổi được size, chỉ sửa được màu và giá. Nếu người khác vừa sửa sản phẩm này, hệ thống sẽ yêu cầu tải lại trước khi lưu.
               </Typography>
             </Box>
           </Stack>

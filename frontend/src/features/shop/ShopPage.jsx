@@ -236,7 +236,7 @@ function Categories({ categories: all, onPick }) {
               flexDirection: 'column',
               alignItems: 'center',
               gap: { xs: 1.25, md: 2 },
-              '&:hover .circle': { bgcolor: C.ink, color: '#FFFFFF' },
+              '&:hover .circle': { bgcolor: C.primary, color: '#FFFFFF' },
               '&:hover .name': { color: C.accent },
               ...focusRing
             }}
@@ -457,7 +457,7 @@ const shelfArrowSx = (side) => ({
   bgcolor: '#FFFFFF',
   color: C.ink,
   boxShadow: '0 2px 12px rgba(0,0,0,.15)',
-  '&:hover': { bgcolor: C.ink, color: '#FFFFFF', borderColor: C.ink }
+  '&:hover': { bgcolor: C.primary, color: '#FFFFFF', borderColor: C.primary }
 });
 
 // Một hàng sản phẩm trên trang chủ (Hàng bán chạy / Hàng mới về): 1 dòng, cuộn ngang bằng 2 nút mũi tên
@@ -564,7 +564,7 @@ function ProductShelf({ id, title, items: firstItems, sort, promoMap, moreTo }) 
           {/* Hết sản phẩm: ô cuối dẫn sang trang xem tất cả */}
           {more.done && moreTo && (
             <Box component={RouterLink} to={moreTo} sx={{ ...shelfTileSx, ...linkSx, gap: 1.5, flexDirection: 'column', fontWeight: 600 }}>
-              <Box component="span" sx={{ width: 56, height: 56, borderRadius: '50%', border: `1px solid ${C.ink}`, display: 'grid', placeItems: 'center' }}>
+              <Box component="span" sx={{ width: 56, height: 56, borderRadius: '50%', border: `1px solid ${C.primary}`, color: C.primary, display: 'grid', placeItems: 'center' }}>
                 <Icon size={20}>
                   <path d="M5 12h14M13 6l6 6-6 6" />
                 </Icon>

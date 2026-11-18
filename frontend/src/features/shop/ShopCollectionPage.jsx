@@ -121,7 +121,7 @@ function Option({ type = 'radio', name, checked, onChange, children }) {
         name={name}
         checked={checked}
         onChange={onChange}
-        sx={{ width: 18, height: 18, m: 0, accentColor: C.ink, cursor: 'pointer', flexShrink: 0 }}
+        sx={{ width: 18, height: 18, m: 0, accentColor: C.primary, cursor: 'pointer', flexShrink: 0 }}
       />
       {children}
     </Box>
@@ -264,7 +264,7 @@ function Pagination({ page, totalPages, onChange }) {
     cursor: 'pointer',
     display: 'inline-grid',
     placeItems: 'center',
-    '&:hover:not(:disabled)': { borderColor: C.ink },
+    '&:hover:not(:disabled)': { borderColor: C.primary, color: C.primary },
     '&:disabled': { opacity: 0.35, cursor: 'default' },
     ...focusRing
   };
@@ -290,7 +290,7 @@ function Pagination({ page, totalPages, onChange }) {
             onClick={() => n !== page && onChange(n)}
             sx={{
               ...cell,
-              ...(n === page && { bgcolor: C.ink, color: '#FFFFFF', borderColor: C.ink, fontWeight: 600, cursor: 'default' })
+              ...(n === page && { bgcolor: C.primary, color: '#FFFFFF', borderColor: C.primary, fontWeight: 600, cursor: 'default' })
             }}
           >
             {n}
@@ -500,8 +500,8 @@ export default function ShopCollectionPage({ collection }) {
                     minWidth: 48,
                     height: 40,
                     px: 1.5,
-                    border: `1px solid ${on ? C.ink : '#CFCAC2'}`,
-                    bgcolor: on ? C.ink : '#FFFFFF',
+                    border: `1px solid ${on ? C.primary : '#CFCAC2'}`,
+                    bgcolor: on ? C.primary : '#FFFFFF',
                     color: on ? '#FFFFFF' : C.ink,
                     font: 'inherit',
                     fontSize: 14,
@@ -558,7 +558,7 @@ export default function ShopCollectionPage({ collection }) {
                       flexShrink: 0,
                       bgcolor: hex || '#E6E3DE',
                       border: '1px solid #8C857B',
-                      boxShadow: on ? `0 0 0 2px #FFFFFF, 0 0 0 4px ${C.ink}` : 'none'
+                      boxShadow: on ? `0 0 0 2px #FFFFFF, 0 0 0 4px ${C.primary}` : 'none'
                     }}
                   />
                   <Box component="span" sx={{ fontWeight: on ? 600 : 400 }}>
@@ -733,7 +733,7 @@ export default function ShopCollectionPage({ collection }) {
 
           {!busy && !error && filtered.length === 0 && (
             <Box sx={{ textAlign: 'center', py: 8, color: C.muted }}>
-              <Box sx={{ fontFamily: SERIF, fontSize: 24, color: C.ink, mb: 1 }}>Không có sản phẩm phù hợp</Box>
+              <Box sx={{ fontFamily: SERIF, fontWeight: 700, fontSize: 22, color: C.ink, mb: 1 }}>Không có sản phẩm phù hợp</Box>
               <Box sx={{ mb: 3 }}>{active.length ? 'Thử bỏ bớt bộ lọc.' : emptyText}</Box>
               {active.length > 0 && (
                 <Box component="button" type="button" onClick={clearAll} sx={btnSx('outline')}>

@@ -574,18 +574,18 @@ export default function CheckoutPage() {
                   }}
                   sx={{
                     textTransform: 'none',
-                    color: '#8EECF5 !important',
+                    color: '#8A2B2B !important',
                     fontWeight: 600,
                     fontSize: 13,
                     p: 0,
                     minWidth: 'auto',
                     bgcolor: 'transparent !important',
                     boxShadow: 'none !important',
-                    '&:hover': { bgcolor: 'transparent !important', color: '#8EECF5 !important', textDecoration: 'none' },
+                    '&:hover': { bgcolor: 'transparent !important', color: '#8A2B2B !important', textDecoration: 'none' },
                     '&::after': { display: 'none !important' }
                   }}
                 >
-                  <span style={{ color: '#8EECF5' }}>Thay đổi</span>
+                  <span style={{ color: '#8A2B2B' }}>Thay đổi</span>
                 </Button>
               </Stack>
 
@@ -602,10 +602,10 @@ export default function CheckoutPage() {
                   }}
                 >
                   <Box sx={{ flexShrink: 0, minWidth: { sm: 160 } }}>
-                    <Typography sx={{ fontWeight: 700, fontSize: 14, color: '#202D42', lineHeight: 1.3 }}>
+                    <Typography sx={{ fontWeight: 700, fontSize: 14, color: '#111111', lineHeight: 1.3 }}>
                       {chosen.name}
                     </Typography>
-                    <Typography sx={{ fontWeight: 700, fontSize: 13.5, color: '#202D42', mt: 0.25 }}>
+                    <Typography sx={{ fontWeight: 700, fontSize: 13.5, color: '#111111', mt: 0.25 }}>
                       {chosen.phone}
                     </Typography>
                   </Box>
@@ -673,7 +673,7 @@ export default function CheckoutPage() {
                     key={m.value}
                     value={m.value}
                     disabled={m.disabled}
-                    control={<Radio sx={{ color: '#9CA3AF', '&.Mui-checked': { color: '#8EECF5 !important' } }} />}
+                    control={<Radio sx={{ color: '#9CA3AF', '&.Mui-checked': { color: '#8A2B2B !important' } }} />}
                     sx={{ alignItems: 'flex-start', mb: 1 }}
                     label={
                       <Box sx={{ pt: 0.75 }}>
@@ -693,7 +693,7 @@ export default function CheckoutPage() {
             <Card variant="outlined" sx={{ p: 2.5, borderRadius: 3 }}>
               <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', mb: voucher ? 1.5 : 0 }}>
                 <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                  <TagOutlined style={{ color: '#BE185D', fontSize: 16 }} />
+                  <TagOutlined style={{ color: '#8A2B2B', fontSize: 16 }} />
                   <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
                     Mã giảm giá
                   </Typography>
@@ -712,18 +712,18 @@ export default function CheckoutPage() {
                   }}
                   sx={{
                     textTransform: 'none',
-                    color: '#8EECF5 !important',
+                    color: '#8A2B2B !important',
                     fontWeight: 600,
                     fontSize: 13,
                     p: 0,
                     minWidth: 'auto',
                     bgcolor: 'transparent !important',
                     boxShadow: 'none !important',
-                    '&:hover': { bgcolor: 'transparent !important', color: '#8EECF5 !important', textDecoration: 'none' },
+                    '&:hover': { bgcolor: 'transparent !important', color: '#8A2B2B !important', textDecoration: 'none' },
                     '&::after': { display: 'none !important' }
                   }}
                 >
-                  <span style={{ color: '#8EECF5' }}>{voucher ? 'Đổi mã khác' : 'Chọn mã'}</span>
+                  <span style={{ color: '#8A2B2B' }}>{voucher ? 'Đổi mã khác' : 'Chọn mã'}</span>
                 </Button>
               </Stack>
 
@@ -732,13 +732,13 @@ export default function CheckoutPage() {
                   sx={{
                     p: 1.5,
                     borderRadius: 2,
-                    bgcolor: '#FEFCE8',
-                    border: '1px solid #FEF08A'
+                    bgcolor: '#FFFFFF',
+                    border: '1px solid #E6E3DE'
                   }}
                 >
                   <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <Box sx={{ minWidth: 0, pr: 1 }}>
-                      <Typography sx={{ fontWeight: 700, fontSize: 13.5, color: '#202D42' }}>
+                      <Typography sx={{ fontWeight: 700, fontSize: 13.5, color: '#111111' }}>
                         {voucher.name}
                       </Typography>
                       <Typography sx={{ fontSize: 12, color: '#64748B', mt: 0.25 }}>
@@ -754,7 +754,7 @@ export default function CheckoutPage() {
                   </Stack>
 
                   {!voucherResult.eligible && (
-                    <Typography sx={{ mt: 1, fontSize: 12, color: '#BE185D', fontWeight: 600 }}>
+                    <Typography sx={{ mt: 1, fontSize: 12, color: '#8A2B2B', fontWeight: 600 }}>
                       {voucherResult.reason || 'Đơn hàng chưa đạt giá trị tối thiểu để dùng mã này.'}
                     </Typography>
                   )}
@@ -773,7 +773,7 @@ export default function CheckoutPage() {
                 {discountAmount > 0 && (
                   <Row
                     label="Giảm giá voucher"
-                    value={<Typography sx={{ color: '#BE185D', fontWeight: 700 }}>-{money(discountAmount)}</Typography>}
+                    value={<Typography sx={{ color: '#8A2B2B', fontWeight: 700 }}>-{money(discountAmount)}</Typography>}
                   />
                 )}
                 <Row label="Phí vận chuyển" value={SHIPPING_FEE ? money(SHIPPING_FEE) : 'Miễn phí'} />
@@ -826,7 +826,7 @@ export default function CheckoutPage() {
       >
         <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', px: 2, py: 1.5 }}>
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-            <TagOutlined style={{ color: '#BE185D', fontSize: 19 }} />
+            <TagOutlined style={{ color: '#8A2B2B', fontSize: 19 }} />
             <Typography sx={{ fontWeight: 800, fontSize: 18, color: '#1F2937' }}>
               Chọn mã giảm giá
             </Typography>
@@ -839,7 +839,7 @@ export default function CheckoutPage() {
         <DialogContent dividers sx={{ borderColor: '#F1F5F9', maxHeight: 520, p: { xs: 1.5, sm: 2 } }}>
           {promosLoading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
-              <CircularProgress size={32} sx={{ color: '#1BA3B3' }} />
+              <CircularProgress size={32} sx={{ color: '#8A2B2B' }} />
             </Box>
           ) : allPromotions.length === 0 ? (
             <Box sx={{ textAlign: 'center', py: 6 }}>
@@ -875,8 +875,8 @@ export default function CheckoutPage() {
                       cursor: status.eligible ? 'pointer' : 'default',
                       borderRadius: '16px',
                       border: '2px solid',
-                      borderColor: isCurrent ? '#A7F2FA' : '#FEF08A',
-                      bgcolor: '#FEFCE8',
+                      borderColor: isCurrent ? '#8A2B2B' : '#E6E3DE',
+                      bgcolor: '#FFFFFF',
                       overflow: 'hidden',
                       boxShadow: 'none !important',
                       opacity: status.eligible ? 1 : 0.55
@@ -887,9 +887,9 @@ export default function CheckoutPage() {
                         sx={{
                           width: { xs: '100%', sm: 105 },
                           minWidth: { xs: '100%', sm: 105 },
-                          bgcolor: '#FEF9C3',
-                          borderRight: { sm: '1.5px dashed #FDE047' },
-                          borderBottom: { xs: '1.5px dashed #FDE047', sm: 'none' },
+                          bgcolor: '#EFEBE5',
+                          borderRight: { sm: '1.5px dashed #CFC8BE' },
+                          borderBottom: { xs: '1.5px dashed #CFC8BE', sm: 'none' },
                           display: 'flex',
                           flexDirection: 'column',
                           alignItems: 'center',
@@ -898,10 +898,10 @@ export default function CheckoutPage() {
                           textAlign: 'center'
                         }}
                       >
-                        <Typography sx={{ fontSize: 20, fontWeight: 800, color: status.eligible ? '#854D0E' : '#94A3B8', lineHeight: 1.1 }}>
+                        <Typography sx={{ fontSize: 20, fontWeight: 800, color: status.eligible ? '#8A2B2B' : '#94A3B8', lineHeight: 1.1 }}>
                           {isPercentType ? `${dVal}%` : dVal >= 1000 ? `${Math.round(dVal / 1000)}K` : `${dVal}đ`}
                         </Typography>
-                        <Typography sx={{ fontSize: 10, fontWeight: 700, color: status.eligible ? '#854D0E' : '#94A3B8', mt: 0.5, textTransform: 'uppercase' }}>
+                        <Typography sx={{ fontSize: 10, fontWeight: 700, color: status.eligible ? '#8A2B2B' : '#94A3B8', mt: 0.5, textTransform: 'uppercase' }}>
                           {isPercentType ? 'GIẢM GIÁ' : 'GIẢM TIỀN'}
                         </Typography>
                       </Box>
@@ -915,13 +915,13 @@ export default function CheckoutPage() {
                             Đơn tối thiểu: <strong>{money(p.minOrderValue)}</strong>
                           </Typography>
                           {status.reason && (
-                            <Typography sx={{ fontSize: 12, color: '#BE185D', fontWeight: 600, mt: 0.75 }}>
+                            <Typography sx={{ fontSize: 12, color: '#8A2B2B', fontWeight: 600, mt: 0.75 }}>
                               {status.reason}
                             </Typography>
                           )}
                         </Box>
 
-                        <Box sx={{ display: 'flex', alignItems: 'center', pt: 1, mt: 1, borderTop: '1px solid #FEF08A' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', pt: 1, mt: 1, borderTop: '1px solid #E6E3DE' }}>
                           <Button
                             size="small"
                             disableRipple
@@ -933,7 +933,7 @@ export default function CheckoutPage() {
                               textTransform: 'none',
                               fontSize: 12,
                               fontWeight: 600,
-                              color: '#0E3A41',
+                              color: '#111111',
                               p: 0,
                               minWidth: 'auto',
                               bgcolor: 'transparent !important',
@@ -941,9 +941,8 @@ export default function CheckoutPage() {
                               display: 'flex',
                               alignItems: 'center',
                               gap: 0.5,
-                              '&:hover': { bgcolor: 'transparent !important', textDecoration: 'none', color: '#0E3A41', boxShadow: 'none !important' },
-                              '&:active': { bgcolor: 'transparent !important', boxShadow: 'none !important' },
-                              '&::after': { display: 'none !important' }
+                              '&:hover': { bgcolor: 'transparent !important', textDecoration: 'none', color: '#111111', boxShadow: 'none !important' },
+                              '&:active': { bgcolor: 'transparent !important', boxShadow: 'none !important' }
                             }}
                           >
                             <span>Điều kiện</span>
@@ -962,8 +961,8 @@ export default function CheckoutPage() {
                       <Box
                         sx={{
                           p: 2,
-                          bgcolor: '#FFFDF0',
-                          borderTop: '1px dashed #FDE047',
+                          bgcolor: '#F7F5F2',
+                          borderTop: '1px dashed #CFC8BE',
                           fontSize: 12.5,
                           color: '#4B5563'
                         }}
@@ -976,7 +975,7 @@ export default function CheckoutPage() {
                         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1 }}>
                           <Box>
                             <Typography sx={{ fontSize: 11.5, color: '#6B7280' }}>Mức ưu đãi</Typography>
-                            <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: '#BE185D' }}>
+                            <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: '#8A2B2B' }}>
                               {isPercentType ? `Giảm ${dVal}%` : `Giảm ${money(dVal)}`}
                             </Typography>
                           </Box>
@@ -1073,8 +1072,8 @@ export default function CheckoutPage() {
                     sx={{
                       borderRadius: '16px',
                       border: '2px solid',
-                      borderColor: isCurrent ? '#A7F2FA' : '#FEF08A',
-                      bgcolor: '#FEFCE8',
+                      borderColor: isCurrent ? '#8A2B2B' : '#E6E3DE',
+                      bgcolor: '#FFFFFF',
                       overflow: 'hidden',
                       boxShadow: 'none !important',
                       cursor: 'pointer',
@@ -1134,16 +1133,16 @@ export default function CheckoutPage() {
               disabled={savingAddress}
               onClick={handleSaveNewAddress}
               sx={{
-                bgcolor: '#A7F2FA',
-                color: '#0E3A41',
+                bgcolor: '#8A2B2B',
+                color: '#FFFFFF',
                 fontWeight: 700,
                 fontSize: 13.5,
                 borderRadius: '12px',
                 py: 0.85,
                 boxShadow: 'none !important',
                 textTransform: 'none',
-                '&:hover': { bgcolor: '#8EECF5', boxShadow: 'none !important' },
-                '&:active': { bgcolor: '#A2F2FA', boxShadow: 'none !important' }
+                '&:hover': { bgcolor: '#6E1F1F', boxShadow: 'none !important' },
+                '&:active': { bgcolor: '#5A1A1A', boxShadow: 'none !important' }
               }}
             >
               {savingAddress ? 'Đang lưu...' : 'Hoàn thành'}
@@ -1155,8 +1154,8 @@ export default function CheckoutPage() {
               disableRipple
               onClick={() => setIsCreatingAddress(true)}
               sx={{
-                bgcolor: '#A7F2FA',
-                color: '#0E3A41',
+                bgcolor: '#8A2B2B',
+                color: '#FFFFFF',
                 fontWeight: 700,
                 fontSize: 13.5,
                 borderRadius: '12px',
@@ -1167,8 +1166,8 @@ export default function CheckoutPage() {
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: 0.75,
-                '&:hover': { bgcolor: '#8EECF5', boxShadow: 'none !important' },
-                '&:active': { bgcolor: '#A2F2FA', boxShadow: 'none !important' }
+                '&:hover': { bgcolor: '#6E1F1F', boxShadow: 'none !important' },
+                '&:active': { bgcolor: '#5A1A1A', boxShadow: 'none !important' }
               }}
             >
               <PlusOutlined style={{ fontSize: 14 }} />
