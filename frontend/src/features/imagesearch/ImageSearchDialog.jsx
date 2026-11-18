@@ -4,6 +4,10 @@ import { Box, CircularProgress, Dialog, IconButton } from '@mui/material';
 import { Photo, money, priceText } from 'features/shop/ShopCommon';
 import { C, Icon, btnSx, focusRing, linkSx, SERIF } from 'features/shop/storeTheme';
 import { imageSearchApi, prepareImage } from './api';
+import WebcamCapture, { canUseWebcam } from './WebcamCapture';
+
+// Điện thoại / máy tính bảng: <input capture> mở thẳng app camera (tốt hơn webcam trong trang)
+const isTouchDevice = () => typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches;
 
 /**
  * Khách chụp / chọn ảnh một món đồ để hỏi shop có bán không.
@@ -127,7 +131,7 @@ function Suggestions({ items, onNavigate, title }) {
 }
 
 export default function ImageSearchDialog({ open, onClose }) {
-  const [phase, setPhase] = useState('pick'); // pick | searching | result
+  const [phase, setPhase] = useState('pick'); // pick | camera | searching | result
   const [preview, setPreview] = useState('');
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
@@ -181,6 +185,18 @@ export default function ImageSearchDialog({ open, onClose }) {
     e.target.value = ''; // chọn lại cùng ảnh vẫn chạy
     handleFile(file);
   };
+
+  // Máy tính: trình duyệt bỏ qua capture và chỉ mở hộp chọn file -> mở webcam ngay trong hộp thoại
+  const openCamera = () => {
+    setError('');
+    if (isTouchDevice() || !canUseWebcam()) cameraRef.current?.click();
+    else setPhase('camera');
+  };
+
+  const onCameraError = useCallback((message) => {
+    setError(message);
+    setPhase('pick');
+  }, []);
 
   const status = result && (STATUS[result.status] || STATUS.NOT_FOUND);
 
@@ -243,7 +259,7 @@ export default function ImageSearchDialog({ open, onClose }) {
               <Box
                 component="button"
                 type="button"
-                onClick={() => cameraRef.current?.click()}
+                onClick={openCamera}
                 sx={{ ...btnSx('dark'), display: 'inline-flex', alignItems: 'center', gap: 1 }}
               >
                 <CameraIcon size={18} /> CHỤP ẢNH
@@ -262,6 +278,8 @@ export default function ImageSearchDialog({ open, onClose }) {
             )}
           </Box>
         )}
+
+        {phase === 'camera' && <WebcamCapture onCapture={handleFile} onCancel={() => setPhase('pick')} onError={onCameraError} />}
 
         {phase === 'searching' && (
           <Box role="status" aria-live="polite" sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, py: 6 }}>
