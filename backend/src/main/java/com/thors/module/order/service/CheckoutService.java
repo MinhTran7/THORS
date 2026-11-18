@@ -37,17 +37,20 @@ public class CheckoutService {
     private final AddressRepository addressRepository;
     private final PromotionRepository promotionRepository;
     private final PromotionService promotionService;
+    private final OrderService orderService;
 
     public CheckoutService(CheckoutRepository checkoutRepository,
                            CartRepository cartRepository,
                            AddressRepository addressRepository,
                            PromotionRepository promotionRepository,
-                           PromotionService promotionService) {
+                           PromotionService promotionService,
+                           OrderService orderService) {
         this.checkoutRepository = checkoutRepository;
         this.cartRepository = cartRepository;
         this.addressRepository = addressRepository;
         this.promotionRepository = promotionRepository;
         this.promotionService = promotionService;
+        this.orderService = orderService;
     }
 
     private record Receiver(String name, String phone, String address) {
@@ -157,6 +160,12 @@ public class CheckoutService {
         for (Integer cartItemId : cartItemIds) {
             cartRepository.deleteItem(userId, cartItemId);
         }
+
+        // Cùng quy tắc với CheckoutRepository.insertOrder: trả online thì chờ thanh toán trước
+        String orderStatus = "ONLINE".equals(paymentMethod)
+                ? OrderStatus.AWAITING_PAYMENT
+                : OrderStatus.PENDING_CONFIRMATION;
+        orderService.notifyOrderPlaced(userId, orderId, orderNumber, orderStatus);
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("id", orderId);

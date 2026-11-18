@@ -35,6 +35,8 @@ export async function api(path, options = {}) {
   if (!response.ok) {
     if (response.status === 401 || response.status === 403) clearCsrf();
     if (response.status === 401) window.dispatchEvent(new Event('thors:unauthorized'));
+    if (response.status === 403 && data.code === 'PASSWORD_CHANGE_REQUIRED')
+      window.dispatchEvent(new Event('thors:password-change-required'));
     throw new ApiError(response.status, data.code, data.message || 'Không xử lý được yêu cầu.');
   }
   return data;

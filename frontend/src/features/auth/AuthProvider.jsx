@@ -19,8 +19,13 @@ export function AuthProvider({ children }) {
   }, []);
   useEffect(() => {
     const clear = () => setAccount(null);
+    const mustChange = () => setAccount((a) => (a ? { ...a, passwordChangeRequired: true } : a));
     window.addEventListener('thors:unauthorized', clear);
-    return () => window.removeEventListener('thors:unauthorized', clear);
+    window.addEventListener('thors:password-change-required', mustChange);
+    return () => {
+      window.removeEventListener('thors:unauthorized', clear);
+      window.removeEventListener('thors:password-change-required', mustChange);
+    };
   }, []);
   async function logout() {
     await post('/auth/logout');

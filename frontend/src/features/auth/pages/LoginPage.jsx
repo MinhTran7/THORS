@@ -41,6 +41,11 @@ export default function LoginPage() {
     }
     setAccount(result.account);
     sessionStorage.removeItem('thorsReturnTo');
+    // Tài khoản do Admin / Owner tạo: phải đổi mật khẩu trước khi vào hệ thống
+    if (result.passwordChangeRequired) {
+      navigate('/profile/password', { replace: true });
+      return;
+    }
     navigate(landingAfterLogin(result.account, returnTo), { replace: true });
   }
   return (
