@@ -198,6 +198,10 @@ function CustomerOrderCard({ order, onOpen, actions, onAction, busy }) {
   const meta = orderStatusMeta(order.orderStatus);
   const pay = paymentStatusMeta(order.paymentStatus);
   const lines = order.lines ?? [];
+  // Mặc định chỉ hiện sản phẩm đầu tiên; bấm "Xem thêm" để mở hết (đơn nhiều sản phẩm không bị dài)
+  const [expanded, setExpanded] = useState(false);
+  const shownLines = expanded ? lines : lines.slice(0, 1);
+  const hiddenCount = lines.length - shownLines.length;
 
   return (
     <Box component="article" sx={{ ...panelSx, mb: 3, transition: 'border-color .2s', '&:hover': { borderColor: '#CFCAC2' } }}>
@@ -234,10 +238,10 @@ function CustomerOrderCard({ order, onOpen, actions, onAction, busy }) {
         onKeyDown={(e) => (e.key === 'Enter' ? onOpen() : undefined)}
         sx={{ cursor: 'pointer', px: { xs: 2, sm: 3 }, '&:hover .name': { color: C.accent }, '&:focus-visible': { outline: `2px solid ${C.accent}`, outlineOffset: '-2px' } }}
       >
-        {lines.map((line, index) => (
+        {shownLines.map((line, index) => (
           <Box
             key={`${order.id}-${index}`}
-            sx={{ display: 'flex', gap: { xs: 1.5, sm: 2.5 }, py: 2.5, borderBottom: index < lines.length - 1 ? `1px solid ${C.line}` : 'none' }}
+            sx={{ display: 'flex', gap: { xs: 1.5, sm: 2.5 }, py: 2.5, borderBottom: index < shownLines.length - 1 ? `1px solid ${C.line}` : 'none' }}
           >
             <StoreThumb src={line.imageUrl} name={line.productName} width={80} />
             <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -261,6 +265,40 @@ function CustomerOrderCard({ order, onOpen, actions, onAction, busy }) {
           </Box>
         )}
       </Box>
+
+      {/* Xem thêm / Thu gọn các sản phẩm còn lại */}
+      {lines.length > 1 && (
+        <Box
+          component="button"
+          type="button"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((v) => !v)}
+          sx={{
+            width: '100%',
+            py: 1.5,
+            border: 0,
+            borderTop: `1px solid ${C.line}`,
+            bgcolor: 'transparent',
+            font: 'inherit',
+            fontSize: 14,
+            color: C.muted,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 0.75,
+            '&:hover': { color: C.accent },
+            '&:focus-visible': { outline: `2px solid ${C.accent}`, outlineOffset: '-2px' }
+          }}
+        >
+          {expanded ? 'Thu gọn' : `Xem thêm ${hiddenCount} sản phẩm`}
+          <Box component="span" aria-hidden="true" sx={{ display: 'inline-flex', transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </Box>
+        </Box>
+      )}
 
       {/* Chân thẻ: thanh toán, thành tiền và nút thao tác */}
       <Box sx={{ px: { xs: 2, sm: 3 }, py: 2.5, bgcolor: C.sand }}>
