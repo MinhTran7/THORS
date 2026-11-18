@@ -12,7 +12,7 @@ import { brand, cardSx } from 'features/account/tokens';
 import { formatLogDate, formatTime } from 'features/account/format';
 import { OutlineButton } from 'features/account/components/Brand';
 import { StatusPill } from 'features/account/components/Chips';
-import { FilterSelect, PageHeader, Pager, Toolbar } from 'features/account/components/Blocks';
+import { FilterSelect, PageHeader, Pager, ResetFilterButton, Toolbar } from 'features/account/components/Blocks';
 import { useToast } from 'features/account/components/Toast';
 import { notificationTypeLabel } from './constants';
 import { customerNotificationPath, entityPath, notificationsApi, refreshNotifications, UNREAD_KEY } from './api';
@@ -230,13 +230,20 @@ export default function NotificationPage() {
 
       <Toolbar>
         <FilterSelect
-          label="Lọc thông báo"
+          label="Loại thông báo"
           value={filter}
           onChange={(value) => {
             setFilter(value);
             setPage(0);
           }}
           options={FILTER_OPTIONS}
+          minWidth={200}
+        />
+        <ResetFilterButton
+          onClick={() => {
+            setFilter('all');
+            setPage(0);
+          }}
         />
       </Toolbar>
 
@@ -265,7 +272,7 @@ export default function NotificationPage() {
               py: 2,
               borderBottom: `1px solid ${brand.line}`,
               bgcolor: item.read ? brand.surface : brand.cyanSoft,
-              '&:hover': { bgcolor: item.read ? '#F6F6F1' : '#D9F4F7' }
+              '&:hover': { bgcolor: item.read ? '#FAF8F5' : '#E6E1D9' }
             }}
           >
             <Stack direction="row" spacing={1.5} alignItems="flex-start">
@@ -277,7 +284,7 @@ export default function NotificationPage() {
                   borderRadius: '50%',
                   mt: 0.9,
                   flexShrink: 0,
-                  bgcolor: item.read ? 'transparent' : brand.cyanHover
+                  bgcolor: item.read ? 'transparent' : brand.teal
                 }}
               />
               <Box sx={{ minWidth: 0, flexGrow: 1 }}>

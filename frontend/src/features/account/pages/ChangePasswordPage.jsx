@@ -183,7 +183,7 @@ export default function ChangePasswordPage() {
             <Stack spacing={1} sx={{ mt: 1.5 }} component="ul" style={{ listStyle: 'none', margin: 0, padding: 0, marginTop: 12 }}>
               {requirements.map((item) => (
                 <Stack key={item.label} component="li" direction="row" spacing={1} alignItems="center">
-                  <CheckCircleFilled style={{ color: item.ok ? (isCustomer ? C.ink : '#2BB5C4') : '#D5D7D0', fontSize: 16 }} />
+                  <CheckCircleFilled style={{ color: item.ok ? (isCustomer ? C.ink : brand.teal) : '#D6D0C7', fontSize: 16 }} />
                   <Typography sx={{ color: brand.ink, fontSize: fs.body }}>{item.label}</Typography>
                 </Stack>
               ))}

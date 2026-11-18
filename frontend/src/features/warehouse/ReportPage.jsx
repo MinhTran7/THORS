@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { Alert, Button, Checkbox, CircularProgress, FormControlLabel, MenuItem, Stack, TextField, Typography } from '@mui/material';
 import useSWR from 'swr';
 import MainCard from 'components/MainCard';
+import { DateRangeFields } from 'features/account/components/DateFilter';
 import { api } from 'services/http';
 import { DataTable, Metrics, Title } from './components';
 import { money, number } from './model';
@@ -112,22 +113,7 @@ export default function ReportPage() {
       />
       <MainCard sx={{ mb: 2 }}>
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} sx={{ alignItems: { md: 'center' } }}>
-          <TextField
-            size="small"
-            type="date"
-            label="Từ ngày"
-            value={from}
-            onChange={(e) => set({ from: e.target.value })}
-            slotProps={{ inputLabel: { shrink: true } }}
-          />
-          <TextField
-            size="small"
-            type="date"
-            label="Đến ngày"
-            value={to}
-            onChange={(e) => set({ to: e.target.value })}
-            slotProps={{ inputLabel: { shrink: true } }}
-          />
+          <DateRangeFields inline from={from} to={to} onChange={(range) => set(range)} />
           <TextField
             size="small"
             placeholder="Tìm tên, mã SP, mã vạch"

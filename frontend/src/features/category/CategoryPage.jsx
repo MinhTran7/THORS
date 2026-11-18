@@ -78,8 +78,8 @@ const emptyForm = {
 const TARGET_BADGE = {
   MEN: { bg: '#EFF6FF', color: '#1D4ED8', border: '#BFDBFE' },
   WOMEN: { bg: '#FDF2F8', color: '#BE185D', border: '#FBCFE8' },
-  KIDS: { bg: '#FFF7AE', color: '#713F12', border: '#FDE047' },
-  UNISEX: { bg: '#F0FCFE', color: '#0E7490', border: '#8EECF5' }
+  KIDS: { bg: '#F6F1E8', color: '#6B4E16', border: '#E6DCC8' },
+  UNISEX: { bg: '#EFEBE5', color: '#8A2B2B', border: '#D9B4B4' }
 };
 
 const selectSx = {
@@ -150,7 +150,7 @@ function iconTone(category) {
   const tone = category.isChild && TARGET_BADGE[category.targetGroup];
   if (tone) return { bgcolor: tone.bg, color: tone.color, borderColor: tone.border };
   // Danh mục gốc: ô icon xanh cyan đậm hơn để nổi bật so với danh mục con
-  if (!category.isChild) return { bgcolor: '#E3FAFD', color: '#0E7490', borderColor: C.cyan };
+  if (!category.isChild) return { bgcolor: '#EFEBE5', color: '#8A2B2B', borderColor: '#D9B4B4' };
   return { bgcolor: C.surface, color: C.muted, borderColor: C.border };
 }
 
@@ -175,7 +175,7 @@ function StatisticCard({
       sx={{
         ...cardSx,
         height: '100%',
-        bgcolor: highlight ? '#F0FCFE' : C.surface,
+        bgcolor: highlight ? '#FAF8F5' : C.surface,
         border: `1.5px solid ${highlight ? C.cyan : C.border}`,
         transition: 'all 0.2s ease',
         '&:hover': {
@@ -210,7 +210,7 @@ function StatisticCard({
               height: 38,
               borderRadius: 2.5,
               bgcolor: highlight ? C.cyan : C.borderLight,
-              color: '#0F172A',
+              color: highlight ? C.cyanInk : '#111111',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -225,7 +225,7 @@ function StatisticCard({
           sx={{
             fontSize: 28,
             fontWeight: 800,
-            color: '#0F172A',
+            color: '#111111',
             mt: 1.25,
             letterSpacing: -0.5
           }}
@@ -651,7 +651,7 @@ export default function CategoryPage() {
   // ==========================================
 
   return (
-    <Box sx={{ maxWidth: 1440, mx: 'auto', pb: 6, color: C.text }}>
+    <Box sx={{ pb: 6, color: C.text }}>
       {/* PAGE HEADER */}
       <Box
         sx={{
@@ -668,7 +668,7 @@ export default function CategoryPage() {
             variant="h3"
             sx={{
               fontWeight: 800,
-              color: '#0F172A',
+              color: '#111111',
               fontSize: { xs: 22, sm: 26 }
             }}
           >
@@ -862,7 +862,7 @@ export default function CategoryPage() {
               color: C.text,
               whiteSpace: 'nowrap',
               '&:hover': {
-                bgcolor: '#F8FAFC',
+                bgcolor: '#F7F5F2',
                 borderColor: C.border,
                 color: C.text
               }
@@ -975,8 +975,8 @@ export default function CategoryPage() {
                                 alignItems: 'center',
                                 justifyContent: 'center',
                                 borderRadius: '50%',
-                                bgcolor: canToggle ? (open ? '#CFF6FB' : '#F1F5F9') : 'transparent',
-                                color: canToggle ? '#0F172A' : 'transparent',
+                                bgcolor: canToggle ? (open ? '#E6DFD6' : '#EFEBE5') : 'transparent',
+                                color: canToggle ? '#111111' : 'transparent',
                                 fontSize: 10,
                                 transition: 'background-color .15s'
                               }}
@@ -1007,7 +1007,7 @@ export default function CategoryPage() {
                               sx={{
                                 fontSize: category.isChild ? 13 : 14,
                                 fontWeight: category.isChild ? 500 : 700,
-                                color: category.isChild ? '#334155' : '#0F172A'
+                                color: category.isChild ? '#3A3633' : '#111111'
                               }}
                             >
                               {category.categoryName}
@@ -1044,7 +1044,7 @@ export default function CategoryPage() {
                           sx={{
                             fontSize: 13.5,
                             fontWeight: 700,
-                            color: '#0F172A'
+                            color: '#111111'
                           }}
                         >
                           {productCount ?? '—'}
@@ -1117,7 +1117,7 @@ export default function CategoryPage() {
                               fontSize: 13,
                               fontWeight: 600,
                               bgcolor: isActive ? '#E7F6F1' : '#F0F2F4',
-                              color: isActive ? '#168B70' : '#75869F'
+                              color: isActive ? '#168B70' : '#5C5650'
                             }}
                           >
                             {isActive ? 'Hoạt động' : 'Đã ngưng'}
@@ -1137,10 +1137,10 @@ export default function CategoryPage() {
                               size="small"
                               onClick={() => setViewCategory(category)}
                               sx={{
-                                color: '#64748B',
+                                color: '#5C5650',
                                 p: 0.75,
                                 '&:hover': {
-                                  color: '#0F172A',
+                                  color: '#111111',
                                   bgcolor: 'transparent'
                                 }
                               }}
@@ -1154,10 +1154,10 @@ export default function CategoryPage() {
                               size="small"
                               onClick={() => openEditDialog(category)}
                               sx={{
-                                color: '#64748B',
+                                color: '#5C5650',
                                 p: 0.75,
                                 '&:hover': {
-                                  color: '#0F172A',
+                                  color: '#111111',
                                   bgcolor: 'transparent'
                                 }
                               }}
@@ -1173,10 +1173,10 @@ export default function CategoryPage() {
                                 openActionMenu(event, category)
                               }
                               sx={{
-                                color: '#64748B',
+                                color: '#5C5650',
                                 p: 0.75,
                                 '&:hover': {
-                                  color: '#0F172A',
+                                  color: '#111111',
                                   bgcolor: 'transparent'
                                 }
                               }}
@@ -1197,7 +1197,7 @@ export default function CategoryPage() {
                       sx={{
                         fontSize: 14,
                         fontWeight: 800,
-                        color: '#0F172A'
+                        color: '#111111'
                       }}
                     >
                       {categories.length === 0
@@ -1296,7 +1296,7 @@ export default function CategoryPage() {
         maxWidth="sm"
         PaperProps={{ sx: { borderRadius: 3.5, p: 1 } }}
       >
-        <DialogTitle sx={{ fontWeight: 800, color: '#0F172A', fontSize: 18 }}>
+        <DialogTitle sx={{ fontWeight: 800, color: '#111111', fontSize: 18 }}>
           Chi tiết danh mục
         </DialogTitle>
 
@@ -1307,7 +1307,7 @@ export default function CategoryPage() {
                 <Typography sx={{ fontSize: 12, color: C.muted, fontWeight: 700, letterSpacing: 0.5 }}>
                   TÊN DANH MỤC
                 </Typography>
-                <Typography sx={{ fontWeight: 800, color: '#0F172A', fontSize: 16, mt: 0.5 }}>
+                <Typography sx={{ fontWeight: 800, color: '#111111', fontSize: 16, mt: 0.5 }}>
                   {viewCategory.categoryName}
                 </Typography>
               </Box>
@@ -1316,7 +1316,7 @@ export default function CategoryPage() {
                 <Typography sx={{ fontSize: 12, color: C.muted, fontWeight: 700, letterSpacing: 0.5 }}>
                   MÔ TẢ
                 </Typography>
-                <Typography sx={{ fontSize: 14, color: '#334155', mt: 0.5, lineHeight: 1.6 }}>
+                <Typography sx={{ fontSize: 14, color: '#3A3633', mt: 0.5, lineHeight: 1.6 }}>
                   {viewCategory.description || 'Chưa có mô tả'}
                 </Typography>
               </Box>
@@ -1326,7 +1326,7 @@ export default function CategoryPage() {
                   <Typography sx={{ fontSize: 12, color: C.muted, fontWeight: 700, letterSpacing: 0.5 }}>
                     DANH MỤC CHA
                   </Typography>
-                  <Typography sx={{ fontSize: 14, color: '#334155', mt: 0.5, fontWeight: 600 }}>
+                  <Typography sx={{ fontSize: 14, color: '#3A3633', mt: 0.5, fontWeight: 600 }}>
                     {viewCategory.parentName || 'Danh mục gốc'}
                   </Typography>
                 </Box>
@@ -1348,8 +1348,8 @@ export default function CategoryPage() {
                       <Box
                         key={child.categoryId}
                         sx={badgeSx(
-                          child.status === 'ACTIVE' ? '#F8FAFC' : '#F1F5F9',
-                          child.status === 'ACTIVE' ? '#0F172A' : '#94A3B8',
+                          child.status === 'ACTIVE' ? '#F7F5F2' : '#EFEBE5',
+                          child.status === 'ACTIVE' ? '#111111' : '#94A3B8',
                           C.border
                         )}
                       >
@@ -1366,7 +1366,7 @@ export default function CategoryPage() {
                 <Typography sx={{ fontSize: 12, color: C.muted, fontWeight: 700, letterSpacing: 0.5 }}>
                   SỐ LƯỢNG SẢN PHẨM THUỘC DANH MỤC
                 </Typography>
-                <Typography sx={{ fontSize: 15, fontWeight: 800, color: '#0F172A', mt: 0.5 }}>
+                <Typography sx={{ fontSize: 15, fontWeight: 800, color: '#111111', mt: 0.5 }}>
                   {getProductCount(viewCategory.categoryId) ?? '—'} sản phẩm
                 </Typography>
               </Box>
@@ -1379,7 +1379,7 @@ export default function CategoryPage() {
                   sx={
                     viewCategory.status === 'ACTIVE'
                       ? badgeSx('#F0FDF4', '#166534', '#BBF7D0')
-                      : badgeSx('#F1F5F9', '#475569', '#E2E8F0')
+                      : badgeSx('#EFEBE5', '#5C5650', '#E6E3DE')
                   }
                 >
                   {viewCategory.status === 'ACTIVE' ? 'Đang hoạt động' : 'Đã ngưng hoạt động'}
@@ -1419,7 +1419,7 @@ export default function CategoryPage() {
         PaperProps={{ sx: { borderRadius: 3.5, p: 1 } }}
       >
         <Box component="form" onSubmit={handleSubmit}>
-          <DialogTitle sx={{ fontWeight: 800, color: '#0F172A', fontSize: 18 }}>
+          <DialogTitle sx={{ fontWeight: 800, color: '#111111', fontSize: 18 }}>
             {dialog?.mode === 'create'
               ? 'Thêm danh mục mới'
               : 'Chỉnh sửa danh mục'}
@@ -1575,7 +1575,7 @@ export default function CategoryPage() {
         maxWidth="xs"
         PaperProps={{ sx: { borderRadius: 3.5, p: 1 } }}
       >
-        <DialogTitle sx={{ fontWeight: 800, color: '#0F172A', fontSize: 18 }}>
+        <DialogTitle sx={{ fontWeight: 800, color: '#111111', fontSize: 18 }}>
           Xác nhận đổi trạng thái
         </DialogTitle>
 
@@ -1594,14 +1594,14 @@ export default function CategoryPage() {
           {statusDialog?.status === 'ACTIVE' && (
             <Box
               sx={{
-                bgcolor: '#FFFDE7',
-                border: '1.5px solid #FDE047',
+                bgcolor: '#F6F1E8',
+                border: '1.5px solid #E6DCC8',
                 borderRadius: 2.5,
                 p: 2,
                 mt: 2
               }}
             >
-              <Typography sx={{ fontSize: 12.5, color: '#713F12', lineHeight: 1.6 }}>
+              <Typography sx={{ fontSize: 12.5, color: '#6B4E16', lineHeight: 1.6 }}>
                 Danh mục này sẽ chuyển sang trạng thái ngưng. Các sản phẩm thuộc danh mục sẽ không bị xóa khỏi hệ thống.
               </Typography>
             </Box>
@@ -1624,7 +1624,7 @@ export default function CategoryPage() {
               ...outlineButtonSx,
               border: 'none',
               bgcolor: statusDialog?.status === 'ACTIVE' ? '#FEF3C7' : C.cyan,
-              color: statusDialog?.status === 'ACTIVE' ? '#92400E' : '#0F172A',
+              color: statusDialog?.status === 'ACTIVE' ? '#92400E' : C.cyanInk,
               fontWeight: 800,
               '&:hover': {
                 bgcolor: statusDialog?.status === 'ACTIVE' ? '#FDE68A' : C.cyanHover

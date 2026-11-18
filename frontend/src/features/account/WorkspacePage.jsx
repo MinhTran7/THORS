@@ -42,23 +42,56 @@ import {
 
 import { useAuth } from 'features/auth/AuthProvider';
 import { getDashboardSummary } from '../../services/dashboardService';
-import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../customer/theme';
+import {
+  C as baseC,
+  cardSx as baseCardSx,
+  outlineButtonSx as baseOutlineButtonSx,
+  primaryButtonSx as basePrimaryButtonSx
+} from '../customer/theme';
 
-// Màu bổ sung theo Design System (PromotionPage.jsx)
+// Trang tổng quan của chủ shop / family dùng tông trầm đồng bộ với màn khách hàng:
+// cyan = nền nút chính / mục đang chọn (đen), cyanInk = chữ trên nền đó (trắng), teal = nhấn đỏ đô.
+const C = {
+  ...baseC,
+  cyan: '#111111',
+  cyanHover: '#2B2B2B',
+  cyanInk: '#FFFFFF',
+  teal: '#8A2B2B',
+  text: '#111111',
+  muted: '#5C5650',
+  border: '#E6E3DE',
+  borderLight: '#EFEBE5'
+};
+const primaryButtonSx = {
+  ...basePrimaryButtonSx,
+  bgcolor: C.cyan,
+  color: C.cyanInk,
+  '&:hover': { bgcolor: C.cyanHover, boxShadow: 'none' },
+  '&.Mui-disabled': { bgcolor: C.borderLight, color: '#8C857D' }
+};
+const outlineButtonSx = {
+  ...baseOutlineButtonSx,
+  color: C.text,
+  border: `1.5px solid ${C.border}`,
+  '&:hover': { bgcolor: '#FAF8F5', borderColor: C.cyan }
+};
+const cardSx = { ...baseCardSx, boxShadow: '0 24px 50px -30px rgba(17, 17, 17, 0.22), 0 0 0 1px #E6E3DE' };
+
+// Màu bổ sung (tông trầm)
 const T = {
-  title: '#0F172A',
-  subtle: '#94A3B8',
-  cyanText: '#0E7490',
-  cream: '#FFF7AE',
-  creamText: '#713F12'
+  title: '#111111',
+  subtle: '#8C857D',
+  cyanText: '#8A2B2B',
+  cream: '#F6F1E8',
+  creamText: '#6B4E16'
 };
 
 // Màu 3 kênh bán trên biểu đồ / thanh tỷ trọng
 // color: cột biểu đồ / thanh tỷ trọng; tint + iconColor: ô icon và nhãn % trong khung "Tỷ trọng theo kênh"
 const CHANNELS = [
-  { key: 'IN_STORE', label: 'Tại quầy', color: '#8EECF5', tint: '#E6FAFC', iconColor: '#0E7490', icon: <ShopOutlined /> },
-  { key: 'WEB', label: 'Website', color: '#0E7490', tint: '#E0F2F7', iconColor: '#0E7490', icon: <GlobalOutlined /> },
-  { key: 'FACEBOOK', label: 'Facebook', color: '#FCD34D', tint: '#FFF7AE', iconColor: '#713F12', icon: <FacebookOutlined /> }
+  { key: 'IN_STORE', label: 'Tại quầy', color: '#111111', tint: '#EFEBE5', iconColor: '#111111', icon: <ShopOutlined /> },
+  { key: 'WEB', label: 'Website', color: '#8A2B2B', tint: '#F5ECEC', iconColor: '#8A2B2B', icon: <GlobalOutlined /> },
+  { key: 'FACEBOOK', label: 'Facebook', color: '#C9B48A', tint: '#F6F1E8', iconColor: '#6B4E16', icon: <FacebookOutlined /> }
 ];
 
 const RANGES = [
@@ -131,7 +164,7 @@ function EmptyState({ message }) {
         alignItems: 'center',
         justifyContent: 'center',
         textAlign: 'center',
-        bgcolor: '#F8FAFC',
+        bgcolor: '#F7F5F2',
         border: `1.5px dashed ${C.border}`,
         borderRadius: 3,
         p: 3
@@ -153,10 +186,10 @@ function SummaryCard({ label, value, note, icon, highlight, warn, loading, to })
         display: 'block',
         height: '100%',
         textDecoration: 'none',
-        bgcolor: highlight ? '#F0FCFE' : C.surface,
+        bgcolor: highlight ? '#FAF8F5' : C.surface,
         border: `1.5px solid ${highlight ? C.cyan : C.border}`,
         transition: 'all 0.2s ease',
-        '&:hover': linked ? { boxShadow: '0 4px 12px rgba(0,0,0,0.04)', borderColor: highlight ? C.cyanHover : '#CBD5E1' } : {}
+        '&:hover': linked ? { boxShadow: '0 4px 12px rgba(0,0,0,0.04)', borderColor: highlight ? C.cyanHover : '#D6D0C7' } : {}
       }}
     >
       <CardContent sx={{ p: { xs: 2.5, sm: 3 }, '&:last-child': { pb: { xs: 2.5, sm: 3 } } }}>
@@ -168,7 +201,7 @@ function SummaryCard({ label, value, note, icon, highlight, warn, loading, to })
               height: 40,
               borderRadius: 2.5,
               bgcolor: warn ? T.cream : highlight ? C.cyan : C.borderLight,
-              color: warn ? T.creamText : T.title,
+              color: warn ? T.creamText : highlight ? C.cyanInk : T.title,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -367,7 +400,7 @@ function StoreDashboard({ account }) {
       ];
 
   return (
-    <Box sx={{ maxWidth: 1440, mx: 'auto', pb: 6, color: C.text }}>
+    <Box sx={{ pb: 6, color: C.text }}>
       {/* PAGE HEADER */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 2, mb: 3 }}>
         <Box>
@@ -398,7 +431,7 @@ function StoreDashboard({ account }) {
                   fontSize: 13,
                   bgcolor: active ? C.cyan : C.surface,
                   borderColor: active ? C.cyan : C.border,
-                  color: T.title,
+                  color: active ? C.cyanInk : T.title,
                   fontWeight: active ? 700 : 600,
                   '&:hover': { bgcolor: active ? C.cyanHover : C.borderLight }
                 }}
@@ -521,7 +554,7 @@ function StoreDashboard({ account }) {
                       p: 1.5,
                       borderRadius: 2.5,
                       border: `1px solid ${C.borderLight}`,
-                      bgcolor: empty ? C.surface : '#FAFCFE',
+                      bgcolor: empty ? C.surface : '#FAF8F5',
                       transition: 'border-color 0.2s ease',
                       '&:hover': { borderColor: C.border }
                     }}
@@ -616,7 +649,7 @@ function StoreDashboard({ account }) {
                     </TableHead>
                     <TableBody>
                       {data.topProducts.map((p, index) => (
-                        <TableRow key={p.productId} hover sx={{ '&:hover': { bgcolor: '#FAFCFE' } }}>
+                        <TableRow key={p.productId} hover sx={{ '&:hover': { bgcolor: '#FAF8F5' } }}>
                           <TableCell sx={{ py: 1.75, width: 48, fontWeight: 800, color: index === 0 ? T.cyanText : C.muted }}>
                             {index + 1}
                           </TableCell>
@@ -798,7 +831,7 @@ export default function WorkspacePage() {
   }
 
   return (
-    <Box sx={{ maxWidth: 1000, mx: 'auto', py: 4, color: C.text }}>
+    <Box sx={{ maxWidth: 1000, color: C.text }}>
       <Typography variant="h3" sx={{ fontWeight: 800, color: T.title, fontSize: { xs: 22, sm: 26 }, mb: 1 }}>
         Xin chào, {account?.fullName || 'Người dùng'}
       </Typography>
@@ -806,7 +839,7 @@ export default function WorkspacePage() {
 
       <Card sx={cardSx}>
         <CardContent sx={{ p: { xs: 2.5, sm: 4 } }}>
-          <Typography sx={{ fontSize: 14.5, color: '#334155', fontWeight: 500, mb: 3 }}>
+          <Typography sx={{ fontSize: 14.5, color: '#3A3530', fontWeight: 500, mb: 3 }}>
             Lựa chọn nghiệp vụ quản trị phù hợp với vai trò của bạn bên dưới:
           </Typography>
 

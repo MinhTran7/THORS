@@ -30,6 +30,7 @@ import {
   FilterSelect,
   PageHeader,
   Pager,
+  ResetFilterButton,
   SearchField,
   StatCard,
   StatRow,
@@ -164,10 +165,17 @@ export default function FamilyListPage() {
       </StatRow>
 
       <Toolbar>
-        <Box sx={{ flex: 1 }}>
-          <SearchField placeholder="Tìm theo tên, email hoặc số điện thoại" value={q} onChange={filter(setQ)} />
+        <Box sx={{ flex: '1 1 260px', minWidth: 240 }}>
+          <SearchField title="Tìm kiếm thành viên" placeholder="Tìm theo tên, email hoặc số điện thoại" value={q} onChange={filter(setQ)} />
         </Box>
-        <FilterSelect label="Lọc theo trạng thái" value={status} onChange={filter(setStatus)} options={STATUS_OPTIONS} />
+        <FilterSelect label="Trạng thái" value={status} onChange={filter(setStatus)} options={STATUS_OPTIONS} minWidth={180} />
+        <ResetFilterButton
+          onClick={() => {
+            setQ('');
+            setStatus(ALL);
+            setPage(0);
+          }}
+        />
       </Toolbar>
 
       <Box sx={{ ...cardSx, overflow: 'hidden' }}>

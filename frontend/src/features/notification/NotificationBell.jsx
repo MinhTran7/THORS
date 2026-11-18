@@ -110,7 +110,7 @@ export default function NotificationBell() {
             size="small"
             disabled={busy || unreadCount === 0}
             onClick={readAll}
-            sx={{ textTransform: 'none', fontWeight: 600, color: brand.inkOnCyan }}
+            sx={{ textTransform: 'none', fontWeight: 600, color: brand.teal }}
           >
             Đánh dấu tất cả đã đọc
           </Button>
@@ -140,13 +140,13 @@ export default function NotificationBell() {
                 py: 1.5,
                 borderBottom: `1px solid ${brand.line}`,
                 bgcolor: item.read ? brand.surface : brand.cyanSoft,
-                '&:hover': { bgcolor: item.read ? '#F6F6F1' : '#D9F4F7' }
+                '&:hover': { bgcolor: item.read ? '#FAF8F5' : '#E6E1D9' }
               }}
             >
               <Stack direction="row" spacing={1.25} alignItems="flex-start">
                 <Box
                   aria-label={item.read ? 'Đã đọc' : 'Chưa đọc'}
-                  sx={{ width: 8, height: 8, borderRadius: '50%', mt: 0.8, flexShrink: 0, bgcolor: item.read ? 'transparent' : brand.cyanHover }}
+                  sx={{ width: 8, height: 8, borderRadius: '50%', mt: 0.8, flexShrink: 0, bgcolor: item.read ? 'transparent' : brand.teal }}
                 />
                 <Box sx={{ minWidth: 0, flexGrow: 1 }}>
                   <Typography variant="subtitle2" noWrap sx={{ color: brand.ink, fontWeight: item.read ? 500 : 700 }}>
@@ -180,7 +180,7 @@ export default function NotificationBell() {
             component={RouterLink}
             to="/notifications"
             onClick={close}
-            sx={{ textTransform: 'none', fontWeight: 600, color: brand.inkOnCyan }}
+            sx={{ textTransform: 'none', fontWeight: 600, color: brand.teal }}
           >
             Xem tất cả thông báo
           </Button>

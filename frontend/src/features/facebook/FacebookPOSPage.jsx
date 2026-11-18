@@ -52,28 +52,28 @@ import { composeAddress, findPhoneInText, normalizePhone, parseAddressText, stri
 
 const EMPTY_ADDRESS = { province: null, ward: null, street: '' };
 
-// Bảng màu chuẩn đồng nhất theo toàn bộ hệ thống THORS
+// Bảng màu chuẩn đồng nhất theo toàn bộ hệ thống THORS (tông trầm, đồng bộ với màn khách hàng)
 const C = {
-  text: '#202D42',
-  muted: '#75869F',
-  border: '#E5EBF2',
-  main: '#8DE9F2',
-  selected: '#DDF7FA',
-  bg: '#F8FAFC',
-  disabled: '#F0F3F7',
+  text: '#111111',
+  muted: '#5C5650',
+  border: '#E6E3DE',
+  main: '#111111',
+  selected: '#EFEBE5',
+  bg: '#F7F5F2',
+  disabled: '#F2EFEA',
   success: '#1B7A43',
   danger: '#B42318'
 };
 
 // Nhãn đặt phía trên ô nhập (Design System) cho form "Thông tin người nhận"
-const formLabelSx = { fontSize: 12.5, fontWeight: 600, color: '#1E293B', mb: 0.5 };
+const formLabelSx = { fontSize: 12.5, fontWeight: 600, color: C.text, mb: 0.5 };
 const formInputSx = {
   '& .MuiOutlinedInput-root': {
     borderRadius: '8px',
     fontSize: 12.5,
-    '& fieldset': { borderColor: '#E2E8F0' },
-    '&:hover fieldset': { borderColor: '#8EECF5' },
-    '&.Mui-focused fieldset': { borderColor: '#8EECF5' }
+    '& fieldset': { borderColor: C.border },
+    '&:hover fieldset': { borderColor: C.main },
+    '&.Mui-focused fieldset': { borderColor: C.main }
   },
   '& .MuiFormHelperText-root': { mx: 0.25, fontSize: 11 }
 };
@@ -1011,7 +1011,7 @@ export default function FacebookPOSPage() {
                     <SearchOutlined style={{ color: C.muted }} />
                   </InputAdornment>
                 ),
-                sx: { borderRadius: '8px', fontSize: 13, bgcolor: '#F8FAFC' }
+                sx: { borderRadius: '8px', fontSize: 13, bgcolor: '#F7F5F2' }
               }}
             />
           </Box>
@@ -1019,7 +1019,7 @@ export default function FacebookPOSPage() {
           <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: 1 }}>
             {conversations.length === 0 ? (
               <Box sx={{ textAlign: 'center', py: 6, px: 2 }}>
-                <MessageOutlined style={{ fontSize: 32, color: '#CBD5E1', marginBottom: 8 }} />
+                <MessageOutlined style={{ fontSize: 32, color: '#D6D0C7', marginBottom: 8 }} />
                 <Typography sx={{ fontSize: 13, color: C.muted, fontWeight: 600 }}>Chưa có tin nhắn mới từ Fanpage</Typography>
                 <Typography sx={{ fontSize: 11, color: C.muted, mt: 0.5 }}>Gửi tin nhắn vào Page THORS để bắt đầu hội thoại!</Typography>
               </Box>
@@ -1046,11 +1046,11 @@ export default function FacebookPOSPage() {
                         border: `1px solid ${isSelected ? C.main : 'transparent'}`,
                         bgcolor: isSelected ? C.selected : '#fff',
                         transition: 'all 0.15s ease',
-                        '&:hover': { bgcolor: isSelected ? C.selected : '#F1F5F9' }
+                        '&:hover': { bgcolor: isSelected ? C.selected : '#EFEBE5' }
                       }}
                     >
                       <Stack direction="row" spacing={1.25} sx={{ alignItems: 'center' }}>
-                        <Avatar src={c.avatar} sx={{ bgcolor: isSelected ? '#087F8C' : '#94A3B8', width: 38, height: 38, fontSize: 14 }}>
+                        <Avatar src={c.avatar} sx={{ bgcolor: isSelected ? '#087F8C' : '#8C857D', width: 38, height: 38, fontSize: 14 }}>
                           {c.name ? c.name[0] : <UserOutlined />}
                         </Avatar>
                         <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -1114,7 +1114,7 @@ export default function FacebookPOSPage() {
             <Box
               ref={chatBoxRef}
               onScroll={handleChatScroll}
-              sx={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', p: 2, bgcolor: '#F8FAFC' }}
+              sx={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', p: 2, bgcolor: '#F7F5F2' }}
             >
               {!selectedPsid ? (
                 <Box sx={{ textAlign: 'center', py: 10 }}>
@@ -1142,8 +1142,8 @@ export default function FacebookPOSPage() {
                             p: 1.5,
                             borderRadius: isShop ? '14px 14px 2px 14px' : '14px 14px 14px 2px',
                             bgcolor: isShop ? C.main : '#fff',
-                            color: isShop ? '#0E3A41' : C.text,
-                            border: isShop ? '1px solid #74DCE7' : `1px solid ${C.border}`,
+                            color: isShop ? '#FFFFFF' : C.text,
+                            border: isShop ? `1px solid ${C.main}` : `1px solid ${C.border}`,
                             boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
                             whiteSpace: 'pre-wrap',
                             // Link / chuỗi dài tự xuống dòng thay vì làm tràn ngang khung chat
@@ -1205,10 +1205,10 @@ export default function FacebookPOSPage() {
                   py: 0.5,
                   borderRadius: 99,
                   bgcolor: unseenCount > 0 ? C.main : '#fff',
-                  color: '#0F172A',
-                  border: `1px solid ${unseenCount > 0 ? '#74DCE7' : C.border}`,
+                  color: unseenCount > 0 ? '#FFFFFF' : C.text,
+                  border: `1px solid ${unseenCount > 0 ? C.main : C.border}`,
                   boxShadow: '0 4px 12px rgba(15, 23, 42, 0.12)',
-                  '&:hover': { bgcolor: unseenCount > 0 ? '#76E5EF' : '#F8FAFC' }
+                  '&:hover': { bgcolor: unseenCount > 0 ? '#2B2B2B' : C.bg }
                 }}
               >
                 {unseenCount > 0 ? `↓ ${unseenCount} tin nhắn mới` : '↓ Tin mới nhất'}
@@ -1227,7 +1227,7 @@ export default function FacebookPOSPage() {
                 onClick={() => handleSendMessage(qr)}
                 sx={{
                   fontSize: 11,
-                  bgcolor: '#F1F5F9',
+                  bgcolor: '#EFEBE5',
                   borderRadius: '6px',
                   '&:hover': { bgcolor: C.selected }
                 }}
@@ -1350,7 +1350,7 @@ export default function FacebookPOSPage() {
                       setCustomerPhone(detectedPhone);
                       phoneManualRef.current = false;
                     }}
-                    sx={{ mt: 0.5, fontSize: 11, cursor: 'pointer', bgcolor: '#E0F2FE', color: '#0E7490', fontWeight: 600 }}
+                    sx={{ mt: 0.5, fontSize: 11, cursor: 'pointer', bgcolor: '#EFEBE5', color: '#8A2B2B', fontWeight: 600 }}
                   />
                 )}
               </Box>
@@ -1368,10 +1368,10 @@ export default function FacebookPOSPage() {
                         sx={{
                           fontSize: 11,
                           cursor: 'pointer',
-                          bgcolor: '#FFF7AE',
-                          color: '#713F12',
+                          bgcolor: '#F6F1E8',
+                          color: '#6B4E16',
                           fontWeight: newAddressInChat ? 700 : 600,
-                          border: newAddressInChat ? '1px solid #EAB308' : 'none'
+                          border: newAddressInChat ? '1px solid #C9B48A' : 'none'
                         }}
                       />
                     </Tooltip>
@@ -1398,8 +1398,8 @@ export default function FacebookPOSPage() {
                   mb: 1.5,
                   p: 1.2,
                   borderRadius: '8px',
-                  bgcolor: '#FEF9C3',
-                  border: '1px dashed #EAB308',
+                  bgcolor: '#F6F1E8',
+                  border: '1px dashed #C9B48A',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
@@ -1408,10 +1408,10 @@ export default function FacebookPOSPage() {
               >
                 <Box sx={{ minWidth: 0 }}>
                   <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
-                    <BulbOutlined style={{ color: '#CA8A04', fontSize: 13 }} />
-                    <Typography sx={{ fontSize: 11, fontWeight: 700, color: '#854D0E' }}>Phát hiện trong hội thoại:</Typography>
+                    <BulbOutlined style={{ color: '#8A2B2B', fontSize: 13 }} />
+                    <Typography sx={{ fontSize: 11, fontWeight: 700, color: '#6B4E16' }}>Phát hiện trong hội thoại:</Typography>
                   </Stack>
-                  <Typography sx={{ fontSize: 11, color: '#713F12', fontWeight: 600 }} noWrap>
+                  <Typography sx={{ fontSize: 11, color: '#6B4E16', fontWeight: 600 }} noWrap>
                     {detectedProductSuggestion.product.productName}
                   </Typography>
                 </Box>
@@ -1420,8 +1420,8 @@ export default function FacebookPOSPage() {
                   variant="contained"
                   onClick={() => setSelectedProduct(detectedProductSuggestion.product)}
                   sx={{
-                    bgcolor: '#EAB308',
-                    color: '#713F12',
+                    bgcolor: '#111111',
+                    color: '#FFFFFF',
                     fontSize: 11,
                     fontWeight: 700,
                     textTransform: 'none',
@@ -1430,7 +1430,7 @@ export default function FacebookPOSPage() {
                     minWidth: 'auto',
                     boxShadow: 'none',
                     whiteSpace: 'nowrap',
-                    '&:hover': { bgcolor: '#CA8A04', color: '#fff' }
+                    '&:hover': { bgcolor: '#2B2B2B', color: '#fff' }
                   }}
                 >
                   + Chọn ngay
@@ -1502,7 +1502,7 @@ export default function FacebookPOSPage() {
                           ) : (
                             <Avatar
                               variant="rounded"
-                              sx={{ width: 32, height: 32, bgcolor: '#E0F2FE', color: '#0284C7', fontSize: 12, fontWeight: 700 }}
+                              sx={{ width: 32, height: 32, bgcolor: '#EFEBE5', color: '#8A2B2B', fontSize: 12, fontWeight: 700 }}
                             >
                               {(p.productName || 'P').charAt(0).toUpperCase()}
                             </Avatar>
@@ -1518,7 +1518,7 @@ export default function FacebookPOSPage() {
                           <Chip
                             size="small"
                             label="Chọn"
-                            sx={{ fontSize: 10, height: 22, bgcolor: '#E0F2FE', color: '#0284C7', fontWeight: 700, cursor: 'pointer' }}
+                            sx={{ fontSize: 10, height: 22, bgcolor: '#EFEBE5', color: '#8A2B2B', fontWeight: 700, cursor: 'pointer' }}
                           />
                         </Box>
                       );
@@ -1561,13 +1561,13 @@ export default function FacebookPOSPage() {
                     sx={{
                       fontSize: 11,
                       textTransform: 'none',
-                      borderColor: '#0284C7',
-                      color: '#0284C7',
+                      borderColor: '#8A2B2B',
+                      color: '#8A2B2B',
                       py: 0.25,
                       px: 1,
                       borderRadius: '6px',
                       whiteSpace: 'nowrap',
-                      '&:hover': { bgcolor: '#E0F2FE', borderColor: '#0284C7' }
+                      '&:hover': { bgcolor: '#EFEBE5', borderColor: '#8A2B2B' }
                     }}
                   >
                     Đổi món
@@ -1606,28 +1606,28 @@ export default function FacebookPOSPage() {
                               position: 'relative',
                               p: '8px 10px',
                               borderRadius: '10px',
-                              border: isSelected ? '1.5px solid #0E7490' : `1px ${outOfStock ? 'dashed' : 'solid'} ${C.border}`,
-                              bgcolor: isSelected ? '#F0FCFE' : outOfStock ? '#F8FAFC' : '#fff',
-                              boxShadow: isSelected ? '0 0 0 3px rgba(142, 236, 245, 0.35)' : 'none',
+                              border: isSelected ? '1.5px solid #8A2B2B' : `1px ${outOfStock ? 'dashed' : 'solid'} ${C.border}`,
+                              bgcolor: isSelected ? '#F5ECEC' : outOfStock ? C.bg : '#fff',
+                              boxShadow: isSelected ? '0 0 0 3px rgba(138, 43, 43, 0.12)' : 'none',
                               cursor: outOfStock ? 'not-allowed' : 'pointer',
                               transition: 'all 0.15s ease',
-                              '&:hover': !outOfStock && !isSelected ? { borderColor: '#8EECF5', bgcolor: '#FAFEFF' } : {}
+                              '&:hover': !outOfStock && !isSelected ? { borderColor: C.main, bgcolor: '#FAF8F5' } : {}
                             }}
                           >
                             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 0.5 }}>
                               <Typography
-                                sx={{ fontSize: 12, fontWeight: 800, color: outOfStock ? '#94A3B8' : isSelected ? '#0E7490' : '#0F172A' }}
+                                sx={{ fontSize: 12, fontWeight: 800, color: outOfStock ? '#8C857D' : isSelected ? '#8A2B2B' : C.text }}
                                 noWrap
                               >
                                 {v.size} / {v.color}
                               </Typography>
-                              {isSelected && <CheckOutlined style={{ fontSize: 11, color: '#0E7490' }} />}
+                              {isSelected && <CheckOutlined style={{ fontSize: 11, color: '#8A2B2B' }} />}
                             </Box>
                             <Typography
                               sx={{
                                 fontSize: 12,
                                 fontWeight: 700,
-                                color: outOfStock ? '#94A3B8' : '#0F172A',
+                                color: outOfStock ? '#8C857D' : '#111111',
                                 mt: 0.25,
                                 textDecoration: outOfStock ? 'line-through' : 'none'
                               }}
@@ -1643,14 +1643,14 @@ export default function FacebookPOSPage() {
                                   borderRadius: '6px',
                                   fontSize: 10.5,
                                   fontWeight: 700,
-                                  bgcolor: outOfStock ? '#FEE2E2' : stock <= 3 ? '#FFF7AE' : '#E7F6F1',
-                                  color: outOfStock ? '#B91C1C' : stock <= 3 ? '#713F12' : '#168B70'
+                                  bgcolor: outOfStock ? '#FEE2E2' : stock <= 3 ? '#F6F1E8' : '#E7F6F1',
+                                  color: outOfStock ? '#B91C1C' : stock <= 3 ? '#6B4E16' : '#168B70'
                                 }}
                               >
                                 {outOfStock ? 'Hết hàng' : `Còn bán ${stock}`}
                               </Box>
                               {inCart > 0 && (
-                                <Box component="span" sx={{ fontSize: 10.5, fontWeight: 600, color: '#0E7490' }}>
+                                <Box component="span" sx={{ fontSize: 10.5, fontWeight: 600, color: '#8A2B2B' }}>
                                   · Trong giỏ {inCart}
                                 </Box>
                               )}
@@ -1668,15 +1668,15 @@ export default function FacebookPOSPage() {
                       startIcon={<ShoppingOutlined />}
                       sx={{
                         height: 40,
-                        bgcolor: '#8EECF5',
-                        color: '#0F172A',
+                        bgcolor: C.main,
+                        color: '#FFFFFF',
                         borderRadius: '10px',
                         textTransform: 'none',
                         fontWeight: 700,
                         fontSize: 13,
                         boxShadow: 'none',
-                        '&:hover': { bgcolor: '#76E5EF', boxShadow: '0 2px 8px rgba(142, 236, 245, 0.4)' },
-                        '&.Mui-disabled': { bgcolor: '#E2E8F0', color: '#94A3B8' }
+                        '&:hover': { bgcolor: '#2B2B2B', boxShadow: '0 2px 8px rgba(17, 17, 17, 0.25)' },
+                        '&.Mui-disabled': { bgcolor: C.border, color: '#8C857D' }
                       }}
                     >
                       {selectedVariant
@@ -1707,7 +1707,7 @@ export default function FacebookPOSPage() {
                     key={item.variantId}
                     sx={{
                       p: 1,
-                      bgcolor: '#F8FAFC',
+                      bgcolor: '#F7F5F2',
                       borderRadius: '8px',
                       border: `1px solid ${C.border}`
                     }}
@@ -1836,7 +1836,7 @@ export default function FacebookPOSPage() {
 
           {/* Thông tin chuyển khoản */}
           {qrModal.accountNumber && (
-            <Box sx={{ mt: 2, p: 1.5, bgcolor: '#F8FAFC', borderRadius: '10px', border: `1px solid ${C.border}`, textAlign: 'left' }}>
+            <Box sx={{ mt: 2, p: 1.5, bgcolor: '#F7F5F2', borderRadius: '10px', border: `1px solid ${C.border}`, textAlign: 'left' }}>
               <Typography sx={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>TÀI KHOẢN THỤ HƯỞNG</Typography>
               <Typography sx={{ fontSize: 12, fontWeight: 700, color: C.text, mt: 0.25 }}>
                 {qrModal.bankName} - {qrModal.accountName}

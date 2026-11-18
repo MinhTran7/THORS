@@ -75,8 +75,8 @@ function InfoCard({ label, value, highlight = false }) {
       sx={{
         flex: 1,
         minWidth: 0,
-        bgcolor: highlight ? '#F0FDFA' : '#F8FAFC',
-        border: `1.5px solid ${highlight ? '#99F6E4' : C.border}`,
+        bgcolor: highlight ? '#EFEBE5' : '#F7F5F2',
+        border: `1.5px solid ${highlight ? '#D9B4B4' : C.border}`,
         borderRadius: 3,
         p: 2.5
       }}
@@ -85,7 +85,7 @@ function InfoCard({ label, value, highlight = false }) {
         sx={{
           fontSize: 13,
           fontWeight: 700,
-          color: highlight ? '#0F766E' : C.muted
+          color: highlight ? '#8A2B2B' : C.muted
         }}
       >
         {label}
@@ -95,7 +95,7 @@ function InfoCard({ label, value, highlight = false }) {
         sx={{
           fontSize: { xs: 20, md: 24 },
           fontWeight: 800,
-          color: '#0F172A',
+          color: '#111111',
           mt: 0.75,
           overflowWrap: 'anywhere'
         }}
@@ -216,7 +216,7 @@ export default function ProductDetailPage() {
 
   if (error || !data) {
     return (
-      <Box sx={{ maxWidth: 1440, mx: 'auto', p: 3, color: C.text }}>
+      <Box sx={{ color: C.text }}>
         <Alert severity="error" sx={{ mb: 2.5, borderRadius: 2.5, fontSize: 13.5, fontWeight: 600 }}>
           {error || 'Không tìm thấy thông tin sản phẩm.'}
         </Alert>
@@ -258,8 +258,6 @@ export default function ProductDetailPage() {
   return (
     <Box
       sx={{
-        maxWidth: 1440,
-        mx: 'auto',
         pb: 6,
         color: C.text
       }}
@@ -275,7 +273,7 @@ export default function ProductDetailPage() {
             color: C.muted,
             mb: 1.5,
             p: 0,
-            '&:hover': { bgcolor: 'transparent', color: '#0F172A' }
+            '&:hover': { bgcolor: 'transparent', color: '#111111' }
           }}
         >
           Quay lại danh sách sản phẩm
@@ -287,7 +285,7 @@ export default function ProductDetailPage() {
               variant="h3"
               sx={{
                 fontWeight: 800,
-                color: '#0F172A',
+                color: '#111111',
                 fontSize: { xs: 22, sm: 26 }
               }}
             >
@@ -326,7 +324,7 @@ export default function ProductDetailPage() {
               aspectRatio: '1 / 1',
               borderRadius: 3.5,
               overflow: 'hidden',
-              bgcolor: '#F8FAFC',
+              bgcolor: '#F7F5F2',
               border: `1px solid ${C.border}`,
               display: 'flex',
               alignItems: 'center',
@@ -412,7 +410,7 @@ export default function ProductDetailPage() {
         <Grid size={{ xs: 12, md: 8 }}>
           <Card sx={{ ...cardSx, height: '100%' }}>
             <Box sx={{ p: { xs: 2.5, sm: 3.5 } }}>
-              <Box sx={{ mb: 1.5, ...badgeSx('#F0FDFA', '#0F766E', '#99F6E4') }}>
+              <Box sx={{ mb: 1.5, ...badgeSx('#EFEBE5', '#8A2B2B', '#D9B4B4') }}>
                 {product.categoryName || 'Chưa phân loại'}
               </Box>
 
@@ -420,7 +418,7 @@ export default function ProductDetailPage() {
                 sx={{
                   fontSize: { xs: 20, md: 25 },
                   fontWeight: 800,
-                  color: '#0F172A'
+                  color: '#111111'
                 }}
               >
                 {product.productName}
@@ -522,13 +520,13 @@ export default function ProductDetailPage() {
               sx={{
                 fontSize: 16,
                 fontWeight: 800,
-                color: '#0F172A'
+                color: '#111111'
               }}
             >
               Ma trận biến thể &amp; tồn kho
             </Typography>
 
-            <Box sx={badgeSx('#FEF9C3', '#854D0E', '#FDE047')}>
+            <Box sx={badgeSx('#F6F1E8', '#6B4E16', '#E6DCC8')}>
               Tổng tồn: {totalStock} cái
             </Box>
           </Box>
@@ -601,7 +599,7 @@ export default function ProductDetailPage() {
 
                     if (!activeVariant) {
                       availability = 'Đã ẩn';
-                      badgeProps = { bg: '#F0F2F4', color: '#75869F' };
+                      badgeProps = { bg: '#EFEBE5', color: '#5C5650' };
                     } else if (stock <= 0) {
                       availability = 'Hết hàng';
                       badgeProps = { bg: '#FEE2E2', color: '#DC2626' };
@@ -616,7 +614,7 @@ export default function ProductDetailPage() {
                         hover
                         sx={{ '&:hover': { bgcolor: '#FAFCFE' } }}
                       >
-                        <TableCell sx={{ pl: 3, fontSize: 13.5, fontWeight: 700, color: '#0F172A' }}>
+                        <TableCell sx={{ pl: 3, fontSize: 13.5, fontWeight: 700, color: '#111111' }}>
                           {variant.size || '—'}
                         </TableCell>
 
@@ -640,11 +638,11 @@ export default function ProductDetailPage() {
                           <Box sx={{ fontSize: 11.5 }}>#{variant.detailId}</Box>
                         </TableCell>
 
-                        <TableCell sx={{ fontSize: 13.5, fontWeight: 800, color: '#0F172A' }}>
+                        <TableCell sx={{ fontSize: 13.5, fontWeight: 800, color: '#111111' }}>
                           {formatPrice(variant.price)}
                         </TableCell>
 
-                        <TableCell sx={{ fontSize: 13.5, fontWeight: 800, color: stock <= 0 ? '#DC2626' : '#0F172A' }}>
+                        <TableCell sx={{ fontSize: 13.5, fontWeight: 800, color: stock <= 0 ? '#DC2626' : '#111111' }}>
                           {stock}
                           {sellable !== stock && (
                             <Box component="span" sx={{ fontSize: 12, fontWeight: 600, color: C.muted, ml: 0.75 }}>
@@ -758,7 +756,7 @@ export default function ProductDetailPage() {
                 sx={{
                   fontSize: 16,
                   fontWeight: 800,
-                  color: '#0F172A',
+                  color: '#111111',
                   mb: 2.5
                 }}
               >
@@ -788,7 +786,7 @@ export default function ProductDetailPage() {
                       sx={
                         activeProduct
                           ? badgeSx('#F0FDF4', '#166534', '#BBF7D0')
-                          : badgeSx('#F1F5F9', '#475569', '#E2E8F0')
+                          : badgeSx('#EFEBE5', '#5C5650', '#E6E3DE')
                       }
                     >
                       {activeProduct ? 'Đang hoạt động' : 'Đã ẩn'}
@@ -829,7 +827,7 @@ export default function ProductDetailPage() {
                       sx={
                         onlineEnabled
                           ? badgeSx('#F0FDF4', '#166534', '#BBF7D0')
-                          : badgeSx('#F1F5F9', '#475569', '#E2E8F0')
+                          : badgeSx('#EFEBE5', '#5C5650', '#E6E3DE')
                       }
                     >
                       {onlineEnabled ? 'Đang bật' : 'Đang tắt'}
@@ -854,7 +852,7 @@ export default function ProductDetailPage() {
             <Box
               sx={{
                 bgcolor: '#FFFDE7',
-                border: '1.5px solid #FDE047',
+                border: '1.5px solid #E6DCC8',
                 borderRadius: 3,
                 p: 2.5
               }}
@@ -886,7 +884,7 @@ export default function ProductDetailPage() {
                   <Typography
                     sx={{
                       fontSize: 12.5,
-                      color: '#713F12',
+                      color: '#6B4E16',
                       mt: 0.5,
                       lineHeight: 1.6
                     }}

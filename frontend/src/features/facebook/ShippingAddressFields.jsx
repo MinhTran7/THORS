@@ -5,12 +5,12 @@ import { CheckCircleFilled, EnvironmentOutlined, ExclamationCircleFilled, InfoCi
 import { fetchProvinces, fetchWards } from '../cart/vnAddress';
 import { filterByName } from './addressParser';
 
-// Màu theo Design System THORS
+// Màu theo Design System THORS (tông trầm, đồng bộ với màn khách hàng)
 const C = {
-  text: '#1E293B',
-  muted: '#64748B',
-  border: '#E2E8F0',
-  cyan: '#8EECF5',
+  text: '#111111',
+  muted: '#5C5650',
+  border: '#E6E3DE',
+  cyan: '#111111',
   error: '#EF4444'
 };
 
@@ -33,8 +33,8 @@ const CHECK_VIEW = {
   HOUSE: { bg: '#E7F6F1', color: '#168B70', icon: <CheckCircleFilled />, text: 'Tìm thấy chính xác trên bản đồ.' },
   STREET: { bg: '#E7F6F1', color: '#168B70', icon: <CheckCircleFilled />, text: 'Tìm thấy tên đường trên bản đồ (chưa có số nhà).' },
   AREA: {
-    bg: '#FFF7AE',
-    color: '#713F12',
+    bg: '#F6F1E8',
+    color: '#6B4E16',
     icon: <InfoCircleFilled />,
     text: 'Chỉ khớp tới phường/xã — nên hỏi lại khách số nhà, tên đường cho rõ.'
   },
@@ -45,7 +45,7 @@ const CHECK_VIEW = {
     text: 'Không tìm thấy trên bản đồ. Owner sẽ không xác nhận được đơn — hãy kiểm tra lại với khách.'
   },
   UNAVAILABLE: {
-    bg: '#F1F5F9',
+    bg: '#EFEBE5',
     color: C.muted,
     icon: <InfoCircleFilled />,
     text: 'Dịch vụ bản đồ (Goong / OpenStreetMap) không phản hồi, chưa kiểm tra được. Vẫn tạo đơn được.'

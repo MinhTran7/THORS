@@ -413,7 +413,7 @@ export default function EditProductPage() {
   // ==========================================
 
   return (
-    <Box sx={{ maxWidth: 1440, mx: 'auto', pb: 6, color: C.text }}>
+    <Box sx={{ pb: 6, color: C.text }}>
       {/* HEADER */}
       <Box sx={{ mb: 3.5 }}>
         <Button
@@ -425,7 +425,7 @@ export default function EditProductPage() {
             color: C.muted,
             mb: 1.5,
             p: 0,
-            '&:hover': { bgcolor: 'transparent', color: '#0F172A' }
+            '&:hover': { bgcolor: 'transparent', color: '#111111' }
           }}
         >
           Quay lại chi tiết sản phẩm
@@ -437,7 +437,7 @@ export default function EditProductPage() {
               variant="h3"
               sx={{
                 fontWeight: 800,
-                color: '#0F172A',
+                color: '#111111',
                 fontSize: { xs: 22, sm: 26 }
               }}
             >
@@ -497,7 +497,7 @@ export default function EditProductPage() {
                 sx={{
                   fontSize: 16,
                   fontWeight: 800,
-                  color: '#0F172A',
+                  color: '#111111',
                   mb: 2.5
                 }}
               >
@@ -616,7 +616,7 @@ export default function EditProductPage() {
                     sx={{
                       fontSize: 16,
                       fontWeight: 800,
-                      color: '#0F172A'
+                      color: '#111111'
                     }}
                   >
                     Biến thể sản phẩm
@@ -651,7 +651,7 @@ export default function EditProductPage() {
                       p: 2.5,
                       border: `1.5px solid ${C.borderLight}`,
                       borderRadius: 3,
-                      bgcolor: '#F8FAFC'
+                      bgcolor: '#F7F5F2'
                     }}
                   >
                     <Box
@@ -666,7 +666,7 @@ export default function EditProductPage() {
                         sx={{
                           fontSize: 14,
                           fontWeight: 800,
-                          color: '#0F172A'
+                          color: '#111111'
                         }}
                       >
                         {variant.detailId != null
@@ -689,8 +689,8 @@ export default function EditProductPage() {
                               px: 1.25,
                               py: 0.35,
                               borderRadius: 1.75,
-                              bgcolor: '#FFF7AE',
-                              color: '#713F12',
+                              bgcolor: '#F6F1E8',
+                              color: '#6B4E16',
                               fontSize: 12,
                               fontWeight: 600
                             }}
@@ -798,7 +798,7 @@ export default function EditProductPage() {
                 sx={{
                   fontSize: 16,
                   fontWeight: 800,
-                  color: '#0F172A',
+                  color: '#111111',
                   mb: 0.5
                 }}
               >
@@ -879,7 +879,7 @@ export default function EditProductPage() {
                                 py: 0.25,
                                 borderRadius: 1.5,
                                 bgcolor: C.cyan,
-                                color: '#0F172A',
+                                color: C.cyanInk,
                                 fontSize: 11,
                                 fontWeight: 700
                               }}
@@ -900,7 +900,7 @@ export default function EditProductPage() {
                                     size="small"
                                     disabled={imageBusy}
                                     onClick={() => handleSetPrimaryImage(image.imageId)}
-                                    sx={{ bgcolor: 'rgba(255,255,255,0.9)', color: '#64748B', '&:hover': { bgcolor: '#fff', color: '#0F172A' } }}
+                                    sx={{ bgcolor: 'rgba(255,255,255,0.9)', color: '#5C5650', '&:hover': { bgcolor: '#fff', color: '#111111' } }}
                                   >
                                     <StarOutlined style={{ fontSize: 15 }} />
                                   </IconButton>
@@ -914,7 +914,7 @@ export default function EditProductPage() {
                                   size="small"
                                   disabled={imageBusy || images.length <= 1}
                                   onClick={() => handleDeleteImage(image.imageId)}
-                                  sx={{ bgcolor: 'rgba(255,255,255,0.9)', color: '#64748B', '&:hover': { bgcolor: '#fff', color: C.error } }}
+                                  sx={{ bgcolor: 'rgba(255,255,255,0.9)', color: '#5C5650', '&:hover': { bgcolor: '#fff', color: C.error } }}
                                 >
                                   <DeleteOutlined style={{ fontSize: 15 }} />
                                 </IconButton>
@@ -938,11 +938,11 @@ export default function EditProductPage() {
               )}
             </Card>
 
-            {/* GUIDELINES (PHUOC'S TEAL BOX) */}
+            {/* GUIDELINES (tông trầm: nền be, viền đỏ đô nhạt) */}
             <Box
               sx={{
-                bgcolor: '#F0FDFA',
-                border: '1px solid #99F6E4',
+                bgcolor: '#EFEBE5',
+                border: '1px solid #D9B4B4',
                 borderRadius: 3,
                 p: 2.5
               }}
@@ -951,7 +951,7 @@ export default function EditProductPage() {
                 sx={{
                   fontSize: 14,
                   fontWeight: 800,
-                  color: '#0F766E',
+                  color: '#8A2B2B',
                   mb: 0.5
                 }}
               >
@@ -961,7 +961,7 @@ export default function EditProductPage() {
               <Typography
                 sx={{
                   fontSize: 12.5,
-                  color: '#115E59',
+                  color: '#5C5650',
                   lineHeight: 1.7
                 }}
               >

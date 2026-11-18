@@ -9,8 +9,8 @@ import { C } from '../customer/theme';
 const TARGET_TONE = {
   MEN: { bg: '#EFF6FF', color: '#1D4ED8', border: '#BFDBFE' },
   WOMEN: { bg: '#FDF2F8', color: '#BE185D', border: '#FBCFE8' },
-  KIDS: { bg: '#FFF7AE', color: '#713F12', border: '#FDE047' },
-  UNISEX: { bg: '#F0FCFE', color: '#0E7490', border: '#8EECF5' }
+  KIDS: { bg: '#F6F1E8', color: '#6B4E16', border: '#E6DCC8' },
+  UNISEX: { bg: '#EFEBE5', color: '#8A2B2B', border: '#D9B4B4' }
 };
 
 // Bỏ dấu để gõ "giay nu" vẫn ra "Giày nữ"

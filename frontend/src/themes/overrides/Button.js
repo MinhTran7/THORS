@@ -30,10 +30,11 @@ function getColorStyle({ variant, color, theme }) {
     case 'contained':
       if (color === 'primary') {
         return {
-          backgroundColor: '#A8F1F8',
-          color: '#0E3A41',
+          // Nút chính kiểu màn khách hàng: nền đen, chữ trắng
+          backgroundColor: '#111111',
+          color: '#FFFFFF',
           fontWeight: 800,
-          '&:hover': { backgroundColor: '#8FE6EF' },
+          '&:hover': { backgroundColor: '#2B2B2B' },
           ...commonShadow
         };
       }

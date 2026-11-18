@@ -30,11 +30,11 @@ export function OutlineButton({ sx, ...props }) {
       sx={{
         bgcolor: brand.surface,
         border: `1.5px solid ${brand.line}`,
-        color: '#374151',
+        color: brand.ink,
         fontWeight: 700,
         borderRadius: '12px',
         textTransform: 'none',
-        '&:hover': { bgcolor: '#FAFDFD', border: `1.5px solid ${brand.cyan}` },
+        '&:hover': { bgcolor: '#FAF8F5', border: `1.5px solid ${brand.cyan}` },
         ...sx
       }}
     />
@@ -42,7 +42,7 @@ export function OutlineButton({ sx, ...props }) {
 }
 
 export const BrandSwitch = styled(Switch)({
-  '& .MuiSwitch-track': { backgroundColor: '#D5D7D0', opacity: 1 },
+  '& .MuiSwitch-track': { backgroundColor: '#D6D0C7', opacity: 1 },
   '& .MuiSwitch-switchBase.Mui-checked': { color: '#fff' },
   '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: brand.cyan, opacity: 1 },
   '& .MuiSwitch-switchBase.Mui-disabled + .MuiSwitch-track': { opacity: 0.5 }

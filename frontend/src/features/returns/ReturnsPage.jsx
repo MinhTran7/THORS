@@ -12,17 +12,14 @@ import {
   TableHead,
   TableRow,
   Chip,
-  TextField,
-  InputAdornment,
   Alert,
   CircularProgress,
   Tooltip,
   Divider,
   Paper
 } from '@mui/material';
-import { Pager } from 'features/account/components/Blocks';
+import { Pager, ResetFilterButton, SearchField, Toolbar } from 'features/account/components/Blocks';
 import {
-  SearchOutlined,
   PlusOutlined,
   RollbackOutlined,
   EyeOutlined,
@@ -36,11 +33,12 @@ import CreateReturnDialog from './CreateReturnDialog';
 import ReturnDetailDialog from './ReturnDetailDialog';
 
 const COLORS = {
-  text: '#202D42',
-  muted: '#75869F',
-  border: '#E5EBF2',
-  cyan: '#8DE9F2',
-  cyanLight: '#EAFBFD',
+  // Tông trầm đồng bộ với màn khách hàng: cyan = nền nút chính (đen), cyanLight = nền be nhạt
+  text: '#111111',
+  muted: '#5C5650',
+  border: '#E6E3DE',
+  cyan: '#111111',
+  cyanLight: '#EFEBE5',
   green: '#25856A',
   red: '#D04D4D',
   yellow: '#E59A00'
@@ -65,7 +63,7 @@ function getStatusChip(status) {
     case 'PENDING':
       return <Chip size="small" label="Chờ xử lý" sx={{ bgcolor: '#FFF7E6', color: COLORS.yellow, fontWeight: 700, fontSize: 11 }} />;
     case 'APPROVED':
-      return <Chip size="small" label="Đã duyệt" sx={{ bgcolor: '#EAFBFD', color: '#0E7A88', fontWeight: 700, fontSize: 11 }} />;
+      return <Chip size="small" label="Đã duyệt" sx={{ bgcolor: '#EFEBE5', color: '#8A2B2B', fontWeight: 700, fontSize: 11 }} />;
     case 'RECEIVED':
       return <Chip size="small" label="Đã nhận hàng" sx={{ bgcolor: '#E8F6F0', color: COLORS.green, fontWeight: 700, fontSize: 11 }} />;
     case 'COMPLETED':
@@ -160,7 +158,7 @@ export default function ReturnsPage() {
   ];
 
   return (
-    <Box sx={{ maxWidth: 1440, mx: 'auto', p: { xs: 2, sm: 3 } }}>
+    <Box>
       {/* HEADER */}
       <Stack
         direction={{ xs: 'column', sm: 'row' }}
@@ -204,11 +202,11 @@ export default function ReturnsPage() {
             onClick={() => setCreateDialogOpen(true)}
             sx={{
               bgcolor: COLORS.cyan,
-              color: COLORS.text,
+              color: '#FFFFFF',
               textTransform: 'none',
               fontWeight: 700,
               boxShadow: 'none',
-              '&:hover': { bgcolor: '#6DDDE9', boxShadow: 'none' }
+              '&:hover': { bgcolor: '#2B2B2B', boxShadow: 'none' }
             }}
           >
             Đổi trả tại quầy
@@ -245,11 +243,11 @@ export default function ReturnsPage() {
                 textTransform: 'none',
                 borderColor: selected ? COLORS.cyan : COLORS.border,
                 bgcolor: selected ? COLORS.cyan : '#FFFFFF',
-                color: COLORS.text,
+                color: selected ? '#FFFFFF' : COLORS.text,
                 fontWeight: selected ? 700 : 500,
                 fontSize: 12,
                 px: 2,
-                '&:hover': { bgcolor: COLORS.cyanLight, borderColor: COLORS.cyan }
+                '&:hover': { bgcolor: selected ? '#2B2B2B' : COLORS.cyanLight, borderColor: COLORS.cyan }
               }}
             >
               {tab.label}
@@ -259,43 +257,41 @@ export default function ReturnsPage() {
       </Stack>
 
       {/* SEARCH BAR */}
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mb: 2.5 }}>
-        <TextField
-          size="small"
-          fullWidth
-          placeholder="Tìm kiếm theo mã phiếu, mã đơn hàng, tên khách hàng hoặc SĐT..."
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
+      <Toolbar>
+        <Box sx={{ flex: '1 1 260px', minWidth: 240 }}>
+          <SearchField
+            title="Tìm kiếm yêu cầu"
+            placeholder="Tìm kiếm theo mã phiếu, mã đơn hàng, tên khách hàng hoặc SĐT..."
+            value={search}
+            onChange={(value) => {
+              setSearch(value);
+              setPage(1);
+            }}
+          />
+        </Box>
+        <ResetFilterButton
+          onClick={() => {
+            setSearch('');
+            setActiveTab('ALL');
             setPage(1);
           }}
-          slotProps={{
-            input: {
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchOutlined />
-                </InputAdornment>
-              )
-            }
-          }}
-          sx={{ bgcolor: '#FFFFFF', '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
         />
         <Button
           variant="outlined"
           startIcon={<SyncOutlined />}
           onClick={loadData}
-          sx={{ textTransform: 'none', minWidth: 100, borderColor: COLORS.border, color: COLORS.text }}
+          sx={{ height: 44, borderRadius: '10px', textTransform: 'none', minWidth: 100, borderColor: COLORS.border, color: COLORS.text }}
         >
           Làm mới
         </Button>
-      </Stack>
+      </Toolbar>
 
       {/* DATA TABLE */}
       <Card sx={cardSx}>
         <TableContainer sx={{ overflowX: 'auto' }}>
           <Table sx={{ minWidth: 950, '& .MuiTableCell-root': { borderColor: COLORS.border } }}>
             <TableHead>
-              <TableRow sx={{ bgcolor: '#F7F9FC' }}>
+              <TableRow sx={{ bgcolor: '#F7F5F2' }}>
                 {['Mã yêu cầu', 'Mã đơn hàng', 'Khách hàng', 'Lý do', 'Loại', 'Tiền hoàn', 'Ngày yêu cầu', 'Trạng thái', 'Thao tác'].map((label) => (
                   <TableCell
                     key={label}
@@ -350,7 +346,7 @@ export default function ReturnsPage() {
                     </TableCell>
 
                     <TableCell>
-                      <Typography fontSize={12} fontWeight={600} color="#0E7A88">
+                      <Typography fontSize={12} fontWeight={600} color="#8A2B2B">
                         {row.orderNumber}
                       </Typography>
                     </TableCell>
@@ -406,10 +402,10 @@ export default function ReturnsPage() {
                             textTransform: 'none',
                             fontSize: 11,
                             fontWeight: 700,
-                            bgcolor: '#0E7A88',
+                            bgcolor: '#8A2B2B',
                             color: '#FFFFFF',
                             boxShadow: 'none',
-                            '&:hover': { bgcolor: '#095B66' }
+                            '&:hover': { bgcolor: '#6F2222' }
                           }}
                         >
                           Duyệt đơn

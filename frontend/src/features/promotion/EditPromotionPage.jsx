@@ -29,19 +29,19 @@ import { getProducts } from 'services/productService';
 import { useCrumbs } from '../../layouts/crumbs';
 
 const C = {
-  text: '#202D42',
-  muted: '#64748B',
+  text: '#111111',
+  muted: '#5C5650',
   subtle: '#94A3B8',
-  border: '#E2E8F0',
-  borderLight: '#F1F5F9',
-  bg: '#F8FAFC',
+  border: '#E6E3DE',
+  borderLight: '#EFEBE5',
+  bg: '#F7F5F2',
   surface: '#FFFFFF',
-  cyan: '#8EECF5',
-  cyanHover: '#76E5EF',
-  cyanText: '#8EECF5',
-  cream: '#FFF7AE',
-  creamHover: '#FFF294',
-  creamText: '#713F12'
+  cyan: '#111111',
+  cyanHover: '#2B2B2B',
+  cyanText: '#8A2B2B',
+  cream: '#F6F1E8',
+  creamHover: '#EFE4CF',
+  creamText: '#6B4E16'
 };
 
 const cardSx = {
@@ -235,9 +235,9 @@ function ProductItem({ product, checked, onToggle }) {
         alignItems: 'center',
         gap: 1.5,
         p: 1.25,
-        border: `1px solid ${checked ? '#FACC15' : C.borderLight}`,
+        border: `1px solid ${checked ? '#111111' : C.borderLight}`,
         borderRadius: 2.5,
-        bgcolor: checked ? '#FEFCE8' : C.surface,
+        bgcolor: checked ? '#F6F1E8' : C.surface,
         cursor: 'pointer'
       }}
     >
@@ -249,7 +249,7 @@ function ProductItem({ product, checked, onToggle }) {
         sx={{
           p: 0.5,
           color: C.border,
-          '&.Mui-checked': { color: '#EAB308' }
+          '&.Mui-checked': { color: '#111111' }
         }}
       />
 
@@ -260,7 +260,7 @@ function ProductItem({ product, checked, onToggle }) {
           flexShrink: 0,
           borderRadius: 2,
           overflow: 'hidden',
-          bgcolor: '#F8FAFC',
+          bgcolor: '#F7F5F2',
           border: `1px solid ${C.borderLight}`,
           display: 'flex',
           alignItems: 'center',
@@ -294,7 +294,7 @@ function ProductItem({ product, checked, onToggle }) {
           {productName}
         </Typography>
         <Stack direction="row" spacing={2} sx={{ mt: 0.25 }}>
-          <Typography sx={{ color: '#202D42', fontSize: 12.5, fontWeight: 700 }}>
+          <Typography sx={{ color: '#111111', fontSize: 12.5, fontWeight: 700 }}>
             {productPrice}
           </Typography>
           <Typography sx={{ color: C.muted, fontSize: 12 }}>
@@ -488,7 +488,7 @@ export default function EditPromotionPage() {
 
   if (loading) {
     return (
-      <Box sx={{ maxWidth: 1000, mx: 'auto', py: 10, textAlign: 'center' }}>
+      <Box sx={{ py: 10, textAlign: 'center' }}>
         <CircularProgress size={38} sx={{ color: C.cyan }} />
         <Typography sx={{ mt: 2, color: C.muted, fontSize: 13.5 }}>
           Đang tải thông tin chỉnh sửa...
@@ -499,7 +499,7 @@ export default function EditPromotionPage() {
 
   if (error && !form.name) {
     return (
-      <Box sx={{ maxWidth: 1000, mx: 'auto', py: 8 }}>
+      <Box sx={{ py: 8 }}>
         <Card sx={{ p: 4, textAlign: 'center', borderRadius: 3.5, border: `1px solid ${C.border}` }}>
           <Typography color="error" sx={{ fontWeight: 700, fontSize: 15 }}>
             {error}
@@ -511,7 +511,7 @@ export default function EditPromotionPage() {
               mt: 2,
               textTransform: 'none',
               bgcolor: C.cyan,
-              color: C.text,
+              color: '#FFFFFF',
               fontWeight: 700,
               borderRadius: 2.5,
               px: 2.5,
@@ -526,7 +526,7 @@ export default function EditPromotionPage() {
   }
 
   return (
-    <Box sx={{ maxWidth: 1000, mx: 'auto', color: C.text, pb: 6 }}>
+    <Box sx={{ color: C.text, pb: 6 }}>
       {/* ─── TIÊU ĐỀ ─── */}
       <Box sx={{ mb: 3 }}>
         <Typography variant="h3" sx={{ fontWeight: 800, color: C.text, fontSize: { xs: 22, sm: 28 } }}>
@@ -749,12 +749,12 @@ export default function EditPromotionPage() {
                   gap: 1.5,
                   p: 2,
                   borderRadius: 2.5,
-                  border: `1.5px solid ${form.applyScope === 'ALL' ? '#8EECF5' : C.border}`,
-                  bgcolor: form.applyScope === 'ALL' ? '#ECFEFF' : '#FFFFFF',
+                  border: `1.5px solid ${form.applyScope === 'ALL' ? '#111111' : C.border}`,
+                  bgcolor: form.applyScope === 'ALL' ? '#FAF8F5' : '#FFFFFF',
                   cursor: 'pointer',
                   transition: 'all 0.2s ease',
                   '&:hover': {
-                    borderColor: form.applyScope === 'ALL' ? '#8EECF5' : '#CBD5E1'
+                    borderColor: form.applyScope === 'ALL' ? '#111111' : '#CBD5E1'
                   }
                 }}
               >
@@ -768,7 +768,7 @@ export default function EditPromotionPage() {
                     p: 0.5,
                     color: '#94A3B8',
                     '&.Mui-checked': {
-                      color: '#8EECF5'
+                      color: '#111111'
                     }
                   }}
                 />
@@ -793,12 +793,12 @@ export default function EditPromotionPage() {
                   gap: 1.5,
                   p: 2,
                   borderRadius: 2.5,
-                  border: `1.5px solid ${form.applyScope === 'SELECTED' ? '#8EECF5' : C.border}`,
-                  bgcolor: form.applyScope === 'SELECTED' ? '#ECFEFF' : '#FFFFFF',
+                  border: `1.5px solid ${form.applyScope === 'SELECTED' ? '#111111' : C.border}`,
+                  bgcolor: form.applyScope === 'SELECTED' ? '#FAF8F5' : '#FFFFFF',
                   cursor: 'pointer',
                   transition: 'all 0.2s ease',
                   '&:hover': {
-                    borderColor: form.applyScope === 'SELECTED' ? '#8EECF5' : '#CBD5E1'
+                    borderColor: form.applyScope === 'SELECTED' ? '#111111' : '#CBD5E1'
                   }
                 }}
               >
@@ -812,7 +812,7 @@ export default function EditPromotionPage() {
                     p: 0.5,
                     color: '#94A3B8',
                     '&.Mui-checked': {
-                      color: '#8EECF5'
+                      color: '#111111'
                     }
                   }}
                 />
@@ -894,7 +894,7 @@ export default function EditPromotionPage() {
 
                 {/* Counter & status */}
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
-                  <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: '#202D42' }}>
+                  <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: '#111111' }}>
                     Đã chọn: {form.productIds.length} / {products.length} sản phẩm
                   </Typography>
                   {form.productIds.length > 0 && (
@@ -989,7 +989,7 @@ export default function EditPromotionPage() {
                 px: 3.5,
                 borderRadius: 2.5,
                 bgcolor: C.cyan,
-                color: C.text,
+                color: '#FFFFFF',
                 fontWeight: 700,
                 fontSize: 13.5,
                 boxShadow: 'none',

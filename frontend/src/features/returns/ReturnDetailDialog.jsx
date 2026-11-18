@@ -41,10 +41,11 @@ import { processReturnRequest, getReturnRequestById } from '../../services/retur
 import { generateVietQrUrl, getBankByCode } from '../../utils/vietqr';
 
 const COLORS = {
-  text: '#202D42',
-  muted: '#75869F',
-  border: '#E5EBF2',
-  cyan: '#8DE9F2',
+  // Tông trầm đồng bộ với màn khách hàng
+  text: '#111111',
+  muted: '#5C5650',
+  border: '#E6E3DE',
+  cyan: '#111111',
   green: '#25856A',
   red: '#D04D4D',
   yellow: '#E59A00'
@@ -60,7 +61,7 @@ function getStatusChip(status) {
     case 'PENDING':
       return <Chip size="small" label="Chờ cửa hàng duyệt" sx={{ bgcolor: '#FFF7E6', color: COLORS.yellow, fontWeight: 700 }} />;
     case 'APPROVED':
-      return <Chip size="small" label="Cửa hàng đã duyệt" sx={{ bgcolor: '#EAFBFD', color: '#0E7A88', fontWeight: 700 }} />;
+      return <Chip size="small" label="Cửa hàng đã duyệt" sx={{ bgcolor: '#EFEBE5', color: '#8A2B2B', fontWeight: 700 }} />;
     case 'RECEIVED':
       return <Chip size="small" label="Đã nhận hàng tại shop" sx={{ bgcolor: '#E8F6F0', color: COLORS.green, fontWeight: 700 }} />;
     case 'COMPLETED':
@@ -231,11 +232,11 @@ export default function ReturnDetailDialog({ open, onClose, returnData, onProces
         </Box>
 
         {/* ORDER & CUSTOMER INFORMATION */}
-        <Paper sx={{ p: 2, mb: 2.5, bgcolor: '#F7F9FC', border: `1px solid ${COLORS.border}`, borderRadius: 2 }}>
+        <Paper sx={{ p: 2, mb: 2.5, bgcolor: '#F7F5F2', border: `1px solid ${COLORS.border}`, borderRadius: 2 }}>
           <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" spacing={2}>
             <Box>
               <Typography fontSize={13} color={COLORS.muted}>
-                Mã đơn hàng: <strong style={{ color: '#0E7A88' }}>{data.orderNumber}</strong>
+                Mã đơn hàng: <strong style={{ color: '#8A2B2B' }}>{data.orderNumber}</strong>
               </Typography>
               <Typography fontSize={13} color={COLORS.muted} sx={{ mt: 0.5 }}>
                 Khách hàng: <strong>{data.customerName || 'Khách vãng lai'}</strong> — SĐT: {data.customerPhone || '—'}
@@ -262,9 +263,9 @@ export default function ReturnDetailDialog({ open, onClose, returnData, onProces
 
         {/* ONLINE REFUND & SHIPPING INFO */}
         {(data.bankAccountNumber || data.returnTrackingCode || data.evidenceUrls) && (
-          <Paper sx={{ p: 2, mb: 2.5, bgcolor: '#FAFCFF', border: `1px solid ${COLORS.cyan}`, borderRadius: 2 }}>
+          <Paper sx={{ p: 2, mb: 2.5, bgcolor: '#FAF8F5', border: `1px solid ${COLORS.border}`, borderRadius: 2 }}>
             <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
-              <BankOutlined style={{ color: '#0E7A88', fontSize: 16 }} />
+              <BankOutlined style={{ color: '#8A2B2B', fontSize: 16 }} />
               <Typography fontSize={13} fontWeight={700} color={COLORS.text}>
                 Thông tin hoàn tiền & Vận chuyển bưu cục (Online)
               </Typography>
@@ -282,7 +283,7 @@ export default function ReturnDetailDialog({ open, onClose, returnData, onProces
 
                   <Grid item xs={12} sm={4}>
                     <Typography fontSize={11} color={COLORS.muted}>Số tài khoản nhận tiền</Typography>
-                    <Typography fontSize={13} fontWeight={700} color="#0E7A88">
+                    <Typography fontSize={13} fontWeight={700} color="#8A2B2B">
                       {data.bankAccountNumber}
                     </Typography>
                   </Grid>
@@ -323,7 +324,7 @@ export default function ReturnDetailDialog({ open, onClose, returnData, onProces
                             borderRadius: 2,
                             overflow: 'hidden',
                             border: `1px solid ${COLORS.border}`,
-                            bgcolor: '#F8FAFC',
+                            bgcolor: '#F7F5F2',
                             p: 0.5
                           }}
                         >
@@ -335,7 +336,7 @@ export default function ReturnDetailDialog({ open, onClose, returnData, onProces
                                 style={{ width: '100%', maxHeight: 150, borderRadius: 6, display: 'block' }}
                               />
                               <Box sx={{ mt: 0.5, textAlign: 'center' }}>
-                                <a href={trimmed} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: '#0E7A88', fontWeight: 600 }}>
+                                <a href={trimmed} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: '#8A2B2B', fontWeight: 600 }}>
                                   Mở video tab mới ↗
                                 </a>
                               </Box>
@@ -349,7 +350,7 @@ export default function ReturnDetailDialog({ open, onClose, returnData, onProces
                                 onClick={() => window.open(trimmed, '_blank')}
                               />
                               <Box sx={{ mt: 0.5 }}>
-                                <a href={trimmed} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: '#0E7A88', fontWeight: 600 }}>
+                                <a href={trimmed} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: '#8A2B2B', fontWeight: 600 }}>
                                   Xem ảnh gốc ↗
                                 </a>
                               </Box>
@@ -378,7 +379,7 @@ export default function ReturnDetailDialog({ open, onClose, returnData, onProces
 
         <TableContainer component={Paper} sx={{ border: `1px solid ${COLORS.border}`, borderRadius: 2, mb: 2 }}>
           <Table size="small">
-            <TableHead sx={{ bgcolor: '#F7F9FC' }}>
+            <TableHead sx={{ bgcolor: '#F7F5F2' }}>
               <TableRow>
                 <TableCell sx={{ fontSize: 11, fontWeight: 600, color: COLORS.muted }}>SẢN PHẨM</TableCell>
                 <TableCell sx={{ fontSize: 11, fontWeight: 600, color: COLORS.muted }}>ĐƠN GIÁ</TableCell>
@@ -524,7 +525,7 @@ export default function ReturnDetailDialog({ open, onClose, returnData, onProces
           const finalTotalRefund = itemsTotalRefund + Number(shippingReimbursement || 0);
 
           return (
-            <Paper sx={{ p: 2.5, my: 2, bgcolor: '#F0FCFE', border: `1.5px dashed #0E7A88`, borderRadius: 2 }}>
+            <Paper sx={{ p: 2.5, my: 2, bgcolor: '#F7F5F2', border: `1.5px dashed #8A2B2B`, borderRadius: 2 }}>
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={3} alignItems="center">
                 <Box sx={{ textAlign: 'center', bgcolor: '#FFF', p: 1.5, borderRadius: 2, border: `1px solid ${COLORS.border}`, boxShadow: '0 2px 10px rgba(0,0,0,0.06)' }}>
                   <img
@@ -545,7 +546,7 @@ export default function ReturnDetailDialog({ open, onClose, returnData, onProces
 
                 <Box sx={{ flex: 1, width: '100%' }}>
                   <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
-                    <QrcodeOutlined style={{ color: '#0E7A88', fontSize: 18 }} />
+                    <QrcodeOutlined style={{ color: '#8A2B2B', fontSize: 18 }} />
                     <Typography fontSize={15} fontWeight={700} color={COLORS.text}>
                       Quét mã VietQR chuyển khoản hoàn tiền
                     </Typography>
@@ -567,7 +568,7 @@ export default function ReturnDetailDialog({ open, onClose, returnData, onProces
                       <Grid item xs={6}>
                         <Typography fontSize={11} color={COLORS.muted}>Số tài khoản:</Typography>
                         <Stack direction="row" spacing={1} alignItems="center">
-                          <Typography fontSize={13} fontWeight={700} color="#0E7A88">
+                          <Typography fontSize={13} fontWeight={700} color="#8A2B2B">
                             {data.bankAccountNumber}
                           </Typography>
                           <Button
@@ -664,7 +665,7 @@ export default function ReturnDetailDialog({ open, onClose, returnData, onProces
               disabled={processing}
               startIcon={<CheckOutlined />}
               onClick={() => handleAction('APPROVE')}
-              sx={{ bgcolor: '#0E7A88', color: '#FFF', textTransform: 'none', fontWeight: 600, '&:hover': { bgcolor: '#095B66' } }}
+              sx={{ bgcolor: '#8A2B2B', color: '#FFF', textTransform: 'none', fontWeight: 600, '&:hover': { bgcolor: '#6F2222' } }}
             >
               Cửa hàng phê duyệt
             </Button>

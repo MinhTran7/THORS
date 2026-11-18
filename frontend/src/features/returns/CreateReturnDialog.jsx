@@ -27,11 +27,12 @@ import { SearchOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { getReturnableOrder, createReturnRequest } from '../../services/returnService';
 
 const COLORS = {
-  text: '#202D42',
-  muted: '#75869F',
-  border: '#E5EBF2',
-  cyan: '#8DE9F2',
-  cyanLight: '#EAFBFD',
+  // Tông trầm đồng bộ với màn khách hàng
+  text: '#111111',
+  muted: '#5C5650',
+  border: '#E6E3DE',
+  cyan: '#111111',
+  cyanLight: '#EFEBE5',
   green: '#25856A',
   red: '#D04D4D'
 };
@@ -226,11 +227,11 @@ export default function CreateReturnDialog({ open, onClose, onSuccess }) {
               onClick={handleSearchOrder}
               sx={{
                 bgcolor: COLORS.cyan,
-                color: COLORS.text,
+                color: '#FFFFFF',
                 fontWeight: 600,
                 textTransform: 'none',
                 minWidth: 120,
-                '&:hover': { bgcolor: '#6DDDE9' }
+                '&:hover': { bgcolor: '#2B2B2B' }
               }}
             >
               {searching ? 'Đang tìm...' : 'Tra cứu'}
@@ -259,7 +260,7 @@ export default function CreateReturnDialog({ open, onClose, onSuccess }) {
               </Typography>
             </Paper>
 
-            <Paper sx={{ p: 2, mb: 2.5, bgcolor: '#F7F9FC', border: `1px solid ${COLORS.border}`, borderRadius: 2 }}>
+            <Paper sx={{ p: 2, mb: 2.5, bgcolor: '#F7F5F2', border: `1px solid ${COLORS.border}`, borderRadius: 2 }}>
               <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" spacing={2}>
                 <Box>
                   <Typography fontSize={14} fontWeight={700} color={COLORS.text}>
@@ -284,7 +285,7 @@ export default function CreateReturnDialog({ open, onClose, onSuccess }) {
 
             <TableContainer component={Paper} sx={{ border: `1px solid ${COLORS.border}`, borderRadius: 2, mb: 2.5 }}>
               <Table size="small">
-                <TableHead sx={{ bgcolor: '#F7F9FC' }}>
+                <TableHead sx={{ bgcolor: '#F7F5F2' }}>
                   <TableRow>
                     <TableCell padding="checkbox" />
                     <TableCell sx={{ fontSize: 11, fontWeight: 600, color: COLORS.muted }}>SẢN PHẨM</TableCell>

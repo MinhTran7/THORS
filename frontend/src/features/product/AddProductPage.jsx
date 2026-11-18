@@ -126,7 +126,7 @@ function SectionTitle({ title, subtitle }) {
         sx={{
           fontSize: 16,
           fontWeight: 800,
-          color: '#0F172A'
+          color: '#111111'
         }}
       >
         {title}
@@ -604,8 +604,6 @@ export default function AddProductPage() {
   return (
     <Box
       sx={{
-        maxWidth: 1440,
-        mx: 'auto',
         pb: 6,
         color: C.text
       }}
@@ -621,7 +619,7 @@ export default function AddProductPage() {
             color: C.muted,
             mb: 1.5,
             p: 0,
-            '&:hover': { bgcolor: 'transparent', color: '#0F172A' }
+            '&:hover': { bgcolor: 'transparent', color: '#111111' }
           }}
         >
           Quay lại danh sách sản phẩm
@@ -633,7 +631,7 @@ export default function AddProductPage() {
               variant="h3"
               sx={{
                 fontWeight: 800,
-                color: '#0F172A',
+                color: '#111111',
                 fontSize: { xs: 22, sm: 26 }
               }}
             >
@@ -653,7 +651,7 @@ export default function AddProductPage() {
           </Box>
 
           {hasChanges && (
-            <Box sx={badgeSx('#FEF9C3', '#854D0E', '#FDE047')}>
+            <Box sx={badgeSx('#F6F1E8', '#6B4E16', '#E6DCC8')}>
               Có thay đổi chưa lưu
             </Box>
           )}
@@ -847,7 +845,7 @@ export default function AddProductPage() {
                       sx={{
                         fontSize: 24,
                         fontWeight: 800,
-                        color: '#0F172A',
+                        color: '#111111',
                         mt: 0.5
                       }}
                     >
@@ -855,7 +853,7 @@ export default function AddProductPage() {
                     </Typography>
                   </Box>
 
-                  <Box sx={badgeSx('#F0FDFA', '#0F766E', '#99F6E4')}>
+                  <Box sx={badgeSx('#EFEBE5', '#8A2B2B', '#D9B4B4')}>
                     Đơn vị tiền tệ: VNĐ
                   </Box>
                 </Stack>
@@ -913,7 +911,7 @@ export default function AddProductPage() {
                   sx={{
                     border: `2px dashed ${C.cyan}`,
                     borderRadius: 3,
-                    bgcolor: '#F0FCFE',
+                    bgcolor: '#FAF8F5',
                     py: 3.5,
                     px: 2,
                     textAlign: 'center',
@@ -932,7 +930,7 @@ export default function AddProductPage() {
                   <CloudUploadOutlined
                     style={{
                       fontSize: 34,
-                      color: '#0F172A'
+                      color: '#111111'
                     }}
                   />
 
@@ -940,7 +938,7 @@ export default function AddProductPage() {
                     sx={{
                       fontSize: 13.5,
                       fontWeight: 800,
-                      color: '#0F172A',
+                      color: '#111111',
                       mt: 1
                     }}
                   >
@@ -1024,7 +1022,7 @@ export default function AddProductPage() {
                             sx={{ mt: 0.5 }}
                           >
                             {index === 0 ? (
-                              <Box sx={badgeSx('#FEF9C3', '#854D0E', '#FDE047')}>
+                              <Box sx={badgeSx('#F6F1E8', '#6B4E16', '#E6DCC8')}>
                                 <StarFilled style={{ fontSize: 11, color: '#EAB308' }} />
                                 Ảnh chính
                               </Box>
@@ -1116,7 +1114,7 @@ export default function AddProductPage() {
                       Bán online
                     </Typography>
 
-                    <Box sx={badgeSx('#F1F5F9', '#475569', '#E2E8F0')}>
+                    <Box sx={badgeSx('#EFEBE5', '#5C5650', '#E6E3DE')}>
                       Đang tắt
                     </Box>
                   </Stack>
@@ -1142,18 +1140,18 @@ export default function AddProductPage() {
                       sx={{
                         fontSize: 14.5,
                         fontWeight: 800,
-                        color: '#0F172A'
+                        color: '#111111'
                       }}
                     >
                       0 sản phẩm
                     </Typography>
                   </Stack>
 
-                  {/* NOTE BOX IN PHUOC'S TEAL STYLE */}
+                  {/* NOTE BOX (tông trầm: nền be, viền đỏ đô nhạt) */}
                   <Box
                     sx={{
-                      bgcolor: '#F0FDFA',
-                      border: '1px solid #99F6E4',
+                      bgcolor: '#EFEBE5',
+                      border: '1px solid #D9B4B4',
                       borderRadius: 2.5,
                       p: 2,
                       mt: 1
@@ -1162,7 +1160,7 @@ export default function AddProductPage() {
                     <Typography
                       sx={{
                         fontSize: 12.5,
-                        color: '#115E59',
+                        color: '#8A2B2B',
                         lineHeight: 1.6
                       }}
                     >
@@ -1361,7 +1359,7 @@ export default function AddProductPage() {
                           removeVariant(variant.id)
                         }
                         sx={{
-                          color: '#64748B',
+                          color: '#5C5650',
                           p: 0.75,
                           '&:hover': {
                             color: '#EF4444',

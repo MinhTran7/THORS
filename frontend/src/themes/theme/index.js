@@ -23,19 +23,19 @@ export default function Default(colors) {
   };
   const contrastText = '#fff';
 
-  // Màu chính đồng bộ với trang Đăng nhập: xanh ngọc (link, viền, ô chọn) — nút đặc dùng xanh nhạt, xem overrides/Button.js
+  // Màu chính đồng bộ với màn khách hàng (tông trầm): đỏ đô cho link, viền, ô chọn — nút đặc màu đen, xem overrides/Button.js
   return {
     primary: {
-      lighter: '#E6F9FB',
-      100: '#CFF4F8',
-      200: '#B6EEF4',
-      light: '#A8F1F8',
-      400: '#5CCAD6',
-      main: '#1BA3B3',
-      dark: '#158A98',
-      700: '#117480',
-      darker: '#0E5E68',
-      900: '#0E3A41',
+      lighter: '#F5ECEC',
+      100: '#EBD6D6',
+      200: '#D9B4B4',
+      light: '#C08A8A',
+      400: '#A35555',
+      main: '#8A2B2B',
+      dark: '#702222',
+      700: '#5B1C1C',
+      darker: '#451515',
+      900: '#2E0E0E',
       contrastText
     },
     secondary: {

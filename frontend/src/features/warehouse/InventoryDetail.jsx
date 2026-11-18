@@ -18,6 +18,7 @@ import {
   Typography
 } from '@mui/material';
 import useSWR from 'swr';
+import { DateRangeFields } from 'features/account/components/DateFilter';
 import { api } from 'services/http';
 import { useWarehouse } from './WarehouseContext';
 import { DataTable } from './components';
@@ -123,21 +124,15 @@ function StockCard({ id, kind }) {
             ))}
           </TextField>
         )}
-        <TextField
-          size="small"
-          type="date"
-          label="Từ ngày"
-          value={from}
-          onChange={(e) => (setFrom(e.target.value), setPage(0))}
-          slotProps={{ inputLabel: { shrink: true } }}
-        />
-        <TextField
-          size="small"
-          type="date"
-          label="Đến ngày"
-          value={to}
-          onChange={(e) => (setTo(e.target.value), setPage(0))}
-          slotProps={{ inputLabel: { shrink: true } }}
+        <DateRangeFields
+          inline
+          from={from}
+          to={to}
+          onChange={(range) => {
+            setFrom(range.from);
+            setTo(range.to);
+            setPage(0);
+          }}
         />
       </Stack>
       <Typography variant="caption" color="text.secondary">

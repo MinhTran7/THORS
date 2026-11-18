@@ -26,9 +26,9 @@ import ThorsMark from './ThorsMark';
 
 const SIDEBAR_WIDTH = 256;
 
-// Màu theo trang Đăng nhập
-const ACCENT = brand.cyan;
-const HOVER_BG = 'rgba(168, 241, 248, 0.32)';
+// Màu theo màn khách hàng (tông trầm)
+const ACCENT = brand.teal;
+const HOVER_BG = 'rgba(17, 17, 17, 0.05)';
 
 const textProps = { fontSize: 14, fontWeight: 'inherit', noWrap: true };
 const iconBoxSx = {
@@ -50,12 +50,12 @@ const itemSx = {
   transition: 'background-color .2s, color .2s',
   '&:hover': { bgcolor: HOVER_BG, color: brand.ink }
 };
-// Mục đang chọn: nền xanh ngọc nhạt
-const SELECT_MAIN = '#48EFFE';
-const SELECT_BG = 'rgba(72, 239, 254, 0.2)';
+// Mục đang chọn: nền be, icon và vạch cạnh màu đỏ đô
+const SELECT_MAIN = brand.teal;
+const SELECT_BG = brand.cyanSoft;
 const selectedSx = {
   '&.Mui-selected, &.Mui-selected:hover': { bgcolor: SELECT_BG, color: brand.ink, fontWeight: 600 },
-  '&.Mui-selected .nav-icon': { color: '#2BDDF0' }
+  '&.Mui-selected .nav-icon': { color: SELECT_MAIN }
 };
 
 const navListSx = {

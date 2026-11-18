@@ -76,8 +76,37 @@ export function StatRow({ children }) {
   return <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' }, gap: 2, mb: 2 }}>{children}</Box>;
 }
 
-export function SearchField({ placeholder, value, onChange }) {
+// ---------------------------------------------------------------- Thanh bộ lọc dùng chung
+// Kiểu thống nhất theo trang Khuyến mãi: nhãn nhỏ phía trên mỗi ô, ô cao 44px, viền be nhạt, hover/focus viền đen (tông trầm).
+const FILTER = { text: brand.ink, border: brand.line, accent: brand.ink, surface: brand.surface };
+
+export const filterLabelSx = { display: 'block', fontSize: 13, fontWeight: 600, color: FILTER.text, mb: 0.75, whiteSpace: 'nowrap' };
+
+export const filterInputSx = {
+  '& .MuiOutlinedInput-root': {
+    bgcolor: FILTER.surface,
+    borderRadius: '10px',
+    height: 44,
+    fontSize: 13.5,
+    '& fieldset': { borderColor: FILTER.border },
+    '&:hover fieldset': { borderColor: FILTER.accent },
+    '&.Mui-focused fieldset': { borderColor: FILTER.accent }
+  }
+};
+
+/** Một ô trong thanh lọc: nhãn phía trên + ô nhập/chọn bên dưới. */
+export function FilterField({ label, children, sx }) {
   return (
+    <Box sx={{ minWidth: 0, ...sx }}>
+      {label && <Typography sx={filterLabelSx}>{label}</Typography>}
+      {children}
+    </Box>
+  );
+}
+
+/** title: nhãn hiện phía trên ô (kiểu trang Khuyến mãi). */
+export function SearchField({ placeholder, value, onChange, title }) {
+  const field = (
     <TextField
       fullWidth
       size="small"
@@ -88,53 +117,83 @@ export function SearchField({ placeholder, value, onChange }) {
         input: {
           startAdornment: (
             <InputAdornment position="start">
-              <SearchOutlined />
+              <SearchOutlined style={{ color: '#94A3B8', fontSize: 16 }} />
             </InputAdornment>
           )
         },
-        htmlInput: { 'aria-label': placeholder }
+        htmlInput: { 'aria-label': title || placeholder }
       }}
-      sx={{ '& .MuiOutlinedInput-root': { bgcolor: brand.surface, borderRadius: '10px', fontSize: fs.body, '& fieldset': { borderColor: brand.line } } }}
+      sx={filterInputSx}
     />
   );
+  return title ? <FilterField label={title}>{field}</FilterField> : field;
 }
 
-export function FilterSelect({ value, onChange, options, label, minWidth = 150 }) {
+/** label: tên ô (dùng làm nhãn phía trên và aria-label). hideLabel: chỉ dùng làm aria-label. */
+export function FilterSelect({ value, onChange, options, label, minWidth = 150, hideLabel = false }) {
   return (
-    <TextField
-      select
-      size="small"
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-      slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': label } }}
+    <FilterField label={hideLabel ? undefined : label}>
+      <TextField
+        select
+        size="small"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': label } }}
+        sx={{ minWidth, width: '100%', ...filterInputSx }}
+      >
+        {options.map((option) => (
+          <MenuItem key={option.value} value={option.value} sx={{ fontSize: 13.5 }}>
+            {option.label}
+          </MenuItem>
+        ))}
+      </TextField>
+    </FilterField>
+  );
+}
+
+/** Nút "Bỏ lọc" ở cuối thanh lọc, cùng chiều cao với các ô lọc. */
+export function ResetFilterButton({ onClick, disabled }) {
+  return (
+    <Button
+      variant="outlined"
+      onClick={onClick}
+      disabled={disabled}
+      disableRipple
       sx={{
-        minWidth,
-        '& .MuiOutlinedInput-root': { bgcolor: brand.surface, borderRadius: '10px', fontSize: fs.body, '& fieldset': { borderColor: brand.line } }
+        height: 44,
+        px: 1.75,
+        minWidth: 'unset',
+        flexShrink: 0,
+        borderRadius: '10px',
+        textTransform: 'none',
+        fontSize: 13,
+        fontWeight: 600,
+        borderColor: FILTER.border,
+        bgcolor: FILTER.surface,
+        color: FILTER.text,
+        whiteSpace: 'nowrap',
+        boxShadow: 'none',
+        '&:hover': { bgcolor: FILTER.surface, borderColor: FILTER.accent, boxShadow: 'none' }
       }}
     >
-      {options.map((option) => (
-        <MenuItem key={option.value} value={option.value} sx={{ fontSize: fs.body }}>
-          {option.label}
-        </MenuItem>
-      ))}
-    </TextField>
+      Bỏ lọc
+    </Button>
   );
 }
 
-export function Toolbar({ children }) {
-  return (
-    <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} sx={{ mb: 2 }}>
-      {children}
-    </Stack>
-  );
+/** Thanh lọc: các ô xếp hàng ngang, canh đáy (vì có nhãn phía trên), tự xuống dòng khi hẹp. */
+export function Toolbar({ children, sx }) {
+  return <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: { xs: 1.5, lg: 2 }, mb: 3, ...sx }}>{children}</Box>;
 }
+
+export const FilterBar = Toolbar;
 
 export const headCellSx = {
   color: brand.muted,
   fontSize: fs.caption,
   fontWeight: 600,
   py: 1.5,
-  bgcolor: '#FAFAF6',
+  bgcolor: '#FAF8F5',
   borderBottom: `1px solid ${brand.line}`
 };
 

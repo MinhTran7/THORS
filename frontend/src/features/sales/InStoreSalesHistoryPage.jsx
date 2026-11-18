@@ -1,55 +1,37 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
-import {
-  Box,
-  Button,
-  CircularProgress,
-  IconButton,
-  InputAdornment,
-  MenuItem,
-  Select,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  TextField,
-  Tooltip,
-  Typography
-} from '@mui/material';
-import {
-  ClearOutlined,
-  CreditCardOutlined,
-  BankOutlined,
-  DollarOutlined,
-  EyeOutlined,
-  ReloadOutlined,
-  SearchOutlined,
-  ShoppingCartOutlined
-} from '@ant-design/icons';
-import { Pager } from 'features/account/components/Blocks';
+import { Box, CircularProgress, IconButton, Table, TableBody, TableCell, TableHead, TableRow, Tooltip, Typography } from '@mui/material';
+import { CreditCardOutlined, DollarOutlined, EyeOutlined, ShoppingCartOutlined } from '@ant-design/icons';
+import { FilterSelect, Pager, ResetFilterButton, SearchField, Toolbar } from 'features/account/components/Blocks';
+import { ALL_TIME, DateRangeFilter, resolveDateRange } from 'features/account/components/DateFilter';
 import { api } from '../../services/http';
 import { useCrumbs } from '../../layouts/crumbs';
 import { useDebounced } from '../account/hooks';
 
-// Bảng màu chuẩn theo yêu cầu: chỉ dùng cyan #8EECF5 và cream #FFF7AE kết hợp nền/viền trung tính
+// Bảng màu tông trầm đồng bộ với màn khách hàng: đen (nhấn chính), đỏ đô (chữ nhấn), be (nền nhạt)
 const C = {
-  text: '#1E293B',
-  muted: '#64748B',
-  border: '#E2E8F0',
-  borderLight: '#F1F5F9',
-  bg: '#F8FAFC',
+  text: '#111111',
+  muted: '#5C5650',
+  border: '#E6E3DE',
+  borderLight: '#EFEBE5',
+  bg: '#F7F5F2',
   surface: '#FFFFFF',
-  cyan: '#8EECF5',
-  cyanHover: '#76E5EF',
-  cyanText: '#0E7490',
-  cream: '#FFF7AE',
-  creamHover: '#FFF294',
-  creamText: '#713F12'
+  cyan: '#111111',
+  cyanHover: '#2B2B2B',
+  cyanText: '#8A2B2B',
+  cream: '#F6F1E8',
+  creamHover: '#EFE4CF',
+  creamText: '#6B4E16'
 };
 
 const PAGE_SIZE = 8;
+
+const PAYMENT_OPTIONS = [
+  { value: '', label: 'Mọi phương thức' },
+  { value: 'CASH', label: 'Tiền mặt' },
+  { value: 'TRANSFER', label: 'Chuyển khoản' }
+];
 
 function isCashMethod(method) {
   if (!method) return true;
@@ -85,16 +67,10 @@ export default function InStoreSalesHistoryPage() {
 
   const navigate = useNavigate();
 
-  // Ngày hôm nay theo giờ địa phương (YYYY-MM-DD) để vô hiệu hóa hoàn toàn ngày trong tương lai
-  const today = (() => {
-    const d = new Date();
-    const pad = (n) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  })();
-
   const [q, setQ] = useState('');
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
+  // Bộ lọc ngày dùng chung (DateFilter.jsx): tự chặn ngày tương lai và "Từ ngày" không vượt "Đến ngày"
+  const [dateRange, setDateRange] = useState(ALL_TIME);
+  const { from: fromDate, to: toDate } = resolveDateRange(dateRange);
   const [sellerId, setSellerId] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('');
   const [page, setPage] = useState(0);
@@ -132,36 +108,23 @@ export default function InStoreSalesHistoryPage() {
   const total = data?.total ?? 0;
   const totalPages = data?.totalPages ?? 0;
 
-  function handleSearchChange(val) {
-    setQ(val);
+  const filter = (setter) => (value) => {
+    setter(value);
     setPage(0);
-  }
+  };
 
-  function handleFromDateChange(val) {
-    // Chặn ngày tương lai
-    if (val && val > today) val = today;
-    setFromDate(val);
-    setPage(0);
-  }
-
-  function handleToDateChange(val) {
-    // Chặn ngày tương lai
-    if (val && val > today) val = today;
-    setToDate(val);
-    setPage(0);
-  }
+  const sellerOptions = [{ value: '', label: 'Tất cả thu ngân' }, ...sellers.map((s) => ({ value: String(s.id), label: s.name }))];
 
   function handleResetFilters() {
     setQ('');
-    setFromDate('');
-    setToDate('');
+    setDateRange(ALL_TIME);
     setSellerId('');
     setPaymentMethod('');
     setPage(0);
   }
 
   return (
-    <Box sx={{ maxWidth: 1400, mx: 'auto', color: C.text, pb: 4 }}>
+    <Box sx={{ color: C.text, pb: 4 }}>
       {/* ─── TIÊU ĐỀ TRÊN CÙNG: DANH SÁCH HÓA ĐƠN ─── */}
       <Box sx={{ mb: 2.5 }}>
         <Typography variant="h3" sx={{ fontWeight: 800, color: C.text }}>
@@ -169,241 +132,16 @@ export default function InStoreSalesHistoryPage() {
         </Typography>
       </Box>
 
-      {/* ─── THANH BỘ LỌC PHÍA TRÊN ─── */}
-      <Box
-        sx={{
-          mb: 3,
-          display: 'grid',
-          gridTemplateColumns: {
-            xs: '1fr',
-            sm: 'repeat(2, 1fr)',
-            md: 'minmax(150px, 1.8fr) 140px 140px 130px 130px auto'
-          },
-          gap: { xs: 1.5, lg: 2 },
-          alignItems: 'flex-end'
-        }}
-      >
-        {/* Tìm kiếm theo mã hóa đơn */}
-        <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>
-            Tìm kiếm hóa đơn
-          </Typography>
-          <TextField
-            fullWidth
-            size="small"
-            placeholder="Tìm theo mã hóa đơn..."
-            value={q}
-            onChange={(e) => handleSearchChange(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchOutlined style={{ color: '#94A3B8', fontSize: 16 }} />
-                </InputAdornment>
-              )
-            }}
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                bgcolor: C.surface,
-                borderRadius: 2.5,
-                height: 44,
-                '& fieldset': { borderColor: C.border },
-                '&:hover fieldset': { borderColor: C.cyan },
-                '&.Mui-focused fieldset': { borderColor: C.cyan }
-              }
-            }}
-          />
+      {/* ─── THANH BỘ LỌC: dùng chung các ô lọc với những trang danh sách khác ─── */}
+      <Toolbar>
+        <Box sx={{ flex: '1 1 240px', minWidth: 240 }}>
+          <SearchField title="Tìm kiếm hóa đơn" placeholder="Tìm theo mã hóa đơn..." value={q} onChange={filter(setQ)} />
         </Box>
-
-        {/* Lọc theo thu ngân */}
-        <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>
-            Thu ngân
-          </Typography>
-          <Select
-            fullWidth
-            size="small"
-            displayEmpty
-            value={sellerId}
-            onChange={(e) => {
-              setSellerId(e.target.value);
-              setPage(0);
-            }}
-            renderValue={(val) => {
-              if (!val) return 'Tất cả';
-              const found = sellers.find((s) => String(s.id) === String(val));
-              return found ? found.name : 'Tất cả';
-            }}
-            sx={{
-              bgcolor: C.surface,
-              borderRadius: 2.5,
-              height: 44,
-              fontSize: 13.5,
-              '& .MuiOutlinedInput-notchedOutline': { borderColor: C.border },
-              '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: C.cyan },
-              '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: C.cyan }
-            }}
-          >
-            <MenuItem value="">Tất cả</MenuItem>
-            {sellers.map((s) => (
-              <MenuItem key={s.id} value={String(s.id)}>
-                {s.name}
-              </MenuItem>
-            ))}
-          </Select>
-        </Box>
-
-        {/* Lọc theo phương thức thanh toán */}
-        <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>
-            Phương thức
-          </Typography>
-          <Select
-            fullWidth
-            size="small"
-            displayEmpty
-            value={paymentMethod}
-            onChange={(e) => {
-              setPaymentMethod(e.target.value);
-              setPage(0);
-            }}
-            renderValue={(val) => {
-              if (!val) return 'Tất cả';
-              if (val === 'CASH') return 'Tiền mặt';
-              if (val === 'TRANSFER') return 'Chuyển khoản';
-              return 'Tất cả';
-            }}
-            sx={{
-              bgcolor: C.surface,
-              borderRadius: 2.5,
-              height: 44,
-              fontSize: 13.5,
-              '& .MuiOutlinedInput-notchedOutline': { borderColor: C.border },
-              '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: C.cyan },
-              '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: C.cyan }
-            }}
-          >
-            <MenuItem value="">Tất cả</MenuItem>
-            <MenuItem value="CASH">Tiền mặt</MenuItem>
-            <MenuItem value="TRANSFER">Chuyển khoản</MenuItem>
-          </Select>
-        </Box>
-
-        {/* Từ ngày - Chặn tuyệt đối ngày tương lai */}
-        <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>
-            Từ ngày
-          </Typography>
-          <TextField
-            fullWidth
-            size="small"
-            type="date"
-            value={fromDate}
-            onChange={(e) => handleFromDateChange(e.target.value)}
-            inputProps={{
-              max: toDate && toDate < today ? toDate : today
-            }}
-            slotProps={{
-              htmlInput: {
-                max: toDate && toDate < today ? toDate : today
-              }
-            }}
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                bgcolor: C.surface,
-                borderRadius: 2.5,
-                height: 44,
-                '& fieldset': { borderColor: C.border },
-                '&:hover fieldset': { borderColor: C.cyan },
-                '&.Mui-focused fieldset': { borderColor: C.cyan }
-              }
-            }}
-          />
-        </Box>
-
-        {/* Đến ngày - Chặn tuyệt đối ngày tương lai */}
-        <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>
-            Đến ngày
-          </Typography>
-          <TextField
-            fullWidth
-            size="small"
-            type="date"
-            value={toDate}
-            onChange={(e) => handleToDateChange(e.target.value)}
-            inputProps={{
-              min: fromDate || undefined,
-              max: today
-            }}
-            slotProps={{
-              htmlInput: {
-                min: fromDate || undefined,
-                max: today
-              }
-            }}
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                bgcolor: C.surface,
-                borderRadius: 2.5,
-                height: 44,
-                '& fieldset': { borderColor: C.border },
-                '&:hover fieldset': { borderColor: C.cyan },
-                '&.Mui-focused fieldset': { borderColor: C.cyan }
-              }
-            }}
-          />
-        </Box>
-
-        {/* Button chữ Bỏ lọc: chiều rộng gọn, không viền phát sáng khi bấm/hover */}
-        <Box sx={{ minWidth: 0, display: 'flex' }}>
-          <Button
-            variant="outlined"
-            onClick={handleResetFilters}
-            disableRipple
-            sx={{
-              height: 44,
-              px: 1.75,
-              minWidth: 'unset',
-              borderRadius: 2.5,
-              textTransform: 'none',
-              fontSize: 13,
-              fontWeight: 600,
-              borderColor: C.border,
-              bgcolor: C.surface,
-              color: C.text,
-              whiteSpace: 'nowrap',
-              outline: 'none',
-              boxShadow: 'none !important',
-              transition: 'none',
-              '&:hover': {
-                bgcolor: C.surface,
-                borderColor: C.border,
-                color: C.text,
-                outline: 'none',
-                boxShadow: 'none !important'
-              },
-              '&:focus': {
-                outline: 'none',
-                boxShadow: 'none !important'
-              },
-              '&:focus-visible': {
-                outline: 'none',
-                boxShadow: 'none !important'
-              },
-              '&.Mui-focusVisible': {
-                outline: 'none',
-                boxShadow: 'none !important'
-              },
-              '&:active': {
-                outline: 'none',
-                boxShadow: 'none !important'
-              }
-            }}
-          >
-            Bỏ lọc
-          </Button>
-        </Box>
-      </Box>
+        <FilterSelect label="Thu ngân" value={sellerId} onChange={filter(setSellerId)} options={sellerOptions} minWidth={170} />
+        <FilterSelect label="Phương thức" value={paymentMethod} onChange={filter(setPaymentMethod)} options={PAYMENT_OPTIONS} minWidth={170} />
+        <DateRangeFilter label="Ngày bán" value={dateRange} onChange={filter(setDateRange)} />
+        <ResetFilterButton onClick={handleResetFilters} />
+      </Toolbar>
 
       {/* ─── KHỐI BẢNG DANH SÁCH HÓA ĐƠN (Đã bỏ thanh header bên trong) ─── */}
       <Box
@@ -425,23 +163,23 @@ export default function InStoreSalesHistoryPage() {
         <Box sx={{ overflowX: 'auto' }}>
           <Table size="medium">
             <TableHead>
-              <TableRow sx={{ '& th': { borderBottom: `1px solid ${C.border}`, py: 1.75, bgcolor: '#F8FAFC' } }}>
-                <TableCell sx={{ color: '#475569', fontSize: 13, fontWeight: 600, pl: 3 }}>
+              <TableRow sx={{ '& th': { borderBottom: `1px solid ${C.border}`, py: 1.75, bgcolor: C.bg } }}>
+                <TableCell sx={{ color: C.muted, fontSize: 13, fontWeight: 600, pl: 3 }}>
                   Mã hóa đơn
                 </TableCell>
-                <TableCell sx={{ color: '#475569', fontSize: 13, fontWeight: 600 }}>
+                <TableCell sx={{ color: C.muted, fontSize: 13, fontWeight: 600 }}>
                   Thời gian
                 </TableCell>
-                <TableCell sx={{ color: '#475569', fontSize: 13, fontWeight: 600 }}>
+                <TableCell sx={{ color: C.muted, fontSize: 13, fontWeight: 600 }}>
                   Thu ngân
                 </TableCell>
-                <TableCell sx={{ color: '#475569', fontSize: 13, fontWeight: 600 }} align="right">
+                <TableCell sx={{ color: C.muted, fontSize: 13, fontWeight: 600 }} align="right">
                   Tổng tiền
                 </TableCell>
-                <TableCell sx={{ color: '#475569', fontSize: 13, fontWeight: 600, pl: 4 }}>
+                <TableCell sx={{ color: C.muted, fontSize: 13, fontWeight: 600, pl: 4 }}>
                   Phương thức
                 </TableCell>
-                <TableCell sx={{ color: '#475569', fontSize: 13, fontWeight: 600, pr: 3 }} align="center">
+                <TableCell sx={{ color: C.muted, fontSize: 13, fontWeight: 600, pr: 3 }} align="center">
                   Thao tác
                 </TableCell>
               </TableRow>
@@ -479,7 +217,7 @@ export default function InStoreSalesHistoryPage() {
                       key={sale.orderId}
                       hover
                       sx={{
-                        '&:hover': { bgcolor: '#FAFCFE' },
+                        '&:hover': { bgcolor: '#FAF8F5' },
                         '& td': { borderBottom: `1px solid ${C.borderLight}`, py: 2 }
                       }}
                     >
@@ -514,7 +252,7 @@ export default function InStoreSalesHistoryPage() {
                         </Typography>
                       </TableCell>
 
-                      {/* Phương thức - Dùng chuẩn màu cyan #8EECF5 và cream #FFF7AE */}
+                      {/* Phương thức - Tiền mặt: nền be vàng; Chuyển khoản: nền be, chữ đỏ đô */}
                       <TableCell sx={{ pl: 4 }}>
                         <Box
                           sx={{
@@ -524,7 +262,7 @@ export default function InStoreSalesHistoryPage() {
                             px: 1.5,
                             py: 0.5,
                             borderRadius: 4,
-                            bgcolor: isCash ? C.cream : C.cyan,
+                            bgcolor: isCash ? C.cream : C.borderLight,
                             color: isCash ? C.creamText : C.cyanText,
                             fontSize: 12,
                             fontWeight: 700,
@@ -547,10 +285,10 @@ export default function InStoreSalesHistoryPage() {
                             size="small"
                             onClick={() => navigate(`/in-store-sales/history/${sale.orderId}`)}
                             sx={{
-                              color: '#64748B',
+                              color: C.muted,
                               p: 0.75,
                               '&:hover': {
-                                color: '#0F172A',
+                                color: C.text,
                                 bgcolor: 'transparent'
                               }
                             }}

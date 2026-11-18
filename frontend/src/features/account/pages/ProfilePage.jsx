@@ -31,12 +31,12 @@ import UserAvatar from '../components/UserAvatar';
 const CRUMBS = ['Hồ sơ'];
 
 // TODO: đưa các màu này vào tokens.js (brand) khi có dịp.
-const surface = { base: '#FBFBF8', hover: '#F6F7F0', hoverBorder: '#DCDDD5', google: '#EA4335' };
+const surface = { base: '#FAF8F5', hover: '#F3EFE9', hoverBorder: '#D6D0C7', google: '#EA4335' };
 
 const iconBoxSx = {
   borderRadius: '10px',
   bgcolor: brand.cyanSoft,
-  color: brand.inkOnCyan,
+  color: brand.ink,
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -377,7 +377,7 @@ export default function ProfilePage() {
         <Box sx={{ ...cardSx, overflow: 'hidden' }}>
           <Box
             sx={{
-              background: `linear-gradient(135deg, ${brand.cyanSoft} 0%, #D2F4F7 45%, ${brand.yellowSoft} 100%)`,
+              background: `linear-gradient(135deg, ${brand.cyanSoft} 0%, #E6DFD6 45%, ${brand.yellowSoft} 100%)`,
               height: 96
             }}
           />
@@ -578,7 +578,7 @@ export default function ProfilePage() {
                     <Chip
                       size="small"
                       label="Xác thực Google SSO"
-                      sx={{ bgcolor: brand.cyanSoft, color: brand.inkOnCyan, fontWeight: 600, fontSize: fs.caption, height: 28 }}
+                      sx={{ bgcolor: brand.cyanSoft, color: brand.ink, fontWeight: 600, fontSize: fs.caption, height: 28 }}
                     />
                   )
                 }

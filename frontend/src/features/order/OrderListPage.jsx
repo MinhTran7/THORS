@@ -10,7 +10,6 @@ import {
   DialogContent,
   DialogTitle,
   FormControlLabel,
-  MenuItem,
   Radio,
   RadioGroup,
   Tab,
@@ -40,7 +39,18 @@ import { formatTime, parseUtc } from 'features/account/format';
 import { brand, cardSx } from 'features/account/tokens';
 import { BrandButton, OutlineButton } from 'features/account/components/Brand';
 import { StatusPill } from 'features/account/components/Chips';
-import { bodyCellSx, EmptyRow, headCellSx, PageHeader, Pager, SearchField, Toolbar } from 'features/account/components/Blocks';
+import {
+  bodyCellSx,
+  EmptyRow,
+  FilterSelect,
+  headCellSx,
+  PageHeader,
+  Pager,
+  ResetFilterButton,
+  SearchField,
+  Toolbar
+} from 'features/account/components/Blocks';
+import { ALL_TIME, DateRangeFilter, resolveDateRange } from 'features/account/components/DateFilter';
 import { LIVE_SWR, ordersApi, refreshAllOrders } from './api';
 import { CUSTOMER_ACTIONS, OWNER_ACTIONS, ownerActionsFor } from './orderActions';
 import AddressNotFoundDialog, { ADDRESS_NOT_FOUND, INVALID_ADDRESS_REASON } from './AddressNotFoundDialog';
@@ -74,25 +84,12 @@ const CUSTOMER_TABS = [
   { value: 'CANCELLED,REJECTED,EXPIRED', label: 'Đã hủy' }
 ];
 
-// Bộ lọc ngày đặt hàng
-const DATE_PRESETS = [
-  { value: 'all', label: 'Tất cả thời gian' },
-  { value: 'today', label: 'Hôm nay' },
-  { value: '7', label: '7 ngày gần nhất' },
-  { value: '30', label: '30 ngày gần nhất' },
-  { value: 'month', label: 'Tháng này' },
-  { value: 'custom', label: 'Chọn khoảng ngày' }
-];
-
 // Bộ lọc hình thức thanh toán (khớp với backend: giá trị cột orders.payment_method)
 const PAYMENT_FILTERS = [
   { value: 'all', label: 'Mọi hình thức thanh toán' },
   { value: 'COD', label: 'Thanh toán khi nhận hàng (COD)' },
   { value: 'ONLINE', label: 'Thanh toán online' }
 ];
-
-// Chiều rộng cố định cho các ô lọc để thanh lọc không bị nhảy khi đổi lựa chọn
-const FILTER_WIDTH = { date: 200, payment: 270, customDate: 160 };
 
 // Lý do có sẵn để chọn; chỉ khi chọn "Lý do khác" mới phải tự nhập
 const OTHER_REASON = '__OTHER__';
@@ -133,33 +130,6 @@ const formatDate = (value) => {
   const d = parseUtc(value);
   if (!d) return '—';
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
-};
-
-// Dạng yyyy-MM-dd (giờ địa phương) để gửi lên backend / gán cho input type="date"
-const toIsoDate = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-
-// Đổi lựa chọn bộ lọc ngày thành khoảng from/to
-const getDateRange = (preset, customFrom, customTo) => {
-  const today = new Date();
-  const daysAgo = (n) => {
-    const d = new Date(today);
-    d.setDate(d.getDate() - n);
-    return d;
-  };
-  switch (preset) {
-    case 'today':
-      return { dateFrom: toIsoDate(today), dateTo: toIsoDate(today) };
-    case '7':
-      return { dateFrom: toIsoDate(daysAgo(6)), dateTo: toIsoDate(today) };
-    case '30':
-      return { dateFrom: toIsoDate(daysAgo(29)), dateTo: toIsoDate(today) };
-    case 'month':
-      return { dateFrom: toIsoDate(new Date(today.getFullYear(), today.getMonth(), 1)), dateTo: toIsoDate(today) };
-    case 'custom':
-      return { dateFrom: customFrom || undefined, dateTo: customTo || undefined };
-    default:
-      return {};
-  }
 };
 
 // Mã đơn: màu đỏ, gạch chân
@@ -313,9 +283,7 @@ export default function OrderListPage() {
 
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('all');
-  const [datePreset, setDatePreset] = useState('all');
-  const [customFrom, setCustomFrom] = useState('');
-  const [customTo, setCustomTo] = useState('');
+  const [dateRange, setDateRange] = useState(ALL_TIME);
   const [paymentFilter, setPaymentFilter] = useState('all');
   const [page, setPage] = useState(0);
   const [creating, setCreating] = useState(false);
@@ -337,12 +305,12 @@ export default function OrderListPage() {
     setPage(0);
   };
 
-  const { dateFrom, dateTo } = getDateRange(datePreset, customFrom, customTo);
+  const { from: dateFrom, to: dateTo } = resolveDateRange(dateRange);
   const params = {
     status: status === 'all' ? undefined : status,
     q: search || undefined,
-    dateFrom,
-    dateTo,
+    dateFrom: dateFrom || undefined,
+    dateTo: dateTo || undefined,
     paymentMethod: paymentFilter === 'all' ? undefined : paymentFilter,
     page,
     size: PAGE_SIZE
@@ -355,7 +323,7 @@ export default function OrderListPage() {
   // Làm mới mọi dữ liệu đơn hàng (danh sách, số đếm, cả trang chi tiết đang mở trong cache)
   const refresh = () => refreshAllOrders(globalMutate);
 
-  const hasFilter = Boolean(search) || status !== 'all' || datePreset !== 'all' || paymentFilter !== 'all';
+  const hasFilter = Boolean(search) || status !== 'all' || dateRange.preset !== 'all' || paymentFilter !== 'all';
 
   // Chỉ dành cho chủ shop, để test thông báo: tạo đơn online mẫu rồi tải lại danh sách
   const createSample = async () => {
@@ -550,65 +518,23 @@ export default function OrderListPage() {
   );
 
   // Thanh bộ lọc: tìm kiếm, ngày đặt, hình thức thanh toán; dùng chung cho khách và chủ shop.
-  // Các ô lọc có chiều rộng cố định, chỉ ô tìm kiếm co giãn, nên thanh không bị nhảy khi đổi lựa chọn.
+  // Bộ lọc ngày dùng chung với các trang khác (DateRangeFilter); chỉ ô tìm kiếm co giãn nên thanh không bị nhảy khi đổi lựa chọn.
+  const resetFilters = () => {
+    setQ('');
+    setStatus('all');
+    setDateRange(ALL_TIME);
+    setPaymentFilter('all');
+    setPage(0);
+  };
   const filterBar = (searchPlaceholder) => (
-    <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.5 }}>
-      <Box sx={{ flex: '1 1 260px', minWidth: 260 }}>
-        <SearchField placeholder={searchPlaceholder} value={q} onChange={filter(setQ)} />
+    <Toolbar sx={{ mb: 0 }}>
+      <Box sx={{ flex: '1 1 260px', minWidth: 240 }}>
+        <SearchField title="Tìm kiếm đơn hàng" placeholder={searchPlaceholder} value={q} onChange={filter(setQ)} />
       </Box>
-      <TextField
-        select
-        size="small"
-        label="Ngày đặt"
-        value={datePreset}
-        onChange={(e) => filter(setDatePreset)(e.target.value)}
-        sx={{ width: FILTER_WIDTH.date, flexShrink: 0 }}
-        slotProps={{ select: { sx: { borderRadius: '10px' } } }}
-      >
-        {DATE_PRESETS.map((item) => (
-          <MenuItem key={item.value} value={item.value}>
-            {item.label}
-          </MenuItem>
-        ))}
-      </TextField>
-      {datePreset === 'custom' && (
-        <>
-          <TextField
-            type="date"
-            size="small"
-            label="Từ ngày"
-            value={customFrom}
-            onChange={(e) => filter(setCustomFrom)(e.target.value)}
-            sx={{ width: FILTER_WIDTH.customDate, flexShrink: 0 }}
-            slotProps={{ inputLabel: { shrink: true }, htmlInput: { max: customTo || undefined }, input: { sx: { borderRadius: '10px' } } }}
-          />
-          <TextField
-            type="date"
-            size="small"
-            label="Đến ngày"
-            value={customTo}
-            onChange={(e) => filter(setCustomTo)(e.target.value)}
-            sx={{ width: FILTER_WIDTH.customDate, flexShrink: 0 }}
-            slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: customFrom || undefined }, input: { sx: { borderRadius: '10px' } } }}
-          />
-        </>
-      )}
-      <TextField
-        select
-        size="small"
-        label="Thanh toán"
-        value={paymentFilter}
-        onChange={(e) => filter(setPaymentFilter)(e.target.value)}
-        sx={{ width: FILTER_WIDTH.payment, flexShrink: 0 }}
-        slotProps={{ select: { sx: { borderRadius: '10px' } } }}
-      >
-        {PAYMENT_FILTERS.map((item) => (
-          <MenuItem key={item.value} value={item.value}>
-            {item.label}
-          </MenuItem>
-        ))}
-      </TextField>
-    </Box>
+      <DateRangeFilter label="Ngày đặt" value={dateRange} onChange={filter(setDateRange)} />
+      <FilterSelect label="Thanh toán" value={paymentFilter} onChange={filter(setPaymentFilter)} options={PAYMENT_FILTERS} minWidth={250} />
+      <ResetFilterButton onClick={resetFilters} />
+    </Toolbar>
   );
 
   // ---------------------------------------------------------------- Khách hàng (kiểu Shopee)
@@ -784,9 +710,7 @@ export default function OrderListPage() {
         </Tabs>
       </Box>
 
-      <Toolbar>
-        <Box sx={{ flex: 1 }}>{filterBar('Tìm theo mã đơn, người nhận hoặc số điện thoại...')}</Box>
-      </Toolbar>
+      <Box sx={{ mb: 3 }}>{filterBar('Tìm theo mã đơn, người nhận hoặc số điện thoại...')}</Box>
 
       <Box sx={{ ...cardSx, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)', borderRadius: '14px' }}>
         {list.error && !list.data && (
@@ -797,7 +721,7 @@ export default function OrderListPage() {
         <Box sx={{ overflowX: 'auto' }}>
           <Table size="small" sx={{ minWidth: 1020 }}>
             <TableHead>
-              <TableRow sx={{ bgcolor: '#FBFBF8' }}>
+              <TableRow sx={{ bgcolor: '#FAF8F5' }}>
                 {columns.map((label, index) => (
                   <TableCell
                     key={`${label}-${index}`}
@@ -829,7 +753,7 @@ export default function OrderListPage() {
                     hover
                     sx={{
                       transition: 'background-color 0.15s ease',
-                      '&:hover': { bgcolor: '#F9FAF5' }
+                      '&:hover': { bgcolor: '#FAF8F5' }
                     }}
                   >
                     {/* Cột 1: Mã đơn & Ngày giờ */}
@@ -871,7 +795,7 @@ export default function OrderListPage() {
                           display: 'inline-flex',
                           alignItems: 'center',
                           gap: 0.5,
-                          bgcolor: '#F3F4EE',
+                          bgcolor: brand.cyanSoft,
                           color: brand.muted,
                           px: 0.8,
                           py: 0.2,
@@ -974,7 +898,7 @@ export default function OrderListPage() {
               {!list.isLoading && items.length === 0 && (
                 <EmptyRow colSpan={columns.length}>
                   <Box sx={{ py: 6, textAlign: 'center' }}>
-                    <InboxOutlined style={{ fontSize: 40, color: '#CCD0C8', marginBottom: 12 }} />
+                    <InboxOutlined style={{ fontSize: 40, color: '#CFC8BE', marginBottom: 12 }} />
                     <Typography variant="body1" sx={{ color: brand.ink, fontWeight: 600 }}>
                       {hasFilter ? 'Không có đơn hàng nào phù hợp với bộ lọc.' : 'Chưa có đơn hàng online nào trong hệ thống.'}
                     </Typography>

@@ -38,11 +38,12 @@ import { createProductsBatch } from '../../services/productService';
 import { C, outlineButtonSx, primaryButtonSx } from '../customer/theme';
 
 const COLORS = {
-  text: '#1E293B',
-  muted: '#64748B',
-  border: '#E2E8F0',
-  cyan: '#8EECF5',
-  cyanLight: '#EAFBFD',
+  // Tông trầm đồng bộ với màn khách hàng
+  text: '#111111',
+  muted: '#5C5650',
+  border: '#E6E3DE',
+  cyan: '#111111',
+  cyanLight: '#EFEBE5',
   green: '#059669',
   red: '#EF4444',
   yellow: '#D97706'
@@ -390,7 +391,7 @@ export default function ProductExcelDialog({ open, onClose, categories = [], onS
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth PaperProps={{ sx: { borderRadius: 3.5, p: 0.5 } }}>
-      <DialogTitle sx={{ fontWeight: 800, color: '#0F172A', fontSize: 18, pb: 1 }}>
+      <DialogTitle sx={{ fontWeight: 800, color: '#111111', fontSize: 18, pb: 1 }}>
         <Stack direction="row" alignItems="center" spacing={1.5}>
           <FileExcelOutlined style={{ color: COLORS.green, fontSize: 24 }} />
           <span>Nhập sản phẩm hàng loạt từ Excel</span>
@@ -406,7 +407,7 @@ export default function ProductExcelDialog({ open, onClose, categories = [], onS
           sx={{
             p: 3,
             mb: 2.5,
-            bgcolor: '#F8FAFC',
+            bgcolor: '#F7F5F2',
             borderRadius: 3,
             border: `1.5px dashed ${C.border}`,
             textAlign: 'center'
@@ -509,11 +510,11 @@ export default function ProductExcelDialog({ open, onClose, categories = [], onS
                 <Table size="small" stickyHeader>
                   <TableHead>
                     <TableRow>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: '#F4F6F8', width: 64 }}>Ảnh</TableCell>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: '#F4F6F8' }}>Tên sản phẩm</TableCell>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: '#F4F6F8' }}>Danh mục</TableCell>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: '#F4F6F8' }}>Số biến thể</TableCell>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: '#F4F6F8' }}>Chi tiết (Size / Màu / Giá)</TableCell>
+                      <TableCell sx={{ fontWeight: 700, bgcolor: '#F7F5F2', width: 64 }}>Ảnh</TableCell>
+                      <TableCell sx={{ fontWeight: 700, bgcolor: '#F7F5F2' }}>Tên sản phẩm</TableCell>
+                      <TableCell sx={{ fontWeight: 700, bgcolor: '#F7F5F2' }}>Danh mục</TableCell>
+                      <TableCell sx={{ fontWeight: 700, bgcolor: '#F7F5F2' }}>Số biến thể</TableCell>
+                      <TableCell sx={{ fontWeight: 700, bgcolor: '#F7F5F2' }}>Chi tiết (Size / Màu / Giá)</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -591,14 +592,14 @@ export default function ProductExcelDialog({ open, onClose, categories = [], onS
                 <Table size="small" stickyHeader>
                   <TableHead>
                     <TableRow>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: '#F4F6F8', width: 55 }}>Dòng</TableCell>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: '#F4F6F8', width: 55 }}>Ảnh</TableCell>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: '#F4F6F8' }}>Danh mục</TableCell>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: '#F4F6F8' }}>Tên sản phẩm</TableCell>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: '#F4F6F8', width: 65 }}>Size</TableCell>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: '#F4F6F8', width: 85 }}>Màu</TableCell>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: '#F4F6F8', width: 95 }}>Giá (VNĐ)</TableCell>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: '#F4F6F8' }}>Trạng thái / Lỗi</TableCell>
+                      <TableCell sx={{ fontWeight: 700, bgcolor: '#F7F5F2', width: 55 }}>Dòng</TableCell>
+                      <TableCell sx={{ fontWeight: 700, bgcolor: '#F7F5F2', width: 55 }}>Ảnh</TableCell>
+                      <TableCell sx={{ fontWeight: 700, bgcolor: '#F7F5F2' }}>Danh mục</TableCell>
+                      <TableCell sx={{ fontWeight: 700, bgcolor: '#F7F5F2' }}>Tên sản phẩm</TableCell>
+                      <TableCell sx={{ fontWeight: 700, bgcolor: '#F7F5F2', width: 65 }}>Size</TableCell>
+                      <TableCell sx={{ fontWeight: 700, bgcolor: '#F7F5F2', width: 85 }}>Màu</TableCell>
+                      <TableCell sx={{ fontWeight: 700, bgcolor: '#F7F5F2', width: 95 }}>Giá (VNĐ)</TableCell>
+                      <TableCell sx={{ fontWeight: 700, bgcolor: '#F7F5F2' }}>Trạng thái / Lỗi</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>

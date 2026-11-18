@@ -28,17 +28,17 @@ import { api } from '../../services/http';
 import { formatLogDate, formatTime } from '../account/format';
 
 const C = {
-  text: '#202D42',
-  muted: '#75869F',
-  border: '#E5EBF2',
-  main: '#8DE9F2',
-  mainHover: '#6BDCE7',
-  bg: '#F8FAFC',
-  cancelHover: '#FFFBE7',
+  text: '#111111',
+  muted: '#5C5650',
+  border: '#E6E3DE',
+  main: '#111111',
+  mainHover: '#2B2B2B',
+  bg: '#F7F5F2',
+  cancelHover: '#F6F1E8',
   surface: '#FFFFFF',
-  mintBg: '#E8F8F5',
-  mintText: '#0F766E',
-  mintBorder: '#C2EFE5'
+  mintBg: '#EFEBE5',
+  mintText: '#8A2B2B',
+  mintBorder: '#E6E3DE'
 };
 
 const money = (value) => `${Number(value || 0).toLocaleString('vi-VN')} ₫`;
@@ -195,9 +195,10 @@ export default function InStoreSaleDetailModal({ open, onClose, orderId }) {
                       px: 1.25,
                       py: 0.4,
                       borderRadius: 1.5,
-                      bgcolor: isCash ? C.mintBg : '#F0F7FF',
-                      color: isCash ? C.mintText : '#1D4ED8',
-                      border: `1px solid ${isCash ? C.mintBorder : '#D0E1FD'}`,
+                      // Tiền mặt: be vàng; Chuyển khoản: be, chữ đỏ đô (giống trang danh sách hóa đơn)
+                      bgcolor: isCash ? '#F6F1E8' : C.mintBg,
+                      color: isCash ? '#6B4E16' : C.mintText,
+                      border: `1px solid ${isCash ? '#E6DCC8' : C.mintBorder}`,
                       fontSize: 12,
                       fontWeight: 700
                     }}
@@ -246,7 +247,7 @@ export default function InStoreSaleDetailModal({ open, onClose, orderId }) {
                 </TableHead>
                 <TableBody>
                   {data.items?.map((item) => (
-                    <TableRow key={item.orderItemId} hover sx={{ '&:hover': { bgcolor: '#F9FEFF' } }}>
+                    <TableRow key={item.orderItemId} hover sx={{ '&:hover': { bgcolor: '#FAF8F5' } }}>
                       <TableCell sx={{ py: 1.25 }}>
                         <Typography sx={{ fontSize: 13, fontWeight: 700, color: C.text }}>
                           {item.productName || 'Sản phẩm'}
@@ -377,7 +378,7 @@ export default function InStoreSaleDetailModal({ open, onClose, orderId }) {
             textTransform: 'none',
             borderRadius: 2,
             bgcolor: C.main,
-            color: C.text,
+            color: '#FFFFFF',
             fontWeight: 700,
             boxShadow: 'none',
             '&:hover': {

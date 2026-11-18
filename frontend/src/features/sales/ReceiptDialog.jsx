@@ -1,13 +1,14 @@
 import { Box, Button, Dialog, DialogActions, DialogContent, Divider, Stack, Typography } from '@mui/material';
 import { PrinterOutlined, PlusOutlined } from '@ant-design/icons';
 
+// Tông trầm đồng bộ với màn khách hàng: nút "In hóa đơn" đen, nút còn lại nền be
 const C = {
-  text: '#202D42',
-  muted: '#75869F',
-  border: '#E5EBF2',
-  main: '#8DE9F2',
-  bg: '#F8FAFC',
-  cancelHover: '#FFFBE7'
+  text: '#111111',
+  muted: '#5C5650',
+  border: '#E6E3DE',
+  main: '#EFEBE5',
+  bg: '#F7F5F2',
+  cancelHover: '#F6F1E8'
 };
 
 const buttonSx = {
@@ -236,7 +237,7 @@ export default function ReceiptDialog({
               py: 1,
               bgcolor: C.text,
               color: '#fff',
-              '&:hover': { bgcolor: '#2C3E55' }
+              '&:hover': { bgcolor: '#2B2B2B' }
             }}
           >
             In hóa đơn
@@ -252,7 +253,7 @@ export default function ReceiptDialog({
               py: 1,
               bgcolor: C.main,
               color: C.text,
-              '&:hover': { bgcolor: '#6BDCE7' }
+              '&:hover': { bgcolor: '#E6E1D9' }
             }}
           >
             {closeText}

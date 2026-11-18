@@ -27,19 +27,19 @@ import { useCrumbs } from '../../layouts/crumbs';
 import ReceiptDialog from './ReceiptDialog';
 
 const C = {
-  text: '#0F172A',
-  muted: '#64748B',
-  subtle: '#94A3B8',
-  border: '#E2E8F0',
-  borderLight: '#F1F5F9',
-  bg: '#F8FAFC',
+  text: '#111111',
+  muted: '#5C5650',
+  subtle: '#8C857D',
+  border: '#E6E3DE',
+  borderLight: '#EFEBE5',
+  bg: '#F7F5F2',
   surface: '#FFFFFF',
-  cyan: '#8EECF5',
-  cyanHover: '#76E5EF',
-  cyanText: '#0E7490',
-  cream: '#FFF7AE',
-  creamHover: '#FFF294',
-  creamText: '#713F12'
+  cyan: '#111111',
+  cyanHover: '#2B2B2B',
+  cyanText: '#8A2B2B',
+  cream: '#F6F1E8',
+  creamHover: '#EFE4CF',
+  creamText: '#6B4E16'
 };
 
 function isCashMethod(method) {
@@ -106,7 +106,7 @@ export default function InStoreSaleDetailPage() {
 
   if (isLoading) {
     return (
-      <Box sx={{ maxWidth: 1400, mx: 'auto', py: 10, textAlign: 'center' }}>
+      <Box sx={{ py: 10, textAlign: 'center' }}>
         <CircularProgress size={38} sx={{ color: C.cyan }} />
         <Typography sx={{ mt: 2, color: C.muted, fontSize: 13.5 }}>
           Đang tải thông tin chi tiết hóa đơn...
@@ -117,7 +117,7 @@ export default function InStoreSaleDetailPage() {
 
   if (error || !data) {
     return (
-      <Box sx={{ maxWidth: 1400, mx: 'auto', py: 8 }}>
+      <Box sx={{ py: 8 }}>
         <Card sx={{ p: 4, textAlign: 'center', borderRadius: 3.5, border: `1px solid ${C.border}` }}>
           <Typography color="error" sx={{ fontWeight: 700, fontSize: 15 }}>
             {error?.message || 'Không tìm thấy thông tin hóa đơn.'}
@@ -129,7 +129,7 @@ export default function InStoreSaleDetailPage() {
               mt: 2,
               textTransform: 'none',
               bgcolor: C.cyan,
-              color: C.text,
+              color: '#FFFFFF',
               fontWeight: 700,
               borderRadius: 2.5,
               px: 2.5,
@@ -144,7 +144,7 @@ export default function InStoreSaleDetailPage() {
   }
 
   return (
-    <Box sx={{ maxWidth: 1400, mx: 'auto', color: C.text, pb: 6 }}>
+    <Box sx={{ color: C.text, pb: 6 }}>
       {/* ─── TIÊU ĐỀ & NÚT IN HÓA ĐƠN SANG HẲN BÊN PHẢI ─── */}
       <Box
         sx={{
@@ -167,7 +167,7 @@ export default function InStoreSaleDetailPage() {
             textTransform: 'none',
             borderRadius: 2.5,
             bgcolor: C.cyan,
-            color: C.text,
+            color: '#FFFFFF',
             fontWeight: 700,
             fontSize: 13.5,
             px: 2.5,
@@ -250,7 +250,7 @@ export default function InStoreSaleDetailPage() {
                 px: 1.5,
                 py: 0.5,
                 borderRadius: 4,
-                bgcolor: isCash ? C.cream : C.cyan,
+                bgcolor: isCash ? C.cream : C.borderLight,
                 color: isCash ? C.creamText : C.cyanText,
                 fontSize: 12,
                 fontWeight: 700,
@@ -329,7 +329,7 @@ export default function InStoreSaleDetailPage() {
                     key={item.orderItemId}
                     hover
                     sx={{
-                      '&:hover': { bgcolor: '#FAFCFE' },
+                      '&:hover': { bgcolor: '#FAF8F5' },
                       '& td': { borderBottom: `1px solid ${C.borderLight}`, py: 2 }
                     }}
                   >
@@ -341,7 +341,7 @@ export default function InStoreSaleDetailPage() {
                             width: 48,
                             height: 48,
                             borderRadius: 2,
-                            bgcolor: '#F1F5F9',
+                            bgcolor: C.borderLight,
                             overflow: 'hidden',
                             flexShrink: 0,
                             display: 'flex',
@@ -358,7 +358,7 @@ export default function InStoreSaleDetailPage() {
                               sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
                             />
                           ) : (
-                            <PictureOutlined style={{ fontSize: 20, color: '#94A3B8' }} />
+                            <PictureOutlined style={{ fontSize: 20, color: C.subtle }} />
                           )}
                         </Box>
                         <Box>

@@ -42,15 +42,15 @@ import { getProducts } from 'services/productService';
 import { useCrumbs } from '../../layouts/crumbs';
 
 const COLORS = {
-  text: '#202D42',
-  muted: '#75869F',
-  border: '#E5E7E3',
-  cyan: '#8DE9F2',
-  cyanHover: '#6DDDE9',
-  price: '#239EAA',
-  background: '#FAFAF8',
-  selected: '#EAFBFC',
-  dark: '#123B43'
+  text: '#111111',
+  muted: '#5C5650',
+  border: '#E6E3DE',
+  cyan: '#111111',
+  cyanHover: '#2B2B2B',
+  price: '#8A2B2B',
+  background: '#F7F5F2',
+  selected: '#F6F1E8',
+  dark: '#111111'
 };
 
 const cardSx = {
@@ -243,9 +243,9 @@ function ProductItem({ product, checked, onToggle }) {
         alignItems: 'center',
         gap: 1.5,
         p: 1.25,
-        border: `1px solid ${checked ? '#FACC15' : COLORS.border}`,
+        border: `1px solid ${checked ? '#111111' : COLORS.border}`,
         borderRadius: 2.5,
-        bgcolor: checked ? '#FEFCE8' : '#FFFFFF',
+        bgcolor: checked ? '#F6F1E8' : '#FFFFFF',
         cursor: 'pointer'
       }}
     >
@@ -257,7 +257,7 @@ function ProductItem({ product, checked, onToggle }) {
         sx={{
           p: 0.5,
           color: COLORS.border,
-          '&.Mui-checked': { color: '#EAB308' }
+          '&.Mui-checked': { color: '#111111' }
         }}
       />
 
@@ -268,7 +268,7 @@ function ProductItem({ product, checked, onToggle }) {
           flexShrink: 0,
           borderRadius: 2,
           overflow: 'hidden',
-          bgcolor: '#F8FAFC',
+          bgcolor: '#F7F5F2',
           border: `1px solid ${COLORS.border}`,
           display: 'flex',
           alignItems: 'center',
@@ -302,7 +302,7 @@ function ProductItem({ product, checked, onToggle }) {
           {productName}
         </Typography>
         <Stack direction="row" spacing={2} alignItems="center" sx={{ mt: 0.25 }}>
-          <Typography sx={{ color: '#202D42', fontSize: 12.5, fontWeight: 700 }}>
+          <Typography sx={{ color: '#111111', fontSize: 12.5, fontWeight: 700 }}>
             {productPrice}
           </Typography>
           <Typography sx={{ color: COLORS.muted, fontSize: 12 }}>
@@ -639,8 +639,6 @@ export default function AddPromotionPage() {
       <Box
           sx={{
             minHeight: '100%',
-            px: { xs: 1.5, md: 3 },
-            py: { xs: 2, md: 3 },
             bgcolor: COLORS.background,
             boxSizing: 'border-box'
           }}
@@ -937,12 +935,12 @@ export default function AddPromotionPage() {
                       gap: 1.5,
                       p: 2,
                       borderRadius: 2.5,
-                      border: `1.5px solid ${form.applyScope === 'ALL' ? '#8EECF5' : COLORS.border}`,
-                      bgcolor: form.applyScope === 'ALL' ? '#ECFEFF' : '#FFFFFF',
+                      border: `1.5px solid ${form.applyScope === 'ALL' ? '#111111' : COLORS.border}`,
+                      bgcolor: form.applyScope === 'ALL' ? '#FAF8F5' : '#FFFFFF',
                       cursor: 'pointer',
                       transition: 'all 0.2s ease',
                       '&:hover': {
-                        borderColor: form.applyScope === 'ALL' ? '#8EECF5' : '#CBD5E1'
+                        borderColor: form.applyScope === 'ALL' ? '#111111' : '#CBD5E1'
                       }
                     }}
                   >
@@ -956,7 +954,7 @@ export default function AddPromotionPage() {
                         p: 0.5,
                         color: '#94A3B8',
                         '&.Mui-checked': {
-                          color: '#8EECF5'
+                          color: '#111111'
                         }
                       }}
                     />
@@ -981,12 +979,12 @@ export default function AddPromotionPage() {
                       gap: 1.5,
                       p: 2,
                       borderRadius: 2.5,
-                      border: `1.5px solid ${form.applyScope === 'SELECTED' ? '#8EECF5' : COLORS.border}`,
-                      bgcolor: form.applyScope === 'SELECTED' ? '#ECFEFF' : '#FFFFFF',
+                      border: `1.5px solid ${form.applyScope === 'SELECTED' ? '#111111' : COLORS.border}`,
+                      bgcolor: form.applyScope === 'SELECTED' ? '#FAF8F5' : '#FFFFFF',
                       cursor: 'pointer',
                       transition: 'all 0.2s ease',
                       '&:hover': {
-                        borderColor: form.applyScope === 'SELECTED' ? '#8EECF5' : '#CBD5E1'
+                        borderColor: form.applyScope === 'SELECTED' ? '#111111' : '#CBD5E1'
                       }
                     }}
                   >
@@ -1000,7 +998,7 @@ export default function AddPromotionPage() {
                         p: 0.5,
                         color: '#94A3B8',
                         '&.Mui-checked': {
-                          color: '#8EECF5'
+                          color: '#111111'
                         }
                       }}
                     />
@@ -1082,7 +1080,7 @@ export default function AddPromotionPage() {
 
                     {/* Counter & status */}
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
-                      <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: '#202D42' }}>
+                      <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: '#111111' }}>
                         Đã chọn: {form.productIds.length} / {products.length} sản phẩm
                       </Typography>
                       {form.productIds.length > 0 && (
@@ -1183,7 +1181,7 @@ export default function AddPromotionPage() {
                   sx={{
                     minWidth: 165,
                     bgcolor: COLORS.cyan,
-                    color: COLORS.dark,
+                    color: '#FFFFFF',
                     fontWeight: 700,
                     borderRadius: 2,
                     px: 3,

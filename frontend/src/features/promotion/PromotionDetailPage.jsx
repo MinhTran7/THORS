@@ -24,19 +24,19 @@ import { getProducts } from 'services/productService';
 import { useCrumbs } from '../../layouts/crumbs';
 
 const C = {
-  text: '#1E293B',
-  muted: '#64748B',
+  text: '#111111',
+  muted: '#5C5650',
   subtle: '#94A3B8',
-  border: '#E2E8F0',
-  borderLight: '#F1F5F9',
-  bg: '#F8FAFC',
+  border: '#E6E3DE',
+  borderLight: '#EFEBE5',
+  bg: '#F7F5F2',
   surface: '#FFFFFF',
-  cyan: '#8EECF5',
-  cyanHover: '#76E5EF',
-  cyanText: '#0E7490',
-  cream: '#FFF7AE',
-  creamHover: '#FFF294',
-  creamText: '#713F12'
+  cyan: '#111111',
+  cyanHover: '#2B2B2B',
+  cyanText: '#8A2B2B',
+  cream: '#F6F1E8',
+  creamHover: '#EFE4CF',
+  creamText: '#6B4E16'
 };
 
 const cardSx = {
@@ -177,7 +177,7 @@ export default function PromotionDetailPage() {
 
   if (loading) {
     return (
-      <Box sx={{ maxWidth: 1400, mx: 'auto', py: 10, textAlign: 'center' }}>
+      <Box sx={{ py: 10, textAlign: 'center' }}>
         <CircularProgress size={38} sx={{ color: C.cyan }} />
         <Typography sx={{ mt: 2, color: C.muted, fontSize: 13.5 }}>
           Đang tải thông tin chi tiết khuyến mãi...
@@ -188,7 +188,7 @@ export default function PromotionDetailPage() {
 
   if (error || !promotion) {
     return (
-      <Box sx={{ maxWidth: 1400, mx: 'auto', py: 8 }}>
+      <Box sx={{ py: 8 }}>
         <Card sx={{ p: 4, textAlign: 'center', borderRadius: 3.5, border: `1px solid ${C.border}` }}>
           <Typography color="error" sx={{ fontWeight: 700, fontSize: 15 }}>
             {error || 'Không tìm thấy chương trình khuyến mãi.'}
@@ -200,7 +200,7 @@ export default function PromotionDetailPage() {
               mt: 2,
               textTransform: 'none',
               bgcolor: C.cyan,
-              color: C.text,
+              color: '#FFFFFF',
               fontWeight: 700,
               borderRadius: 2.5,
               px: 2.5,
@@ -220,7 +220,7 @@ export default function PromotionDetailPage() {
   const selectedProducts = allProducts.filter((product) => selectedIdSet.has(String(getProductId(product))));
 
   return (
-    <Box sx={{ maxWidth: 1400, mx: 'auto', color: C.text, pb: 6 }}>
+    <Box sx={{ color: C.text, pb: 6 }}>
       {/* ─── TIÊU ĐỀ & NÚT CHỈNH SỬA SANG BÊN PHẢI ─── */}
       <Box
         sx={{
@@ -244,7 +244,7 @@ export default function PromotionDetailPage() {
             textTransform: 'none',
             borderRadius: 2.5,
             bgcolor: C.cyan,
-            color: C.text,
+            color: '#FFFFFF',
             fontWeight: 700,
             fontSize: 13.5,
             px: 2.5,
@@ -345,13 +345,13 @@ export default function PromotionDetailPage() {
                     schedule.code === 'ONGOING'
                       ? C.cream
                       : schedule.code === 'UPCOMING'
-                      ? '#E0F2FE'
+                      ? '#EFEBE5'
                       : '#F1F5F9',
                   color:
                     schedule.code === 'ONGOING'
                       ? C.creamText
                       : schedule.code === 'UPCOMING'
-                      ? '#0369A1'
+                      ? '#8A2B2B'
                       : C.muted
                 }}
               >
@@ -442,7 +442,7 @@ export default function PromotionDetailPage() {
                 <Table
                   sx={{
                     '& th': {
-                      bgcolor: '#F8FAFC',
+                      bgcolor: '#F7F5F2',
                       color: C.muted,
                       fontSize: 12,
                       fontWeight: 700,
@@ -474,7 +474,7 @@ export default function PromotionDetailPage() {
                       const price = getProductPrice(product);
 
                       return (
-                        <TableRow key={id} hover sx={{ '&:hover': { bgcolor: '#FAFCFE' } }}>
+                        <TableRow key={id} hover sx={{ '&:hover': { bgcolor: '#FAF8F5' } }}>
                           <TableCell sx={{ pl: 3 }}>
                             <Box
                               sx={{
@@ -482,7 +482,7 @@ export default function PromotionDetailPage() {
                                 height: 48,
                                 borderRadius: 2,
                                 border: `1px solid ${C.borderLight}`,
-                                bgcolor: '#F8FAFC',
+                                bgcolor: '#F7F5F2',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
@@ -524,7 +524,7 @@ export default function PromotionDetailPage() {
             sx={{
               p: 2.5,
               borderRadius: 2.5,
-              bgcolor: '#F8FAFC',
+              bgcolor: '#F7F5F2',
               border: `1px solid ${C.borderLight}`
             }}
           >

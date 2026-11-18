@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import useSWR from 'swr';
-import { Box, IconButton, Table, TableBody, TableCell, TableHead, TableRow, TextField, Tooltip, Typography } from '@mui/material';
+import { Box, IconButton, Table, TableBody, TableCell, TableHead, TableRow, Tooltip, Typography } from '@mui/material';
 import { Stack } from '../components/Flex';
 import { CheckCircleOutlined, CloseCircleOutlined, DownloadOutlined, FileTextOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useCrumbs } from 'layouts/crumbs';
 import { downloadCsv } from 'utils/csv';
 import { fetchAll, logsApi } from '../api';
 import { LOG_STATUS, ROLE_LABEL } from '../constants';
-import { formatLogDate, formatTime, humanize, parseUtc, toYmd, tzLabel, tzOffsetMinutes } from '../format';
+import { formatLogDate, formatTime, humanize, parseUtc, tzLabel, tzOffsetMinutes } from '../format';
 import { useDebounced } from '../hooks';
 import { brand, cardSx, fs } from '../tokens';
 import { OutlineButton } from '../components/Brand';
@@ -17,6 +17,7 @@ import {
   FilterSelect,
   PageHeader,
   Pager,
+  ResetFilterButton,
   SearchField,
   StatCard,
   StatRow,
@@ -25,6 +26,7 @@ import {
   headCellSx
 } from '../components/Blocks';
 import { useToast } from '../components/Toast';
+import { DateRangeFilter, dateRangeCaption, resolveDateRange } from '../components/DateFilter';
 
 const ACTION_LABELS = {
   LOGIN: 'Đăng nhập',
@@ -50,36 +52,9 @@ const STATUS_OPTIONS = [
   ...Object.entries(LOG_STATUS).map(([value, meta]) => ({ value, label: meta.label }))
 ];
 
-const RANGE_OPTIONS = [
-  { value: '7d', label: '7 ngày qua' },
-  { value: '30d', label: '30 ngày qua' },
-  { value: 'all', label: 'Tất cả thời gian' },
-  { value: 'custom', label: 'Tùy chọn ngày…' }
-];
 
-const daysAgo = (n) => {
-  const today = new Date();
-  return toYmd(new Date(today.getFullYear(), today.getMonth(), today.getDate() - n));
-};
-
-// "N ngày qua" tính cả hôm nay. Chuỗi rỗng = không giới hạn phía đó.
-function presetRange(preset) {
-  if (preset === '7d') return { from: daysAgo(6), to: daysAgo(0) };
-  if (preset === '30d') return { from: daysAgo(29), to: daysAgo(0) };
-  return { from: '', to: '' };
-}
-
-const dmy = (ymd) => ymd.split('-').reverse().join('/');
-
-function rangeCaption(preset, from, to) {
-  if (preset === 'custom') {
-    if (from && to) return `Từ ${dmy(from)} đến ${dmy(to)}`;
-    if (from) return `Từ ${dmy(from)} đến nay`;
-    if (to) return `Đến hết ${dmy(to)}`;
-    return 'Toàn bộ lịch sử';
-  }
-  return preset === 'all' ? 'Toàn bộ lịch sử' : `Trong ${RANGE_OPTIONS.find((o) => o.value === preset).label}`;
-}
+// Mặc định (và khi bấm "Bỏ lọc") xem 7 ngày qua
+const DEFAULT_RANGE = { preset: '7d', from: '', to: '' };
 
 // Hàng thấp hơn mặc định để một trang 10 dòng đỡ phải cuộn.
 const cellSx = { ...bodyCellSx, py: 1 };
@@ -100,11 +75,9 @@ export default function SystemLogPage() {
   const [toast, showToast] = useToast();
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('');
-  const [preset, setPreset] = useState('7d');
-  // Chỉ dùng khi chọn "Tùy chọn ngày…"; các mốc nhanh tính lại mỗi lần render nên qua nửa đêm vẫn đúng.
-  const [customFrom, setCustomFrom] = useState('');
-  const [customTo, setCustomTo] = useState('');
-  const { from, to } = preset === 'custom' ? { from: customFrom, to: customTo } : presetRange(preset);
+  const [dateRange, setDateRange] = useState(DEFAULT_RANGE);
+  // Các mốc nhanh tính lại mỗi lần render nên qua nửa đêm vẫn đúng.
+  const { from, to } = resolveDateRange(dateRange);
   const [page, setPage] = useState(0);
   const [exporting, setExporting] = useState(false);
   const [refreshedAt, setRefreshedAt] = useState(null);
@@ -128,18 +101,9 @@ export default function SystemLogPage() {
     setPage(0);
   };
 
-  // Chuyển sang "Tùy chọn ngày…" thì giữ nguyên khoảng đang xem làm điểm bắt đầu để sửa tiếp.
-  const choosePreset = (value) => {
-    if (value === 'custom' && preset !== 'custom') {
-      setCustomFrom(from);
-      setCustomTo(to);
-    }
-    filter(setPreset)(value);
-  };
-
   const stats = summary.data;
   const successRate = stats && stats.events > 0 ? Math.round((stats.successful / stats.events) * 100) : 100;
-  const caption = rangeCaption(preset, from, to);
+  const caption = dateRangeCaption(dateRange);
 
   async function exportCsv() {
     setExporting(true);
@@ -165,20 +129,6 @@ export default function SystemLogPage() {
   }
 
   const items = list.data?.items ?? [];
-  const dateField = (label, value, setter) => (
-    <TextField
-      type="date"
-      size="small"
-      label={label}
-      value={value}
-      onChange={(event) => filter(setter)(event.target.value)}
-      slotProps={{ inputLabel: { shrink: true } }}
-      sx={{
-        minWidth: 170,
-        '& .MuiOutlinedInput-root': { bgcolor: brand.surface, borderRadius: '10px', fontSize: fs.body, '& fieldset': { borderColor: brand.line } }
-      }}
-    />
-  );
 
   return (
     <Box>
@@ -211,17 +161,19 @@ export default function SystemLogPage() {
       </StatRow>
 
       <Toolbar>
-        <Box sx={{ flex: 1 }}>
-          <SearchField placeholder="Tìm người dùng, hành động hoặc địa chỉ IP" value={q} onChange={filter(setQ)} />
+        <Box sx={{ flex: '1 1 260px', minWidth: 240 }}>
+          <SearchField title="Tìm kiếm nhật ký" placeholder="Tìm người dùng, hành động hoặc địa chỉ IP" value={q} onChange={filter(setQ)} />
         </Box>
-        <FilterSelect label="Lọc theo trạng thái" value={status} onChange={filter(setStatus)} options={STATUS_OPTIONS} minWidth={180} />
-        <FilterSelect label="Khoảng thời gian" value={preset} onChange={choosePreset} options={RANGE_OPTIONS} minWidth={170} />
-        {preset === 'custom' && (
-          <>
-            {dateField('Từ ngày', customFrom, setCustomFrom)}
-            {dateField('Đến ngày', customTo, setCustomTo)}
-          </>
-        )}
+        <FilterSelect label="Trạng thái" value={status} onChange={filter(setStatus)} options={STATUS_OPTIONS} minWidth={180} />
+        <DateRangeFilter value={dateRange} onChange={filter(setDateRange)} />
+        <ResetFilterButton
+          onClick={() => {
+            setQ('');
+            setStatus('');
+            setDateRange(DEFAULT_RANGE);
+            setPage(0);
+          }}
+        />
       </Toolbar>
 
       <Box sx={{ ...cardSx, overflow: 'hidden' }}>

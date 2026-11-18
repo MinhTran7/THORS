@@ -46,26 +46,28 @@ import { categoryFullName, getCategories, sortCategoriesAsTree } from '../../ser
 import { primaryButtonSx, outlineButtonSx } from '../customer/theme';
 import ProductExcelDialog from './ProductExcelDialog';
 
+// Tông trầm đồng bộ với màn khách hàng: cyan = nền nút chính / mục đang chọn (đen, chữ trắng),
+// cyanText = màu nhấn đỏ đô, cream = nền be nhạt cho ghi chú.
 const C = {
-  text: '#1E293B',
-  muted: '#64748B',
+  text: '#111111',
+  muted: '#5C5650',
   subtle: '#94A3B8',
-  border: '#E2E8F0',
-  borderLight: '#F1F5F9',
-  bg: '#F8FAFC',
+  border: '#E6E3DE',
+  borderLight: '#EFEBE5',
+  bg: '#F7F5F2',
   surface: '#FFFFFF',
-  cyan: '#8EECF5',
-  cyanHover: '#76E5EF',
-  cyanText: '#0E7490',
-  cream: '#FFF7AE',
-  creamHover: '#FFF294',
-  creamText: '#713F12',
+  cyan: '#111111',
+  cyanHover: '#2B2B2B',
+  cyanText: '#8A2B2B',
+  cream: '#F6F1E8',
+  creamHover: '#EFE4CF',
+  creamText: '#6B4E16',
   error: '#EF4444'
 };
 
 const PAGE_SIZE = 8;
 
-// Switch thu nhỏ theo Design System (34x18, track #BAF2F8 khi bật, #CBD5E1 khi tắt)
+// Switch thu nhỏ theo Design System (34x18, track đen khi bật, be xám khi tắt — tông trầm)
 const switchSx = {
   width: 34,
   height: 18,
@@ -75,9 +77,9 @@ const switchSx = {
     transitionDuration: '200ms',
     '&.Mui-checked': {
       transform: 'translateX(16px)',
-      color: '#67E8F9',
+      color: '#FFFFFF',
       '& + .MuiSwitch-track': {
-        bgcolor: '#BAF2F8',
+        bgcolor: '#111111',
         opacity: 1,
         border: 0
       }
@@ -90,7 +92,7 @@ const switchSx = {
   },
   '& .MuiSwitch-track': {
     borderRadius: 9,
-    bgcolor: '#CBD5E1',
+    bgcolor: '#D6D0C7',
     opacity: 1
   }
 };
@@ -477,7 +479,7 @@ export default function ProductPage() {
   const enablingOnline = onlineTarget ? !isOnlineProduct(onlineTarget) : false;
 
   return (
-    <Box sx={{ maxWidth: 1440, mx: 'auto', pb: 6, color: C.text }}>
+    <Box sx={{ pb: 6, color: C.text }}>
       {/* HEADER */}
       <Box
         sx={{
@@ -494,7 +496,7 @@ export default function ProductPage() {
             variant="h3"
             sx={{
               fontWeight: 800,
-              color: '#0F172A',
+              color: '#111111',
               fontSize: { xs: 22, sm: 26 }
             }}
           >
@@ -566,12 +568,12 @@ export default function ProductPage() {
                 fontSize: 13,
                 fontWeight: selected ? 800 : 600,
                 bgcolor: selected ? C.cyan : C.surface,
-                color: '#0F172A',
+                color: selected ? '#FFFFFF' : C.text,
                 border: `1px solid ${selected ? C.cyanHover : C.border}`,
-                boxShadow: selected ? '0 2px 8px rgba(142, 236, 245, 0.4)' : 'none',
+                boxShadow: selected ? '0 2px 8px rgba(17, 17, 17, 0.2)' : 'none',
                 '&:hover': {
                   bgcolor: selected ? C.cyanHover : C.borderLight,
-                  borderColor: selected ? C.cyanHover : '#CBD5E1'
+                  borderColor: selected ? C.cyanHover : '#D6D0C7'
                 }
               }}
             >
@@ -761,8 +763,8 @@ export default function ProductPage() {
                               width: 44,
                               height: 44,
                               borderRadius: 2,
-                              bgcolor: '#F0FCFE',
-                              color: '#0F172A',
+                              bgcolor: '#EFEBE5',
+                              color: '#111111',
                               fontWeight: 800,
                               border: `1px solid ${C.border}`,
                               flexShrink: 0
@@ -772,7 +774,7 @@ export default function ProductPage() {
                           </Avatar>
 
                           <Box sx={{ minWidth: 0 }}>
-                            <Typography sx={{ fontSize: 13.5, fontWeight: 800, color: '#0F172A' }} noWrap>
+                            <Typography sx={{ fontSize: 13.5, fontWeight: 800, color: '#111111' }} noWrap>
                               {product.productName}
                             </Typography>
                             <Typography sx={{ fontSize: 12, color: '#94A3B8', mt: 0.25 }}>
@@ -789,7 +791,7 @@ export default function ProductPage() {
 
                       {/* SELLING PRICE */}
                       <TableCell>
-                        <Typography sx={{ fontSize: 13.5, fontWeight: 800, color: '#0F172A' }}>{displayPrice(product)}</Typography>
+                        <Typography sx={{ fontSize: 13.5, fontWeight: 800, color: '#111111' }}>{displayPrice(product)}</Typography>
                       </TableCell>
 
                       {/* STOCK — tồn của biến thể đang hoạt động; có thể bán = tồn − đang giữ cho đơn */}
@@ -851,7 +853,7 @@ export default function ProductPage() {
                             </span>
                           </Tooltip>
 
-                          <Box sx={chipSx(isActive ? '#E7F6F1' : '#F0F2F4', isActive ? '#168B70' : '#75869F')}>
+                          <Box sx={chipSx(isActive ? '#E7F6F1' : '#EFEBE5', isActive ? '#168B70' : '#5C5650')}>
                             {isActive ? 'Hoạt động' : 'Đã ẩn'}
                           </Box>
                         </Stack>
@@ -883,7 +885,7 @@ export default function ProductPage() {
                               />
                             </span>
                           </Tooltip>
-                          <Box sx={chipSx(isOnline ? '#E7F6F1' : '#F0F2F4', isOnline ? '#168B70' : '#75869F')}>
+                          <Box sx={chipSx(isOnline ? '#E7F6F1' : '#EFEBE5', isOnline ? '#168B70' : '#5C5650')}>
                             {isOnline
                               ? onlineCount < activeVariants
                                 ? `${onlineCount}/${activeVariants} biến thể`
@@ -905,10 +907,10 @@ export default function ProductPage() {
                                 viewProduct(product.productId);
                               }}
                               sx={{
-                                color: '#64748B',
+                                color: '#5C5650',
                                 p: 0.75,
                                 '&:hover': {
-                                  color: '#0F172A',
+                                  color: '#111111',
                                   bgcolor: 'transparent'
                                 }
                               }}
@@ -926,10 +928,10 @@ export default function ProductPage() {
                                 navigate(`/products/${product.productId}/edit`);
                               }}
                               sx={{
-                                color: '#64748B',
+                                color: '#5C5650',
                                 p: 0.75,
                                 '&:hover': {
-                                  color: '#0F172A',
+                                  color: '#111111',
                                   bgcolor: 'transparent'
                                 }
                               }}
@@ -946,7 +948,7 @@ export default function ProductPage() {
               {!loading && filteredProducts.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
-                    <Typography sx={{ fontSize: 14, fontWeight: 800, color: '#0F172A' }}>
+                    <Typography sx={{ fontSize: 14, fontWeight: 800, color: '#111111' }}>
                       {products.length === 0 ? 'Chưa có sản phẩm nào trong kho' : 'Không tìm thấy sản phẩm phù hợp'}
                     </Typography>
                     <Typography sx={{ fontSize: 13, color: C.muted, mt: 0.5 }}>
@@ -990,7 +992,7 @@ export default function ProductPage() {
         fullWidth
         PaperProps={{ sx: { borderRadius: 3.5, p: 1 } }}
       >
-        <DialogTitle sx={{ fontWeight: 800, color: '#0F172A', fontSize: 18 }}>
+        <DialogTitle sx={{ fontWeight: 800, color: '#111111', fontSize: 18 }}>
           {statusDialogProduct?.status === 'ACTIVE' ? 'Ẩn sản phẩm' : 'Kích hoạt sản phẩm'}
         </DialogTitle>
 
@@ -1009,7 +1011,7 @@ export default function ProductPage() {
           )}
 
           {statusDialogProduct?.status === 'INACTIVE' && (
-            <Box sx={{ bgcolor: '#F0FCFE', border: `1px solid ${C.cyan}`, borderRadius: 2.5, p: 2, mt: 2 }}>
+            <Box sx={{ bgcolor: '#EFEBE5', border: `1px solid ${C.cyan}`, borderRadius: 2.5, p: 2, mt: 2 }}>
               <Typography sx={{ fontSize: 12.5, color: C.cyanText, lineHeight: 1.6 }}>
                 Sản phẩm sẽ hoạt động trở lại trong hệ thống quản lý. Trạng thái bán online vẫn phụ thuộc vào cấu hình biến thể của sản
                 phẩm.
@@ -1030,7 +1032,7 @@ export default function ProductPage() {
               ...outlineButtonSx,
               border: 'none',
               bgcolor: statusDialogProduct?.status === 'ACTIVE' ? C.cream : C.cyan,
-              color: statusDialogProduct?.status === 'ACTIVE' ? C.creamText : '#0F172A',
+              color: statusDialogProduct?.status === 'ACTIVE' ? C.creamText : '#FFFFFF',
               fontWeight: 800,
               '&:hover': {
                 bgcolor: statusDialogProduct?.status === 'ACTIVE' ? C.creamHover : C.cyanHover
@@ -1050,7 +1052,7 @@ export default function ProductPage() {
         fullWidth
         PaperProps={{ sx: { borderRadius: 3.5, p: 1 } }}
       >
-        <DialogTitle sx={{ fontWeight: 800, color: '#0F172A', fontSize: 18 }}>
+        <DialogTitle sx={{ fontWeight: 800, color: '#111111', fontSize: 18 }}>
           {enablingOnline ? 'Bật bán online' : 'Tắt bán online'}
         </DialogTitle>
 
@@ -1061,7 +1063,7 @@ export default function ProductPage() {
 
           <Box
             sx={{
-              bgcolor: enablingOnline ? '#F0FCFE' : C.cream,
+              bgcolor: enablingOnline ? '#EFEBE5' : C.cream,
               border: enablingOnline ? `1px solid ${C.cyan}` : 'none',
               borderRadius: 2.5,
               p: 2,
@@ -1088,7 +1090,7 @@ export default function ProductPage() {
               ...outlineButtonSx,
               border: 'none',
               bgcolor: enablingOnline ? C.cyan : C.cream,
-              color: enablingOnline ? '#0F172A' : C.creamText,
+              color: enablingOnline ? '#FFFFFF' : C.creamText,
               fontWeight: 800,
               '&:hover': { bgcolor: enablingOnline ? C.cyanHover : C.creamHover }
             }}

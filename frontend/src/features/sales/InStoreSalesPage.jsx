@@ -509,7 +509,7 @@ export default function InStoreSalesPage() {
       sx={{
         maxWidth: 1600,
         mx: 'auto',
-        color: '#0F172A',
+        color: '#111111',
         display: { lg: 'flex' },
         flexDirection: 'column',
         height: { lg: 'calc(100vh - 135px)' }
@@ -557,7 +557,7 @@ export default function InStoreSalesPage() {
                     input: {
                     startAdornment: (
                       <InputAdornment position="start">
-                        <SearchOutlined style={{ color: '#94A3B8', fontSize: 16 }} />
+                        <SearchOutlined style={{ color: '#8C857D', fontSize: 16 }} />
                       </InputAdornment>
                     ),
                     endAdornment: (
@@ -568,7 +568,7 @@ export default function InStoreSalesPage() {
                           title="Có máy quét: cứ bóp cò là thêm vào hóa đơn. Không có máy quét: bấm để quét bằng camera."
                           onClick={() => setCameraOpen(true)}
                         >
-                          <ScanOutlined style={{ color: '#64748B', fontSize: 18 }} />
+                          <ScanOutlined style={{ color: '#5C5650', fontSize: 18 }} />
                         </IconButton>
                       </InputAdornment>
                     )
@@ -579,9 +579,9 @@ export default function InStoreSalesPage() {
                     '& .MuiOutlinedInput-root': {
                       borderRadius: 2.5,
                       height: 42,
-                      '& fieldset': { borderColor: '#E2E8F0' },
-                      '&:hover fieldset': { borderColor: '#8EECF5' },
-                      '&.Mui-focused fieldset': { borderColor: '#8EECF5' }
+                      '& fieldset': { borderColor: '#E6E3DE' },
+                      '&:hover fieldset': { borderColor: '#111111' },
+                      '&.Mui-focused fieldset': { borderColor: '#111111' }
                     }
                   }}
                 />
@@ -595,7 +595,7 @@ export default function InStoreSalesPage() {
                       right: 0,
                       zIndex: 20,
                       bgcolor: '#FFFFFF',
-                      border: '1px solid #E2E8F0',
+                      border: '1px solid #E6E3DE',
                       borderRadius: 2.5,
                       boxShadow: '0 10px 24px rgba(15, 23, 42, 0.12)',
                       maxHeight: 380,
@@ -605,10 +605,10 @@ export default function InStoreSalesPage() {
                   >
                     {loading ? (
                       <Box sx={{ py: 3, textAlign: 'center' }}>
-                        <CircularProgress size={24} sx={{ color: '#8EECF5' }} />
+                        <CircularProgress size={24} sx={{ color: '#111111' }} />
                       </Box>
                     ) : !visibleProducts.length ? (
-                      <Typography sx={{ py: 3, textAlign: 'center', color: '#64748B', fontSize: 13 }}>
+                      <Typography sx={{ py: 3, textAlign: 'center', color: '#5C5650', fontSize: 13 }}>
                         Không tìm thấy sản phẩm phù hợp.
                       </Typography>
                     ) : (
@@ -647,7 +647,7 @@ export default function InStoreSalesPage() {
                               py: 1,
                               cursor: 'pointer',
                               opacity: isOut ? 0.55 : 1,
-                              '&:hover': { bgcolor: '#F0FDFF' }
+                              '&:hover': { bgcolor: '#FAF8F5' }
                             }}
                           >
                             <Box
@@ -655,8 +655,8 @@ export default function InStoreSalesPage() {
                                 width: 40,
                                 height: 40,
                                 borderRadius: 1.5,
-                                bgcolor: '#F8FAFC',
-                                border: '1px solid #E2E8F0',
+                                bgcolor: '#F7F5F2',
+                                border: '1px solid #E6E3DE',
                                 flexShrink: 0,
                                 overflow: 'hidden',
                                 display: 'flex',
@@ -667,20 +667,20 @@ export default function InStoreSalesPage() {
                               {image ? (
                                 <Box component="img" src={image} alt={product.productName} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                               ) : (
-                                <ShoppingCartOutlined style={{ fontSize: 16, color: '#CBD5E1' }} />
+                                <ShoppingCartOutlined style={{ fontSize: 16, color: '#D6D0C7' }} />
                               )}
                             </Box>
                             <Box sx={{ flex: 1, minWidth: 0 }}>
                               <Typography
-                                sx={{ fontSize: 13, fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                                sx={{ fontSize: 13, fontWeight: 700, color: '#111111', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
                               >
                                 {product.productName}
                               </Typography>
-                              <Typography sx={{ fontSize: 11.5, color: '#94A3B8' }}>{product.sku || '—'}</Typography>
+                              <Typography sx={{ fontSize: 11.5, color: '#8C857D' }}>{product.sku || '—'}</Typography>
                             </Box>
                             <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
-                              <Typography sx={{ fontSize: 13, fontWeight: 800, color: '#0F172A' }}>{priceText}</Typography>
-                              <Typography sx={{ fontSize: 11.5, color: isOut ? '#EF4444' : '#64748B' }}>
+                              <Typography sx={{ fontSize: 13, fontWeight: 800, color: '#111111' }}>{priceText}</Typography>
+                              <Typography sx={{ fontSize: 11.5, color: isOut ? '#EF4444' : '#5C5650' }}>
                                 {isOut ? 'Hết hàng' : `Tồn: ${stock}`}
                               </Typography>
                             </Box>
@@ -707,9 +707,9 @@ export default function InStoreSalesPage() {
                 '& .MuiOutlinedInput-root': {
                   borderRadius: 2.5,
                   height: 42,
-                  '& fieldset': { borderColor: '#E2E8F0' },
-                  '&:hover fieldset': { borderColor: '#8EECF5' },
-                  '&.Mui-focused fieldset': { borderColor: '#8EECF5' }
+                  '& fieldset': { borderColor: '#E6E3DE' },
+                  '&:hover fieldset': { borderColor: '#111111' },
+                  '&.Mui-focused fieldset': { borderColor: '#111111' }
                 }
               }}
             >
@@ -725,7 +725,7 @@ export default function InStoreSalesPage() {
             sx={{
               bgcolor: '#FFFFFF',
               borderRadius: 3.5,
-              border: '1px solid #E2E8F0',
+              border: '1px solid #E6E3DE',
               p: { xs: 2, sm: 2.5 },
               boxShadow: '0 1px 4px rgba(0,0,0,0.03)',
               flex: 1,
@@ -756,20 +756,20 @@ export default function InStoreSalesPage() {
                   flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  bgcolor: '#F8FAFC',
+                  bgcolor: '#F7F5F2',
                   borderRadius: 2.5,
                   p: 2,
                   textAlign: 'center'
                 }}
               >
-                <ShoppingCartOutlined style={{ fontSize: 30, color: '#CBD5E1', marginBottom: 8 }} />
-                <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#475569' }}>Chưa có sản phẩm nào</Typography>
-                <Typography sx={{ fontSize: 11.5, color: '#94A3B8', mt: 0.25 }}>Tìm và chọn sản phẩm ở thanh tìm kiếm để thêm vào hóa đơn</Typography>
+                <ShoppingCartOutlined style={{ fontSize: 30, color: '#D6D0C7', marginBottom: 8 }} />
+                <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#4A443E' }}>Chưa có sản phẩm nào</Typography>
+                <Typography sx={{ fontSize: 11.5, color: '#8C857D', mt: 0.25 }}>Tìm và chọn sản phẩm ở thanh tìm kiếm để thêm vào hóa đơn</Typography>
               </Box>
             ) : (
               cart.map((line, index) => (
-                <Box key={line.key} sx={{ py: 1.25, borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', gap: 1.25 }}>
-                  <Typography sx={{ width: 22, fontSize: 12.5, fontWeight: 700, color: '#94A3B8', textAlign: 'center', flexShrink: 0 }}>
+                <Box key={line.key} sx={{ py: 1.25, borderBottom: '1px solid #EFEBE5', display: 'flex', alignItems: 'center', gap: 1.25 }}>
+                  <Typography sx={{ width: 22, fontSize: 12.5, fontWeight: 700, color: '#8C857D', textAlign: 'center', flexShrink: 0 }}>
                     {index + 1}
                   </Typography>
                   <Box
@@ -781,9 +781,9 @@ export default function InStoreSalesPage() {
                       height: 44,
                       borderRadius: 2,
                       objectFit: 'cover',
-                      bgcolor: '#F8FAFC',
+                      bgcolor: '#F7F5F2',
                       flexShrink: 0,
-                      border: '1px solid #E2E8F0'
+                      border: '1px solid #E6E3DE'
                     }}
                   />
                   <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -791,7 +791,7 @@ export default function InStoreSalesPage() {
                       sx={{
                         fontSize: 13,
                         fontWeight: 700,
-                        color: '#0F172A',
+                        color: '#111111',
                         lineHeight: 1.3,
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
@@ -802,12 +802,12 @@ export default function InStoreSalesPage() {
                     </Typography>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.25, flexWrap: 'wrap' }}>
                       {(line.size || line.color) && (
-                        <Typography sx={{ fontSize: 11.5, color: '#64748B' }}>
+                        <Typography sx={{ fontSize: 11.5, color: '#5C5650' }}>
                           {[line.size, line.color].filter(Boolean).join(' · ')}
                         </Typography>
                       )}
-                      {(line.size || line.color) && <Typography sx={{ fontSize: 11.5, color: '#CBD5E1' }}>•</Typography>}
-                      <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: '#475569' }}>{money(line.price)}</Typography>
+                      {(line.size || line.color) && <Typography sx={{ fontSize: 11.5, color: '#D6D0C7' }}>•</Typography>}
+                      <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: '#4A443E' }}>{money(line.price)}</Typography>
                     </Box>
                   </Box>
                   <Box
@@ -818,7 +818,7 @@ export default function InStoreSalesPage() {
                     }}
                   >
                     <IconButton size="small" onClick={() => updateQuantity(line.key, -1)} sx={{ p: 0.5 }}>
-                      <MinusOutlined style={{ fontSize: 10, color: '#475569' }} />
+                      <MinusOutlined style={{ fontSize: 10, color: '#4A443E' }} />
                     </IconButton>
                     <Box
                       component="input"
@@ -835,7 +835,7 @@ export default function InStoreSalesPage() {
                         textAlign: 'center',
                         fontSize: 13,
                         fontWeight: 700,
-                        color: '#0F172A',
+                        color: '#111111',
                         border: 'none',
                         outline: 'none',
                         bgcolor: 'transparent',
@@ -848,16 +848,16 @@ export default function InStoreSalesPage() {
                       onClick={() => updateQuantity(line.key, 1)}
                       sx={{ p: 0.5 }}
                     >
-                      <PlusOutlined style={{ fontSize: 10, color: '#475569' }} />
+                      <PlusOutlined style={{ fontSize: 10, color: '#4A443E' }} />
                     </IconButton>
                   </Box>
-                  <Typography sx={{ minWidth: 90, textAlign: 'right', fontSize: 13.5, fontWeight: 700, color: '#0F172A', flexShrink: 0 }}>
+                  <Typography sx={{ minWidth: 90, textAlign: 'right', fontSize: 13.5, fontWeight: 700, color: '#111111', flexShrink: 0 }}>
                     {money(line.price * line.quantity)}
                   </Typography>
                   <IconButton
                     size="small"
                     onClick={() => setCart((prev) => prev.filter((item) => item.key !== line.key))}
-                    sx={{ p: 0.5, color: '#94A3B8', flexShrink: 0, '&:hover': { color: '#EF4444' } }}
+                    sx={{ p: 0.5, color: '#8C857D', flexShrink: 0, '&:hover': { color: '#EF4444' } }}
                   >
                     <CloseOutlined style={{ fontSize: 11 }} />
                   </IconButton>
@@ -883,10 +883,10 @@ export default function InStoreSalesPage() {
                   pointerEvents: 'auto',
                   width: 44,
                   height: 44,
-                  bgcolor: '#8EECF5',
-                  color: '#0F172A',
+                  bgcolor: '#111111',
+                  color: '#FFFFFF',
                   boxShadow: '0 4px 12px rgba(15, 23, 42, 0.15)',
-                  '&:hover': { bgcolor: '#5FDDEA' }
+                  '&:hover': { bgcolor: '#2B2B2B' }
                 }}
               >
                 <PlusOutlined style={{ fontSize: 18 }} />
@@ -901,7 +901,7 @@ export default function InStoreSalesPage() {
           sx={{
             bgcolor: '#FFFFFF',
             borderRadius: 3.5,
-            border: '1px solid #E2E8F0',
+            border: '1px solid #E6E3DE',
             px: { xs: 2, sm: 2.25 },
             py: 1.5,
             boxShadow: '0 1px 4px rgba(0,0,0,0.03)',
@@ -928,10 +928,10 @@ export default function InStoreSalesPage() {
                     py: 0.5,
                     borderRadius: 2,
                     cursor: 'pointer',
-                    bgcolor: isActiveTab ? '#FEF9C3' : '#F1F5F9',
+                    bgcolor: isActiveTab ? '#F6F1E8' : '#EFEBE5',
                     border: '1.5px solid',
-                    borderColor: isActiveTab ? '#FDE047' : '#E2E8F0',
-                    color: isActiveTab ? '#854D0E' : '#64748B',
+                    borderColor: isActiveTab ? '#E6DCC8' : '#E6E3DE',
+                    color: isActiveTab ? '#6B4E16' : '#5C5650',
                     fontWeight: 600,
                     fontSize: 12,
                     whiteSpace: 'nowrap',
@@ -939,8 +939,8 @@ export default function InStoreSalesPage() {
                     boxSizing: 'border-box',
                     transition: 'background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease',
                     '&:hover': {
-                      bgcolor: isActiveTab ? '#FEF9C3' : '#E2E8F0',
-                      color: '#0F172A'
+                      bgcolor: isActiveTab ? '#F6F1E8' : '#E6E3DE',
+                      color: '#111111'
                     }
                   }}
                 >
@@ -957,7 +957,7 @@ export default function InStoreSalesPage() {
                         height: 15,
                         borderRadius: 99,
                         fontSize: 11,
-                        color: '#94A3B8',
+                        color: '#8C857D',
                         ml: 0.25,
                         '&:hover': { bgcolor: '#FEE2E2', color: '#EF4444' }
                       }}
@@ -984,8 +984,8 @@ export default function InStoreSalesPage() {
                 height: 28,
                 borderRadius: 1.75,
                 bgcolor: '#FFFFFF',
-                border: '1.5px dashed #CBD5E1',
-                color: '#475569',
+                border: '1.5px dashed #D6D0C7',
+                color: '#4A443E',
                 cursor: 'pointer',
                 fontSize: 15,
                 fontWeight: 700,
@@ -993,9 +993,9 @@ export default function InStoreSalesPage() {
                 outline: 'none',
                 transition: 'all 0.15s ease',
                 '&:hover': {
-                  borderColor: '#0F172A',
-                  color: '#0F172A',
-                  bgcolor: '#F8FAFC'
+                  borderColor: '#111111',
+                  color: '#111111',
+                  bgcolor: '#F7F5F2'
                 }
               }}
             >
@@ -1006,14 +1006,14 @@ export default function InStoreSalesPage() {
           {/* Header hóa đơn */}
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <FileTextOutlined style={{ fontSize: 18, color: '#0F172A' }} />
-              <Typography sx={{ fontSize: 16.5, fontWeight: 800, color: '#0F172A' }}>{activeOrder?.label || 'Hóa đơn hiện tại'}</Typography>
+              <FileTextOutlined style={{ fontSize: 18, color: '#111111' }} />
+              <Typography sx={{ fontSize: 16.5, fontWeight: 800, color: '#111111' }}>{activeOrder?.label || 'Hóa đơn hiện tại'}</Typography>
             </Box>
             <Box
               sx={{
-                bgcolor: '#FEF9C3',
-                color: '#854D0E',
-                border: '1px solid #FDE047',
+                bgcolor: '#F6F1E8',
+                color: '#6B4E16',
+                border: '1px solid #E6DCC8',
                 borderRadius: 99,
                 px: 1.25,
                 py: 0.35,
@@ -1032,26 +1032,26 @@ export default function InStoreSalesPage() {
             }}
           >
           {/* Tổng tiền hàng & Giảm giá */}
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, py: 0.75, borderTop: '1px solid #F1F5F9' }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, py: 0.75, borderTop: '1px solid #EFEBE5' }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Typography sx={{ fontSize: 13, color: '#64748B' }}>Tổng tiền hàng</Typography>
-              <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: '#0F172A' }}>{money(subtotal)}</Typography>
+              <Typography sx={{ fontSize: 13, color: '#5C5650' }}>Tổng tiền hàng</Typography>
+              <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: '#111111' }}>{money(subtotal)}</Typography>
             </Box>
 
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                <Typography sx={{ fontSize: 13, color: '#64748B' }}>
+                <Typography sx={{ fontSize: 13, color: '#5C5650' }}>
                   Giảm giá{discountType === 'percent' && discountNumber > 0 ? ` (${discountNumber}%)` : ''}
                 </Typography>
                 <IconButton
                   size="small"
                   onClick={openDiscount}
-                  sx={{ p: 0.25, color: '#64748B', '&:hover': { color: '#0F172A' } }}
+                  sx={{ p: 0.25, color: '#5C5650', '&:hover': { color: '#111111' } }}
                 >
                   <EditOutlined style={{ fontSize: 12 }} />
                 </IconButton>
               </Box>
-              <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: discountValue > 0 ? '#10B981' : '#0F172A' }}>
+              <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: discountValue > 0 ? '#10B981' : '#111111' }}>
                 {discountValue > 0 ? `-${money(discountValue)}` : '-0 đ'}
               </Typography>
             </Box>
@@ -1064,17 +1064,17 @@ export default function InStoreSalesPage() {
                 alignItems: 'center',
                 pt: 0.5,
                 mt: 0.25,
-                borderTop: '1px dashed #E2E8F0'
+                borderTop: '1px dashed #E6E3DE'
               }}
             >
-              <Typography sx={{ fontSize: 14.5, fontWeight: 800, color: '#0F172A' }}>Tổng phải trả</Typography>
-              <Typography sx={{ fontSize: 20, fontWeight: 800, color: '#0F172A' }}>{money(total)}</Typography>
+              <Typography sx={{ fontSize: 14.5, fontWeight: 800, color: '#111111' }}>Tổng phải trả</Typography>
+              <Typography sx={{ fontSize: 20, fontWeight: 800, color: '#111111' }}>{money(total)}</Typography>
             </Box>
           </Box>
 
           {/* Phương thức thanh toán */}
           <Box sx={{ mt: 0.75 }}>
-            <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: '#334155', mb: 0.5 }}>Phương thức thanh toán</Typography>
+            <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: '#3A3530', mb: 0.5 }}>Phương thức thanh toán</Typography>
             <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
               <Box
                 component="button"
@@ -1086,9 +1086,9 @@ export default function InStoreSalesPage() {
                   justifyContent: 'center',
                   gap: 1,
                   fontFamily: 'inherit',
-                  bgcolor: payment === 'Cash' ? '#FEF9C3' : '#FFFFFF',
-                  border: `1.5px solid ${payment === 'Cash' ? '#FDE047' : '#E2E8F0'}`,
-                  color: payment === 'Cash' ? '#854D0E' : '#475569',
+                  bgcolor: payment === 'Cash' ? '#F6F1E8' : '#FFFFFF',
+                  border: `1.5px solid ${payment === 'Cash' ? '#E6DCC8' : '#E6E3DE'}`,
+                  color: payment === 'Cash' ? '#6B4E16' : '#4A443E',
                   fontWeight: 700,
                   fontSize: 13,
                   height: 34,
@@ -1100,7 +1100,7 @@ export default function InStoreSalesPage() {
                   WebkitTapHighlightColor: 'transparent',
                   userSelect: 'none',
                   '&:hover': {
-                    bgcolor: payment === 'Cash' ? '#FEF9C3' : '#F8FAFC'
+                    bgcolor: payment === 'Cash' ? '#F6F1E8' : '#F7F5F2'
                   }
                 }}
               >
@@ -1118,9 +1118,9 @@ export default function InStoreSalesPage() {
                   justifyContent: 'center',
                   gap: 1,
                   fontFamily: 'inherit',
-                  bgcolor: payment === 'Bank transfer' ? '#FEF9C3' : '#FFFFFF',
-                  border: `1.5px solid ${payment === 'Bank transfer' ? '#FDE047' : '#E2E8F0'}`,
-                  color: payment === 'Bank transfer' ? '#854D0E' : '#475569',
+                  bgcolor: payment === 'Bank transfer' ? '#F6F1E8' : '#FFFFFF',
+                  border: `1.5px solid ${payment === 'Bank transfer' ? '#E6DCC8' : '#E6E3DE'}`,
+                  color: payment === 'Bank transfer' ? '#6B4E16' : '#4A443E',
                   fontWeight: 700,
                   fontSize: 13,
                   height: 34,
@@ -1132,7 +1132,7 @@ export default function InStoreSalesPage() {
                   WebkitTapHighlightColor: 'transparent',
                   userSelect: 'none',
                   '&:hover': {
-                    bgcolor: payment === 'Bank transfer' ? '#FEF9C3' : '#F8FAFC'
+                    bgcolor: payment === 'Bank transfer' ? '#F6F1E8' : '#F7F5F2'
                   }
                 }}
               >
@@ -1143,7 +1143,7 @@ export default function InStoreSalesPage() {
             {payment === 'Cash' && (
               <Box sx={{ mt: 0.75, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Typography sx={{ fontSize: 13, color: '#64748B', fontWeight: 600 }}>Tiền khách trả</Typography>
+                  <Typography sx={{ fontSize: 13, color: '#5C5650', fontWeight: 600 }}>Tiền khách trả</Typography>
                   <TextField
                     size="small"
                     inputMode="numeric"
@@ -1166,8 +1166,8 @@ export default function InStoreSalesPage() {
                   />
                 </Box>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Typography sx={{ fontSize: 13, color: '#64748B', fontWeight: 600 }}>Tiền trả lại khách</Typography>
-                  <Typography sx={{ fontSize: 14, fontWeight: 800, color: changeAmount > 0 ? '#10B981' : '#0F172A' }}>
+                  <Typography sx={{ fontSize: 13, color: '#5C5650', fontWeight: 600 }}>Tiền trả lại khách</Typography>
+                  <Typography sx={{ fontSize: 14, fontWeight: 800, color: changeAmount > 0 ? '#10B981' : '#111111' }}>
                     {money(changeAmount)}
                   </Typography>
                 </Box>
@@ -1185,8 +1185,8 @@ export default function InStoreSalesPage() {
               disabled={submitting}
               startIcon={!submitting && <CheckOutlined />}
               sx={{
-                bgcolor: '#8EECF5',
-                color: '#0F172A',
+                bgcolor: '#111111',
+                color: '#FFFFFF',
                 fontWeight: 800,
                 fontSize: 13.5,
                 height: 38,
@@ -1194,12 +1194,12 @@ export default function InStoreSalesPage() {
                 textTransform: 'none',
                 boxShadow: 'none',
                 '&:hover': {
-                  bgcolor: '#76DCED',
-                  boxShadow: '0 2px 10px rgba(142, 236, 245, 0.45)'
+                  bgcolor: '#2B2B2B',
+                  boxShadow: '0 2px 10px rgba(17, 17, 17, 0.45)'
                 },
                 '&.Mui-disabled': {
-                  bgcolor: '#E2E8F0',
-                  color: '#94A3B8'
+                  bgcolor: '#E6E3DE',
+                  color: '#8C857D'
                 }
               }}
             >
@@ -1212,7 +1212,7 @@ export default function InStoreSalesPage() {
                 onClick={clearInvoice}
                 startIcon={<DeleteOutlined style={{ fontSize: 12 }} />}
                 sx={{
-                  color: '#64748B',
+                  color: '#5C5650',
                   fontSize: 12,
                   fontWeight: 600,
                   textTransform: 'none',
@@ -1250,12 +1250,12 @@ export default function InStoreSalesPage() {
         <Box sx={{ p: { xs: 2.25, sm: 2.75 } }}>
           {/* Header Modal */}
           <Box sx={{ mb: 2 }}>
-            <Typography sx={{ fontSize: 16.5, fontWeight: 800, color: '#0F172A' }}>Chọn biến thể sản phẩm</Typography>
+            <Typography sx={{ fontSize: 16.5, fontWeight: 800, color: '#111111' }}>Chọn biến thể sản phẩm</Typography>
           </Box>
 
           {loadingVariants ? (
             <Box sx={{ py: 4, textAlign: 'center' }}>
-              <CircularProgress size={28} sx={{ color: '#8EECF5' }} />
+              <CircularProgress size={28} sx={{ color: '#111111' }} />
             </Box>
           ) : (
             <>
@@ -1267,7 +1267,7 @@ export default function InStoreSalesPage() {
                   alignItems: 'center',
                   gap: 1.5,
                   pb: 1.75,
-                  borderBottom: '1px solid #F1F5F9'
+                  borderBottom: '1px solid #EFEBE5'
                 }}
               >
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
@@ -1280,28 +1280,28 @@ export default function InStoreSalesPage() {
                       height: 58,
                       borderRadius: 2,
                       objectFit: 'cover',
-                      bgcolor: '#F8FAFC',
-                      border: '1px solid #E2E8F0'
+                      bgcolor: '#F7F5F2',
+                      border: '1px solid #E6E3DE'
                     }}
                   />
                   <Box>
-                    <Typography sx={{ fontSize: 15, fontWeight: 800, color: '#0F172A', lineHeight: 1.25 }}>
+                    <Typography sx={{ fontSize: 15, fontWeight: 800, color: '#111111', lineHeight: 1.25 }}>
                       {variantProduct?.productName}
                     </Typography>
-                    <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: '#0F172A', mt: 0.35 }}>{priceRange}</Typography>
+                    <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: '#111111', mt: 0.35 }}>{priceRange}</Typography>
                   </Box>
                 </Box>
 
                 {/* Thông tin Tồn kho & Biến thể góc phải (cùng size và màu) */}
                 <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
-                  <Typography sx={{ fontSize: 12, fontWeight: 600, color: '#64748B', lineHeight: 1.2 }}>
+                  <Typography sx={{ fontSize: 12, fontWeight: 600, color: '#5C5650', lineHeight: 1.2 }}>
                     {selectedVariant
                       ? `Tồn: ${getStock(selectedVariant)}`
                       : variantProduct
                         ? `Tồn: ${getProductStock(variantProduct)}`
                         : ''}
                   </Typography>
-                  <Typography sx={{ fontSize: 12, fontWeight: 600, color: '#64748B', mt: 0.35 }}>
+                  <Typography sx={{ fontSize: 12, fontWeight: 600, color: '#5C5650', mt: 0.35 }}>
                     {selectedSize ? `Size ${selectedSize}` : 'Chưa chọn size'}
                     {' · '}
                     {selectedColor ? `Màu ${selectedColor}` : 'Chưa chọn màu'}
@@ -1311,7 +1311,7 @@ export default function InStoreSalesPage() {
 
               {/* Bộ chọn Kích cỡ */}
               <Box sx={{ mt: 2 }}>
-                <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: '#475569', mb: 0.85 }}>Kích cỡ</Typography>
+                <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: '#4A443E', mb: 0.85 }}>Kích cỡ</Typography>
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.85 }}>
                   {sizes.map((size) => {
                     const isSelected = selectedSize === size;
@@ -1333,15 +1333,15 @@ export default function InStoreSalesPage() {
                           fontSize: 12.5,
                           fontWeight: isSelected ? 700 : 500,
                           bgcolor: '#FFFFFF',
-                          color: !hasStock ? '#CBD5E1' : isSelected ? '#0F172A' : '#475569',
-                          border: isSelected ? '1.5px solid #64748B' : '1.5px solid #E2E8F0',
+                          color: !hasStock ? '#D6D0C7' : isSelected ? '#111111' : '#4A443E',
+                          border: isSelected ? '1.5px solid #5C5650' : '1.5px solid #E6E3DE',
                           cursor: hasStock ? 'pointer' : 'not-allowed',
                           opacity: hasStock ? 1 : 0.4,
                           outline: 'none',
                           transition: 'none',
                           '&:hover': hasStock
                             ? {
-                                borderColor: isSelected ? '#64748B' : '#94A3B8'
+                                borderColor: isSelected ? '#5C5650' : '#8C857D'
                               }
                             : {}
                         }}
@@ -1355,7 +1355,7 @@ export default function InStoreSalesPage() {
 
               {/* Bộ chọn Màu sắc */}
               <Box sx={{ mt: 2 }}>
-                <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: '#475569', mb: 0.85 }}>Màu sắc</Typography>
+                <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: '#4A443E', mb: 0.85 }}>Màu sắc</Typography>
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.85 }}>
                   {colors.map((color) => {
                     const isSelected = selectedColor === color;
@@ -1380,15 +1380,15 @@ export default function InStoreSalesPage() {
                           fontSize: 12.5,
                           fontWeight: isSelected ? 700 : 500,
                           bgcolor: '#FFFFFF',
-                          color: !inStock ? '#CBD5E1' : isSelected ? '#0F172A' : '#475569',
-                          border: isSelected ? '1.5px solid #64748B' : '1.5px solid #E2E8F0',
+                          color: !inStock ? '#D6D0C7' : isSelected ? '#111111' : '#4A443E',
+                          border: isSelected ? '1.5px solid #5C5650' : '1.5px solid #E6E3DE',
                           cursor: inStock ? 'pointer' : 'not-allowed',
                           opacity: inStock ? 1 : 0.4,
                           outline: 'none',
                           transition: 'none',
                           '&:hover': inStock
                             ? {
-                                borderColor: isSelected ? '#64748B' : '#94A3B8'
+                                borderColor: isSelected ? '#5C5650' : '#8C857D'
                               }
                             : {}
                         }}
@@ -1402,7 +1402,7 @@ export default function InStoreSalesPage() {
 
               {/* Bộ chọn Số lượng */}
               <Box sx={{ mt: 2, mb: 2 }}>
-                <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: '#475569', mb: 0.85 }}>Số lượng</Typography>
+                <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: '#4A443E', mb: 0.85 }}>Số lượng</Typography>
                 <Box
                   sx={{
                     display: 'inline-flex',
@@ -1416,7 +1416,7 @@ export default function InStoreSalesPage() {
                     onClick={() => setVariantQuantity((q) => Math.max(1, q - 1))}
                     sx={{ p: 0.75 }}
                   >
-                    <MinusOutlined style={{ fontSize: 11, color: '#475569' }} />
+                    <MinusOutlined style={{ fontSize: 11, color: '#4A443E' }} />
                   </IconButton>
                   <Box
                     component="input"
@@ -1434,7 +1434,7 @@ export default function InStoreSalesPage() {
                       textAlign: 'center',
                       fontSize: 13,
                       fontWeight: 700,
-                      color: '#0F172A',
+                      color: '#111111',
                       border: 'none',
                       outline: 'none',
                       bgcolor: 'transparent',
@@ -1447,7 +1447,7 @@ export default function InStoreSalesPage() {
                     onClick={() => setVariantQuantity((q) => q + 1)}
                     sx={{ p: 0.75 }}
                   >
-                    <PlusOutlined style={{ fontSize: 11, color: '#475569' }} />
+                    <PlusOutlined style={{ fontSize: 11, color: '#4A443E' }} />
                   </IconButton>
                 </Box>
               </Box>
@@ -1459,14 +1459,14 @@ export default function InStoreSalesPage() {
                   justifyContent: 'space-between',
                   alignItems: 'center',
                   pt: 2,
-                  borderTop: '1px solid #F1F5F9'
+                  borderTop: '1px solid #EFEBE5'
                 }}
               >
                 <Box>
-                  <Typography sx={{ fontSize: 11.5, color: '#64748B' }}>
+                  <Typography sx={{ fontSize: 11.5, color: '#5C5650' }}>
                     {selectedVariant ? `Thành tiền · ${variantQuantity} sản phẩm` : 'Giá sản phẩm'}
                   </Typography>
-                  <Typography sx={{ fontSize: 17, fontWeight: 800, color: '#0F172A', mt: 0.25 }}>
+                  <Typography sx={{ fontSize: 17, fontWeight: 800, color: '#111111', mt: 0.25 }}>
                     {selectedVariant ? money(getPrice(selectedVariant) * variantQuantity) : priceRange}
                   </Typography>
                 </Box>
@@ -1477,15 +1477,15 @@ export default function InStoreSalesPage() {
                     onClick={closeDialog}
                     sx={{
                       bgcolor: '#FFFFFF',
-                      border: '1px solid #E2E8F0',
-                      color: '#334155',
+                      border: '1px solid #E6E3DE',
+                      color: '#3A3530',
                       fontWeight: 600,
                       fontSize: 11.5,
                       height: 30,
                       px: 1.5,
                       borderRadius: 1.5,
                       textTransform: 'none',
-                      '&:hover': { bgcolor: '#F8FAFC' }
+                      '&:hover': { bgcolor: '#F7F5F2' }
                     }}
                   >
                     Hủy
@@ -1498,8 +1498,8 @@ export default function InStoreSalesPage() {
                     onClick={confirmVariant}
                     startIcon={<PlusOutlined style={{ fontSize: 10 }} />}
                     sx={{
-                      bgcolor: '#8EECF5',
-                      color: '#0F172A',
+                      bgcolor: '#111111',
+                      color: '#FFFFFF',
                       fontWeight: 700,
                       fontSize: 11.5,
                       height: 30,
@@ -1508,12 +1508,12 @@ export default function InStoreSalesPage() {
                       textTransform: 'none',
                       boxShadow: 'none',
                       '&:hover': {
-                        bgcolor: '#76DCED',
-                        boxShadow: '0 2px 8px rgba(142, 236, 245, 0.4)'
+                        bgcolor: '#2B2B2B',
+                        boxShadow: '0 2px 8px rgba(17, 17, 17, 0.4)'
                       },
                       '&.Mui-disabled': {
-                        bgcolor: '#E2E8F0',
-                        color: '#94A3B8'
+                        bgcolor: '#E6E3DE',
+                        color: '#8C857D'
                       }
                     }}
                   >
@@ -1534,7 +1534,7 @@ export default function InStoreSalesPage() {
         slotProps={{ paper: { sx: { maxWidth: 380, borderRadius: 3.5, m: 2 } } }}
       >
         <Box sx={{ p: 2.5 }}>
-          <Typography sx={{ fontSize: 16.5, fontWeight: 800, color: '#0F172A', mb: 2 }}>Giảm giá</Typography>
+          <Typography sx={{ fontSize: 16.5, fontWeight: 800, color: '#111111', mb: 2 }}>Giảm giá</Typography>
 
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, mb: 2 }}>
             {[
@@ -1560,9 +1560,9 @@ export default function InStoreSalesPage() {
                     borderRadius: 2.5,
                     cursor: 'pointer',
                     outline: 'none',
-                    bgcolor: selected ? '#FEF9C3' : '#FFFFFF',
-                    border: `1.5px solid ${selected ? '#FDE047' : '#E2E8F0'}`,
-                    color: selected ? '#854D0E' : '#475569'
+                    bgcolor: selected ? '#F6F1E8' : '#FFFFFF',
+                    border: `1.5px solid ${selected ? '#E6DCC8' : '#E6E3DE'}`,
+                    color: selected ? '#6B4E16' : '#4A443E'
                   }}
                 >
                   {opt.label}
@@ -1600,15 +1600,15 @@ export default function InStoreSalesPage() {
               type="button"
               onClick={() => setDiscountOpen(false)}
               sx={{
-                border: '1px solid #E2E8F0',
-                color: '#334155',
+                border: '1px solid #E6E3DE',
+                color: '#3A3530',
                 fontWeight: 600,
                 fontSize: 12.5,
                 height: 34,
                 px: 2,
                 borderRadius: 1.5,
                 textTransform: 'none',
-                '&:hover': { bgcolor: '#F8FAFC' }
+                '&:hover': { bgcolor: '#F7F5F2' }
               }}
             >
               Hủy
@@ -1618,8 +1618,8 @@ export default function InStoreSalesPage() {
               variant="contained"
               onClick={applyDiscount}
               sx={{
-                bgcolor: '#8EECF5',
-                color: '#0F172A',
+                bgcolor: '#111111',
+                color: '#FFFFFF',
                 fontWeight: 700,
                 fontSize: 12.5,
                 height: 34,
@@ -1627,7 +1627,7 @@ export default function InStoreSalesPage() {
                 borderRadius: 1.5,
                 textTransform: 'none',
                 boxShadow: 'none',
-                '&:hover': { bgcolor: '#76DCED', boxShadow: 'none' }
+                '&:hover': { bgcolor: '#2B2B2B', boxShadow: 'none' }
               }}
             >
               Áp dụng

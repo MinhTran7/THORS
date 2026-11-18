@@ -42,19 +42,19 @@ import CustomerPromotionPage from './CustomerPromotionPage';
 import { useCrumbs } from '../../layouts/crumbs';
 
 const C = {
-  text: '#1E293B',
-  muted: '#64748B',
+  text: '#111111',
+  muted: '#5C5650',
   subtle: '#94A3B8',
-  border: '#E2E8F0',
-  borderLight: '#F1F5F9',
-  bg: '#F8FAFC',
+  border: '#E6E3DE',
+  borderLight: '#EFEBE5',
+  bg: '#F7F5F2',
   surface: '#FFFFFF',
-  cyan: '#8EECF5',
-  cyanHover: '#76E5EF',
-  cyanText: '#0E7490',
-  cream: '#FFF7AE',
-  creamHover: '#FFF294',
-  creamText: '#713F12'
+  cyan: '#111111',
+  cyanHover: '#2B2B2B',
+  cyanText: '#8A2B2B',
+  cream: '#F6F1E8',
+  creamHover: '#EFE4CF',
+  creamText: '#6B4E16'
 };
 
 const PAGE_SIZE = 8;
@@ -123,9 +123,9 @@ function PromotionSwitch({ promotion, onToggleNormal, onEndedClick, disabled }) 
             transitionDuration: '200ms',
             '&.Mui-checked': {
               transform: 'translateX(16px)',
-              color: '#67E8F9',
+              color: '#FFFFFF',
               '& + .MuiSwitch-track': {
-                bgcolor: '#BAF2F8',
+                bgcolor: '#111111',
                 opacity: 1,
                 border: 0
               }
@@ -243,7 +243,7 @@ function OwnerPromotionView() {
   };
 
   return (
-    <Box sx={{ maxWidth: 1400, mx: 'auto', color: C.text, pb: 4 }}>
+    <Box sx={{ color: C.text, pb: 4 }}>
       {/* ─── TIÊU ĐỀ TRÊN CÙNG: DANH SÁCH KHUYẾN MÃI ─── */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5 }}>
         <Typography variant="h3" sx={{ fontWeight: 800, color: C.text }}>
@@ -255,7 +255,7 @@ function OwnerPromotionView() {
           onClick={() => navigate('/promotions/add')}
           sx={{
             bgcolor: C.cyan,
-            color: C.text,
+            color: '#FFFFFF',
             fontWeight: 700,
             fontSize: 13.5,
             borderRadius: 2.5,
@@ -528,7 +528,7 @@ function OwnerPromotionView() {
                         <TableRow
                           key={promotion.promotionId}
                           hover
-                          sx={{ '&:hover': { bgcolor: '#FAFCFE' } }}
+                          sx={{ '&:hover': { bgcolor: '#FAF8F5' } }}
                         >
                           {/* Tên khuyến mãi */}
                           <TableCell sx={{ pl: 3 }}>
@@ -583,13 +583,13 @@ function OwnerPromotionView() {
                                     schedule === 'ONGOING'
                                       ? C.cream
                                       : schedule === 'UPCOMING'
-                                      ? '#E0F2FE'
+                                      ? '#EFEBE5'
                                       : '#F1F5F9',
                                   color:
                                     schedule === 'ONGOING'
                                       ? C.creamText
                                       : schedule === 'UPCOMING'
-                                      ? '#0369A1'
+                                      ? '#8A2B2B'
                                       : C.muted
                                 }}
                               >
@@ -602,7 +602,7 @@ function OwnerPromotionView() {
                             </Box>
                           </TableCell>
 
-                          {/* Sử dụng - Đoạn tiến độ 0-100% màu xanh chủ đạo */}
+                          {/* Sử dụng - Đoạn tiến độ 0-100% màu chủ đạo (đen) */}
                           <TableCell sx={{ minWidth: 150 }}>
                             {promotion.usageLimit == null ? (
                               <Box sx={{ width: '100%', maxWidth: 130 }}>
@@ -764,7 +764,7 @@ function OwnerPromotionView() {
             disabled={changingStatus}
             sx={{
               bgcolor: C.cyan,
-              color: C.text,
+              color: '#FFFFFF',
               boxShadow: 'none',
               textTransform: 'none',
               fontWeight: 700,
@@ -821,7 +821,7 @@ function OwnerPromotionView() {
             }}
             sx={{
               bgcolor: C.cyan,
-              color: C.text,
+              color: '#FFFFFF',
               boxShadow: 'none',
               textTransform: 'none',
               fontWeight: 700,

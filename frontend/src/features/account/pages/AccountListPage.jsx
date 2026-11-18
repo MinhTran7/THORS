@@ -28,7 +28,17 @@ import { useDebounced } from '../hooks';
 import { brand, cardSx, fs } from '../tokens';
 import { OutlineButton } from '../components/Brand';
 import { RoleChip, StatusPill } from '../components/Chips';
-import { EmptyRow, FilterSelect, PageHeader, Pager, SearchField, bodyCellSx, headCellSx } from '../components/Blocks';
+import {
+  EmptyRow,
+  FilterSelect,
+  PageHeader,
+  Pager,
+  ResetFilterButton,
+  SearchField,
+  Toolbar,
+  bodyCellSx,
+  headCellSx
+} from '../components/Blocks';
 import ResetPasswordDialog from '../components/ResetPasswordDialog';
 import { useToast } from '../components/Toast';
 import UserAvatar from '../components/UserAvatar';
@@ -173,7 +183,7 @@ export default function AccountListPage() {
       />
 
       {/* Tab trạng thái, tìm kiếm và bộ lọc nằm chung một hàng để đỡ tốn chiều cao. */}
-      <Stack direction={{ xs: 'column', lg: 'row' }} spacing={1.5} alignItems={{ lg: 'center' }} sx={{ mb: 2 }}>
+      <Toolbar>
         <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
           {tabs.map((tab) => {
             const selected = status === tab.value;
@@ -183,7 +193,7 @@ export default function AccountListPage() {
                 onClick={() => filter(setStatus)(tab.value)}
                 aria-pressed={selected}
                 sx={{
-                  height: 40,
+                  height: 44,
                   borderRadius: '10px',
                   border: `1px solid ${selected ? brand.cyan : brand.line}`,
                   bgcolor: selected ? brand.cyan : brand.surface,
@@ -203,12 +213,20 @@ export default function AccountListPage() {
             );
           })}
         </Stack>
-        <Box sx={{ flex: 1, minWidth: 240 }}>
-          <SearchField placeholder="Tìm theo tên, email hoặc số điện thoại" value={q} onChange={filter(setQ)} />
+        <Box sx={{ flex: '1 1 260px', minWidth: 240 }}>
+          <SearchField title="Tìm kiếm tài khoản" placeholder="Tìm theo tên, email hoặc số điện thoại" value={q} onChange={filter(setQ)} />
         </Box>
-        <FilterSelect label="Lọc theo trạng thái" value={status} onChange={filter(setStatus)} options={STATUS_OPTIONS} minWidth={180} />
-        <FilterSelect label="Lọc theo vai trò" value={role} onChange={filter(setRole)} options={ROLE_OPTIONS} minWidth={190} />
-      </Stack>
+        <FilterSelect label="Trạng thái" value={status} onChange={filter(setStatus)} options={STATUS_OPTIONS} minWidth={180} />
+        <FilterSelect label="Vai trò" value={role} onChange={filter(setRole)} options={ROLE_OPTIONS} minWidth={190} />
+        <ResetFilterButton
+          onClick={() => {
+            setQ('');
+            setStatus('');
+            setRole('');
+            setPage(0);
+          }}
+        />
+      </Toolbar>
 
       <Box sx={{ ...cardSx, overflow: 'hidden' }}>
         {list.error && (
