@@ -153,7 +153,7 @@ public class ImageSearchService {
         if (!matched || !cards.containsKey(best.productId())) {
             return new ImageSearchResult("NOT_FOUND",
                     suggestions.isEmpty() ? "Shop chưa có mẫu này."
-                            : "Shop chưa có mẫu này. Bạn có thể xem các sản phẩm gần giống bên dưới.",
+                            : "Shop chưa có mẫu này. Bạn có thể xem các sản phẩm khác bên dưới.",
                     null, null, suggestions, category);
         }
 
