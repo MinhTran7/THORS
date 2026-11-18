@@ -40,7 +40,10 @@ public class PromotionService {
         }
 
         if ("CUSTOMER".equals(role)) {
-            return repository.findAvailable(LocalDateTime.now()).stream().map(this::withProductIds).toList();
+            return repository.findAvailable(LocalDateTime.now()).stream()
+                    .filter(promotion -> !promotion.isExhausted())
+                    .map(this::withProductIds)
+                    .toList();
         }
 
         throw forbidden();
@@ -66,6 +69,12 @@ public class PromotionService {
     }
 
 
+    public BigDecimal salePrice(int productId, BigDecimal price) {
+        return repository.findRunningProductPromotion(productId, LocalDateTime.now())
+                .map(promotion -> price.subtract(promotion.discountOf(price)))
+                .orElse(price);
+    }
+
     @Transactional
     public Promotion create(CreatePromotionRequest request) {
         requireOwner();
@@ -89,30 +98,24 @@ public class PromotionService {
 
         BigDecimal value = request.discountValue();
         BigDecimal minimum = request.minOrderValue();
-        BigDecimal maximum = request.maxDiscountAmount();
         LocalDateTime startDate = request.startDate();
         LocalDateTime endDate = request.endDate();
-        Integer usageLimit = request.usageLimit();
+        Integer usageLimit = isPositive(minimum) ? request.usageLimit() : null;
 
         validateName(name);
         validateDescription(description);
         validateDiscount(type, value);
-        validateOrderValues(minimum, maximum);
+        validateMinimum(minimum);
         validateCreateDates(startDate, endDate);
-        validateUsageLimit(usageLimit);
+        validateUsageLimit(minimum, usageLimit);
 
-        if ("FIXED".equals(type) && maximum != null) {
-            throw badRequest(
-                    "PROMOTION_MAXIMUM_NOT_ALLOWED",
-                    "Số tiền giảm tối đa chỉ áp dụng cho giảm giá theo phần trăm."
-            );
-        }
-
-        String applyScope = normalizeApplyScope(request.applyScope());
+        String applyScope = isPositive(minimum) ? "ALL" : normalizeApplyScope(request.applyScope());
         List<Integer> productIds = validateProductSelection(
                 applyScope,
                 request.productIds()
         );
+
+        checkProductOverlap(0, minimum, applyScope, productIds, startDate, endDate);
 
         int createdId = repository.create(
                 name,
@@ -120,7 +123,6 @@ public class PromotionService {
                 type,
                 value,
                 minimum,
-                maximum,
                 startDate,
                 endDate,
                 usageLimit,
@@ -149,6 +151,14 @@ public class PromotionService {
         Promotion existing = repository.findById(id)
                 .orElseThrow(this::notFound);
 
+        // Chỉ sửa được khuyến mãi sắp diễn ra
+        if (!LocalDateTime.now().isBefore(existing.startDate())) {
+            throw badRequest(
+                    "PROMOTION_STARTED",
+                    "Khuyến mãi đã bắt đầu nên không thể chỉnh sửa."
+            );
+        }
+
         String name = request.name() == null
                 ? ""
                 : request.name().trim();
@@ -161,46 +171,26 @@ public class PromotionService {
 
         BigDecimal value = request.discountValue();
         BigDecimal minimum = request.minOrderValue();
-        BigDecimal maximum = request.maxDiscountAmount();
         LocalDateTime startDate = request.startDate();
         LocalDateTime endDate = request.endDate();
-        Integer usageLimit = request.usageLimit();
+        Integer usageLimit = isPositive(minimum) ? request.usageLimit() : null;
 
         validateName(name);
         validateDescription(description);
         validateDiscount(type, value);
-        validateOrderValues(minimum, maximum);
-        validateUpdateDates(startDate, endDate);
-        validateUsageLimit(usageLimit);
+        validateMinimum(minimum);
+        validateCreateDates(startDate, endDate);
+        validateUsageLimit(minimum, usageLimit);
 
-        if ("FIXED".equals(type) && maximum != null) {
-            throw badRequest(
-                    "PROMOTION_MAXIMUM_NOT_ALLOWED",
-                    "Số tiền giảm tối đa chỉ áp dụng cho giảm giá theo phần trăm."
-            );
-        }
-
-        if ("ACTIVE".equals(existing.status())
-                && !endDate.isAfter(LocalDateTime.now())) {
-            throw badRequest(
-                    "PROMOTION_DATES_EXPIRED",
-                    "Khuyến mãi đang bật phải có thời gian kết thúc trong tương lai."
-            );
-        }
-
-        String applyScope = request.applyScope() == null
-                ? normalizeApplyScope(existing.applyScope())
-                : normalizeApplyScope(request.applyScope());
-
-        List<Integer> requestedProductIds =
-                request.productIds() == null && request.applyScope() == null
-                        ? repository.findProductIds(id)
-                        : request.productIds();
-
+        String applyScope = isPositive(minimum) ? "ALL" : normalizeApplyScope(request.applyScope());
         List<Integer> productIds = validateProductSelection(
                 applyScope,
-                requestedProductIds
+                request.productIds()
         );
+
+        if ("ACTIVE".equals(existing.status())) {
+            checkProductOverlap(id, minimum, applyScope, productIds, startDate, endDate);
+        }
 
         int updated = repository.update(
                 id,
@@ -209,7 +199,6 @@ public class PromotionService {
                 type,
                 value,
                 minimum,
-                maximum,
                 startDate,
                 endDate,
                 usageLimit,
@@ -282,7 +271,6 @@ public class PromotionService {
                 promotion.createdBy(),
                 promotion.discountType(),
                 promotion.minOrderValue(),
-                promotion.maxDiscountAmount(),
                 promotion.usageLimit(),
                 promotion.applyScope(),
                 repository.findProductIds(promotion.promotionId()),
@@ -314,19 +302,56 @@ public class PromotionService {
         Promotion promotion = repository.findById(id)
                 .orElseThrow(this::notFound);
 
-        if ("ACTIVE".equals(normalizedStatus)) {
-            LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now();
 
-            if (promotion.endDate() == null
-                    || !promotion.endDate().isAfter(now)) {
+        if ("ACTIVE".equals(normalizedStatus)) {
+            if (!promotion.endDate().isAfter(now)) {
                 throw badRequest(
-                        "PROMOTION_ALREADY_EXPIRED",
-                        "Khuyến mãi đã hết hạn. Hãy cập nhật thời gian trước khi bật lại."
+                        "PROMOTION_ENDED",
+                        "Khuyến mãi đã kết thúc nên không thể bật lại."
                 );
             }
+
+            checkProductOverlap(
+                    id,
+                    promotion.minOrderValue(),
+                    promotion.applyScope(),
+                    repository.findProductIds(id),
+                    promotion.startDate(),
+                    promotion.endDate()
+            );
+        } else if ("ACTIVE".equals(promotion.status())
+                && !now.isBefore(promotion.startDate())
+                && now.isBefore(promotion.endDate())) {
+            throw badRequest(
+                    "PROMOTION_RUNNING",
+                    "Khuyến mãi đang diễn ra nên không thể tắt."
+            );
         }
 
         repository.updateStatus(id, normalizedStatus);
+    }
+
+    // Một sản phẩm không được thuộc hai khuyến mãi trùng thời gian
+    private void checkProductOverlap(
+            int id,
+            BigDecimal minimum,
+            String applyScope,
+            List<Integer> productIds,
+            LocalDateTime startDate,
+            LocalDateTime endDate
+    ) {
+        if (isPositive(minimum)) {
+            return;
+        }
+
+        repository.findOverlappingProductPromotion(id, applyScope, productIds, startDate, endDate)
+                .ifPresent(other -> {
+                    throw badRequest(
+                            "PROMOTION_PRODUCT_OVERLAP",
+                            "Có sản phẩm đang thuộc khuyến mãi “" + other.name() + "” trong cùng thời gian."
+                    );
+                });
     }
 
     private String normalizeDescription(String description) {
@@ -387,23 +412,17 @@ public class PromotionService {
         }
     }
 
-    private void validateOrderValues(
-            BigDecimal minimum,
-            BigDecimal maximum
-    ) {
+    private void validateMinimum(BigDecimal minimum) {
         if (minimum == null || minimum.compareTo(ZERO) < 0) {
             throw badRequest(
                     "PROMOTION_MINIMUM_INVALID",
                     "Giá trị đơn hàng tối thiểu phải lớn hơn hoặc bằng 0."
             );
         }
+    }
 
-        if (maximum != null && maximum.compareTo(ZERO) < 0) {
-            throw badRequest(
-                    "PROMOTION_MAXIMUM_INVALID",
-                    "Mức giảm tối đa không được âm."
-            );
-        }
+    private boolean isPositive(BigDecimal value) {
+        return value != null && value.signum() > 0;
     }
 
     private void validateCreateDates(
@@ -423,25 +442,11 @@ public class PromotionService {
         }
     }
 
-    private void validateUpdateDates(
-            LocalDateTime startDate,
-            LocalDateTime endDate
-    ) {
-        if (startDate == null
-                || endDate == null
-                || !endDate.isAfter(startDate)) {
-            throw badRequest(
-                    "PROMOTION_DATES_INVALID",
-                    "Thời gian kết thúc phải sau thời gian bắt đầu."
-            );
-        }
-    }
-
-    private void validateUsageLimit(Integer usageLimit) {
-        if (usageLimit != null && usageLimit < 1) {
+    private void validateUsageLimit(BigDecimal minimum, Integer usageLimit) {
+        if (isPositive(minimum) && (usageLimit == null || usageLimit < 1)) {
             throw badRequest(
                     "PROMOTION_USAGE_LIMIT_INVALID",
-                    "Giới hạn lượt sử dụng phải từ 1 trở lên hoặc để trống."
+                    "Vui lòng nhập giới hạn lượt dùng từ 1 trở lên."
             );
         }
     }

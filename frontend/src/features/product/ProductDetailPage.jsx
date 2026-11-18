@@ -29,6 +29,7 @@ import {
 
 import { getProductById, setVariantOnline } from '../../services/productService';
 import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../customer/theme';
+import { descriptionToText } from './productDescription';
 
 // Switch thu nhỏ theo Design System
 const switchSx = {
@@ -144,6 +145,34 @@ export default function ProductDetailPage() {
     }
   }
 
+  // Bật/tắt bán online TẤT CẢ biến thể một lần (gửi đồng thời các yêu cầu cho những biến thể cần đổi)
+  const [bulkOnline, setBulkOnline] = useState(false);
+
+  async function toggleAllOnline(enable) {
+    if (bulkOnline || togglingVariantId || !data) return;
+    const productActive = data.product.status === 'ACTIVE';
+    const targets = data.variants.filter((v) => {
+      const on = Boolean(Number(v.onlineSalesEnabled));
+      const canEnable = productActive && v.status === 'ACTIVE' && v.price != null;
+      return enable ? !on && canEnable : on;
+    });
+    if (targets.length === 0) return;
+    setBulkOnline(true);
+    setVariantError('');
+    // Gửi tất cả yêu cầu cùng lúc rồi cập nhật bảng một lần
+    const results = await Promise.allSettled(targets.map((v) => setVariantOnline(productId, v.detailId, enable)));
+    const doneIds = new Set(targets.filter((_, i) => results[i].status === 'fulfilled').map((v) => v.detailId));
+    const failed = targets.length - doneIds.size;
+    setData((previous) => {
+      if (!previous) return previous;
+      const nextVariants = previous.variants.map((v) => (doneIds.has(v.detailId) ? { ...v, onlineSalesEnabled: enable ? 1 : 0 } : v));
+      const onlineCount = nextVariants.filter((v) => Boolean(Number(v.onlineSalesEnabled))).length;
+      return { ...previous, product: { ...previous.product, onlineVariantCount: onlineCount }, variants: nextVariants };
+    });
+    if (failed) setVariantError(`Có ${failed} biến thể không đổi được trạng thái bán online. Vui lòng thử lại.`);
+    setBulkOnline(false);
+  }
+
   // ==========================================
   // LOAD PRODUCT DETAIL
   // ==========================================
@@ -242,6 +271,29 @@ export default function ProductDetailPage() {
   const onlineVariantCount = Number(product.onlineVariantCount ?? 0);
   const variantCount = Number(product.variantCount ?? variants.length);
   const onlineEnabled = activeProduct && onlineVariantCount > 0;
+  // Công tắc "Bật tất cả": các biến thể bật được (đang hoạt động, có giá) đều đã bật thì coi là đang bật
+  const enableableVariants = variants.filter((v) => activeProduct && v.status === 'ACTIVE' && v.price != null);
+  const allOnline = enableableVariants.length > 0 && enableableVariants.every((v) => Boolean(Number(v.onlineSalesEnabled)));
+  const anyOnline = variants.some((v) => Boolean(Number(v.onlineSalesEnabled)));
+  const bulkDisabled = bulkOnline || Boolean(togglingVariantId) || (!anyOnline && enableableVariants.length === 0);
+  const bulkSwitch = (
+    <Tooltip title={allOnline ? 'Tắt bán online tất cả biến thể' : 'Bật bán online tất cả biến thể'}>
+      <span>
+        {bulkOnline ? (
+          <CircularProgress size={16} sx={{ color: C.cyan }} />
+        ) : (
+          <Switch
+            checked={allOnline}
+            size="small"
+            disabled={bulkDisabled}
+            onChange={() => toggleAllOnline(!allOnline)}
+            sx={switchSx}
+            slotProps={{ input: { 'aria-label': 'Bật/tắt bán online tất cả biến thể' } }}
+          />
+        )}
+      </span>
+    </Tooltip>
+  );
 
   const priceRange =
     product.minPrice == null
@@ -433,7 +485,7 @@ export default function ProductDetailPage() {
                   mt: 0.5
                 }}
               >
-                {product.sku ? `SKU: ${product.sku} · ` : ''}Mã sản phẩm: #{product.productId}
+                Mã sản phẩm: #{product.productId}
               </Typography>
 
               <Typography
@@ -446,7 +498,7 @@ export default function ProductDetailPage() {
                   lineHeight: 1.7
                 }}
               >
-                {product.description || 'Chưa có thông tin mô tả cho sản phẩm này.'}
+                {descriptionToText(product.description) || 'Chưa có thông tin mô tả cho sản phẩm này.'}
               </Typography>
 
               {/* PRICE INFORMATION */}
@@ -576,13 +628,19 @@ export default function ProductDetailPage() {
               >
                 <TableHead>
                   <TableRow>
-                    <TableCell sx={{ pl: 3 }}>KÍCH THƯỚC (SIZE)</TableCell>
-                    <TableCell>MÀU SẮC (COLOR)</TableCell>
+                    <TableCell sx={{ pl: 3 }}>SIZE</TableCell>
+                    <TableCell>MÀU</TableCell>
                     <TableCell>MÃ BIẾN THỂ</TableCell>
                     <TableCell>GIÁ BÁN</TableCell>
                     <TableCell>TỒN KHO</TableCell>
+                    <TableCell>VỊ TRÍ KỆ</TableCell>
                     <TableCell align="center">TRẠNG THÁI</TableCell>
-                    <TableCell align="center" sx={{ pr: 3 }}>BÁN ONLINE</TableCell>
+                    <TableCell align="center" sx={{ pr: 3 }}>
+                      <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
+                        BÁN ONLINE
+                        {variants.length > 1 && bulkSwitch}
+                      </Box>
+                    </TableCell>
                   </TableRow>
                 </TableHead>
 
@@ -595,6 +653,16 @@ export default function ProductDetailPage() {
                     const activeVariant = variant.status === 'ACTIVE';
                     const online = Boolean(Number(variant.onlineSalesEnabled));
                     const canEnableOnline = activeVariant && product.status === 'ACTIVE' && variant.price != null;
+                    // Vị trí kệ (module Kho): "A1:30,A2:4" -> [{ label: 'A1', quantity: 30 }, ...]
+                    const shelves = String(variant.locations || '')
+                      .split(',')
+                      .filter(Boolean)
+                      .map((item) => {
+                        const cut = item.lastIndexOf(':');
+                        return { label: item.slice(0, cut), quantity: Number(item.slice(cut + 1)) || 0 };
+                      });
+                    const shelved = shelves.reduce((sum, item) => sum + item.quantity, 0);
+                    const unshelved = Math.max(stock - shelved, 0);
 
                     let availability = 'Còn hàng';
                     let badgeProps = { bg: '#E7F6F1', color: '#168B70' };
@@ -637,7 +705,6 @@ export default function ProductDetailPage() {
                           ) : (
                             'Chưa có mã'
                           )}
-                          <Box sx={{ fontSize: 11.5 }}>#{variant.detailId}</Box>
                         </TableCell>
 
                         <TableCell sx={{ fontSize: 13.5, fontWeight: 800, color: '#0F172A' }}>
@@ -655,6 +722,47 @@ export default function ProductDetailPage() {
                             <Typography sx={{ fontSize: 11.5, color: C.muted, fontWeight: 500 }}>
                               Ngưỡng tối thiểu: {minStock}
                             </Typography>
+                          )}
+                        </TableCell>
+
+                        {/* VỊ TRÍ KỆ: kệ + tầng đang chứa hàng (xếp kệ ở module Kho), phần còn lại = chưa xếp kệ */}
+                        <TableCell>
+                          {shelves.length === 0 && stock <= 0 ? (
+                            <Typography sx={{ fontSize: 13, color: '#94A3B8' }}>—</Typography>
+                          ) : (
+                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignItems: 'center' }}>
+                              {shelves.map((item) => (
+                                <Tooltip key={item.label} title={`Kệ ${item.label}: ${item.quantity} cái`}>
+                                  <Box
+                                    component="span"
+                                    sx={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 0.5,
+                                      px: 1,
+                                      py: 0.25,
+                                      borderRadius: 1.5,
+                                      fontSize: 12,
+                                      fontWeight: 700,
+                                      bgcolor: '#F0FCFE',
+                                      color: '#0E7490',
+                                      border: '1px solid #BAF2F8',
+                                      whiteSpace: 'nowrap'
+                                    }}
+                                  >
+                                    {item.label}
+                                    <Box component="span" sx={{ fontWeight: 600, color: C.muted }}>
+                                      · {item.quantity}
+                                    </Box>
+                                  </Box>
+                                </Tooltip>
+                              ))}
+                              {unshelved > 0 && (
+                                <Typography component="span" sx={{ fontSize: 12, color: '#B45309', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                  {shelves.length ? `+${unshelved} chưa xếp kệ` : `Chưa xếp kệ (${unshelved})`}
+                                </Typography>
+                              )}
+                            </Box>
                           )}
                         </TableCell>
 
@@ -697,7 +805,7 @@ export default function ProductDetailPage() {
                                 <Switch
                                   checked={online}
                                   size="small"
-                                  disabled={Boolean(togglingVariantId) || (!online && !canEnableOnline)}
+                                  disabled={bulkOnline || Boolean(togglingVariantId) || (!online && !canEnableOnline)}
                                   onChange={() => toggleVariantOnline(variant)}
                                   sx={switchSx}
                                 />
@@ -712,7 +820,7 @@ export default function ProductDetailPage() {
                   {variants.length === 0 && (
                     <TableRow>
                       <TableCell
-                        colSpan={7}
+                        colSpan={8}
                         align="center"
                         sx={{ py: 5 }}
                       >
@@ -825,14 +933,18 @@ export default function ProductDetailPage() {
                       Mở bán online
                     </Typography>
 
-                    <Box
-                      sx={
-                        onlineEnabled
-                          ? badgeSx('#F0FDF4', '#166534', '#BBF7D0')
-                          : badgeSx('#F1F5F9', '#475569', '#E2E8F0')
-                      }
-                    >
-                      {onlineEnabled ? 'Đang bật' : 'Đang tắt'}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+                      <Box
+                        sx={
+                          onlineEnabled
+                            ? badgeSx('#F0FDF4', '#166534', '#BBF7D0')
+                            : badgeSx('#F1F5F9', '#475569', '#E2E8F0')
+                        }
+                      >
+                        {onlineEnabled ? 'Đang bật' : 'Đang tắt'}
+                      </Box>
+                      {/* Bật/tắt bán online tất cả biến thể cùng lúc */}
+                      {variants.length > 0 && bulkSwitch}
                     </Box>
                   </Box>
 
@@ -844,7 +956,7 @@ export default function ProductDetailPage() {
                       lineHeight: 1.5
                     }}
                   >
-                    {onlineVariantCount} trên tổng số {variantCount} biến thể được bật bán trên website.
+                    {onlineVariantCount} trên tổng số {variantCount} biến thể được bật bán trên website. Gạt công tắc để bật/tắt tất cả cùng lúc.
                   </Typography>
                 </Box>
               </Stack>

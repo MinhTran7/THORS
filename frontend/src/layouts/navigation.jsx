@@ -7,6 +7,8 @@ import {
   FacebookOutlined,
   FileAddOutlined,
   FileDoneOutlined,
+  GiftOutlined,
+  GlobalOutlined,
   HistoryOutlined,
   HomeOutlined,
   IdcardOutlined,
@@ -24,6 +26,7 @@ import {
   ShoppingOutlined,
   SkinOutlined,
   SwapOutlined,
+  TagOutlined,
   TeamOutlined,
   UnorderedListOutlined,
   UserOutlined,
@@ -54,14 +57,24 @@ const OWNER_MENU = [
       { to: '/in-store-sales/history', label: 'Đơn hàng tại quầy', icon: <FileDoneOutlined /> },
       { to: '/orders', label: 'Đơn hàng online', icon: <MobileOutlined /> },
       { to: '/returns', label: 'Đổi trả', icon: <SwapOutlined /> },
-      { to: '/warehouse/defects', label: 'Xử lý hàng lỗi', icon: <WarningOutlined /> },
-      promotions
+      { to: '/warehouse/defects', label: 'Xử lý hàng lỗi', icon: <WarningOutlined /> }
+    ]
+  },
+  {
+    label: 'Khuyến mãi',
+    icon: <PercentageOutlined />,
+    children: [
+      { to: '/promotions', label: 'Khuyến mãi sản phẩm', icon: <GiftOutlined /> },
+      { to: '/order-discounts', label: 'Giảm giá đơn hàng', icon: <TagOutlined /> }
     ]
   },
   {
     label: 'Kênh bán hàng',
     icon: <ShareAltOutlined />,
-    children: [{ to: '/facebook', label: 'Facebook', icon: <FacebookOutlined /> }]
+    children: [
+      { to: '/facebook', label: 'Facebook', icon: <FacebookOutlined /> },
+      { to: '/website', label: 'Website', icon: <GlobalOutlined /> }
+    ]
   },
   {
     label: 'Nhập hàng',
@@ -85,7 +98,7 @@ const OWNER_MENU = [
 ];
 
 // Các trang chỉ OWNER được vào (khớp với RequireAuth roles={['OWNER']} trong routes/index.jsx).
-const OWNER_ONLY = new Set(['/products', '/categories', '/returns', '/family']);
+const OWNER_ONLY = new Set(['/products', '/categories', '/returns', '/family', '/promotions', '/order-discounts', '/website']);
 
 const without = (menu, hidden) =>
   menu

@@ -55,6 +55,12 @@ public class OrderController {
      *     &ghnDistrictId=&ghnWardCode=
      * (khi gửi GHN: cân nặng gram, bỏ trống = mặc định; Quận-Huyện / Phường-Xã theo GHN Owner chọn)
      */
+    /** POST /api/orders/{id}/refunded: Owner xác nhận đã hoàn tiền cho đơn đang "Chờ hoàn tiền" */
+    @PostMapping("/{id}/refunded")
+    Object markRefunded(@PathVariable int id) {
+        return service.markRefunded(sessions.current(), id);
+    }
+
     @PostMapping("/{id}/status")
     Object changeStatus(
             @PathVariable int id,
@@ -63,8 +69,25 @@ public class OrderController {
             @RequestParam(required = false) String carrier,
             @RequestParam(required = false) Integer weightG,
             @RequestParam(required = false) Integer ghnDistrictId,
-            @RequestParam(required = false) String ghnWardCode) {
+            @RequestParam(required = false) String ghnWardCode,
+            // Khách hủy đơn đã thanh toán online: tài khoản nhận tiền hoàn
+            @RequestParam(required = false) String refundBankBin,
+            @RequestParam(required = false) String refundBankName,
+            @RequestParam(required = false) String refundAccountNumber,
+            @RequestParam(required = false) String refundAccountName) {
+        var refund =
+                refundAccountNumber == null
+                        ? null
+                        : new com.thors.module.order.dto.OrderViews.BankAccount(
+                                refundBankBin, refundBankName, refundAccountNumber, refundAccountName);
         return service.changeStatus(
-                sessions.current(), id, status, reason, carrier, weightG, ghnDistrictId, ghnWardCode);
+                sessions.current(), id, status, reason, carrier, weightG, ghnDistrictId, ghnWardCode, refund);
+    }
+
+    /** PUT /api/orders/{id}/refund-account: khách nhập / sửa tài khoản nhận tiền hoàn (đơn đang chờ hoàn tiền) */
+    @PutMapping("/{id}/refund-account")
+    Object saveRefundAccount(
+            @PathVariable int id, @RequestBody com.thors.module.order.dto.OrderViews.BankAccount account) {
+        return service.saveRefundAccount(sessions.current(), id, account);
     }
 }

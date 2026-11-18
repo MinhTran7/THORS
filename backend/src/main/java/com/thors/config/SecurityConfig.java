@@ -170,7 +170,7 @@ public class SecurityConfig {
                 if (settings.google().enabled() || (settings.facebook() != null && settings.facebook().enabled()))
                         http.oauth2Login(
                                         c -> c.successHandler((req, res, auth) -> {
-                                                if (auth instanceof OAuth2AuthenticationToken token && "facebook"
+                                                                           if (auth instanceof OAuth2AuthenticationToken token && "facebook"
                                                                 .equals(token.getAuthorizedClientRegistrationId()))
                                                         facebookHandler.onAuthenticationSuccess(req, res, auth);
                                                 else

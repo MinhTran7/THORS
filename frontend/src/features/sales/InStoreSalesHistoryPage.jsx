@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
 import {
   Box,
-  Button,
   CircularProgress,
   IconButton,
   InputAdornment,
@@ -19,16 +18,13 @@ import {
   Typography
 } from '@mui/material';
 import {
-  ClearOutlined,
   CreditCardOutlined,
-  BankOutlined,
   DollarOutlined,
   EyeOutlined,
-  ReloadOutlined,
   SearchOutlined,
   ShoppingCartOutlined
 } from '@ant-design/icons';
-import { Pager } from 'features/account/components/Blocks';
+import { FilterResetButton, Pager } from 'features/account/components/Blocks';
 import { api } from '../../services/http';
 import { useCrumbs } from '../../layouts/crumbs';
 import { useDebounced } from '../account/hooks';
@@ -39,22 +35,17 @@ const C = {
   muted: '#64748B',
   border: '#E2E8F0',
   borderLight: '#F1F5F9',
-  bg: '#F8FAFC',
   surface: '#FFFFFF',
   cyan: '#8EECF5',
-  cyanHover: '#76E5EF',
   cyanText: '#0E7490',
   cream: '#FFF7AE',
-  creamHover: '#FFF294',
   creamText: '#713F12'
 };
 
 const PAGE_SIZE = 8;
 
 function isCashMethod(method) {
-  if (!method) return true;
-  const m = String(method).toUpperCase();
-  return m === 'CASH' || m.includes('TIEN_MAT') || m.includes('TIỀN MẶT');
+  return !method || method === 'CASH';
 }
 
 const money = (value) => `${Number(value || 0).toLocaleString('vi-VN')} đ`;
@@ -120,7 +111,8 @@ export default function InStoreSalesHistoryPage() {
   };
 
   const queryStr = buildQuery(params);
-  const swrKey = `/sales/in-store${queryStr}`;
+  const dateError = fromDate && toDate && fromDate > toDate ? 'Từ ngày không được sau đến ngày.' : '';
+  const swrKey = dateError ? null : `/sales/in-store${queryStr}`;
 
   const { data, error, isLoading } = useSWR(
     swrKey,
@@ -128,9 +120,9 @@ export default function InStoreSalesHistoryPage() {
     { keepPreviousData: true, revalidateOnFocus: false }
   );
 
-  const items = data?.items ?? [];
-  const total = data?.total ?? 0;
-  const totalPages = data?.totalPages ?? 0;
+  const items = dateError ? [] : (data?.items ?? []);
+  const total = dateError ? 0 : (data?.total ?? 0);
+  const totalPages = dateError ? 0 : (data?.totalPages ?? 0);
 
   function handleSearchChange(val) {
     setQ(val);
@@ -161,7 +153,7 @@ export default function InStoreSalesHistoryPage() {
   }
 
   return (
-    <Box sx={{ maxWidth: 1400, mx: 'auto', color: C.text, pb: 4 }}>
+    <Box sx={{ color: C.text, pb: 4 }}>
       {/* ─── TIÊU ĐỀ TRÊN CÙNG: DANH SÁCH HÓA ĐƠN ─── */}
       <Box sx={{ mb: 2.5 }}>
         <Typography variant="h3" sx={{ fontWeight: 800, color: C.text }}>
@@ -354,55 +346,7 @@ export default function InStoreSalesHistoryPage() {
           />
         </Box>
 
-        {/* Button chữ Bỏ lọc: chiều rộng gọn, không viền phát sáng khi bấm/hover */}
-        <Box sx={{ minWidth: 0, display: 'flex' }}>
-          <Button
-            variant="outlined"
-            onClick={handleResetFilters}
-            disableRipple
-            sx={{
-              height: 44,
-              px: 1.75,
-              minWidth: 'unset',
-              borderRadius: 2.5,
-              textTransform: 'none',
-              fontSize: 13,
-              fontWeight: 600,
-              borderColor: C.border,
-              bgcolor: C.surface,
-              color: C.text,
-              whiteSpace: 'nowrap',
-              outline: 'none',
-              boxShadow: 'none !important',
-              transition: 'none',
-              '&:hover': {
-                bgcolor: C.surface,
-                borderColor: C.border,
-                color: C.text,
-                outline: 'none',
-                boxShadow: 'none !important'
-              },
-              '&:focus': {
-                outline: 'none',
-                boxShadow: 'none !important'
-              },
-              '&:focus-visible': {
-                outline: 'none',
-                boxShadow: 'none !important'
-              },
-              '&.Mui-focusVisible': {
-                outline: 'none',
-                boxShadow: 'none !important'
-              },
-              '&:active': {
-                outline: 'none',
-                boxShadow: 'none !important'
-              }
-            }}
-          >
-            Bỏ lọc
-          </Button>
-        </Box>
+        <FilterResetButton onClick={handleResetFilters} />
       </Box>
 
       {/* ─── KHỐI BẢNG DANH SÁCH HÓA ĐƠN (Đã bỏ thanh header bên trong) ─── */}
@@ -415,51 +359,40 @@ export default function InStoreSalesHistoryPage() {
           overflow: 'hidden'
         }}
       >
-        {error && (
+        {(dateError || error) && (
           <Typography color="error" sx={{ p: 3, textAlign: 'center', fontSize: 14 }}>
-            {error.message || 'Không thể tải danh sách hóa đơn.'}
+            {dateError || error.message || 'Không thể tải danh sách hóa đơn.'}
           </Typography>
         )}
 
         {/* Bảng danh sách */}
         <Box sx={{ overflowX: 'auto' }}>
-          <Table size="medium">
+          <Table size="medium" sx={{ tableLayout: 'fixed', minWidth: 820 }}>
             <TableHead>
-              <TableRow sx={{ '& th': { borderBottom: `1px solid ${C.border}`, py: 1.75, bgcolor: '#F8FAFC' } }}>
-                <TableCell sx={{ color: '#475569', fontSize: 13, fontWeight: 600, pl: 3 }}>
-                  Mã hóa đơn
-                </TableCell>
-                <TableCell sx={{ color: '#475569', fontSize: 13, fontWeight: 600 }}>
-                  Thời gian
-                </TableCell>
-                <TableCell sx={{ color: '#475569', fontSize: 13, fontWeight: 600 }}>
-                  Thu ngân
-                </TableCell>
-                <TableCell sx={{ color: '#475569', fontSize: 13, fontWeight: 600 }} align="right">
-                  Tổng tiền
-                </TableCell>
-                <TableCell sx={{ color: '#475569', fontSize: 13, fontWeight: 600, pl: 4 }}>
-                  Phương thức
-                </TableCell>
-                <TableCell sx={{ color: '#475569', fontSize: 13, fontWeight: 600, pr: 3 }} align="center">
-                  Thao tác
-                </TableCell>
+              <TableRow sx={{ '& th': { borderBottom: `1px solid ${C.border}`, py: 1.75, bgcolor: '#F8FAFC', color: '#475569', fontSize: 13, fontWeight: 600 } }}>
+                <TableCell align="center" sx={{ width: 72 }}>STT</TableCell>
+                <TableCell>Mã hóa đơn</TableCell>
+                <TableCell>Thời gian</TableCell>
+                <TableCell>Thu ngân</TableCell>
+                <TableCell>Tổng tiền</TableCell>
+                <TableCell>Phương thức</TableCell>
+                <TableCell align="center">Thao tác</TableCell>
               </TableRow>
             </TableHead>
 
             <TableBody>
               {isLoading && !items.length ? (
                 <TableRow>
-                  <TableCell colSpan={6} sx={{ py: 8, textAlign: 'center' }}>
+                  <TableCell colSpan={7} sx={{ py: 8, textAlign: 'center' }}>
                     <CircularProgress size={32} sx={{ color: C.cyan }} />
                     <Typography sx={{ mt: 1.5, color: C.muted, fontSize: 13 }}>
                       Đang tải danh sách hóa đơn...
                     </Typography>
                   </TableCell>
                 </TableRow>
-              ) : !items.length ? (
+              ) : !items.length && (dateError || error) ? null : !items.length ? (
                 <TableRow>
-                  <TableCell colSpan={6} sx={{ py: 8, textAlign: 'center' }}>
+                  <TableCell colSpan={7} sx={{ py: 8, textAlign: 'center' }}>
                     <ShoppingCartOutlined style={{ fontSize: 36, color: '#CBD5E1' }} />
                     <Typography sx={{ mt: 1, fontSize: 14, fontWeight: 700, color: C.text }}>
                       Chưa có hóa đơn nào
@@ -470,7 +403,7 @@ export default function InStoreSalesHistoryPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                items.map((sale) => {
+                items.map((sale, i) => {
                   const isCash = isCashMethod(sale.paymentMethod);
                   const { date, time } = formatReceiptDate(sale.orderDate);
 
@@ -483,8 +416,12 @@ export default function InStoreSalesHistoryPage() {
                         '& td': { borderBottom: `1px solid ${C.borderLight}`, py: 2 }
                       }}
                     >
+                      <TableCell align="center" sx={{ fontSize: 13, color: C.muted }}>
+                        {page * PAGE_SIZE + i + 1}
+                      </TableCell>
+
                       {/* Mã hóa đơn */}
-                      <TableCell sx={{ pl: 3 }}>
+                      <TableCell>
                         <Typography sx={{ fontWeight: 800, fontSize: 13.5, color: C.text }}>
                           {sale.invoiceNumber || sale.orderNumber}
                         </Typography>
@@ -508,14 +445,14 @@ export default function InStoreSalesHistoryPage() {
                       </TableCell>
 
                       {/* Tổng tiền */}
-                      <TableCell align="right">
+                      <TableCell>
                         <Typography sx={{ fontWeight: 800, fontSize: 14, color: C.text }}>
                           {money(sale.totalAmount)}
                         </Typography>
                       </TableCell>
 
                       {/* Phương thức - Dùng chuẩn màu cyan #8EECF5 và cream #FFF7AE */}
-                      <TableCell sx={{ pl: 4 }}>
+                      <TableCell>
                         <Box
                           sx={{
                             display: 'inline-flex',
@@ -541,7 +478,7 @@ export default function InStoreSalesHistoryPage() {
                       </TableCell>
 
                       {/* Thao tác - Icon mắt đơn giản, không viền hộp, không button hover */}
-                      <TableCell align="center" sx={{ pr: 3 }}>
+                      <TableCell align="center">
                         <Tooltip title="Xem chi tiết hóa đơn">
                           <IconButton
                             size="small"
@@ -567,16 +504,7 @@ export default function InStoreSalesHistoryPage() {
           </Table>
         </Box>
 
-        {/* ─── PHÂN TRANG PHÍA DƯỚI ─── */}
-        <Pager
-          page={page}
-          totalPages={totalPages}
-          total={total}
-          size={PAGE_SIZE}
-          noun="hóa đơn"
-          onPage={setPage}
-          sx={{ borderTop: `1px solid ${C.borderLight}` }}
-        />
+        <Pager page={page} totalPages={totalPages} total={total} size={PAGE_SIZE} noun="hóa đơn" onPage={setPage} sx={{ borderTop: `1px solid ${C.borderLight}` }} />
       </Box>
     </Box>
   );

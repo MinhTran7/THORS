@@ -43,9 +43,7 @@ const C = {
 };
 
 function isCashMethod(method) {
-  if (!method) return true;
-  const m = String(method).toUpperCase();
-  return m === 'CASH' || m.includes('TIEN_MAT') || m.includes('TIỀN MẶT');
+  return !method || method === 'CASH';
 }
 
 const money = (value) => `${Number(value || 0).toLocaleString('vi-VN')} đ`;
@@ -71,12 +69,6 @@ export default function InStoreSaleDetailPage() {
     orderId ? `/sales/in-store/${orderId}` : null,
     () => api(`/sales/in-store/${orderId}`)
   );
-
-  // Lấy danh mục sản phẩm từ hệ thống để làm fallback hình ảnh nếu đơn cũ chưa lưu image_url
-  const { data: productsData } = useSWR('/products', () => api('/products'), {
-    revalidateOnFocus: false
-  });
-  const productList = productsData?.data || (Array.isArray(productsData) ? productsData : []);
 
   const isCash = isCashMethod(data?.paymentMethod);
   const { date, time } = formatDetailDate(data?.orderDate);
@@ -106,7 +98,7 @@ export default function InStoreSaleDetailPage() {
 
   if (isLoading) {
     return (
-      <Box sx={{ maxWidth: 1400, mx: 'auto', py: 10, textAlign: 'center' }}>
+      <Box sx={{ py: 10, textAlign: 'center' }}>
         <CircularProgress size={38} sx={{ color: C.cyan }} />
         <Typography sx={{ mt: 2, color: C.muted, fontSize: 13.5 }}>
           Đang tải thông tin chi tiết hóa đơn...
@@ -117,7 +109,7 @@ export default function InStoreSaleDetailPage() {
 
   if (error || !data) {
     return (
-      <Box sx={{ maxWidth: 1400, mx: 'auto', py: 8 }}>
+      <Box sx={{ py: 8 }}>
         <Card sx={{ p: 4, textAlign: 'center', borderRadius: 3.5, border: `1px solid ${C.border}` }}>
           <Typography color="error" sx={{ fontWeight: 700, fontSize: 15 }}>
             {error?.message || 'Không tìm thấy thông tin hóa đơn.'}
@@ -144,7 +136,7 @@ export default function InStoreSaleDetailPage() {
   }
 
   return (
-    <Box sx={{ maxWidth: 1400, mx: 'auto', color: C.text, pb: 6 }}>
+    <Box sx={{ color: C.text, pb: 6 }}>
       {/* ─── TIÊU ĐỀ & NÚT IN HÓA ĐƠN SANG HẲN BÊN PHẢI ─── */}
       <Box
         sx={{
@@ -310,19 +302,7 @@ export default function InStoreSaleDetailPage() {
                 if (item.size) variantParts.push(`Size ${item.size}`);
                 const variantText = variantParts.length > 0 ? variantParts.join(' · ') : 'Mặc định';
 
-                // Tìm hình ảnh sản phẩm từ item hoặc từ danh mục products
-                const foundProduct = productList.find(
-                  (p) =>
-                    p.productName === item.productName ||
-                    (item.detailId && p.variants?.some((v) => v.detailId === item.detailId))
-                );
-                const resolvedImage =
-                  item.imageUrl ||
-                  foundProduct?.primaryImageUrl ||
-                  foundProduct?.imageUrl ||
-                  foundProduct?.thumbnailUrl ||
-                  foundProduct?.images?.[0]?.imageUrl ||
-                  '';
+                const resolvedImage = item.imageUrl || '';
 
                 return (
                   <TableRow

@@ -6,23 +6,21 @@ import com.thors.module.order.dto.CreateOrderRequest;
 import com.thors.module.order.repository.CheckoutRepository;
 import com.thors.module.promotion.entity.Promotion;
 import com.thors.module.promotion.repository.PromotionRepository;
+import com.thors.module.promotion.service.PromotionService;
 
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
@@ -30,27 +28,32 @@ import java.util.regex.Pattern;
 public class CheckoutService {
 
     private static final BigDecimal SHIPPING_FEE = BigDecimal.ZERO;
+    /** Đơn thanh toán online (chuyển khoản / PayOS) chỉ giữ hàng trong ngần này phút, quá hạn tự hủy. */
+    public static final int ONLINE_PAYMENT_HOLD_MINUTES = 10;
     private static final Pattern PHONE = Pattern.compile("^(0|\\+84)\\d{9}$");
 
     private final CheckoutRepository checkoutRepository;
     private final CartRepository cartRepository;
     private final AddressRepository addressRepository;
     private final PromotionRepository promotionRepository;
+    private final PromotionService promotionService;
 
     public CheckoutService(CheckoutRepository checkoutRepository,
                            CartRepository cartRepository,
                            AddressRepository addressRepository,
-                           PromotionRepository promotionRepository) {
+                           PromotionRepository promotionRepository,
+                           PromotionService promotionService) {
         this.checkoutRepository = checkoutRepository;
         this.cartRepository = cartRepository;
         this.addressRepository = addressRepository;
         this.promotionRepository = promotionRepository;
+        this.promotionService = promotionService;
     }
 
     private record Receiver(String name, String phone, String address) {
     }
 
-    private record Line(int detailId, int quantity, Map<String, Object> detail) {
+    private record Line(int detailId, int quantity, BigDecimal unitPrice, Map<String, Object> detail) {
     }
 
     @Transactional
@@ -95,7 +98,7 @@ public class CheckoutService {
 
         BigDecimal itemsAmount = BigDecimal.ZERO;
         for (Line line : lines) {
-            itemsAmount = itemsAmount.add(toMoney(line.detail().get("price")).multiply(BigDecimal.valueOf(line.quantity())));
+            itemsAmount = itemsAmount.add(line.unitPrice().multiply(BigDecimal.valueOf(line.quantity())));
         }
 
         Integer promotionId = null;
@@ -103,58 +106,28 @@ public class CheckoutService {
         BigDecimal promotionDiscount = BigDecimal.ZERO;
 
         if (request.promotionId() != null) {
-            Promotion promo = promotionRepository.findById(request.promotionId())
+            Promotion promo = promotionRepository.lockById(request.promotionId())
                     .orElseThrow(() -> new IllegalArgumentException("Khuyến mãi không tồn tại."));
-            if (!"ACTIVE".equalsIgnoreCase(promo.status())) {
-                throw new IllegalArgumentException("Khuyến mãi hiện không khả dụng.");
+            if (!promo.isOrderVoucher()) {
+                throw new IllegalArgumentException("Giảm giá sản phẩm được áp dụng tự động, không cần chọn mã.");
             }
             LocalDateTime now = LocalDateTime.now();
-            if (promo.startDate() != null && now.isBefore(promo.startDate())) {
-                throw new IllegalArgumentException("Chương trình khuyến mãi chưa bắt đầu.");
+            if (!"ACTIVE".equals(promo.status()) || now.isBefore(promo.startDate()) || !now.isBefore(promo.endDate())) {
+                throw new IllegalArgumentException("Khuyến mãi hiện không khả dụng.");
             }
-            if (promo.endDate() != null && now.isAfter(promo.endDate())) {
-                throw new IllegalArgumentException("Khuyến mãi đã hết hạn sử dụng.");
-            }
-            if (promo.usageLimit() != null && promo.usedCount() != null && promo.usedCount() >= promo.usageLimit()) {
+            if (promo.usageLimit() != null && promotionRepository.countUsage(promo.promotionId()) >= promo.usageLimit()) {
                 throw new IllegalArgumentException("Khuyến mãi đã hết lượt sử dụng.");
             }
-
-            BigDecimal eligibleSubtotal = BigDecimal.ZERO;
-            if ("SELECTED".equalsIgnoreCase(promo.applyScope())) {
-                List<Integer> productIds = promotionRepository.findProductIds(promo.promotionId());
-                Set<Integer> allowedProductIds = new HashSet<>(productIds);
-                for (Line line : lines) {
-                    Object pId = line.detail().get("productId");
-                    if (pId != null && allowedProductIds.contains(((Number) pId).intValue())) {
-                        eligibleSubtotal = eligibleSubtotal.add(toMoney(line.detail().get("price")).multiply(BigDecimal.valueOf(line.quantity())));
-                    }
-                }
-                if (eligibleSubtotal.compareTo(BigDecimal.ZERO) == 0) {
-                    throw new IllegalArgumentException("Đơn hàng không có sản phẩm nào thuộc phạm vi áp dụng khuyến mãi.");
-                }
-            } else {
-                eligibleSubtotal = itemsAmount;
-            }
-
-            if (promo.minOrderValue() != null && eligibleSubtotal.compareTo(promo.minOrderValue()) < 0) {
+            if (itemsAmount.compareTo(promo.minOrderValue()) < 0) {
                 throw new IllegalArgumentException("Đơn hàng chưa đạt giá trị tối thiểu để áp dụng khuyến mãi.");
             }
 
-            if ("PERCENT".equalsIgnoreCase(promo.discountType()) || "PERCENTAGE".equalsIgnoreCase(promo.discountType())) {
-                promotionDiscount = eligibleSubtotal.multiply(promo.discountValue())
-                        .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP);
-                if (promo.maxDiscountAmount() != null && promo.maxDiscountAmount().compareTo(BigDecimal.ZERO) > 0) {
-                    promotionDiscount = promotionDiscount.min(promo.maxDiscountAmount());
-                }
-            } else {
-                promotionDiscount = promo.discountValue().min(eligibleSubtotal);
-            }
-
+            promotionDiscount = promo.discountOf(itemsAmount);
             promotionId = promo.promotionId();
             promotionName = promo.name();
         }
 
-        BigDecimal total = itemsAmount.subtract(promotionDiscount).max(BigDecimal.ZERO).add(SHIPPING_FEE);
+        BigDecimal total = itemsAmount.subtract(promotionDiscount).add(SHIPPING_FEE);
 
         int orderId = 0;
         String orderNumber = null;
@@ -172,8 +145,13 @@ public class CheckoutService {
 
         for (Line line : lines) {
             Map<String, Object> d = line.detail();
-            checkoutRepository.insertItem(orderId, line.detailId(), line.quantity(), toMoney(d.get("price")),
+            checkoutRepository.insertItem(orderId, line.detailId(), line.quantity(), line.unitPrice(),
                     String.valueOf(d.get("productName")), String.valueOf(d.get("size")), String.valueOf(d.get("color")));
+        }
+
+        // Thanh toán online: chỉ giữ đơn (và hàng) ONLINE_PAYMENT_HOLD_MINUTES phút
+        if ("ONLINE".equalsIgnoreCase(paymentMethod)) {
+            checkoutRepository.setPaymentDeadline(orderId, ONLINE_PAYMENT_HOLD_MINUTES);
         }
 
         for (Integer cartItemId : cartItemIds) {
@@ -185,6 +163,9 @@ public class CheckoutService {
         result.put("orderNumber", orderNumber);
         result.put("totalAmount", total);
         result.put("paymentMethod", paymentMethod);
+        if ("ONLINE".equalsIgnoreCase(paymentMethod)) {
+            result.put("paymentHoldMinutes", ONLINE_PAYMENT_HOLD_MINUTES);
+        }
         if (promotionDiscount.compareTo(BigDecimal.ZERO) > 0) {
             result.put("discountAmount", promotionDiscount);
             result.put("promotionName", promotionName);
@@ -205,7 +186,8 @@ public class CheckoutService {
         if (quantity > stock) {
             throw new IllegalArgumentException("\"" + name + "\" chỉ còn " + stock + " sản phẩm trong kho.");
         }
-        return new Line(detailId, quantity, detail);
+        BigDecimal unitPrice = promotionService.salePrice(((Number) detail.get("productId")).intValue(), toMoney(detail.get("price")));
+        return new Line(detailId, quantity, unitPrice, detail);
     }
 
     private Receiver resolveReceiver(int userId, CreateOrderRequest request) {

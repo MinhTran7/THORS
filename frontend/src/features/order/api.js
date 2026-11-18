@@ -19,18 +19,31 @@ export const ordersApi = {
   // Owner: xác nhận / từ chối / giao / hoàn tất. Customer: hủy đơn.
   // carrier chỉ dùng khi chuyển sang SHIPPING: SELF (tự giao) hoặc mã đơn vị vận chuyển
   // ghn (chỉ khi carrier = GHN): { districtId, wardCode, weightG } theo danh mục GHN
-  changeStatus: (id, status, reason, carrier, ghn) =>
+  // refund (khách hủy đơn đã thanh toán online): { bankBin, bankName, accountNumber, accountName }
+  changeStatus: (id, status, reason, carrier, ghn, refund) =>
     api(
       `/orders/${id}/status${query({
         status,
         reason,
         carrier,
-        ...(carrier === 'GHN' && ghn ? { ghnDistrictId: ghn.districtId, ghnWardCode: ghn.wardCode, weightG: ghn.weightG } : {})
+        ...(carrier === 'GHN' && ghn ? { ghnDistrictId: ghn.districtId, ghnWardCode: ghn.wardCode, weightG: ghn.weightG } : {}),
+        ...(refund
+          ? {
+              refundBankBin: refund.bankBin,
+              refundBankName: refund.bankName,
+              refundAccountNumber: refund.accountNumber,
+              refundAccountName: refund.accountName
+            }
+          : {})
       })}`,
       { method: 'POST' }
     ),
+  // Khách nhập / sửa tài khoản nhận tiền hoàn (đơn đang "Chờ hoàn tiền")
+  saveRefundAccount: (id, account) => api(`/orders/${id}/refund-account`, { method: 'PUT', body: account }),
   // Khoảng cách từ cửa hàng tới địa chỉ giao và hình thức giao gợi ý (chỉ cửa hàng)
   deliverySuggestion: (id) => api(`/orders/${id}/delivery-suggestion`),
+  // Owner: đã chuyển khoản trả lại khách cho đơn "Chờ hoàn tiền" (đơn đã thanh toán online nhưng bị hủy / từ chối)
+  markRefunded: (id) => post(`/orders/${id}/refunded`, {}),
   createPayOSLink: (orderId) => post('/payment/payos/create-link', { orderId }),
   checkPayOSStatus: (orderId) => api(`/payment/payos/status/${orderId}`)
 };

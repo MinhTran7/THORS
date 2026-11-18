@@ -21,7 +21,9 @@ import {
 } from '@ant-design/icons';
 import { getPromotionById } from 'services/promotionService';
 import { getProducts } from 'services/productService';
+import { categoryFullName, getCategories } from 'services/categoryService';
 import { useCrumbs } from '../../layouts/crumbs';
+import { KIND, kindOf, lockMessage, NoticeDialog } from './PromotionForm';
 
 const C = {
   text: '#1E293B',
@@ -67,7 +69,7 @@ const dateText = (value) => {
 };
 
 const discountText = (promotion) => {
-  const isPercentage = ['PERCENTAGE', 'PERCENT'].includes(promotion.discountType);
+  const isPercentage = promotion.discountType === 'PERCENT';
   return isPercentage ? `${promotion.discountValue}%` : money(promotion.discountValue);
 };
 
@@ -122,17 +124,20 @@ const getProductRows = (response) => {
   return [];
 };
 
-export default function PromotionDetailPage() {
+export default function PromotionDetailPage({ kind = 'PRODUCT' }) {
   const navigate = useNavigate();
   const { promotionId } = useParams();
+  const { base, title, name } = KIND[kind];
 
-  useCrumbs(['Danh sách khuyến mãi', 'Chi tiết khuyến mãi']);
+  useCrumbs([title, `Chi tiết ${name}`]);
 
   const [promotion, setPromotion] = useState(null);
   const [allProducts, setAllProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [productsLoading, setProductsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
 
   useEffect(() => {
     let mounted = true;
@@ -141,6 +146,10 @@ export default function PromotionDetailPage() {
         setLoading(true);
         setError('');
         const data = await getPromotionById(promotionId);
+        if (mounted && data?.promotionId && kindOf(data) !== kind) {
+          navigate(`${KIND[kindOf(data)].base}/${promotionId}`, { replace: true });
+          return;
+        }
         if (mounted) setPromotion(data);
       } catch (e) {
         if (mounted) {
@@ -154,15 +163,19 @@ export default function PromotionDetailPage() {
     return () => {
       mounted = false;
     };
-  }, [promotionId]);
+  }, [promotionId, kind, navigate]);
 
   useEffect(() => {
+    if (kind !== 'PRODUCT') return undefined;
     let mounted = true;
     const loadProducts = async () => {
       try {
         setProductsLoading(true);
-        const response = await getProducts();
-        if (mounted) setAllProducts(getProductRows(response));
+        const [response, categoryResponse] = await Promise.all([getProducts(), getCategories().catch(() => [])]);
+        if (mounted) {
+          setAllProducts(getProductRows(response));
+          setCategories(getProductRows(categoryResponse));
+        }
       } catch (e) {
         console.error('Không thể tải danh sách sản phẩm:', e);
       } finally {
@@ -173,11 +186,11 @@ export default function PromotionDetailPage() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [kind]);
 
   if (loading) {
     return (
-      <Box sx={{ maxWidth: 1400, mx: 'auto', py: 10, textAlign: 'center' }}>
+      <Box sx={{ py: 10, textAlign: 'center' }}>
         <CircularProgress size={38} sx={{ color: C.cyan }} />
         <Typography sx={{ mt: 2, color: C.muted, fontSize: 13.5 }}>
           Đang tải thông tin chi tiết khuyến mãi...
@@ -188,14 +201,14 @@ export default function PromotionDetailPage() {
 
   if (error || !promotion) {
     return (
-      <Box sx={{ maxWidth: 1400, mx: 'auto', py: 8 }}>
+      <Box sx={{ py: 8 }}>
         <Card sx={{ p: 4, textAlign: 'center', borderRadius: 3.5, border: `1px solid ${C.border}` }}>
           <Typography color="error" sx={{ fontWeight: 700, fontSize: 15 }}>
             {error || 'Không tìm thấy chương trình khuyến mãi.'}
           </Typography>
           <Button
             startIcon={<ArrowLeftOutlined />}
-            onClick={() => navigate('/promotions')}
+            onClick={() => navigate(base)}
             sx={{
               mt: 2,
               textTransform: 'none',
@@ -215,12 +228,23 @@ export default function PromotionDetailPage() {
   }
 
   const schedule = getScheduleStatus(promotion);
+
+  // Đang diễn ra hoặc đã kết thúc thì báo, không cho sửa
+  const openEdit = () => {
+    const message = lockMessage(promotion);
+    if (message) setNotice(message);
+    else navigate(`${base}/${promotion.promotionId}/edit`);
+  };
   const selectedProductIds = Array.isArray(promotion.productIds) ? promotion.productIds : [];
   const selectedIdSet = new Set(selectedProductIds.map(String));
   const selectedProducts = allProducts.filter((product) => selectedIdSet.has(String(getProductId(product))));
+  const categoryName = (product) => {
+    const found = categories.find((c) => String(c.categoryId) === String(product.categoryId));
+    return found ? categoryFullName(found) : product.categoryName || 'Chưa phân loại';
+  };
 
   return (
-    <Box sx={{ maxWidth: 1400, mx: 'auto', color: C.text, pb: 6 }}>
+    <Box sx={{ color: C.text, pb: 6 }}>
       {/* ─── TIÊU ĐỀ & NÚT CHỈNH SỬA SANG BÊN PHẢI ─── */}
       <Box
         sx={{
@@ -233,13 +257,13 @@ export default function PromotionDetailPage() {
         }}
       >
         <Typography variant="h3" sx={{ fontWeight: 800, color: C.text, fontSize: { xs: 22, sm: 28 } }}>
-          Chi tiết khuyến mãi
+          Chi tiết {name}
         </Typography>
 
         <Button
           variant="contained"
           startIcon={<EditOutlined style={{ fontSize: 15 }} />}
-          onClick={() => navigate(`/promotions/${promotion.promotionId}/edit`)}
+          onClick={openEdit}
           sx={{
             textTransform: 'none',
             borderRadius: 2.5,
@@ -362,7 +386,7 @@ export default function PromotionDetailPage() {
         </Box>
       </Card>
 
-      {/* ─── CARD 2: ĐIỀU KIỆN ÁP DỤNG (DÀN ĐỀU 4 CỘT) ─── */}
+      {/* ─── CARD 2: ĐIỀU KIỆN ÁP DỤNG ─── */}
       <Card sx={cardSx}>
         <Typography sx={{ fontWeight: 800, fontSize: 16, color: C.text, mb: 2.5 }}>
           Điều kiện áp dụng
@@ -371,172 +395,176 @@ export default function PromotionDetailPage() {
         <Box
           sx={{
             display: 'flex',
-            justifyContent: 'space-between',
             alignItems: 'flex-start',
             flexWrap: 'wrap',
-            gap: 3,
+            gap: 6,
             width: '100%'
           }}
         >
           <Box sx={{ minWidth: 0, flex: { sm: '0 0 auto' } }}>
             <Typography sx={{ fontSize: 12.5, color: C.muted, fontWeight: 600 }}>Loại giảm giá</Typography>
             <Typography sx={{ mt: 0.75, fontSize: 15, fontWeight: 700, color: C.text }}>
-              {['PERCENTAGE', 'PERCENT'].includes(promotion.discountType)
+              {promotion.discountType === 'PERCENT'
                 ? 'Theo phần trăm (%)'
                 : 'Số tiền cố định (VNĐ)'}
             </Typography>
           </Box>
 
-          <Box sx={{ minWidth: 0, flex: { sm: '0 0 auto' } }}>
-            <Typography sx={{ fontSize: 12.5, color: C.muted, fontWeight: 600 }}>Đơn hàng tối thiểu</Typography>
-            <Typography sx={{ mt: 0.75, fontSize: 15, fontWeight: 700, color: C.text }}>
-              {money(promotion.minOrderValue)}
-            </Typography>
-          </Box>
+          {kind === 'ORDER' && (
+            <>
+              <Box sx={{ minWidth: 0, flex: { sm: '0 0 auto' } }}>
+                <Typography sx={{ fontSize: 12.5, color: C.muted, fontWeight: 600 }}>Đơn hàng tối thiểu</Typography>
+                <Typography sx={{ mt: 0.75, fontSize: 15, fontWeight: 700, color: C.text }}>{money(promotion.minOrderValue)}</Typography>
+              </Box>
 
-          <Box sx={{ minWidth: 0, flex: { sm: '0 0 auto' } }}>
-            <Typography sx={{ fontSize: 12.5, color: C.muted, fontWeight: 600 }}>Mức giảm tối đa</Typography>
-            <Typography sx={{ mt: 0.75, fontSize: 15, fontWeight: 700, color: C.text }}>
-              {['PERCENTAGE', 'PERCENT'].includes(promotion.discountType)
-                ? (promotion.maxDiscountAmount == null ? 'Không giới hạn' : money(promotion.maxDiscountAmount))
-                : `${money(promotion.discountValue)} (Cố định)`}
-            </Typography>
-          </Box>
-
-          <Box sx={{ minWidth: 0, flex: { sm: '0 0 auto' } }}>
-            <Typography sx={{ fontSize: 12.5, color: C.muted, fontWeight: 600 }}>Lượt sử dụng tối đa</Typography>
-            <Typography sx={{ mt: 0.75, fontSize: 15, fontWeight: 700, color: C.text }}>
-              {promotion.usageLimit == null
-                ? 'Không giới hạn'
-                : `${Number(promotion.usageLimit).toLocaleString('vi-VN')} lượt`}
-            </Typography>
-          </Box>
+              <Box sx={{ minWidth: 0, flex: { sm: '0 0 auto' } }}>
+                <Typography sx={{ fontSize: 12.5, color: C.muted, fontWeight: 600 }}>Lượt dùng</Typography>
+                <Typography sx={{ mt: 0.75, fontSize: 15, fontWeight: 700, color: C.text }}>
+                  {promotion.usedCount || 0}/{promotion.usageLimit} lượt
+                </Typography>
+              </Box>
+            </>
+          )}
         </Box>
       </Card>
 
-
       {/* ─── CARD 3: PHẠM VI ÁP DỤNG ─── */}
-      <Card sx={cardSx}>
-        <Typography sx={{ fontWeight: 800, fontSize: 16, color: C.text, mb: 2 }}>
-          Phạm vi áp dụng
-        </Typography>
+      {kind === 'PRODUCT' && (
+        <Card sx={cardSx}>
+          <Typography sx={{ fontWeight: 800, fontSize: 16, color: C.text, mb: 2 }}>
+            Phạm vi áp dụng
+          </Typography>
 
-        {promotion.applyScope === 'SELECTED' ? (
-          <Box>
-            <Typography sx={{ fontSize: 13.5, color: C.muted, mb: 2 }}>
-              Khuyến mãi chỉ áp dụng cho {selectedProductIds.length} sản phẩm được chọn dưới đây:
-            </Typography>
-
-            {productsLoading ? (
-              <Box sx={{ py: 4, display: 'flex', justifyContent: 'center' }}>
-                <CircularProgress size={30} sx={{ color: C.cyan }} />
-              </Box>
-            ) : selectedProducts.length === 0 ? (
-              <Typography sx={{ fontSize: 13.5, color: C.muted, py: 2 }}>
-                {selectedProductIds.length === 0
-                  ? 'Chưa có sản phẩm nào được liên kết với chương trình.'
-                  : 'Không tìm thấy thông tin sản phẩm trong kho dữ liệu.'}
+          {promotion.applyScope === 'SELECTED' ? (
+            <Box>
+              <Typography sx={{ fontSize: 13.5, color: C.muted, mb: 2 }}>
+                Khuyến mãi chỉ áp dụng cho {selectedProductIds.length} sản phẩm được chọn dưới đây:
               </Typography>
-            ) : (
-              <TableContainer sx={{ border: `1px solid ${C.borderLight}`, borderRadius: 2.5, overflow: 'hidden' }}>
-                <Table
-                  sx={{
-                    '& th': {
-                      bgcolor: '#F8FAFC',
-                      color: C.muted,
-                      fontSize: 12,
-                      fontWeight: 700,
-                      textTransform: 'uppercase',
-                      letterSpacing: 0.5,
-                      py: 1.5,
-                      borderBottom: `1px solid ${C.borderLight}`
-                    },
-                    '& td': {
-                      borderColor: C.borderLight,
-                      py: 1.75,
-                      fontSize: 13.5,
-                      color: C.text
-                    }
-                  }}
-                >
-                  <TableHead>
-                    <TableRow>
-                      <TableCell sx={{ width: 80, pl: 3 }}>ẢNH</TableCell>
-                      <TableCell>TÊN SẢN PHẨM</TableCell>
-                      <TableCell align="right" sx={{ width: 220, pr: 3 }}>GIÁ BÁN HIỆN TẠI</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {selectedProducts.map((product) => {
-                      const id = getProductId(product);
-                      const name = getProductName(product);
-                      const img = getProductImage(product);
-                      const price = getProductPrice(product);
 
-                      return (
-                        <TableRow key={id} hover sx={{ '&:hover': { bgcolor: '#FAFCFE' } }}>
-                          <TableCell sx={{ pl: 3 }}>
-                            <Box
-                              sx={{
-                                width: 48,
-                                height: 48,
-                                borderRadius: 2,
-                                border: `1px solid ${C.borderLight}`,
-                                bgcolor: '#F8FAFC',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                overflow: 'hidden'
-                              }}
-                            >
-                              {img ? (
-                                <Box
-                                  component="img"
-                                  src={img}
-                                  alt={name}
-                                  sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                />
-                              ) : (
-                                <PictureOutlined style={{ fontSize: 18, color: C.subtle }} />
-                              )}
-                            </Box>
-                          </TableCell>
-                          <TableCell>
-                            <Typography sx={{ fontWeight: 600, color: C.text, fontSize: 14 }}>
-                              {name}
-                            </Typography>
-                          </TableCell>
-                          <TableCell align="right" sx={{ pr: 3 }}>
-                            <Typography sx={{ fontWeight: 700, color: C.text, fontSize: 14 }}>
-                              {price}
-                            </Typography>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            )}
-          </Box>
-        ) : (
-          <Box
-            sx={{
-              p: 2.5,
-              borderRadius: 2.5,
-              bgcolor: '#F8FAFC',
-              border: `1px solid ${C.borderLight}`
-            }}
-          >
-            <Typography sx={{ fontWeight: 700, fontSize: 14, color: C.text }}>
-              Toàn bộ sản phẩm trong cửa hàng
-            </Typography>
-            <Typography sx={{ mt: 0.5, fontSize: 13, color: C.muted }}>
-              Chương trình khuyến mãi được tự động áp dụng cho tất cả các sản phẩm khi đơn hàng đạt đủ điều kiện.
-            </Typography>
-          </Box>
-        )}
-      </Card>
+              {productsLoading ? (
+                <Box sx={{ py: 4, display: 'flex', justifyContent: 'center' }}>
+                  <CircularProgress size={30} sx={{ color: C.cyan }} />
+                </Box>
+              ) : selectedProducts.length === 0 ? (
+                <Typography sx={{ fontSize: 13.5, color: C.muted, py: 2 }}>
+                  {selectedProductIds.length === 0
+                    ? 'Chưa có sản phẩm nào được liên kết với chương trình.'
+                    : 'Không tìm thấy thông tin sản phẩm trong kho dữ liệu.'}
+                </Typography>
+              ) : (
+                <TableContainer sx={{ border: `1px solid ${C.borderLight}`, borderRadius: 2.5, overflow: 'hidden' }}>
+                  <Table
+                    sx={{
+                      '& th': {
+                        bgcolor: '#F8FAFC',
+                        color: C.subtle,
+                        fontSize: 11.5,
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        letterSpacing: 0.4,
+                        py: 1.5,
+                        borderBottom: `1px solid ${C.borderLight}`
+                      },
+                      '& td': {
+                        borderColor: C.borderLight,
+                        py: 1.75,
+                        fontSize: 13.5,
+                        color: C.text
+                      }
+                    }}
+                  >
+                    <TableHead>
+                      <TableRow>
+                        <TableCell align="center" sx={{ width: 64, pl: 3 }}>STT</TableCell>
+                        <TableCell sx={{ width: 72 }} />
+                        <TableCell>Sản phẩm</TableCell>
+                        <TableCell>Danh mục</TableCell>
+                        <TableCell align="center" sx={{ width: 120 }}>Tồn kho</TableCell>
+                        <TableCell align="right" sx={{ width: 200, pr: 3 }}>Giá bán</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {selectedProducts.map((product, index) => {
+                        const id = getProductId(product);
+                        const name = getProductName(product);
+                        const img = getProductImage(product);
+                        const price = getProductPrice(product);
+
+                        return (
+                          <TableRow key={id} hover sx={{ '&:hover': { bgcolor: '#FAFCFE' } }}>
+                            <TableCell align="center" sx={{ pl: 3, color: `${C.muted} !important` }}>
+                              {index + 1}
+                            </TableCell>
+                            <TableCell>
+                              <Box
+                                sx={{
+                                  width: 48,
+                                  height: 48,
+                                  borderRadius: 2,
+                                  border: `1px solid ${C.borderLight}`,
+                                  bgcolor: '#F8FAFC',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  overflow: 'hidden'
+                                }}
+                              >
+                                {img ? (
+                                  <Box
+                                    component="img"
+                                    src={img}
+                                    alt={name}
+                                    sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                  />
+                                ) : (
+                                  <PictureOutlined style={{ fontSize: 18, color: C.subtle }} />
+                                )}
+                              </Box>
+                            </TableCell>
+                            <TableCell>
+                              <Typography sx={{ fontWeight: 600, color: C.text, fontSize: 14 }}>
+                                {name}
+                              </Typography>
+                              <Typography sx={{ fontSize: 12, color: C.muted }}>{product.sku || '—'}</Typography>
+                            </TableCell>
+                            <TableCell sx={{ color: `${C.muted} !important` }}>{categoryName(product)}</TableCell>
+                            <TableCell align="center" sx={{ color: Number(product.totalStock) > 0 ? undefined : '#EF4444 !important' }}>
+                              {Number(product.totalStock || 0).toLocaleString('vi-VN')}
+                            </TableCell>
+                            <TableCell align="right" sx={{ pr: 3 }}>
+                              <Typography sx={{ fontWeight: 700, color: C.text, fontSize: 14 }}>
+                                {price}
+                              </Typography>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              )}
+            </Box>
+          ) : (
+            <Box
+              sx={{
+                p: 2.5,
+                borderRadius: 2.5,
+                bgcolor: '#F8FAFC',
+                border: `1px solid ${C.borderLight}`
+              }}
+            >
+              <Typography sx={{ fontWeight: 700, fontSize: 14, color: C.text }}>
+                Toàn bộ sản phẩm trong cửa hàng
+              </Typography>
+              <Typography sx={{ mt: 0.5, fontSize: 13, color: C.muted }}>
+                Khuyến mãi được tự động áp dụng cho tất cả sản phẩm trong cửa hàng.
+              </Typography>
+            </Box>
+          )}
+        </Card>
+      )}
+
+      <NoticeDialog message={notice} onClose={() => setNotice('')} />
     </Box>
   );
 }

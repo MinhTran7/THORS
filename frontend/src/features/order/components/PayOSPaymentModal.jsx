@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -8,7 +8,6 @@ import {
   Typography,
   Button,
   CircularProgress,
-  Alert,
   IconButton,
   Tooltip
 } from '@mui/material';
@@ -17,23 +16,53 @@ import {
   CheckCircleOutlined,
   QrcodeOutlined,
   LinkOutlined,
-  SyncOutlined,
-  CloseOutlined
+  CloseOutlined,
+  ClockCircleOutlined
 } from '@ant-design/icons';
 import { brand } from 'features/account/tokens';
 import { formatVnd } from '../constants';
 import { ordersApi } from '../api';
 import { generateVietQrUrl } from 'utils/vietqr';
 
-export default function PayOSPaymentModal({ open, onClose, paymentData, onSuccess }) {
-  const [checking, setChecking] = useState(false);
+export default function PayOSPaymentModal({ open, onClose, paymentData, onSuccess, onCancelled }) {
   const [copiedField, setCopiedField] = useState(null);
   const [success, setSuccess] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
+  // Hủy đơn ngay trong hộp thanh toán: null -> 'confirm' (hỏi lại) -> 'working' -> 'done'
+  const [cancelState, setCancelState] = useState(null);
+  const [cancelError, setCancelError] = useState('');
+  const cancelled = cancelState === 'done';
 
-  // Tự động kiểm tra trạng thái mỗi 4 giây khi dialog đang mở
+  async function cancelOrder() {
+    setCancelState('working');
+    setCancelError('');
+    try {
+      await ordersApi.changeStatus(paymentData.orderId, 'CANCELLED', 'Khách hủy khi đang thanh toán');
+      setCancelState('done');
+      if (onCancelled) onCancelled();
+    } catch (err) {
+      setCancelState('confirm');
+      setCancelError(err?.message || 'Không hủy được đơn hàng.');
+    }
+  }
+
+  // Đơn chuyển khoản chỉ giữ 10 phút: backend trả số giây còn lại, đếm ngược tại máy khách
+  const deadline = useMemo(
+    () => (paymentData?.expiresInSeconds != null ? Date.now() + Number(paymentData.expiresInSeconds) * 1000 : null),
+    [paymentData]
+  );
+  const [now, setNow] = useState(() => Date.now());
+  const remaining = deadline ? Math.max(0, Math.ceil((deadline - now) / 1000)) : null;
+  const expired = remaining === 0;
+
   useEffect(() => {
-    if (!open || !paymentData?.orderId || success) return;
+    if (!open || !deadline || success || expired || cancelled) return undefined;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [open, deadline, success, expired, cancelled]);
+
+  // Tự động kiểm tra trạng thái mỗi 4 giây khi dialog đang mở (dừng khi đã hết hạn)
+  useEffect(() => {
+    if (!open || !paymentData?.orderId || success || expired || cancelled) return;
 
     const interval = setInterval(async () => {
       try {
@@ -48,7 +77,7 @@ export default function PayOSPaymentModal({ open, onClose, paymentData, onSucces
     }, 4000);
 
     return () => clearInterval(interval);
-  }, [open, paymentData?.orderId, success, onSuccess]);
+  }, [open, paymentData?.orderId, success, expired, cancelled, onSuccess]);
 
   if (!paymentData) return null;
 
@@ -56,24 +85,6 @@ export default function PayOSPaymentModal({ open, onClose, paymentData, onSucces
     navigator.clipboard.writeText(text);
     setCopiedField(field);
     setTimeout(() => setCopiedField(null), 2000);
-  };
-
-  const handleManualCheck = async () => {
-    setChecking(true);
-    setErrorMsg('');
-    try {
-      const res = await ordersApi.checkPayOSStatus(paymentData.orderId);
-      if (res.paid) {
-        setSuccess(true);
-        if (onSuccess) onSuccess();
-      } else {
-        setErrorMsg('Hệ thống chưa nhận được khoản thanh toán. Nếu bạn vừa chuyển khoản, vui lòng chờ 5-10 giây rồi thử lại.');
-      }
-    } catch (err) {
-      setErrorMsg(err.message || 'Lỗi kiểm tra trạng thái thanh toán.');
-    } finally {
-      setChecking(false);
-    }
   };
 
   // Tạo ảnh VietQR từ bin hoặc qrCode
@@ -96,9 +107,11 @@ export default function PayOSPaymentModal({ open, onClose, paymentData, onSucces
             Thanh toán VietQR / PayOS
           </Typography>
         </Box>
-        <IconButton onClick={onClose} size="small">
-          <CloseOutlined />
-        </IconButton>
+        <Tooltip title={success || cancelled || expired ? 'Đóng' : 'Đóng — thanh toán sau trong chi tiết đơn hàng (trước khi hết hạn giữ đơn)'}>
+          <IconButton onClick={onClose} size="small" aria-label="Đóng">
+            <CloseOutlined />
+          </IconButton>
+        </Tooltip>
       </DialogTitle>
 
       <DialogContent sx={{ p: 3 }}>
@@ -113,6 +126,32 @@ export default function PayOSPaymentModal({ open, onClose, paymentData, onSucces
             </Typography>
             <Button variant="contained" onClick={onClose} sx={{ bgcolor: brand.primary, textTransform: 'none' }}>
               Đóng và xem đơn hàng
+            </Button>
+          </Box>
+        ) : cancelled ? (
+          <Box sx={{ textAlign: 'center', py: 4 }}>
+            <CloseOutlined style={{ fontSize: 48, color: brand.muted, marginBottom: 16 }} />
+            <Typography variant="h5" sx={{ fontWeight: 700, color: brand.ink, mb: 1 }}>
+              Đã hủy đơn hàng
+            </Typography>
+            <Typography variant="body1" sx={{ color: brand.muted, mb: 3 }}>
+              Đơn {paymentData.orderNumber} đã được hủy, hàng đã trả lại kho. Bạn chưa bị trừ tiền.
+            </Typography>
+            <Button variant="contained" onClick={onClose} sx={{ bgcolor: brand.primary, textTransform: 'none' }}>
+              Đóng
+            </Button>
+          </Box>
+        ) : expired ? (
+          <Box sx={{ textAlign: 'center', py: 4 }}>
+            <ClockCircleOutlined style={{ fontSize: 56, color: '#dc2626', marginBottom: 16 }} />
+            <Typography variant="h5" sx={{ fontWeight: 700, color: '#dc2626', mb: 1 }}>
+              Hết thời gian thanh toán
+            </Typography>
+            <Typography variant="body1" sx={{ color: brand.muted, mb: 3 }}>
+              Đơn {paymentData.orderNumber} chỉ được giữ 10 phút nên đã bị hủy và hàng được trả lại kho. Vui lòng đặt lại đơn mới.
+            </Typography>
+            <Button variant="contained" onClick={onClose} sx={{ bgcolor: brand.primary, textTransform: 'none' }}>
+              Đóng
             </Button>
           </Box>
         ) : (
@@ -196,12 +235,6 @@ export default function PayOSPaymentModal({ open, onClose, paymentData, onSucces
                 </Box>
               </Box>
 
-              {errorMsg && (
-                <Alert severity="warning" sx={{ mt: 2, fontSize: 13 }}>
-                  {errorMsg}
-                </Alert>
-              )}
-
               {paymentData.checkoutUrl && (
                 <Button
                   fullWidth
@@ -220,20 +253,56 @@ export default function PayOSPaymentModal({ open, onClose, paymentData, onSucces
         )}
       </DialogContent>
 
-      {!success && (
-        <DialogActions sx={{ p: 2, borderTop: `1px solid ${brand.line}`, justifyContent: 'space-between' }}>
-          <Button onClick={onClose} sx={{ color: brand.muted, textTransform: 'none' }}>
-            Hủy / Đóng
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={checking ? <CircularProgress size={16} color="inherit" /> : <SyncOutlined />}
-            disabled={checking}
-            onClick={handleManualCheck}
-            sx={{ bgcolor: brand.primary, textTransform: 'none', px: 2.5 }}
-          >
-            {checking ? 'Đang kiểm tra…' : 'Tôi đã chuyển khoản'}
-          </Button>
+      {!success && !expired && !cancelled && (
+        <DialogActions sx={{ p: 2, borderTop: `1px solid ${brand.line}`, justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
+          {/* X ở góc = đóng, thanh toán sau (trước khi hết hạn); "Hủy đơn" = hủy hẳn, trả hàng về kho */}
+          {cancelState === 'confirm' || cancelState === 'working' ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+              <Typography variant="body2" sx={{ color: '#dc2626', fontWeight: 600 }}>
+                {cancelError || 'Hủy đơn này? Hàng đang giữ sẽ được trả lại kho.'}
+              </Typography>
+              <Button
+                size="small"
+                disabled={cancelState === 'working'}
+                onClick={() => {
+                  setCancelState(null);
+                  setCancelError('');
+                }}
+                sx={{ color: brand.muted, textTransform: 'none' }}
+              >
+                Không
+              </Button>
+              <Button
+                size="small"
+                variant="contained"
+                disabled={cancelState === 'working'}
+                onClick={cancelOrder}
+                sx={{ bgcolor: '#dc2626', textTransform: 'none', '&:hover': { bgcolor: '#b91c1c' } }}
+              >
+                {cancelState === 'working' ? 'Đang hủy…' : 'Hủy đơn'}
+              </Button>
+            </Box>
+          ) : (
+            <Button onClick={() => setCancelState('confirm')} sx={{ color: '#dc2626', textTransform: 'none', fontWeight: 600 }}>
+              Hủy đơn
+            </Button>
+          )}
+          {/* Không cần bấm xác nhận: hệ thống tự kiểm tra mỗi 4 giây, nhận tiền là tự chuyển sang "Thanh toán thành công" */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {remaining != null && (
+              <Typography
+                variant="body2"
+                sx={{ fontWeight: 700, color: remaining <= 60 ? '#dc2626' : brand.ink, display: 'flex', alignItems: 'center', gap: 0.75 }}
+              >
+                <ClockCircleOutlined />
+                Giữ đơn còn {String(Math.floor(remaining / 60)).padStart(2, '0')}:{String(remaining % 60).padStart(2, '0')}
+              </Typography>
+            )}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: brand.muted }}>
+              <CircularProgress size={14} color="inherit" />
+              <Typography variant="body2">Đang chờ thanh toán… tự cập nhật khi nhận được tiền</Typography>
+            </Box>
+          </Box>
         </DialogActions>
       )}
     </Dialog>
