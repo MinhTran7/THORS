@@ -44,32 +44,51 @@ public class SizeGuideService {
         List<Map<String, Object>> variants = shop.findVariants(productId);
         var info = charts.categoryInfo(productId);
         var kind = StandardSizeCharts.detectKind(info == null ? List.of() : info.names());
+        ChartPick pick = chartFor(productId, variants, info, kind);
 
+        Optional<BodyProfileRequest> saved = savedProfile(actor);
+        BodyProfileRequest body = custom != null ? validate(custom) : saved.orElse(null);
+        if (pick.chart().isEmpty() || body == null) {
+            return new SizeGuide(pick.chart(), null, saved.isPresent(), pick.standard(), kind.name());
+        }
+        var recommendation = SizeRecommender.recommend(pick.chart(), body, sizesInStock(variants), custom == null);
+        return new SizeGuide(pick.chart(), recommendation, saved.isPresent(), pick.standard(), kind.name());
+    }
+
+    /** Bảng size dùng cho sản phẩm + có phải bảng chuẩn (ước lượng) không. */
+    public record ChartPick(List<SizeChartRow> chart, boolean standard) {
+    }
+
+    /** Bảng size riêng của sản phẩm; chưa có thì bảng size chuẩn theo danh mục (ước lượng). */
+    public ChartPick chartFor(int productId, List<Map<String, Object>> variants,
+            SizeChartRepository.CategoryInfo info, StandardSizeCharts.Kind kind) {
         List<SizeChartRow> chart = List.of();
         try {
             chart = SizeChartService.whenReady(() -> charts.findByProduct(productId));
         } catch (ApiException e) {
             // chưa chạy migration bảng size: vẫn dùng được bảng size chuẩn bên dưới
         }
-        // Chưa có bảng size riêng -> bảng size chuẩn theo danh mục (ước lượng, giao diện ghi rõ)
-        boolean standard = false;
-        if (chart.isEmpty()) {
-            List<String> sizes = variants.stream().map(v -> String.valueOf(v.get("size"))).distinct().toList();
-            chart = StandardSizeCharts.rowsFor(kind, info == null ? null : info.targetGroup(),
-                    StandardSizeCharts.sortSizes(sizes));
-            standard = !chart.isEmpty();
-        }
-
-        Optional<BodyProfileRequest> saved = savedProfile(actor);
-        BodyProfileRequest body = custom != null ? validate(custom) : saved.orElse(null);
-        if (chart.isEmpty() || body == null) {
-            return new SizeGuide(chart, null, saved.isPresent(), standard, kind.name());
-        }
-        var recommendation = SizeRecommender.recommend(chart, body, sizesInStock(variants), custom == null);
-        return new SizeGuide(chart, recommendation, saved.isPresent(), standard, kind.name());
+        if (!chart.isEmpty()) return new ChartPick(chart, false);
+        List<String> sizes = variants.stream().map(v -> String.valueOf(v.get("size"))).distinct().toList();
+        List<SizeChartRow> standard = StandardSizeCharts.rowsFor(kind, info == null ? null : info.targetGroup(),
+                StandardSizeCharts.sortSizes(sizes));
+        return new ChartPick(standard, !standard.isEmpty());
     }
 
-    private Optional<BodyProfileRequest> savedProfile(Account actor) {
+    /**
+     * Gợi ý size cho một sản phẩm khi đã có sẵn biến thể + danh mục (dùng cho phối đồ: tránh hỏi DB lặp lại).
+     * Trả null khi sản phẩm không có bảng size nào.
+     */
+    public com.thors.module.fitting.dto.SizeRecommendation recommendFor(int productId, List<Map<String, Object>> variants,
+            SizeChartRepository.CategoryInfo info, BodyProfileRequest body) {
+        var kind = StandardSizeCharts.detectKind(info == null ? List.of() : info.names());
+        ChartPick pick = chartFor(productId, variants, info, kind);
+        if (pick.chart().isEmpty() || body == null) return null;
+        return SizeRecommender.recommend(pick.chart(), body, sizesInStock(variants), true);
+    }
+
+    /** Số đo đã lưu của khách (rỗng nếu không phải khách / chưa lưu / chưa có bảng). */
+    public Optional<BodyProfileRequest> savedProfile(Account actor) {
         if (actor == null || !"CUSTOMER".equals(actor.role())) return Optional.empty();
         try {
             return profiles.findByUserId(actor.id()).map(SizeGuideService::toRequest);

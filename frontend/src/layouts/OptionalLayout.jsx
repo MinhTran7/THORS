@@ -11,6 +11,7 @@ const STOREFRONT_PATHS = [
   '/shop/best-sellers',
   '/shop/new-arrivals',
   '/shop/sale',
+  '/outfit',
   '/shop/products/:productId',
   '/promotions/:promotionId/products',
   '/cart',

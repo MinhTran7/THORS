@@ -401,6 +401,10 @@ function StoreHeader({ categories }) {
           <Box component={RouterLink} to="/promotions" sx={{ ...linkSx, color: C.teal, fontWeight: 600 }}>
             Khuyến mãi
           </Box>
+          {/* Phối đồ theo dịp / ngân sách (module outfit) */}
+          <Box component={RouterLink} to="/outfit" sx={{ ...linkSx, fontWeight: 600 }}>
+            Phối đồ
+          </Box>
         </Box>
 
         {/* Logo giống trang đăng nhập */}

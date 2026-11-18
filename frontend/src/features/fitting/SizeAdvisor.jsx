@@ -115,16 +115,55 @@ export default function SizeAdvisor({ productId, selectedSize, onChoose, isCusto
             {rec.inStock && chooseButton(rec.recommendedSize)}
             {alt && chooseButton(alt.size)}
             {/* Thử trên hình 3D theo số đo đã lưu (quần áo; giày dép không có vòng đo) */}
-            {can3d && (
-              <Button
-                size="small"
-                onClick={() => setShowFit(true)}
-                sx={{ textTransform: 'none', fontWeight: 700, color: C.accent, borderRadius: '10px' }}
-              >
-                Thử trên dáng của bạn (3D)
-              </Button>
-            )}
           </Box>
+          {/* Khối nổi bật mở hình 3D theo số đo của khách, tô màu chỗ vừa / chật */}
+          {can3d && (
+            <Box
+              component="button"
+              type="button"
+              onClick={() => setShowFit(true)}
+              sx={{
+                mt: 1.5,
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1.5,
+                p: 1.5,
+                border: `1.5px solid ${C.ink}`,
+                borderRadius: '12px',
+                bgcolor: '#fff',
+                cursor: 'pointer',
+                textAlign: 'left',
+                font: 'inherit',
+                transition: 'background .15s',
+                '&:hover': { bgcolor: C.sand }
+              }}
+            >
+              <Box
+                sx={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: '50%',
+                  bgcolor: C.ink,
+                  color: '#fff',
+                  display: 'grid',
+                  placeItems: 'center',
+                  fontWeight: 800,
+                  fontSize: 14,
+                  flexShrink: 0
+                }}
+              >
+                3D
+              </Box>
+              <Box sx={{ flex: 1 }}>
+                <Typography sx={{ fontWeight: 700, fontSize: 14.5, color: C.ink }}>
+                  Xem size {selectedSize || rec.recommendedSize} trên dáng 3D của bạn
+                </Typography>
+                <Typography sx={{ fontSize: 12.5, color: C.muted }}>Tô màu chỗ vừa, chật, rộng theo số đo bạn đã lưu</Typography>
+              </Box>
+              <Typography sx={{ fontSize: 20, color: C.ink }}>›</Typography>
+            </Box>
+          )}
         </>
       ) : rec && shoes && isCustomer ? (
         // Đã có số đo nhưng chưa có chiều dài bàn chân

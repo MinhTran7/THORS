@@ -11,7 +11,7 @@
         "rz": 0.104
       },
       "baseCm": 86,
-      "incrCm": 103.4,
+      "incrCm": 103.3,
       "decrCm": 71.1,
       "keys": {
         "incr": "measure-bust-circ-incr",
@@ -35,16 +35,16 @@
       }
     },
     "hips": {
-      "atHeightRatio": 0.49,
+      "atHeightRatio": 0.494,
       "section": {
         "cx": 0,
-        "cz": 0.0202,
-        "rx": 0.1733,
-        "rz": 0.0967
+        "cz": 0.0178,
+        "rx": 0.1728,
+        "rz": 0.0978
       },
       "baseCm": 91.7,
-      "incrCm": 108.9,
-      "decrCm": 83.1,
+      "incrCm": 109.4,
+      "decrCm": 82.9,
       "keys": {
         "incr": "measure-hips-circ-incr",
         "decr": "measure-hips-circ-decr"

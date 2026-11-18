@@ -1,42 +1,51 @@
 import { Component, Suspense, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { ContactShadows, Html, OrbitControls, useGLTF } from '@react-three/drei';
-import { Color, MeshStandardMaterial } from 'three';
+import { Color, DoubleSide, MeshStandardMaterial } from 'three';
 import { bodyMorph } from './bodyMorph';
 
-// Người mẫu theo giới tính: file .glb + .json số đo (tạo bằng scripts/avatar-optimize). Nam: làm sau.
-const MODELS = { FEMALE: '/models/avatar-female' };
+// Người mẫu theo giới tính: file .glb + .json số đo (tạo bằng scripts/avatar-optimize: npm run female / male)
+const MODELS = { FEMALE: '/models/avatar-female', MALE: '/models/avatar-male' };
 
-// Màu do code quyết định (không phụ thuộc màu đặt trong Blender): ma-nơ-canh xám sứ, đồ lót xám than
-const MATERIALS = {
-  Human: new MeshStandardMaterial({ color: '#E6E2DC', roughness: 0.62 }),
-  underwear: new MeshStandardMaterial({ color: '#2B2B2E', roughness: 0.85 })
+// Màu do code quyết định (không phụ thuộc màu đặt trong Blender): ma-nơ-canh xám sứ;
+// đồ lót nữ xám than, boxer nam đen. Khóa = tên vật thể trong file .glb (Human / underwear).
+const SKIN = new MeshStandardMaterial({ color: '#E6E2DC', roughness: 0.62 });
+// Đồ lót nằm sát / trùng da: polygonOffset đẩy nó "lên trước" khi vẽ để không bị lỗi z-fighting
+// (da và vải vẽ xen kẽ thành mảng loang lổ) - không phụ thuộc việc đã đẩy vải ra khỏi da trong Blender hay chưa.
+const underwearMaterial = (color, roughness) =>
+  new MeshStandardMaterial({ color, roughness, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
+const MATERIALS_BY_GENDER = {
+  FEMALE: { Human: SKIN, underwear: underwearMaterial('#2B2B2E', 0.85) },
+  MALE: { Human: SKIN, underwear: underwearMaterial('#1A1A1A', 0.8) }
 };
 
-// Thứ tự 3 vùng tô màu trong shader + nửa chiều cao mỗi vùng (mét, theo cỡ người mẫu)
-const ZONES = [
-  { name: 'bust', halfHeight: 0.07 },
-  { name: 'waist', halfHeight: 0.055 },
-  { name: 'hips', halfHeight: 0.085 }
-];
+// Số vùng tô màu tối đa trong shader (độ vừa: 3 vùng; mặc cả bộ: áo 2 vùng + quần / đầm + giày)
+const MAX_ZONES = 6;
+// Không giới hạn bề ngang (vd giày: tô cả bàn chân)
+const NO_X_LIMIT = 9;
+// Mốc cơ thể theo tỉ lệ chiều cao người mẫu, tính từ chân (đo trên người mẫu MPFB)
+const BODY = { ankle: 0.05, knee: 0.285, shirtHem: 0.56, pantsTop: 0.6, armpit: 0.75, shoulder: 0.835 };
+// Nửa chiều cao vùng "độ vừa" quanh vòng đo (mét, theo cỡ người mẫu)
+const FIT_HALF_HEIGHT = { bust: 0.07, waist: 0.055, hips: 0.085 };
 
 /**
- * Vật liệu "tô màu độ vừa": bản sao vật liệu gốc + đoạn shader phủ màu lên 3 vùng ngực / eo / hông.
- * Mỗi điểm trên thân lấy toạ độ (sau khi vặn núm số đo); nằm trong dải độ cao của vùng và trong bề ngang thân
- * (không lan ra tay) thì pha màu của vùng, mép vùng chuyển mềm (smoothstep).
- * Giá trị từng vùng nằm trong uniforms (đổi size chỉ đổi số, không phải dựng lại shader).
+ * Vật liệu có tô màu theo vùng: bản sao vật liệu gốc + đoạn shader phủ màu lên tối đa 6 vùng.
+ * Mỗi vùng = dải độ cao [y0, y1] (mép mềm) giới hạn bề ngang |x| <= halfX (để không lan ra tay).
+ * Dùng cho cả "độ vừa" (ngực / eo / hông đỏ - xanh) lẫn "mặc thử cả bộ" (tô màu áo, quần, giày).
+ * Giá trị vùng nằm trong uniforms (đổi size / đổi món chỉ đổi số, không phải dựng lại shader).
  */
-function makeFitMaterial(base) {
+function makeZoneMaterial(base) {
   const material = base.clone();
   const uniforms = {
-    uZoneY: { value: [0, 0, 0] },
-    uZoneH: { value: [0, 0, 0] },
-    uZoneX: { value: [0, 0, 0] },
-    uZoneHalfX: { value: [0, 0, 0] },
-    uZoneOn: { value: [0, 0, 0] },
-    uZoneColor: { value: [new Color(), new Color(), new Color()] }
+    uY0: { value: Array(MAX_ZONES).fill(0) },
+    uY1: { value: Array(MAX_ZONES).fill(0) },
+    uHalfX: { value: Array(MAX_ZONES).fill(0) },
+    uFeather: { value: Array(MAX_ZONES).fill(0.01) },
+    uMix: { value: Array(MAX_ZONES).fill(0) },
+    uOn: { value: Array(MAX_ZONES).fill(0) },
+    uColor: { value: Array.from({ length: MAX_ZONES }, () => new Color()) }
   };
-  material.userData.fitUniforms = uniforms;
+  material.userData.zoneUniforms = uniforms;
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
@@ -50,26 +59,71 @@ function makeFitMaterial(base) {
         '#include <common>',
         `#include <common>
         varying vec3 vFitPos;
-        uniform float uZoneY[3];
-        uniform float uZoneH[3];
-        uniform float uZoneX[3];
-        uniform float uZoneHalfX[3];
-        uniform float uZoneOn[3];
-        uniform vec3 uZoneColor[3];`
+        uniform float uY0[${MAX_ZONES}];
+        uniform float uY1[${MAX_ZONES}];
+        uniform float uHalfX[${MAX_ZONES}];
+        uniform float uFeather[${MAX_ZONES}];
+        uniform float uMix[${MAX_ZONES}];
+        uniform float uOn[${MAX_ZONES}];
+        uniform vec3 uColor[${MAX_ZONES}];`
       )
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
-        for (int i = 0; i < 3; i++) {
-          if (uZoneOn[i] < 0.5) continue;
-          float wy = 1.0 - smoothstep(uZoneH[i] * 0.6, uZoneH[i], abs(vFitPos.y - uZoneY[i]));
-          float wx = 1.0 - smoothstep(uZoneHalfX[i], uZoneHalfX[i] * 1.12, abs(vFitPos.x - uZoneX[i]));
-          diffuseColor.rgb = mix(diffuseColor.rgb, uZoneColor[i], wy * wx * 0.85);
+        for (int i = 0; i < ${MAX_ZONES}; i++) {
+          if (uOn[i] < 0.5) continue;
+          float f = uFeather[i];
+          float wy = smoothstep(uY0[i] - f, uY0[i] + f, vFitPos.y) * (1.0 - smoothstep(uY1[i] - f, uY1[i] + f, vFitPos.y));
+          float wx = 1.0 - smoothstep(uHalfX[i], uHalfX[i] * 1.12, abs(vFitPos.x));
+          diffuseColor.rgb = mix(diffuseColor.rgb, uColor[i], wy * wx * uMix[i]);
         }`
       );
   };
-  material.customProgramCacheKey = () => 'thors-fit-zones';
+  material.customProgramCacheKey = () => 'thors-zones';
   return material;
+}
+
+/**
+ * Tính các vùng tô màu (toạ độ theo cỡ người mẫu, chưa nhân scale).
+ * fit: { bust: { color }, waist: {...}, hips: {...} } - độ vừa của size đang thử.
+ * outfit: [{ role: TOP | BOTTOM | DRESS | SHOES, color: '#hex', short: bool }] - mặc thử cả bộ.
+ */
+function zonesFor({ fit, outfit }, calibration, girths) {
+  const H = calibration.heightCm / 100;
+  const y = (ratio) => (calibration.minY ?? 0) + ratio * H;
+  const half = (name) => {
+    const m = calibration.measures[name];
+    return m?.section ? m.section.rx * ((girths[name] || m.baseCm) / m.baseCm) : 0.15;
+  };
+  const zones = [];
+
+  if (fit) {
+    for (const name of ['bust', 'waist', 'hips']) {
+      const m = calibration.measures[name];
+      if (!m?.section || !fit[name]?.color) continue;
+      const center = y(m.atHeightRatio);
+      const h = FIT_HALF_HEIGHT[name];
+      zones.push({ y0: center - h, y1: center + h, halfX: half(name) * 1.05, feather: h * 0.4, mix: 0.85, color: fit[name].color });
+    }
+  }
+
+  for (const item of outfit ?? []) {
+    const base = { feather: 0.012, mix: 0.92, color: item.color };
+    const torso = Math.max(half('bust'), half('waist')) * 1.1;
+    const shoulders = { ...base, y0: y(BODY.armpit - 0.01), y1: y(BODY.shoulder), halfX: 0.21 };
+    if (item.role === 'TOP') {
+      zones.push({ ...base, y0: y(BODY.shirtHem), y1: y(BODY.armpit), halfX: torso }, shoulders);
+    } else if (item.role === 'DRESS') {
+      const body = Math.max(half('bust'), half('hips')) * 1.15;
+      zones.push({ ...base, y0: y(BODY.knee), y1: y(BODY.armpit), halfX: body }, shoulders);
+    } else if (item.role === 'BOTTOM') {
+      // Quần short / chân váy: tới gối; quần dài: tới mắt cá
+      zones.push({ ...base, y0: y(item.short ? BODY.knee + 0.04 : BODY.ankle + 0.01), y1: y(BODY.pantsTop), halfX: half('hips') * 1.15 });
+    } else if (item.role === 'SHOES') {
+      zones.push({ ...base, y0: y(0) - 0.05, y1: y(BODY.ankle), halfX: NO_X_LIMIT });
+    }
+  }
+  return zones.slice(0, MAX_ZONES);
 }
 
 /**
@@ -109,43 +163,63 @@ function FitLabels({ calibration, girths, fit }) {
   });
 }
 
-function Mannequin({ url, profile, calibration, fit }) {
+/**
+ * Áo 3D mặc trên người mẫu (xem garments.js). Áo được đặt sẵn đúng chỗ trong Blender và có các núm co giãn
+ * cùng tên với người mẫu -> vặn cùng giá trị thì áo phồng / thon theo đúng số đo của khách.
+ */
+function Garment({ url, weights }) {
+  const { scene } = useGLTF(`${url}.glb`, false, true);
+  useLayoutEffect(() => {
+    scene.traverse((obj) => {
+      if (!obj.isMesh) return;
+      obj.castShadow = true;
+      // Áo khoác mở vạt: nhìn thấy cả mặt trong của vải
+      obj.material.side = DoubleSide;
+      if (!obj.morphTargetDictionary) return;
+      for (const [name, value] of Object.entries(weights)) {
+        const i = obj.morphTargetDictionary[name];
+        if (i !== undefined) obj.morphTargetInfluences[i] = value;
+      }
+    });
+  }, [scene, weights]);
+  return <primitive object={scene} />;
+}
+
+function Mannequin({ url, profile, calibration, fit, outfit, garment }) {
+  const MATERIALS = MATERIALS_BY_GENDER[profile.gender] ?? MATERIALS_BY_GENDER.FEMALE;
   // useGLTF(đường dẫn, draco, meshopt): file được nén bằng meshopt (three.js giải nén sẵn, không cần CDN)
   const { scene } = useGLTF(`${url}.glb`, false, true);
   const { scale, weights, girths } = useMemo(() => bodyMorph(profile, calibration), [profile, calibration]);
-  const fitting = Boolean(fit);
-  // Chế độ thử size: vật liệu riêng có tô màu (không đụng vật liệu dùng chung của trang Số đo)
-  const fitMaterials = useMemo(
-    () => (fitting ? { Human: makeFitMaterial(MATERIALS.Human), underwear: makeFitMaterial(MATERIALS.underwear) } : null),
-    [fitting]
+  const coloring = Boolean(fit || outfit);
+  // Có tô màu: vật liệu riêng (không đụng vật liệu dùng chung của trang Số đo)
+  const zoneMaterials = useMemo(
+    () => (coloring ? { Human: makeZoneMaterial(MATERIALS.Human), underwear: makeZoneMaterial(MATERIALS.underwear) } : null),
+    [coloring, MATERIALS]
   );
 
-  // Cập nhật màu / vị trí 3 vùng theo size đang thử. Shader so với toạ độ thế giới (mét, đã nhân tỉ lệ chiều cao
-  // của khách) nên mọi số theo cỡ người mẫu đều nhân thêm scale.
+  // Cập nhật các vùng. Shader so với toạ độ thế giới (mét, đã nhân tỉ lệ chiều cao của khách) nên nhân thêm scale.
   useEffect(() => {
-    if (!fitMaterials) return;
-    const modelHeight = calibration.heightCm / 100;
-    for (const material of Object.values(fitMaterials)) {
-      const u = material.userData.fitUniforms;
-      ZONES.forEach(({ name, halfHeight }, i) => {
-        const m = calibration.measures[name];
-        const zone = fit[name];
-        const on = Boolean(m?.section && zone?.color);
-        u.uZoneOn.value[i] = on ? 1 : 0;
-        if (!on) return;
-        const k = (girths[name] || m.baseCm) / m.baseCm;
-        u.uZoneY.value[i] = ((calibration.minY ?? 0) + m.atHeightRatio * modelHeight) * scale;
-        u.uZoneH.value[i] = halfHeight * scale;
-        u.uZoneX.value[i] = m.section.cx * scale;
-        u.uZoneHalfX.value[i] = m.section.rx * k * 1.05 * scale;
-        u.uZoneColor.value[i].set(zone.color);
-      });
+    if (!zoneMaterials) return;
+    const zones = zonesFor({ fit, outfit }, calibration, girths);
+    for (const material of Object.values(zoneMaterials)) {
+      const u = material.userData.zoneUniforms;
+      for (let i = 0; i < MAX_ZONES; i++) {
+        const z = zones[i];
+        u.uOn.value[i] = z ? 1 : 0;
+        if (!z) continue;
+        u.uY0.value[i] = z.y0 * scale;
+        u.uY1.value[i] = z.y1 * scale;
+        u.uHalfX.value[i] = z.halfX * scale;
+        u.uFeather.value[i] = z.feather * scale;
+        u.uMix.value[i] = z.mix;
+        u.uColor.value[i].set(z.color);
+      }
     }
-  }, [fitMaterials, fit, calibration, girths, scale]);
+  }, [zoneMaterials, fit, outfit, calibration, girths, scale]);
 
   // Vặn các núm (morph target) theo số đo; mọi vật thể có núm cùng tên (thân + đồ lót) đổi cùng lúc
   useLayoutEffect(() => {
-    const materials = fitMaterials ?? MATERIALS;
+    const materials = zoneMaterials ?? MATERIALS;
     scene.traverse((obj) => {
       if (!obj.isMesh) return;
       obj.castShadow = true;
@@ -157,11 +231,12 @@ function Mannequin({ url, profile, calibration, fit }) {
         if (i !== undefined) obj.morphTargetInfluences[i] = value;
       }
     });
-  }, [scene, weights, fitMaterials]);
+  }, [scene, weights, zoneMaterials, MATERIALS]);
 
   return (
     <group scale={scale}>
       <primitive object={scene} />
+      {garment && <Garment url={garment.url} weights={weights} />}
       {fit && <FitLabels calibration={calibration} girths={girths} fit={fit} />}
     </group>
   );
@@ -194,9 +269,11 @@ function Notice({ text }) {
 /**
  * Hình người 3D theo số đo: kéo để xoay, lăn chuột để phóng to.
  * profile: { gender, heightCm, weightKg, chestCm, waistCm, hipCm } (lấy thẳng từ form, chưa cần lưu)
- * fit (không bắt buộc): tô màu vùng ngực / eo / hông theo size đang thử - xem makeFitMaterial, FitLabels.
+ * fit (không bắt buộc): tô màu vùng ngực / eo / hông theo size đang thử - xem zonesFor, FitLabels.
+ * outfit (không bắt buộc): mặc thử cả bộ - tô màu áo / quần / đầm / giày lên người mẫu - xem zonesFor.
+ * garment (không bắt buộc): áo 3D thật mặc lên người mẫu - một mục trong garments.js (đúng giới tính).
  */
-export default function AvatarViewer({ profile, fit }) {
+export default function AvatarViewer({ profile, fit, outfit, garment }) {
   const url = MODELS[profile.gender];
   const [calibration, setCalibration] = useState(null);
 
@@ -213,7 +290,6 @@ export default function AvatarViewer({ profile, fit }) {
   }, [url]);
 
   if (!profile.gender) return <Notice text="Chọn giới tính để xem hình dáng." />;
-  if (!url) return <Notice text="Hình 3D cho nam đang được hoàn thiện." />;
   if (calibration === false) return <Notice text="Không tải được dữ liệu hình 3D." />;
   if (!calibration) return <Notice text="Đang tải…" />;
 
@@ -226,7 +302,14 @@ export default function AvatarViewer({ profile, fit }) {
         <directionalLight position={[2, 4, 3]} intensity={1.6} castShadow shadow-mapSize={[1024, 1024]} />
         <directionalLight position={[-3, 2, -2]} intensity={0.5} />
         <Suspense fallback={null}>
-          <Mannequin url={url} profile={profile} calibration={calibration} fit={fit} />
+          <Mannequin
+            url={url}
+            profile={profile}
+            calibration={calibration}
+            fit={fit}
+            outfit={outfit}
+            garment={garment?.gender === profile.gender ? garment : null}
+          />
         </Suspense>
         <ContactShadows position={[0, 0, 0]} opacity={0.35} scale={3} blur={2.4} far={1} />
         <OrbitControls target={[0, h * 0.55, 0]} enablePan={false} minDistance={1.2} maxDistance={5} maxPolarAngle={Math.PI / 1.9} />

@@ -15,6 +15,8 @@ import { useCrumbs } from 'layouts/crumbs';
 import { StoreAccountShell } from 'features/account/components/StoreAccount';
 import { C, cardSx, outlineButtonSx, primaryButtonSx } from 'features/customer/theme';
 import { deleteBodyProfile, getBodyProfile, saveBodyProfile } from './api';
+import StyleProfileCard from 'features/outfit/StyleProfileCard';
+import { garmentsFor } from './avatar/garments';
 
 // Thư viện 3D khá nặng: chỉ tải khi mở trang này (không làm chậm trang cửa hàng)
 const AvatarViewer = lazy(() => import('./avatar/AvatarViewer'));
@@ -100,6 +102,10 @@ export default function BodyProfilePage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // Áo 3D đang mặc thử trên hình xem trước (id trong garments.js, '' = không mặc)
+  const [tryOnId, setTryOnId] = useState('');
+  const tryOnChoices = garmentsFor(form.gender);
+  const tryOn = tryOnChoices.find((g) => g.id === tryOnId) ?? null;
 
   const fill = (p) => setForm(p ? Object.fromEntries(Object.keys(EMPTY).map((k) => [k, p[k] ?? ''])) : EMPTY);
 
@@ -219,15 +225,41 @@ export default function BodyProfilePage() {
               ...cardSx,
               height: { xs: 420, md: 560 },
               overflow: 'hidden',
+              position: 'relative',
               background: 'linear-gradient(180deg, #F7F5F2 0%, #ECE8E2 100%)'
             }}
           >
             <Suspense fallback={null}>
-              <AvatarViewer profile={form} />
+              <AvatarViewer profile={form} garment={tryOn} />
             </Suspense>
+            {/* Mặc thử áo 3D (chỉ hiện khi có áo cho người mẫu giới tính này) */}
+            {tryOnChoices.length > 0 && (
+              <Box sx={{ position: 'absolute', top: 12, left: 12, right: 12, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                {[{ id: '', name: 'Không mặc áo' }, ...tryOnChoices].map((g) => (
+                  <Button
+                    key={g.id || 'none'}
+                    size="small"
+                    onClick={() => setTryOnId(g.id)}
+                    sx={{
+                      ...outlineButtonSx,
+                      height: 32,
+                      px: 1.5,
+                      fontSize: 13,
+                      bgcolor: '#fff',
+                      ...(tryOnId === g.id && { bgcolor: C.cyan, borderColor: C.cyan, color: C.cyanInk })
+                    }}
+                  >
+                    {g.id ? `Mặc thử: ${g.name}` : g.name}
+                  </Button>
+                ))}
+              </Box>
+            )}
           </Box>
         </Box>
       )}
+
+      {/* Hồ sơ phong cách cho phối đồ (module outfit) */}
+      {!loading && <StyleProfileCard hasBodyProfile={Boolean(saved)} />}
 
       <Dialog open={confirmDelete} onClose={() => !saving && setConfirmDelete(false)} maxWidth="xs" fullWidth>
         <DialogTitle sx={{ fontWeight: 800 }}>Xóa số đo?</DialogTitle>

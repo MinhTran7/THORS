@@ -30,6 +30,7 @@ import {
 import { getProductById, setVariantOnline } from '../../services/productService';
 import { useAuth } from 'features/auth/AuthProvider';
 import SizeChartEditor from 'features/fitting/SizeChartEditor';
+import ProductStyleEditor from 'features/outfit/ProductStyleEditor';
 import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../customer/theme';
 import { descriptionToText } from './productDescription';
 
@@ -807,6 +808,8 @@ export default function ProductDetailPage() {
 
           {/* Bảng size: số đo cơ thể theo từng size -> gợi ý size cho khách trên cửa hàng (module fitting) */}
           <SizeChartEditor productId={productId} sizes={[...new Set(variants.map((v) => v.size))]} canEdit={canEditSizeChart} />
+          {/* Thẻ dịp mặc / phong cách cho "Phối đồ cho bạn" (module outfit) */}
+          <ProductStyleEditor productId={productId} canEdit={canEditSizeChart} />
         </Grid>
 
         {/* STATUS AND VISIBILITY */}

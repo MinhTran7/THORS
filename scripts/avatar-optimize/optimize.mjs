@@ -20,7 +20,8 @@ const MEASURES = {
   // stopAtArmpit: dò lên tới nách thì dừng (trên nách, tay dính vào thân làm chu vi tăng vọt)
   bust: { keys: ['measure-bust-circ-incr', 'measure-bust-circ-decr'], band: [0.68, 0.78], pick: 'max', stopAtArmpit: true },
   waist: { keys: ['measure-waist-circ-incr', 'measure-waist-circ-decr'], band: [0.58, 0.68], pick: 'min' },
-  hips: { keys: ['measure-hips-circ-incr', 'measure-hips-circ-decr'], band: [0.45, 0.56], pick: 'max' }
+  // Bắt đầu từ 48% chiều cao: thấp hơn là vùng háng (hai đùi tách ra), đo không chuẩn
+  hips: { keys: ['measure-hips-circ-incr', 'measure-hips-circ-decr'], band: [0.48, 0.56], pick: 'max' }
 };
 const KEEP = Object.values(MEASURES).flatMap((m) => m.keys);
 const BODY_NODE = 'Human'; // vật thể thân người trong Blender (để đo)
@@ -86,15 +87,18 @@ const withKey = (name) => {
 };
 
 /** Chu vi "thước dây" ở độ cao y (glTF: trục Y hướng lên): cắt ngang lưới, lấy cụm thân (bỏ 2 tay), bao lồi. */
-function girth(pos, y) {
-  return torsoSection(pos, y).length;
+/** maxHalfX: chỉ lấy điểm có |x| <= giá trị này (bỏ tay khi đo trạng thái vặn núm). */
+function girth(pos, y, maxHalfX = Infinity) {
+  return torsoSection(pos, y, maxHalfX).length;
 }
 
 /**
  * Mặt cắt thân ở độ cao y: chu vi bao lồi + khung bao (để web vẽ vòng "thước dây" ôm đúng thân).
  * Trả { length, cx, cz, rx, rz } (mét): tâm và nửa bề rộng theo trục X (ngang) / Z (trước-sau).
  */
-function torsoSection(pos, y) {
+const GAP = 0.028;
+
+function torsoSection(pos, y, maxHalfX = Infinity) {
   const pts = [];
   for (let t = 0; t < index.length; t += 3) {
     const tri = [index[t], index[t + 1], index[t + 2]];
@@ -105,17 +109,20 @@ function torsoSection(pos, y) {
       const yb = pos[b + 1];
       if ((ya - y) * (yb - y) >= 0 || ya === yb) continue;
       const f = (y - ya) / (yb - ya);
-      pts.push([pos[a] + f * (pos[b] - pos[a]), pos[a + 2] + f * (pos[b + 2] - pos[a + 2])]);
+      const x = pos[a] + f * (pos[b] - pos[a]);
+      if (Math.abs(x) > maxHalfX) continue;
+      pts.push([x, pos[a + 2] + f * (pos[b + 2] - pos[a + 2])]);
     }
   }
   if (pts.length < 3) return { length: 0, cx: 0, cz: 0, rx: 0, rz: 0 };
-  // Cụm thân: các điểm liên tục theo trục X quanh x = 0, gặp khe hở > 1.5 cm (khoảng trống tới cánh tay) thì dừng
+  // Cụm thân: các điểm liên tục theo trục X quanh x = 0, gặp khe hở > 2.8 cm (khoảng trống tới cánh tay) thì dừng.
+  // Lưới thân có chỗ thưa tới ~1.8 cm (người mẫu nam); khe thân - tay luôn >= ~3.6 cm.
   pts.sort((p, q) => p[0] - q[0]);
   let lo = pts.findIndex((p) => p[0] >= 0);
   if (lo < 0) lo = pts.length - 1;
   let hi = lo;
-  while (lo > 0 && pts[lo][0] - pts[lo - 1][0] < 0.015) lo--;
-  while (hi < pts.length - 1 && pts[hi + 1][0] - pts[hi][0] < 0.015) hi++;
+  while (lo > 0 && pts[lo][0] - pts[lo - 1][0] < GAP) lo--;
+  while (hi < pts.length - 1 && pts[hi + 1][0] - pts[hi][0] < GAP) hi++;
   const torso = pts.slice(lo, hi + 1);
   const xs = torso.map((p) => p[0]);
   const zs = torso.map((p) => p[1]);
@@ -169,9 +176,11 @@ for (const [name, m] of Object.entries(MEASURES)) {
     prev = g;
     if (!best || (m.pick === 'max' ? g > best.g : g < best.g)) best = { y, g, r };
   }
-  const incr = girth(withKey(m.keys[0]), best.y);
-  const decr = girth(withKey(m.keys[1]), best.y);
   const sec = torsoSection(basePos, best.y);
+  // Khi vặn núm, thân nở ra có thể chạm tay: chỉ đo trong bề ngang thân gốc + 20%
+  const limit = Math.abs(sec.cx) + sec.rx * 1.2;
+  const incr = girth(withKey(m.keys[0]), best.y, limit);
+  const decr = girth(withKey(m.keys[1]), best.y, limit);
   calibration.measures[name] = {
     atHeightRatio: Math.round(best.r * 1000) / 1000,
     // Mặt cắt thân ở trạng thái gốc (mét): tâm + nửa bề rộng, để vẽ vòng đo trên web
