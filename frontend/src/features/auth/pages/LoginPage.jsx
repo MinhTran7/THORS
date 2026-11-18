@@ -10,6 +10,21 @@ import { useAuth } from '../AuthProvider';
 import { identity, landingAfterLogin, safeReturn } from '../validation';
 import { post } from 'services/http';
 import { useState } from 'react';
+/**
+ * MÀN HÌNH ĐĂNG NHẬP (đường dẫn /login, khai báo ở routes/index.jsx).
+ *
+ * Luồng đăng nhập bằng email + mật khẩu:
+ *   1. FieldsForm (components/AuthForm.jsx) kiểm tra dữ liệu nhập theo `schema` bên dưới.
+ *   2. Hợp lệ → gọi hàm login() → post('/auth/login') trong services/http.js.
+ *   3. Backend: AuthController.login → AuthService.authenticate → SessionAccess.login.
+ *   4. Kết quả:
+ *        - lỗi (400/401/403/429): AuthForm hiện khung đỏ với câu lỗi từ server;
+ *        - verificationRequired = true: chuyển sang bước "Gửi mã xác minh";
+ *        - thành công: lưu tài khoản vào AuthProvider rồi chuyển trang.
+ *
+ * Bảng dưới là câu báo lỗi khi Google / Facebook chuyển về /login?error=<mã>.
+ * Đăng nhập bằng email KHÔNG dùng bảng này.
+ */
 const googleMessages = {
   facebook_failed: 'Đăng nhập Facebook bị hủy hoặc chưa thành công. Vui lòng thử lại.',
   facebook_expired: 'Phiên Facebook đã hết hạn. Vui lòng thử lại.',
@@ -29,18 +44,33 @@ export default function LoginPage() {
   const { setAccount } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  // pending: khác null khi tài khoản chưa xác minh email → màn hình đổi sang bước gửi mã xác minh
   const [pending, setPending] = useState(null);
+  // Tham số trên URL: returnTo = trang cần quay lại sau khi đăng nhập; message/error = thông báo hiện ở đầu form
   const params = new URLSearchParams(location.search);
+  // safeReturn (validation.js) chỉ nhận đường dẫn nội bộ an toàn, sai thì về /workspace
   const returnTo = safeReturn(params.get('returnTo'));
+
+  /**
+   * Chạy khi bấm "Đăng nhập" VÀ dữ liệu đã qua kiểm tra (FieldsForm chỉ gọi hàm này khi không còn lỗi).
+   * values = { identifier: email, password: mật khẩu }.
+   * Nếu server báo lỗi, post() ném lỗi ra ngoài → FieldsForm bắt và hiện khung đỏ (không xử lý ở đây).
+   */
   async function login(values) {
+    // Gửi POST /api/auth/login (services/http.js tự lấy CSRF token trước nếu chưa có)
     const result = await post('/auth/login', values);
+    // Tài khoản chưa xác minh email: backend KHÔNG tạo phiên đăng nhập.
+    // Nhớ lại email + mật khẩu để bước sau gọi POST /auth/activation gửi mã xác minh.
     if (result.verificationRequired) {
       setPending({ ...values, channel: result.channel, deliveryAvailable: result.deliveryAvailable });
       sessionStorage.setItem('thorsReturnTo', returnTo);
       return;
     }
+    // Đăng nhập thành công: lưu tài khoản vào AuthProvider để cả app biết ai đang đăng nhập
     setAccount(result.account);
     sessionStorage.removeItem('thorsReturnTo');
+    // Chuyển trang (validation.js): khách hàng về trang đang xem dở, vai trò khác vào /workspace.
+    // replace: true → bấm Back không quay lại trang đăng nhập
     navigate(landingAfterLogin(result.account, returnTo), { replace: true });
   }
   return (
@@ -74,6 +104,10 @@ export default function LoginPage() {
         </>
       ) : (
         <>
+          {/* Form đăng nhập email. initialValues: 2 ô ban đầu trống.
+              schema: luật kiểm tra dữ liệu nhập (Yup) — email đúng dạng + không trống (identity trong validation.js),
+              mật khẩu chỉ cần không trống (đăng nhập không ép độ dài như lúc đăng ký).
+              onSubmit={login}: FieldsForm gọi login() khi dữ liệu hợp lệ. */}
           <FieldsForm
             initialValues={{ identifier: '', password: '' }}
             schema={Yup.object({ identifier: identity, password: Yup.string().required('Nhập mật khẩu.') })}

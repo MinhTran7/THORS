@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Alert, Button, Typography } from '@mui/material';
+import { Alert, Button } from '@mui/material';
+import { MailOutlined, SafetyOutlined } from '@ant-design/icons';
 import * as Yup from 'yup';
-import { AuthShell, FieldsForm, Field } from '../components/AuthForm';
+import { FieldsForm } from '../components/AuthForm';
+import ShopAuthShell, { ShopField } from '../components/ShopAuthShell';
 import { useAuth } from '../AuthProvider';
 import { landingAfterLogin } from '../validation';
 import { api, post, clearCsrf } from 'services/http';
@@ -27,7 +29,7 @@ export default function FacebookComplete() {
     return () => clearInterval(timer);
   }, []);
   return (
-    <AuthShell title={context?.linking ? 'Xác minh liên kết Facebook' : 'Hoàn tất đăng ký Facebook'}
+    <ShopAuthShell variant="card" title={context?.linking ? 'Xác minh liên kết Facebook' : 'Hoàn tất đăng ký Facebook'}
       subtitle="Xác minh email để hoàn tất. Những lần đăng nhập Facebook sau không cần OTP email lại.">
       {error && <Alert severity="error">{error}</Alert>}
       {context && !context.sent && (
@@ -42,7 +44,7 @@ export default function FacebookComplete() {
           }}>
           {(form) => context.linking
             ? <Alert severity="info">OTP sẽ gửi đến email của tài khoản THORS bạn vừa đăng nhập.</Alert>
-            : <Field form={form} name="email" label="Email của bạn" autoComplete="email" />}
+            : <ShopField form={form} name="email" label="Email của bạn" icon={<MailOutlined />} autoComplete="email" />}
         </FieldsForm>
       )}
       {context?.sent && <>
@@ -58,8 +60,8 @@ export default function FacebookComplete() {
             sessionStorage.removeItem('thorsReturnTo');
             navigate(target, { replace: true });
           }}>
-          {(form) => <Field form={form} name="code" label="Mã OTP" autoComplete="one-time-code"
-            slotProps={{ htmlInput: { inputMode: 'numeric', maxLength: 6 } }} />}
+          {(form) => <ShopField form={form} name="code" label="Mã OTP" icon={<SafetyOutlined />} autoComplete="one-time-code"
+            inputMode="numeric" maxLength={6} />}
         </FieldsForm>
         <Button disabled={busy || seconds > 0} onClick={async () => {
           setBusy(true); setError('');
@@ -70,7 +72,7 @@ export default function FacebookComplete() {
         }}>{seconds > 0 ? `Gửi lại mã sau ${seconds}s` : 'Gửi lại mã'}</Button>
         {!context.linking && <Button onClick={() => setContext({ ...context, sent: false })}>Nhập email khác</Button>}
       </>}
-      <Typography component={Link} to="/login" color="primary">Quay lại đăng nhập</Typography>
-    </AuthShell>
+      <p className="shop-auth__switch"><Link to="/login">Quay lại đăng nhập</Link></p>
+    </ShopAuthShell>
   );
 }

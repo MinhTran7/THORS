@@ -1,6 +1,7 @@
-package com.thors.module.auth.service;
+package com.thors.module.auth.controller;
 
 import com.thors.config.Settings;
+import com.thors.module.auth.service.*;
 import com.thors.security.*;
 import jakarta.servlet.http.*;
 import java.io.IOException;
