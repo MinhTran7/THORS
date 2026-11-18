@@ -2,8 +2,8 @@ package com.thors.config;
 
 import com.thors.module.account.repository.AccountRepository;
 import com.thors.module.account.repository.PasswordChangeRequirementRepository;
-import com.thors.module.auth.service.GoogleLoginHandler;
-import com.thors.module.auth.service.FacebookLoginHandler;
+import com.thors.module.auth.controller.GoogleLoginHandler;
+import com.thors.module.auth.controller.FacebookLoginHandler;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import java.util.ArrayList;
@@ -20,6 +20,8 @@ import org.springframework.security.web.csrf.*;
 
 @Configuration
 public class SecurityConfig {
+        // Bộ mã hóa mật khẩu BCrypt (độ khó 12). AuthService.authenticate dùng nó để so mật khẩu nhập vào
+        // với password_hash trong bảng user.
         @Bean
         PasswordEncoder passwords() {
                 return new BCryptPasswordEncoder(12);
@@ -75,6 +77,9 @@ public class SecurityConfig {
                         HttpSecurity http, Settings settings, AccountRepository users, GoogleLoginHandler handler,
                         FacebookLoginHandler facebookHandler, PasswordChangeRequirementRepository passwordChanges)
                         throws Exception {
+                // CSRF: mọi POST/PUT/DELETE phải gửi kèm token lấy từ GET /api/auth/csrf (frontend: http.js
+                // refreshCsrf). Token lưu trong session; thiếu hoặc sai → 403, request không tới controller.
+                // Các đường dẫn ignoringRequestMatchers bên dưới là webhook do hệ thống ngoài gọi nên được bỏ qua.
                 http.csrf(
                                 c -> c.csrfTokenRepository(new HttpSessionCsrfTokenRepository())
                                                 .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
@@ -87,6 +92,8 @@ public class SecurityConfig {
                                                                 // GHN gọi webhook từ máy chủ của họ, không có cookie/CSRF; được bảo vệ
                                                                 // bằng chuỗi bí mật trong đường dẫn (thors.ghn.webhook-secret)
                                                                 "/api/ghn/webhook/**"));
+                // Các đường dẫn liệt kê dưới đây gọi được khi CHƯA đăng nhập (permitAll),
+                // trong đó có /api/auth/login (đăng nhập bằng email + mật khẩu).
                 http.authorizeHttpRequests(
                                 a -> a.requestMatchers(
                                                 "/api/auth/csrf",

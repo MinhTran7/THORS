@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.thors.common.ApiException;
 import com.thors.module.account.repository.AccountRepository;
+import com.thors.module.auth.controller.FacebookLoginHandler;
 import com.thors.module.auth.service.*;
 import com.thors.module.auth.service.FacebookAccountService.Pending;
 import com.thors.security.SessionUser;

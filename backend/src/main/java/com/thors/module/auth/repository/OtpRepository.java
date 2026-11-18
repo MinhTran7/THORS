@@ -43,17 +43,24 @@ public class OtpRepository {
             && last.get(0).plusMinutes(15).isAfter(LocalDateTime.now(java.time.Clock.systemUTC()));
   }
 
+  // ===== Đếm số lần đăng nhập sai / khóa 15 phút (dùng trong AuthService.authenticate) =====
+  // Không có bảng riêng: mọi sự kiện đăng nhập ghi vào audit_log với entity_affected='user', entity_id = user_id.
+
   private record LoginEvent(String action, LocalDateTime time) {}
+  // Lấy 6 sự kiện đăng nhập gần nhất của user (mới nhất trước): LOGIN_FAILURE / LOGIN_SUCCESS / LOGIN_LOCK / PASSWORD_INVALIDATE
   private java.util.List<LoginEvent> loginEvents(int user) {
     return db.query("SELECT action_type,performed_at FROM audit_log WHERE entity_affected='user'"
             +" AND entity_id=? AND action_type IN ('LOGIN_FAILURE','LOGIN_SUCCESS','LOGIN_LOCK','PASSWORD_INVALIDATE')"
             +" ORDER BY log_id DESC LIMIT 6", (r,i)->new LoginEvent(r.getString(1),r.getObject(2,LocalDateTime.class)),user);
   }
+  // Đang bị khóa khi sự kiện MỚI NHẤT là LOGIN_LOCK và chưa quá 15 phút (giờ UTC)
   public boolean loginCoolingDown(int user) {
     var events=loginEvents(user);
     return !events.isEmpty() && "LOGIN_LOCK".equals(events.get(0).action())
             && events.get(0).time().plusMinutes(15).isAfter(LocalDateTime.now(java.time.Clock.systemUTC()));
   }
+  // Ghi 1 lần sai. Đếm số LOGIN_FAILURE liên tiếp tính từ mới nhất (gặp sự kiện khác thì dừng đếm);
+  // nếu lần này là lần sai thứ 5 → ghi thêm LOGIN_LOCK (bắt đầu khóa 15 phút).
   public void loginFailure(int user) {
     int failures=0;
     for (var event:loginEvents(user)) {
@@ -63,7 +70,9 @@ public class OtpRepository {
     loginAudit(user,"LOGIN_FAILURE");
     if (failures+1>=5) loginAudit(user,"LOGIN_LOCK");
   }
+  // Ghi đăng nhập đúng mật khẩu → chuỗi sai liên tiếp coi như về 0
   public void loginSuccess(int user) { loginAudit(user,"LOGIN_SUCCESS"); }
+  // Ghi 1 dòng audit_log do hệ thống thực hiện (user_id NULL, actor_type SYSTEM)
   private void loginAudit(int user,String action) {
     db.update("INSERT INTO audit_log(user_id,action_type,entity_affected,entity_id,new_value,actor_type)"
                     +" VALUES(NULL,?,'user',?,?,'SYSTEM')",action,user,

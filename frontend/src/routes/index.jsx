@@ -1,5 +1,5 @@
 import { createBrowserRouter, Navigate, Link } from 'react-router-dom';
-import { Button, Typography } from '@mui/material';
+import { Button } from '@mui/material';
 import WarehousePage, { warehouseRoutes } from 'features/warehouse/WarehousePage';
 
 // Authentication
@@ -23,7 +23,7 @@ import FamilyDetailPage from 'features/account/pages/FamilyDetailPage';
 import AccountsPage from 'features/account/pages/AccountListPage';
 import SystemLogPage from 'features/account/pages/SystemLogPage';
 import WorkspacePage from 'features/account/WorkspacePage';
-import { AuthShell } from 'features/auth/components/AuthForm';
+import ShopAuthShell from 'features/auth/components/ShopAuthShell';
 
 // Notification Management
 import NotificationPage from 'features/notification/NotificationPage';
@@ -204,12 +204,11 @@ export default createBrowserRouter([
   {
     path: '*',
     element: (
-      <AuthShell title="Không tìm thấy trang">
-        <Typography>Đường dẫn không tồn tại.</Typography>
-        <Button component={Link} to="/">
+      <ShopAuthShell variant="card" title="Không tìm thấy trang" subtitle="Đường dẫn không tồn tại.">
+        <Button component={Link} to="/" variant="contained" size="large">
           Về trang chính
         </Button>
-      </AuthShell>
+      </ShopAuthShell>
     )
   }
 ]);

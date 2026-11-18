@@ -8,15 +8,21 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.*;
 
+/**
+ * BẮT LỖI CHUNG cho mọi controller: đổi exception thành JSON { code, message } kèm mã HTTP.
+ * Frontend (http.js) đọc `message` để hiện khung đỏ.
+ */
 @RestControllerAdvice
 public class ApiErrors {
   private static final Logger log = LoggerFactory.getLogger(ApiErrors.class);
 
+  // Lỗi nghiệp vụ do code ném ra, vd 401 CREDENTIALS, 429 LOGIN_COOLDOWN, 403 ACCOUNT_BLOCKED
   @ExceptionHandler(ApiException.class)
   ResponseEntity<?> api(ApiException e) {
     return ResponseEntity.status(e.status).body(Map.of("code", e.code, "message", e.getMessage()));
   }
 
+  // Lỗi @Valid (vd ô trống trong record Login) → 400 với câu lỗi của trường sai đầu tiên
   @ExceptionHandler(MethodArgumentNotValidException.class)
   ResponseEntity<?> validation(MethodArgumentNotValidException e) {
     return ResponseEntity.badRequest()

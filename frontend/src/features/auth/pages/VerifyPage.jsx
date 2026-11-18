@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Alert, Button, Typography } from '@mui/material';
+import { SafetyOutlined } from '@ant-design/icons';
 import * as Yup from 'yup';
-import { AuthShell, FieldsForm, Field } from '../components/AuthForm';
+import { FieldsForm } from '../components/AuthForm';
+import ShopAuthShell, { ShopField } from '../components/ShopAuthShell';
 import { api, post } from 'services/http';
 import { useAuth } from '../AuthProvider';
 import { safeReturn } from '../validation';
@@ -29,7 +31,8 @@ export default function VerifyPage() {
     return () => clearInterval(timer);
   }, []);
   return (
-    <AuthShell
+    <ShopAuthShell
+      variant="card"
       title="Nhập mã xác minh"
       subtitle={
         context && context.context !== 'RESET'
@@ -67,12 +70,14 @@ export default function VerifyPage() {
         }}
       >
         {(form) => (
-          <Field
+          <ShopField
             form={form}
             name="code"
             label="Mã OTP"
+            icon={<SafetyOutlined />}
             autoComplete="one-time-code"
-            slotProps={{ htmlInput: { inputMode: 'numeric', maxLength: 6 } }}
+            inputMode="numeric"
+            maxLength={6}
           />
         )}
       </FieldsForm>
@@ -94,9 +99,9 @@ export default function VerifyPage() {
       >
         {seconds ? `Gửi lại mã sau ${seconds}s` : 'Gửi lại mã'}
       </Button>
-      <Typography component={Link} to="/login" color="primary">
-        Quay lại đăng nhập
-      </Typography>
-    </AuthShell>
+      <p className="shop-auth__switch">
+        <Link to="/login">Quay lại đăng nhập</Link>
+      </p>
+    </ShopAuthShell>
   );
 }

@@ -6,6 +6,7 @@ import com.thors.module.account.entity.Account;
 public final class AccountMapper {
   private AccountMapper() {}
 
+  // Đổi Account thành dữ liệu gửi cho frontend; chỉ gồm các trường được phép lộ ra (không có password_hash)
   public static AccountView view(Account a) {
     return view(a, false);
   }

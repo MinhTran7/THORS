@@ -158,14 +158,14 @@ Các path dưới đây tính từ thư mục gốc dự án. Số dòng theo sn
 - `backend/src/main/java/com/thors/module/account/service/AuditLogService.java`
 - `backend/src/main/java/com/thors/module/auth/controller/AuthController.java`
 - `backend/src/main/java/com/thors/module/auth/controller/FacebookController.java`
+- `backend/src/main/java/com/thors/module/auth/controller/FacebookLoginHandler.java`
+- `backend/src/main/java/com/thors/module/auth/controller/GoogleLoginHandler.java`
 - `backend/src/main/java/com/thors/module/auth/dto/AuthRequests.java`
 - `backend/src/main/java/com/thors/module/auth/entity/OtpChallenge.java`
 - `backend/src/main/java/com/thors/module/auth/repository/OtpRepository.java`
 - `backend/src/main/java/com/thors/module/auth/service/AuthService.java`
 - `backend/src/main/java/com/thors/module/auth/service/FacebookAccountService.java`
-- `backend/src/main/java/com/thors/module/auth/service/FacebookLoginHandler.java`
 - `backend/src/main/java/com/thors/module/auth/service/GoogleAccountService.java`
-- `backend/src/main/java/com/thors/module/auth/service/GoogleLoginHandler.java`
 - `backend/src/main/java/com/thors/module/auth/service/OtpService.java`
 - `backend/src/main/java/com/thors/module/category/controller/CategoryController.java`
 - `backend/src/main/java/com/thors/module/category/dto/CreateCategoryRequest.java`

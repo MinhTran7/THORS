@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Box } from '@mui/material';
 import { EyeInvisibleOutlined, EyeOutlined } from '@ant-design/icons';
 import ShopAuthArt, { ThorsLogo } from './ShopAuthArt';
 import './ShopAuthShell.css';
@@ -27,8 +28,45 @@ const STORY = {
   }
 };
 
-// Khung chung cho trang Đăng nhập / Đăng ký: giới thiệu bên trái, form bên phải
+// Kiểu 'card': một thẻ ở giữa màn hình, logo THORS ở góc trên trái (không có phần giới thiệu)
+const CARD_SX = {
+  '&&': { position: 'relative', gridTemplateColumns: 'minmax(0, 560px)', justifyContent: 'center' },
+  '&& .shop-auth__card': { minHeight: { md: 540 }, display: 'flex', flexDirection: 'column', justifyContent: 'center' },
+  '&& .shop-auth__body': { gap: '28px', mt: '32px' },
+  '&& form > .MuiStack-root > * + *': { mt: '16px' }
+};
+const CARD_BRAND_SX = {
+  position: { xs: 'static', md: 'absolute' },
+  top: '5vh',
+  left: 'max(56px, (100vw - 1200px) / 2)',
+  m: { xs: '32px 24px 0', md: 0 },
+  justifySelf: 'start'
+};
+
+/**
+ * KHUNG CHUNG cho mọi màn hình xác thực.
+ *   - variant 'login' / 'register': giới thiệu bên trái, form bên phải (Đăng nhập, Đăng ký)
+ *   - variant 'card'             : một thẻ giữa màn hình (Quên mật khẩu, Nhập OTP, Đặt lại mật khẩu,
+ *                                  Hoàn tất Facebook, trang 404)
+ */
 export default function ShopAuthShell({ variant = 'login', title, subtitle, children }) {
+  if (variant === 'card') {
+    return (
+      <Box component="main" className="shop-auth" sx={CARD_SX}>
+        <Box component={Link} to="/" className="shop-auth__brand" aria-label="THORS — Trang chủ" sx={CARD_BRAND_SX}>
+          <ThorsLogo />
+          <span>THORS</span>
+        </Box>
+        <section className="shop-auth__panel" aria-labelledby="shop-auth-title">
+          <div className="shop-auth__card">
+            <h1 id="shop-auth-title">{title}</h1>
+            {subtitle && <p className="shop-auth__subtitle">{subtitle}</p>}
+            <div className="shop-auth__body">{children}</div>
+          </div>
+        </section>
+      </Box>
+    );
+  }
   const story = STORY[variant];
   return (
     <main className="shop-auth">
@@ -59,9 +97,18 @@ export default function ShopAuthShell({ variant = 'login', title, subtitle, chil
   );
 }
 
-// Ô nhập dùng với FieldsForm (Formik): chỉ báo lỗi sau khi bấm nút gửi
+/**
+ * Ô nhập dùng với FieldsForm (Formik) — màn hình đăng nhập dùng cho ô Email và ô Mật khẩu.
+ *   - form : trạng thái Formik (FieldsForm truyền xuống) để lấy giá trị / lỗi của ô
+ *   - name : tên trường trong form, vd 'identifier' hoặc 'password'
+ *   - icon : biểu tượng bên trái ô; hint: chữ gợi ý dưới ô khi không có lỗi
+ *   - type 'password': có nút con mắt để hiện / ẩn mật khẩu
+ */
 export function ShopField({ form, name, label, icon, type = 'text', hint, ...props }) {
+  // visible: ô mật khẩu đang hiện chữ thật hay dấu chấm
   const [visible, setVisible] = useState(false);
+  // Chỉ HIỆN lỗi sau khi đã bấm nút gửi ít nhất 1 lần (submitCount > 0), để không báo đỏ khi người dùng mới gõ dở.
+  // Sau lần bấm đầu, lỗi cập nhật ngay mỗi khi sửa chữ trong ô.
   const error = form.submitCount > 0 && form.errors[name];
   const isPassword = type === 'password';
 
