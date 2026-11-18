@@ -26,7 +26,7 @@ import {
 import { CloseOutlined } from '@ant-design/icons';
 import { api } from 'services/http';
 import { useWarehouse } from './WarehouseContext';
-import { Choice, Field } from './components';
+import { Choice, Field, DialogClose } from './components';
 import {
   docCode,
   money,
@@ -342,26 +342,27 @@ function SourceDocumentForm({
       >
         <Box component="form" onSubmit={f.handleSubmit}>
           <DialogTitle>
-            {document
-              ? `Sửa ${docCode(document)}`
-              : isReturn
-                ? 'Tạo phiếu trả'
-                : isReceipt
-                  ? `Nhận hàng${sourceDocument ? ` · ${docCode(sourceDocument)} · ${sourceDocument.manufacturer_name}` : ''}`
+            {isReceipt
+              ? `Nhận hàng${document ? ` · ${docCode(document)}` : ''}${
+                  sourceDocument ? ` · ${docCode(sourceDocument)} · ${sourceDocument.manufacturer_name}` : ''
+                }`
+              : document
+                ? `Sửa ${docCode(document)}`
+                : isReturn
+                  ? 'Tạo phiếu trả'
                   : `Tạo ${typeLabel[type].toLowerCase()}`}
           </DialogTitle>
+          <DialogClose onClick={onClose} disabled={f.isSubmitting || excelBusy} />
 
           <DialogContent>
             <Stack spacing={2.5} sx={{ pt: 1 }}>
-              <Alert severity="info">
-                {type === 'PURCHASE_ORDER'
-                  ? 'Mỗi dòng là một màu/size. Xác nhận phiếu đặt chưa làm tăng tồn kho.'
-                  : type === 'RECEIPT'
-                    ? owner
-                      ? 'Đã điền sẵn số còn chờ nhận; sửa theo số hàng về đợt này (để 0 nếu chưa về). Bấm “Xác nhận phiếu nhập” để phiếu sang “Chờ kiểm hàng”: tồn kho chưa tăng; sau đó in tem, dán lên sản phẩm và quét từng cái, tồn chỉ tăng đúng số đã quét khi chốt nhận hàng. Đơn giá giữ theo phiếu đặt.'
-                      : 'Đã điền sẵn số còn chờ nhận; sửa theo số hàng về đợt này (để 0 nếu chưa về). Phiếu được gửi chủ cửa hàng xác nhận, sau đó in tem và quét để kiểm hàng; tồn kho chỉ tăng đúng số đã quét. Đơn giá giữ theo phiếu đặt.'
-                    : 'Chỉ trả các sản phẩm thuộc phiếu nhập đã chọn. Lưu nháp, gửi duyệt hoặc duyệt phiếu chưa làm giảm tồn kho; tồn chỉ giảm khi xác nhận xuất trả, lúc đó bạn chọn vị trí lấy hàng và số lượng lấy ở từng vị trí.'}
-              </Alert>
+              {type !== 'PURCHASE_ORDER' && (
+                <Alert severity="info">
+                  {type === 'RECEIPT'
+                    ? `Đã điền sẵn số còn thiếu, sửa lại theo số hàng thực nhận đợt này.${owner ? '' : ' Phiếu sẽ gửi chủ cửa hàng duyệt.'}`
+                    : 'Tồn kho chỉ giảm khi xác nhận xuất trả.'}
+                </Alert>
+              )}
 
               {type === 'PURCHASE_ORDER' ? (
                 <Field
@@ -855,12 +856,6 @@ function SourceDocumentForm({
           </DialogContent>
 
           <DialogActions>
-            <Button
-              onClick={onClose}
-              disabled={f.isSubmitting || excelBusy}
-            >
-              Quay lại
-            </Button>
 
             {isReturn && owner ? (
               <>

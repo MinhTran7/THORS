@@ -12,7 +12,6 @@ import {
   IdcardOutlined,
   ImportOutlined,
   InboxOutlined,
-  LayoutOutlined,
   MobileOutlined,
   PercentageOutlined,
   PieChartOutlined,
@@ -79,7 +78,6 @@ const OWNER_MENU = [
     icon: <DatabaseOutlined />,
     children: [
       { to: '/warehouse/inventory', label: 'Tồn kho', icon: <InboxOutlined /> },
-      { to: '/warehouse/layout', label: 'Bố cục kho', icon: <LayoutOutlined /> },
       { to: '/warehouse/locations', label: 'Vị trí kho', icon: <PushpinOutlined /> }
     ]
   },

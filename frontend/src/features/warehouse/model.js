@@ -5,7 +5,6 @@ export const warehouseMenu = [
   ['orders', 'Đặt hàng nhập'],
   ['receipts', 'Nhập hàng'],
   ['returns', 'Trả hàng nhà cung cấp'],
-  ['layout', 'Bố cục kho'],
   ['suppliers', 'Nhà cung cấp'],
   ['locations', 'Vị trí lưu kho']
 ];
@@ -174,7 +173,7 @@ export const countReasonLabel = {
   DAMAGED: 'Hàng hư hỏng',
   LOST: 'Thất lạc / mất',
   FOUND: 'Tìm thấy hàng',
-  MISSING_DOCUMENT: 'Thiếu chứng từ (nhập/bán/trả chưa ghi)'
+  MISSING_DOCUMENT: 'Quên lập phiếu (nhập/bán/trả)'
 };
 // Mã sản phẩm SP + 5 số mã sản phẩm, khớp WarehouseInventory.productCode ở backend.
 export const productCode = (id) => `SP${String(id).padStart(5, '0')}`;

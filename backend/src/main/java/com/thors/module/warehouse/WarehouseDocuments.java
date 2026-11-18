@@ -455,9 +455,10 @@ public class WarehouseDocuments {
     }
 
     /**
-     * Goods check: one scanned label adds 1 to its line, or a line count is set directly (typed in,
-     * "bớt 1"). A label of a variant not on the receipt is refused (wrong goods delivered). More than
-     * the receipt line is refused unless the Owner accepts it ({@code over}).
+     * Goods check: one scanned serial label (printed for this receipt) adds 1 to its line; each label
+     * counts once. Variant barcodes and typed counts are refused once serials exist (database without
+     * product_unit: variant barcode / typed count as before). More than the receipt line is refused
+     * unless the Owner accepts it ({@code over}).
      */
     public Map<String, Object> scan(Account a, int id, Scan r) {
         policy.create(a, "RECEIPT");
@@ -505,7 +506,17 @@ public class WarehouseDocuments {
                                             + " JOIN product p ON p.product_id=d.product_id WHERE d.barcode=?",
                                     code);
             if (found.isEmpty())
-                throw new ApiException(404, "BARCODE_NOT_FOUND", "Không tìm thấy hàng hóa có mã " + code + ".");
+                throw new ApiException(
+                        404,
+                        "BARCODE_NOT_FOUND",
+                        ProductUnits.looksSerial(code) ? "Không tìm thấy tem " + code + "." : "Không tìm thấy hàng hóa có mã " + code + ".");
+            if (s.units().ready())
+                // Mỗi chiếc phải có tem serial riêng được quét thì mới tính là đã nhận.
+                throw new ApiException(
+                        409,
+                        "SCAN_NEED_SERIAL",
+                        code + " là mã biến thể (" + label(found.get(0)) + "), không đếm được từng chiếc."
+                                + " Hãy quét tem serial dán trên từng chiếc (dạng " + code + "-0001).");
             int detail = num(found.get(0), "detail_id");
             line =
                     lines.stream()
@@ -521,6 +532,8 @@ public class WarehouseDocuments {
                                                             + " (sai mẫu/màu/size?)."));
             target = num(line, "scanned_quantity") + 1;
         } else if (r.itemId() != null && r.quantity() != null) {
+            if (s.units().ready())
+                throw invalid("Số đã quét chỉ tăng khi quét tem serial của từng chiếc, không nhập tay.");
             line =
                     lines.stream()
                             .filter(l -> num(l, "receipt_item_id") == r.itemId())
@@ -544,16 +557,6 @@ public class WarehouseDocuments {
                         num(line, "receipt_item_id"));
         if (unit != null)
             s.jdbc().update("UPDATE product_unit SET scanned_at=CURRENT_TIMESTAMP WHERE unit_id=?", unit);
-        else if (s.units().ready()) {
-            // Bớt số đếm: bỏ đánh dấu các tem quét gần nhất để tem đó quét lại được.
-            var marked = s.jdbc().queryForList(
-                    "SELECT unit_id FROM product_unit WHERE in_receipt_item_id=? AND status='PENDING' AND scanned_at IS NOT NULL"
-                            + " ORDER BY scanned_at DESC,unit_id DESC",
-                    Integer.class,
-                    num(line, "receipt_item_id"));
-            for (int k = target; k < marked.size(); k++)
-                s.jdbc().update("UPDATE product_unit SET scanned_at=NULL WHERE unit_id=?", marked.get(k - target));
-        }
         var result = new HashMap<>(line);
         if (unit != null) result.put("serial_code", serial);
         result.put("scanned_quantity", target);
@@ -759,6 +762,7 @@ public class WarehouseDocuments {
                             String.format(
                                     "%s: hàng chưa xếp vị trí chỉ còn %d, không lấy được %d.",
                                     label, stock - assigned, p.quantity()));
+                s.units().requireConfirmed(detail, null, p.quantity(), label, "hàng chưa xếp");
                 movement(a, detail, -p.quantity(), "SUPPLIER_RETURN", item, null, "return:" + item + ":unassigned", reason);
                 continue;
             }
@@ -788,6 +792,7 @@ public class WarehouseDocuments {
                         String.format(
                                 "%s: vị trí %s chỉ còn %d, không lấy được %d.",
                                 label, where, num(loc, "quantity"), p.quantity()));
+            s.units().requireConfirmed(detail, p.locationId(), p.quantity(), label, "vị trí " + where);
             movement(
                     a,
                     detail,

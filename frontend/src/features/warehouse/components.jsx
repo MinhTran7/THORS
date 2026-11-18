@@ -8,6 +8,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  IconButton,
   Stack,
   Table,
   TableBody,
@@ -24,7 +25,16 @@ import { Pager } from 'features/account/components/Blocks';
 import { statusText, number } from './model';
 import { api } from 'services/http';
 import { useWarehouse } from './WarehouseContext';
+import { CloseOutlined } from '@ant-design/icons';
 export const active = (v) => Boolean(Number(v));
+/** Nút X góc trên bên phải hộp thoại (thay cho nút "Quay lại"). Đặt ngay sau DialogTitle. */
+export function DialogClose({ onClick, disabled }) {
+  return (
+    <IconButton aria-label="Đóng" onClick={onClick} disabled={disabled} sx={{ position: 'absolute', right: 12, top: 12 }}>
+      <CloseOutlined />
+    </IconButton>
+  );
+}
 export function Status({ value, type }) {
   return (
     <Chip
@@ -245,6 +255,7 @@ export function ActionDialog({ title, text, reason = false, onConfirm, onClose }
   return (
     <Dialog open onClose={() => !waiting && onClose()} maxWidth="sm" fullWidth>
       <DialogTitle>{title}</DialogTitle>
+      <DialogClose onClick={onClose} disabled={waiting} />
       <DialogContent>
         <Typography sx={{ mb: 2 }}>{text}</Typography>
         {reason && (
@@ -265,9 +276,6 @@ export function ActionDialog({ title, text, reason = false, onConfirm, onClose }
         )}
       </DialogContent>
       <DialogActions>
-        <Button disabled={waiting} onClick={onClose}>
-          Quay lại
-        </Button>
         <Button
           variant="contained"
           disabled={waiting || (reason && !value.trim())}

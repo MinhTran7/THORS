@@ -519,6 +519,19 @@ ORDER BY p.product_name,d.color,d.size
         }
 
         s.units().sync(r.detailId());
+        if (s.units().ready()) {
+            // Chỉ chuyển chiếc đã dán tem và quét xác nhận.
+            var name = s.one(
+                    "SELECT p.product_name,d.color,d.size FROM product_detail d JOIN product p ON p.product_id=d.product_id"
+                            + " WHERE d.detail_id=?",
+                    r.detailId());
+            s.units().requireConfirmed(
+                    r.detailId(),
+                    r.fromLocationId(),
+                    r.quantity(),
+                    name.get("product_name") + " · " + name.get("color") + " · " + name.get("size"),
+                    r.fromLocationId() == null ? "hàng chưa xếp" : "vị trí nguồn");
+        }
         Integer destination = null;
 
         if (r.toShelfId() != null) {
@@ -541,14 +554,13 @@ ORDER BY p.product_name,d.color,d.size
                     r.toShelfId());
 
             if (found.isEmpty()) {
-                requireMetadata(r.description(), r.photoKeys());
-
+                // Mô tả và ảnh thực tế tại vị trí: không bắt buộc.
                 destination = s.insert(
                         "INSERT INTO product_location(detail_id,shelf_level_id,quantity,description)"
                                 + " VALUES(?,?,0,?)",
                         r.detailId(),
                         r.toShelfId(),
-                        r.description().trim());
+                        r.description() == null || r.description().isBlank() ? null : r.description().trim());
             } else {
                 destination = num(
                         found.get(0),
@@ -571,16 +583,6 @@ ORDER BY p.product_name,d.color,d.size
             var dest = s.one(
                     "SELECT * FROM product_location WHERE product_location_id=?",
                     destination);
-
-            if (dest.get("description") == null
-                    || dest.get("description").toString().isBlank()
-                    || s.count(
-                    "SELECT COUNT(*) FROM product_location_image "
-                            + "WHERE product_location_id=? AND deleted_at IS NULL",
-                    destination) == 0) {
-                throw invalid(
-                        "Vị trí phải có mô tả và ít nhất một ảnh thực tế.");
-            }
 
             if ((long) num(dest, "quantity")
                     + r.quantity() > Integer.MAX_VALUE) {
@@ -624,18 +626,6 @@ VALUES(?,0,'Sắp xếp vị trí kho',?,'MOVE',?,?,?,?)
         return Map.of(
                 "message",
                 "Đã cập nhật vị trí; tổng tồn giữ nguyên.");
-    }
-
-    private void requireMetadata(
-            String description,
-            List<String> keys) {
-        if (description == null
-                || description.isBlank()
-                || keys == null
-                || keys.isEmpty()) {
-            throw invalid(
-                    "Lần đầu gán vị trí phải có mô tả và ảnh thực tế.");
-        }
     }
 
     private void attach(
@@ -710,26 +700,19 @@ VALUES(?,0,'Sắp xếp vị trí kho',?,'MOVE',?,?,?,?)
             attach(id, r.photoKeys());
         }
 
-        if (num(location, "quantity") > 0
-                && s.count(
-                "SELECT COUNT(*) FROM product_location_image "
-                        + "WHERE product_location_id=? AND deleted_at IS NULL",
-                id) == 0) {
-            throw invalid(
-                    "Vị trí còn hàng phải giữ ít nhất một ảnh.");
-        }
-
+        // Mô tả và ảnh thực tế tại vị trí: không bắt buộc.
+        String description = r.description() == null || r.description().isBlank() ? null : r.description().trim();
         s.jdbc().update(
                 "UPDATE product_location SET description=?,updated_at=CURRENT_TIMESTAMP "
                         + "WHERE product_location_id=?",
-                r.description().trim(),
+                description,
                 id);
 
         s.audit(
                 a.id(),
                 "LOCATION_METADATA",
                 id,
-                r.description());
+                description);
 
         return Map.of(
                 "message",

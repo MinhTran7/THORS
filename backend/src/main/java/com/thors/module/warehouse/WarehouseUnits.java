@@ -83,6 +83,12 @@ public class WarehouseUnits {
 
     /** {@code defective} = chỉ chiếc đang báo lỗi. */
     public Map<String, Object> list(Account a, List<Integer> details, String status, boolean unprinted, boolean defective) {
+        return list(a, details, status, unprinted, defective, false);
+    }
+
+    /** {@code unconfirmed} = chỉ chiếc đang trong kho chưa quét xác nhận tem. */
+    public Map<String, Object> list(
+            Account a, List<Integer> details, String status, boolean unprinted, boolean defective, boolean unconfirmed) {
         policy.view(a);
         requireTable();
         if (details == null || details.isEmpty()) throw invalid("Chọn biến thể cần xem mã.");
@@ -94,6 +100,7 @@ public class WarehouseUnits {
         var args = new ArrayList<Object>(ids);
         boolean defects = s.units().defectsReady();
         if (defective && defects) where.append(" AND u.defect_status='OPEN'");
+        else if (unconfirmed) where.append(" AND u.status='IN_STOCK' AND u.scanned_at IS NULL");
         else if (unprinted) where.append(" AND u.status='IN_STOCK' AND u.printed_at IS NULL");
         else if (status != null && !status.isBlank()) {
             where.append(" AND u.status=?");
@@ -114,8 +121,13 @@ public class WarehouseUnits {
                 ? s.count("SELECT COUNT(*) FROM product_unit WHERE defect_status='OPEN' AND detail_id IN ("
                         + ProductUnits.marks(ids.size()) + ")", ids.toArray())
                 : 0;
+        long unconfirmedCount = s.count(
+                "SELECT COUNT(*) FROM product_unit WHERE status='IN_STOCK' AND scanned_at IS NULL AND detail_id IN ("
+                        + ProductUnits.marks(ids.size()) + ")",
+                ids.toArray());
         boolean more = rows.size() > LIMIT;
         return Map.of(
+                "unconfirmed", unconfirmedCount,
                 "defective", defectCount,
                 "units", shaped(more ? rows.subList(0, LIMIT) : rows),
                 "truncated", more,
@@ -139,7 +151,8 @@ public class WarehouseUnits {
 
     /**
      * Tem serial cho phiếu nhập đang chờ kiểm hàng: mỗi dòng có đủ tem chờ nhận bằng số trên phiếu (in lại
-     * không sinh mã mới). {@code extra} sinh thêm tem cho một dòng (hàng giao thừa, tem hỏng).
+     * không sinh mã mới). Chỉ trả tem chưa quét (in lại tem hỏng = đúng serial cũ). {@code extra} sinh thêm
+     * tem cho một dòng (hàng giao thừa).
      */
     public Map<String, Object> receiptLabels(Account a, int receiptId, Integer itemId, Integer extra) {
         policy.create(a, "RECEIPT");
@@ -162,7 +175,7 @@ public class WarehouseUnits {
             s.units().create(num(l, "detail_id"), add, ProductUnits.PENDING, null, item, "Tem in khi kiểm hàng phiếu nhập #" + receiptId);
         }
         var rows = s.jdbc().queryForList(
-                columns() + " WHERE u.status='PENDING' AND ri.receipt_id=?"
+                columns() + " WHERE u.status='PENDING' AND u.scanned_at IS NULL AND ri.receipt_id=?"
                         + (itemId != null ? " AND u.in_receipt_item_id=" + itemId : "")
                         + " ORDER BY u.in_receipt_item_id,u.seq",
                 receiptId);

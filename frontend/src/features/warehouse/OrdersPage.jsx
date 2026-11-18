@@ -172,8 +172,7 @@ export default function OrdersPage() {
       {!owner && (
         <Box sx={{ mt: 2 }}>
           <Alert severity="info">
-            Bạn lập phiếu đặt nháp rồi bấm “Gửi chủ cửa hàng xác nhận”. Chủ cửa hàng có thể sửa trước khi xác nhận. Hàng chưa có trong hệ
-            thống: ghi vào ghi chú để chủ cửa hàng tạo sản phẩm.
+            Lập phiếu rồi bấm “Gửi chủ cửa hàng xác nhận”. Hàng chưa có trong hệ thống thì ghi vào ghi chú.
           </Alert>
         </Box>
       )}

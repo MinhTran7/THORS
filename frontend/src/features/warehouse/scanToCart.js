@@ -35,6 +35,10 @@ export async function scanToCartLine(rawCode) {
     throw new Error(
       `Chiếc ${found.unit.serial_code} đang báo lỗi (${found.unit.defect_types}), không bán chiếc này. Lấy chiếc khác hoặc xử lý ở Bán hàng → Xử lý hàng lỗi.`
     );
+  if (found.unit?.status === 'IN_STOCK' && !found.unit.scanned_at)
+    throw new Error(
+      `Chiếc ${found.unit.serial_code} chưa quét xác nhận vào kho, chưa bán được. Quét tem này ở Kho hàng → Xác nhận tem trước.`
+    );
   return {
     key: `${v.product_id}-${v.detail_id}`,
     productId: v.product_id,

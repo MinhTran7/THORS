@@ -48,7 +48,6 @@ public class WarehouseStore {
                     Map.entry("supplier_settlement", "settlement_id"),
                     Map.entry("stock_count", "count_id"),
                     Map.entry("stock_count_item", "count_item_id"),
-                    Map.entry("location_move_request", "request_id"),
                     Map.entry("product_unit", "unit_id"));
 
     public int insert(String sql, Object... args) {
@@ -293,11 +292,11 @@ public class WarehouseStore {
                         503,
                         "MIGRATION_REQUIRED",
                         "Database chưa có bảng serial từng chiếc. Cần chạy database/migrations/2026-11-16_product_unit.sql.");
-            if (m.contains("location_move_request"))
+            if (m.contains("request_status") || m.contains("request_shelf_id"))
                 throw new ApiException(
                         503,
                         "MIGRATION_REQUIRED",
-                        "Database chưa có bảng yêu cầu xếp kệ. Cần chạy database/migrations/2026-11-10_location_move_request.sql.");
+                        "Database chưa có phần yêu cầu xếp kệ. Cần chạy database/migrations/2026-11-18_move_request_columns.sql.");
             if (m.contains("min_stock_quantity") || m.contains("stock_count"))
                 throw new ApiException(
                         503,

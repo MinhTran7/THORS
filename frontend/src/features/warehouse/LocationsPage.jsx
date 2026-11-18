@@ -28,8 +28,7 @@ import {
   Metrics,
   PhotoPicker,
   Status,
-  Title
-} from './components';
+  Title, DialogClose } from './components';
 import {
   locationLabel,
   number,
@@ -297,6 +296,7 @@ function RackForm({ rack, tier, rackId, onClose }) {
               ? 'Sửa kệ'
               : 'Thêm kệ'}
         </DialogTitle>
+        <DialogClose onClick={onClose} disabled={f.isSubmitting} />
 
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
@@ -402,9 +402,7 @@ function RackForm({ rack, tier, rackId, onClose }) {
             />
 
             <Alert severity="info">
-              Chỉ ẩn kệ/tầng khi đã chuyển hết hàng. Trạng thái
-              “Đã đầy”, “Tạm khóa”, “Bảo trì” ngăn đưa thêm hàng
-              vào tầng đó.
+              Chỉ ẩn được kệ/tầng đã hết hàng.
             </Alert>
 
             {error && <Alert severity="error">{error}</Alert>}
@@ -412,9 +410,6 @@ function RackForm({ rack, tier, rackId, onClose }) {
         </DialogContent>
 
         <DialogActions>
-          <Button disabled={f.isSubmitting} onClick={onClose}>
-            Quay lại
-          </Button>
           <Button
             type="submit"
             variant="contained"
@@ -436,7 +431,7 @@ const UNASSIGNED = 'UNASSIGNED';
  * mode = 'move': chuyển từ một tầng (nguồn cố định là dòng hàng của tầng đó).
  * Không truyền mode: form chung, được chọn nguồn.
  */
-function MoveForm({ variant, selectedShelf, from, mode, onClose }) {
+export function MoveForm({ variant, selectedShelf, from, mode, initialQuantity, onClose }) {
   const { data, run, owner } = useWarehouse();
   const [error, setError] = useState('');
   const requestKey = useRef(crypto.randomUUID());
@@ -458,7 +453,8 @@ function MoveForm({ variant, selectedShelf, from, mode, onClose }) {
     initialValues: {
       fromLocationId: mode === 'place' ? '' : from || '',
       toShelfId: selectedShelf || '',
-      quantity: 1,
+      // Mở từ phiếu nhập vừa nhận: điền sẵn số vừa nhận (không quá số đang chưa xếp).
+      quantity: initialQuantity ? Math.max(1, Math.min(initialQuantity, Number(variant.unassigned_quantity) || 1)) : 1,
       description: '',
       photoKeys: []
     },
@@ -568,12 +564,13 @@ function MoveForm({ variant, selectedShelf, from, mode, onClose }) {
         <DialogTitle>
           {title} · {variantLabel(variant)}
         </DialogTitle>
+        <DialogClose onClick={onClose} disabled={f.isSubmitting} />
 
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
             <Alert severity="info">
-              Thao tác chỉ đổi vị trí lưu hàng. Tổng tồn không thay đổi.
-              {!owner && ' Bấm “Gửi yêu cầu” sau khi đã xếp/chuyển hàng: kho chỉ cập nhật khi chủ cửa hàng xác nhận.'}
+              Chỉ đổi vị trí, tổng tồn không đổi.
+              {!owner && ' Kho cập nhật khi chủ cửa hàng xác nhận.'}
             </Alert>
 
             <Choice
@@ -668,7 +665,7 @@ function MoveForm({ variant, selectedShelf, from, mode, onClose }) {
               <>
                 <Field
                   id="move-desc"
-                  label="Mô tả thực tế tại vị trí mới"
+                  label="Mô tả thực tế tại vị trí mới (không bắt buộc)"
                   name="description"
                   value={f.values.description}
                   onChange={f.handleChange}
@@ -681,6 +678,7 @@ function MoveForm({ variant, selectedShelf, from, mode, onClose }) {
 
                 <PhotoPicker
                   keys={f.values.photoKeys}
+                  title="Ảnh thực tế tại vị trí (không bắt buộc · JPG/PNG, tối đa 5 MB/ảnh)"
                   onChange={(keys) =>
                     f.setFieldValue('photoKeys', keys)
                   }
@@ -693,9 +691,6 @@ function MoveForm({ variant, selectedShelf, from, mode, onClose }) {
         </DialogContent>
 
         <DialogActions>
-          <Button disabled={f.isSubmitting} onClick={onClose}>
-            Quay lại
-          </Button>
 
           <Button
             type="submit"
@@ -703,14 +698,7 @@ function MoveForm({ variant, selectedShelf, from, mode, onClose }) {
             disabled={
               f.isSubmitting ||
               !f.isValid ||
-              available < 1 ||
-              (
-                needMetadata &&
-                (
-                  !f.values.description.trim() ||
-                  !f.values.photoKeys.length
-                )
-              )
+              available < 1
             }
           >
             {owner ? 'Lưu vị trí' : 'Gửi yêu cầu'}
@@ -744,12 +732,13 @@ function MetadataForm({ location, onClose }) {
       onClose={() => !waiting && onClose()}
     >
       <DialogTitle>Mô tả và ảnh vị trí</DialogTitle>
+      <DialogClose onClick={onClose} disabled={waiting} />
 
       <DialogContent>
         <Stack spacing={2} sx={{ pt: 1 }}>
           <Field
             id="location-description"
-            label="Mô tả thực tế"
+            label="Mô tả thực tế (không bắt buộc)"
             multiline
             minRows={3}
             value={description}
@@ -795,21 +784,12 @@ function MetadataForm({ location, onClose }) {
       </DialogContent>
 
       <DialogActions>
-        <Button disabled={waiting} onClick={onClose}>
-          Quay lại
-        </Button>
 
         <Button
           variant="contained"
           disabled={
             waiting ||
-            !description.trim() ||
-            keep.length + keys.length > 8 ||
-            (
-              location.quantity > 0 &&
-              !keep.length &&
-              !keys.length
-            )
+            keep.length + keys.length > 8
           }
           onClick={async () => {
             setWaiting(true);
@@ -848,8 +828,10 @@ function MetadataForm({ location, onClose }) {
   );
 }
 
-export default function LocationsPage({ editLayout = false }) {
+export default function LocationsPage() {
   const { data, owner, busy, run } = useWarehouse();
+  // Bố cục kho không còn là trang riêng: chủ cửa hàng bấm "Sửa bố cục kho" ngay trên trang này.
+  const [editLayout, setEditLayout] = useState(false);
   const [params, setParams] = useSearchParams();
   const [selected, setSelected] = useState(null);
   const [rackForm, setRackForm] = useState(null);
@@ -1109,7 +1091,7 @@ export default function LocationsPage({ editLayout = false }) {
         }
         action={
           owner &&
-          editLayout && (
+          (editLayout ? (
             <Stack
               direction="row"
               spacing={1}
@@ -1124,14 +1106,30 @@ export default function LocationsPage({ editLayout = false }) {
               </Button>
 
               <Button
-                variant="contained"
+                variant="outlined"
                 onClick={addRack}
                 disabled={busy}
               >
                 Thêm kệ
               </Button>
+
+              <Button
+                variant="contained"
+                onClick={() => setEditLayout(false)}
+                disabled={busy}
+              >
+                Xong
+              </Button>
             </Stack>
-          )
+          ) : (
+            <Button
+              variant="outlined"
+              onClick={() => setEditLayout(true)}
+              disabled={busy}
+            >
+              Sửa bố cục kho
+            </Button>
+          ))
         }
       />
 
@@ -1331,8 +1329,8 @@ export default function LocationsPage({ editLayout = false }) {
             >
               {!visible.length && (
                 <Typography sx={{ p: 4 }}>
-                  Chưa có kệ. Chủ cửa hàng có thể thêm kệ
-                  ở mục Bố cục kho.
+                  Chưa có kệ. Chủ cửa hàng bấm “Sửa bố cục kho”
+                  để thêm kệ.
                 </Typography>
               )}
 

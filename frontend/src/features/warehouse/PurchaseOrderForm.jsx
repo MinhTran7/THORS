@@ -22,7 +22,7 @@ import { CloseOutlined } from '@ant-design/icons';
 import { api } from 'services/http';
 import { getCategories } from 'services/categoryService';
 import { useWarehouse } from './WarehouseContext';
-import { Field } from './components';
+import { Field, DialogClose } from './components';
 import { docCode, money, number, supplierKey, variantLabel } from './model';
 import VariantPicker from './VariantPicker';
 import QuickCreateDialog from './QuickCreateDialog';
@@ -116,7 +116,8 @@ export default function PurchaseOrderForm({ document, onClose }) {
   const update = (idx, patch) => setItems(items.map((x, i) => (i === idx ? { ...x, ...patch } : x)));
   const amount = items.reduce((n, i) => n + Number(i.quantity || 0) * Number(i.unitPrice || 0), 0);
 
-  const save = async () => {
+  // confirmNow: chủ cửa hàng lưu rồi xác nhận đặt hàng luôn (không cần mở lại phiếu nháp).
+  const save = async (confirmNow = false) => {
     if (savingRef.current) return; // double-click guard
     setError('');
     if (!supplier.trim()) return setError('Chọn nhà cung cấp trước.');
@@ -135,9 +136,10 @@ export default function PurchaseOrderForm({ document, onClose }) {
     savingRef.current = true;
     setSaving(true);
     try {
+      let saved = null;
       await run(
-        () =>
-          api(`/warehouse/documents${document ? `/${document.receipt_id}` : ''}`, {
+        async () => {
+          saved = await api(`/warehouse/documents${document ? `/${document.receipt_id}` : ''}`, {
             method: document ? 'PUT' : 'POST',
             body: {
               type: 'PURCHASE_ORDER',
@@ -146,11 +148,29 @@ export default function PurchaseOrderForm({ document, onClose }) {
               note: note.trim(),
               items: items.map((i) => ({ detailId: i.detailId, sourceItemId: null, quantity: Number(i.quantity), unitPrice: Number(i.unitPrice) }))
             }
-          }),
-        reviewing ? 'Đã lưu thay đổi. Phiếu vẫn chờ xác nhận.' : 'Đã lưu phiếu đặt nháp.'
+          });
+          if (confirmNow) {
+            try {
+              await api(`/warehouse/documents/${saved?.receipt_id ?? document.receipt_id}/confirm`, { method: 'POST' });
+            } catch (e) {
+              // Phiếu đã lưu: lần bấm sau phải sửa đúng phiếu đó, không tạo phiếu mới
+              throw new Error(`Đã lưu phiếu nháp nhưng chưa xác nhận được: ${e.message} Mở phiếu trong danh sách để xác nhận lại.`);
+            }
+          }
+          return saved;
+        },
+        confirmNow
+          ? 'Đã lưu và xác nhận phiếu đặt hàng. Khi hàng về, lập phiếu nhập từ phiếu đặt này.'
+          : reviewing
+            ? 'Đã lưu thay đổi. Phiếu vẫn chờ xác nhận.'
+            : 'Đã lưu phiếu đặt nháp.'
       );
       onClose();
     } catch (e) {
+      if (e.message.startsWith('Đã lưu phiếu nháp nhưng')) {
+        onClose();
+        return;
+      }
       setError(
         `${e.message}${created.length ? ' Hàng vừa tạo nhanh vẫn được giữ trên phiếu; bấm lưu lại sẽ không tạo lại sản phẩm.' : ''}`
       );
@@ -195,11 +215,10 @@ export default function PurchaseOrderForm({ document, onClose }) {
     <>
       <Dialog open onClose={tryClose} fullWidth maxWidth="xl">
         <DialogTitle>{document ? `Sửa ${docCode(document)}` : 'Tạo phiếu đặt hàng nhập'}</DialogTitle>
+        <DialogClose onClick={tryClose} disabled={saving} />
         <DialogContent>
           <Stack spacing={2.5} sx={{ pt: 1 }}>
-            <Alert severity="info">
-              Chọn nhà cung cấp trước, sau đó tích chọn hàng theo từng màu/size. Lưu hoặc xác nhận phiếu đặt chưa làm tăng tồn kho.
-            </Alert>
+            
             <Box>
               <Typography component="label" variant="subtitle2" htmlFor="po-supplier">
                 1. Nhà cung cấp
@@ -276,9 +295,7 @@ export default function PurchaseOrderForm({ document, onClose }) {
                   >
                     {excelBusy ? 'Đang tạo mẫu…' : 'Tải mẫu Excel'}
                   </Button>
-                  <Typography variant="body2" color="text.secondary">
-                    Có thể kết hợp Excel với chọn trực tiếp. Xem trước Excel không lưu phiếu và không tạo sản phẩm.
-                  </Typography>
+                  
                 </Stack>
               </>
             ) : (
@@ -377,12 +394,18 @@ export default function PurchaseOrderForm({ document, onClose }) {
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={tryClose} disabled={saving}>
-            Quay lại
-          </Button>
-          <Button variant="contained" onClick={save} disabled={saving || !supplier || !items.length}>
+          <Button
+            variant={owner ? 'outlined' : 'contained'}
+            onClick={() => save(false)}
+            disabled={saving || !supplier || !items.length}
+          >
             {saving ? 'Đang lưu…' : reviewing ? 'Lưu thay đổi' : 'Lưu phiếu nháp'}
           </Button>
+          {owner && (
+            <Button variant="contained" onClick={() => save(true)} disabled={saving || !supplier || !items.length}>
+              {saving ? 'Đang lưu…' : 'Lưu và xác nhận đặt hàng'}
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
 

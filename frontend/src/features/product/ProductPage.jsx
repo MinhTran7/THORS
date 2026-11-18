@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import {
   Alert,
@@ -213,8 +213,12 @@ export default function ProductPage() {
   // STATES - SEARCH AND FILTER
   // ==========================================
 
-  const [activeTab, setActiveTab] = useState('ACTIVE');
-  const [search, setSearch] = useState('');
+  // Link từ trang khác có thể mở sẵn tab và ô tìm kiếm, ví dụ /products?tab=INACTIVE&q=%2393 (Kho → phiếu đặt hàng)
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(() =>
+    ['ACTIVE', 'INACTIVE', 'ONLINE', 'LOW_STOCK', 'ALL'].includes(searchParams.get('tab')) ? searchParams.get('tab') : 'ACTIVE'
+  );
+  const [search, setSearch] = useState(() => searchParams.get('q') || '');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
 
   // ==========================================

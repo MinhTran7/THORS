@@ -310,12 +310,12 @@ try {
   // Row actions: no separate "Chi tiết" (the row opens it); owner has a soft "Xóa" with a confirmation.
   assert.equal(await page.getByRole('button', { name: 'Chi tiết', exact: true }).count(), 0);
   await page.getByRole('button', { name: 'Xóa', exact: true }).first().click();
-  await page.getByRole('dialog', { name: /^Xóa / }).getByRole('button', { name: 'Quay lại', exact: true }).click();
+  await page.getByRole('dialog', { name: /^Xóa / }).getByRole('button', { name: 'Đóng', exact: true }).click();
   // Tầng 3: bấm biến thể để mở chi tiết.
   await page.getByText('TH000006', { exact: true }).click();
   await page.waitForURL(/detail=6/);
   const detail = page.getByRole('dialog');
-  await detail.getByText('Giá vốn bình quân', { exact: false }).waitFor();
+  await detail.getByText('Giá nhập trung bình', { exact: false }).waitFor();
   await detail.getByLabel('Ngưỡng tồn tối thiểu').fill('0');
   await detail.getByRole('button', { name: 'Lưu ngưỡng', exact: true }).click();
   await page.waitForFunction(() => true);

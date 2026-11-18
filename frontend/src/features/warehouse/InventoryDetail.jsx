@@ -147,8 +147,7 @@ function StockCard({ id, kind }) {
       </Typography>
       {data?.ledger_gap ? (
         <Alert severity="info">
-          Lịch sử của biến thể này chưa đầy đủ: trước biến động cũ nhất đã ghi còn {number(data.ledger_gap)} sản phẩm không có chứng từ. Hệ
-          thống không tạo lịch sử giả để bù.
+          Có {number(data.ledger_gap)} sản phẩm có từ trước khi hệ thống ghi lịch sử nên không có phiếu đi kèm.
         </Alert>
       ) : null}
       {error ? (
@@ -172,7 +171,7 @@ function StockCard({ id, kind }) {
               : [
                   { key: 'adjusted_at', label: 'Thời gian', render: (m) => when(m.adjusted_at) },
                   { key: 'movement_type', label: 'Nghiệp vụ', render: (m) => movementLabel[m.movement_type] || m.movement_type },
-                  { key: 'doc', label: 'Chứng từ', render: (m) => <DocLink row={m} /> },
+                  { key: 'doc', label: 'Phiếu', render: (m) => <DocLink row={m} /> },
                   {
                     key: 'quantity_change',
                     label: 'Tăng / giảm',
@@ -285,10 +284,10 @@ export default function InventoryDetail({ id, onClose, onChanged }) {
                 {owner && (
                   <Alert severity={v.stock_value == null ? 'warning' : 'info'} icon={false}>
                     {v.stock_value == null ? (
-                      <>Chưa đủ cơ sở giá vốn: {v.cost_note}. Không tính giá trị tồn, không dùng giá bán hay giá nhập gần nhất thay thế.</>
+                      <>Chưa rõ giá nhập: {v.cost_note}. Chưa tính được giá trị tồn.</>
                     ) : (
                       <>
-                        Giá vốn bình quân gia quyền liên hoàn {v.unit_cost == null ? '—' : money(v.unit_cost)} · Giá trị tồn{' '}
+                        Giá nhập trung bình {v.unit_cost == null ? '—' : money(v.unit_cost)} · Giá trị tồn{' '}
                         {money(v.stock_value)}
                       </>
                     )}
@@ -366,9 +365,7 @@ export default function InventoryDetail({ id, onClose, onChanged }) {
                 />
                 {v.unheld_pending.length > 0 && (
                   <Alert severity="info">
-                    {v.unheld_pending.length} đơn online đặt trước khi có giữ hàng đang chờ xác nhận (
-                    {v.unheld_pending.map((o) => o.order_number).join(', ')}): chưa giữ hàng, khi Owner xác nhận hệ thống vẫn kiểm tra số có
-                    thể bán.
+                    Đơn online chờ xác nhận nhưng chưa giữ hàng: {v.unheld_pending.map((o) => o.order_number).join(', ')}.
                   </Alert>
                 )}
                 <Typography variant="subtitle1">Đang đặt chưa nhận</Typography>

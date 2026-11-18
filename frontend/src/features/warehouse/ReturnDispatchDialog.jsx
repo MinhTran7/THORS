@@ -15,6 +15,7 @@ import {
   TextField,
   Typography
 } from '@mui/material';
+import { DialogClose } from './components';
 import { api } from 'services/http';
 import { useWarehouse } from './WarehouseContext';
 import { docCode, locationLabel, number, variantLabel } from './model';
@@ -82,11 +83,11 @@ export default function ReturnDispatchDialog({ doc, onClose, onDone }) {
       <DialogTitle>
         {approved ? 'Xác nhận xuất trả' : 'Xác nhận và xuất trả'} {docCode(doc)}
       </DialogTitle>
+      <DialogClose onClick={onClose} disabled={waiting} />
       <DialogContent>
         <Stack spacing={2}>
           <Alert severity="info">
-            Kho xuất trả: Kho cửa hàng. Kiểm tra vị trí lấy hàng và số lượng lấy ở từng vị trí theo hàng thực tế. Số điền sẵn chỉ là gợi ý,
-            hãy sửa lại nếu lấy ở vị trí khác. Khi xác nhận, tổng tồn và tồn tại các vị trí đã chọn giảm ngay, phiếu không sửa được nữa.
+            Kiểm tra lại vị trí và số lượng lấy hàng. Xác nhận xong tồn kho giảm ngay và không sửa được phiếu.
           </Alert>
           {lines.map(({ line, sources }, index) => (
             <Stack key={line.receipt_item_id} spacing={1}>
@@ -147,9 +148,6 @@ export default function ReturnDispatchDialog({ doc, onClose, onDone }) {
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button disabled={waiting} onClick={onClose}>
-          Quay lại
-        </Button>
         <Button
           variant="contained"
           disabled={waiting || problems.some(Boolean)}
