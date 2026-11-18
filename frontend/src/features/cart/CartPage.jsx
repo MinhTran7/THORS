@@ -41,8 +41,10 @@ export default function CartPage({ onCheckout }) {
       const data = await api('/cart');
       const list = (data.items || []).map(toUi);
       setItems(list);
+      // Mới vào giỏ hàng: chưa tick sản phẩm nào, khách tự chọn món muốn mua.
+      // Tải lại sau khi đổi số lượng / xóa: giữ nguyên các món đang tick.
       setSelected((prev) =>
-        new Set(list.filter((i) => canBuy(i) && (!keepSelection || prev.has(i.id))).map((i) => i.id))
+        keepSelection ? new Set(list.filter((i) => canBuy(i) && prev.has(i.id)).map((i) => i.id)) : new Set()
       );
     } catch (e) {
       setError(e.message);
