@@ -8,6 +8,7 @@ import com.thors.module.account.dto.AccountRequests.*;
 import com.thors.module.account.entity.Account;
 import com.thors.module.account.mapper.AccountMapper;
 import com.thors.module.account.repository.AccountRepository;
+import com.thors.module.account.repository.PasswordChangeRequirementRepository;
 import com.thors.module.auth.repository.OtpRepository;
 import com.thors.module.auth.service.AuthService;
 import com.thors.module.notification.service.NotificationPublisher;
@@ -31,16 +32,19 @@ public class AccountService {
   private final OtpRepository codes;
   private final PasswordEncoder passwords;
   private final NotificationPublisher notices;
+  private final PasswordChangeRequirementRepository passwordChanges;
 
   public AccountService(
           AccountRepository users,
           OtpRepository codes,
           PasswordEncoder passwords,
-          NotificationPublisher notices) {
+          NotificationPublisher notices,
+          PasswordChangeRequirementRepository passwordChanges) {
     this.users = users;
     this.codes = codes;
     this.passwords = passwords;
     this.notices = notices;
+    this.passwordChanges = passwordChanges;
   }
 
   // ---------------------------------------------------------------- View / Update Profile
@@ -157,7 +161,7 @@ public class AccountService {
                     : MANAGED_ROLES.contains(r.role());
     if (!allowed) throw new ApiException(403, "ROLE", "Không được tạo vai trò này.");
     AuthService.confirm(r.password(), r.confirmPassword());
-    return users.create(
+    var created = users.create(
             r.role(),
             ContactNormalizer.name(r.fullName()),
             passwords.encode(r.password()),
@@ -167,6 +171,9 @@ public class AccountService {
             actor.id(),
             null,
             false);
+    // Mật khẩu do người tạo đặt: người dùng phải đổi ở lần đăng nhập đầu tiên.
+    passwordChanges.require(created.id());
+    return created;
   }
 
   @Transactional

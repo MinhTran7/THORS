@@ -64,7 +64,13 @@ export default function FamilyFormPage() {
           confirmPassword: values.password
         });
         if (!values.activate) await accountsApi.setStatus(created.id, 'DISABLED');
-        navigate('/family', { state: { toast: `Đã tạo tài khoản cho ${created.fullName}.` } });
+        navigate('/family', {
+          state: {
+            toast: created.mailSent
+              ? `Đã tạo tài khoản cho ${created.fullName} và gửi thông tin đăng nhập tới ${created.email}.`
+              : `Đã tạo tài khoản cho ${created.fullName} nhưng chưa gửi được email. Vui lòng tự báo thông tin đăng nhập cho người dùng.`
+          }
+        });
       } catch (e) {
         setError(e.message);
       }

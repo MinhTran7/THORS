@@ -1,7 +1,9 @@
 package com.thors.module.account.controller;
 
+import com.thors.module.account.dto.AccountCreated;
 import com.thors.module.account.dto.AccountRequests.*;
 import com.thors.module.account.mapper.AccountMapper;
+import com.thors.module.account.service.AccountMailService;
 import com.thors.module.account.service.AccountService;
 import com.thors.module.account.service.AuditLogService;
 import com.thors.module.account.service.AvatarImageService;
@@ -19,13 +21,19 @@ public class AccountController {
   private final AuditLogService audits;
   private final AvatarImageService avatars;
   private final SessionAccess sessions;
+  private final AccountMailService mails;
 
   public AccountController(
-      AccountService service, AuditLogService audits, AvatarImageService avatars, SessionAccess sessions) {
+      AccountService service,
+      AuditLogService audits,
+      AvatarImageService avatars,
+      SessionAccess sessions,
+      AccountMailService mails) {
     this.service = service;
     this.audits = audits;
     this.avatars = avatars;
     this.sessions = sessions;
+    this.mails = mails;
   }
 
   // ----- Profile (mọi người dùng đã đăng nhập) -----
@@ -95,9 +103,15 @@ public class AccountController {
     return service.detail(sessions.current(), id);
   }
 
+  /**
+   * Tạo tài khoản rồi mới gửi email: service.create() có @Transactional nên khi trả về thì tài khoản đã
+   * commit. Gửi mail lỗi không làm mất tài khoản; mailSent=false để giao diện nhắc người tạo tự báo.
+   */
   @PostMapping
   Object create(@Valid @RequestBody Create r) {
-    return AccountMapper.view(service.create(sessions.current(), r));
+    var created = service.create(sessions.current(), r);
+    boolean mailSent = mails.sendAccountCreated(created, r.password());
+    return new AccountCreated(AccountMapper.view(created), mailSent);
   }
 
   @PatchMapping("/{id}")

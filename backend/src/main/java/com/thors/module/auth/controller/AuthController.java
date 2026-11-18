@@ -5,6 +5,7 @@ import com.thors.config.Settings;
 import com.thors.integration.otp.OtpSender;
 import com.thors.module.account.mapper.AccountMapper;
 import com.thors.module.account.repository.AccountRepository;
+import com.thors.module.account.repository.PasswordChangeRequirementRepository;
 import com.thors.module.auth.dto.AuthRequests.*;
 import com.thors.module.auth.entity.OtpChallenge;
 import com.thors.module.auth.service.*;
@@ -25,6 +26,7 @@ public class AuthController {
   private final SessionAccess sessions;
   private final OtpSender sender;
   private final Settings settings;
+  private final PasswordChangeRequirementRepository passwordChanges;
 
   public AuthController(
           AuthService auth,
@@ -32,13 +34,15 @@ public class AuthController {
           AccountRepository users,
           SessionAccess sessions,
           OtpSender sender,
-          Settings settings) {
+          Settings settings,
+          PasswordChangeRequirementRepository passwordChanges) {
     this.auth = auth;
     this.otp = otp;
     this.users = users;
     this.sessions = sessions;
     this.sender = sender;
     this.settings = settings;
+    this.passwordChanges = passwordChanges;
   }
 
   record ResetGrant(int user, long version, long expires) implements Serializable {}
@@ -67,7 +71,8 @@ public class AuthController {
 
   @GetMapping("/me")
   Object me() {
-    return AccountMapper.view(sessions.current());
+    var a = sessions.current();
+    return AccountMapper.view(a, passwordChanges.required(a.id()));
   }
 
   @PostMapping("/register")
@@ -89,7 +94,11 @@ public class AuthController {
               "channel", "EMAIL",
               "deliveryAvailable", sender.available("EMAIL"));
     sessions.login(a, req, res);
-    return Map.of("verificationRequired", false, "account", AccountMapper.view(a));
+    boolean mustChange = passwordChanges.required(a.id());
+    return Map.of(
+            "verificationRequired", false,
+            "passwordChangeRequired", mustChange,
+            "account", AccountMapper.view(a, mustChange));
   }
 
   @PostMapping("/activation")
