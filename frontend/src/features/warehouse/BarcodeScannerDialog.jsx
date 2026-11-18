@@ -227,8 +227,7 @@ export default function BarcodeScannerDialog({ onClose, scanRequest }) {
               {result.locations.length ? (
                 result.locations.map((location) => (
                   <Typography key={location.product_location_id}>
-                    {location.rack_code}
-                    {location.level_number}: {number(location.quantity)} sản phẩm
+                    {location.tier_label || `${location.rack_code}${location.level_number}`}: {number(location.quantity)} sản phẩm
                   </Typography>
                 ))
               ) : (

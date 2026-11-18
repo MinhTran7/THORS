@@ -4,6 +4,7 @@ import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   Checkbox,
@@ -15,9 +16,11 @@ import {
   FormControlLabel,
   MenuItem,
   Stack,
+  TextField,
   Typography
 } from '@mui/material';
 
+import { EditOutlined } from '@ant-design/icons';
 import MainCard from 'components/MainCard';
 import { api } from 'services/http';
 import { useWarehouse } from './WarehouseContext';
@@ -31,6 +34,7 @@ import {
   Title, DialogClose } from './components';
 import {
   locationLabel,
+  tierName,
   number,
   statusLabel,
   variantLabel
@@ -111,6 +115,7 @@ function RackForm({ rack, tier, rackId, onClose }) {
     initialValues: isTier
       ? {
           number: tier?.level_number || 1,
+          name: tier?.level_name || '',
           status: tier?.status || 'AVAILABLE',
           active: tier ? active(tier.is_active) : true
         }
@@ -123,6 +128,7 @@ function RackForm({ rack, tier, rackId, onClose }) {
 
     validationSchema: isTier
       ? Yup.object({
+          name: Yup.string().max(50, 'Tên tầng tối đa 50 ký tự.'),
           number: Yup.number()
             .integer()
             .min(1)
@@ -302,6 +308,7 @@ function RackForm({ rack, tier, rackId, onClose }) {
           <Stack spacing={2} sx={{ pt: 1 }}>
             {isTier ? (
               <>
+                {field('name', 'Tên tầng (không bắt buộc · để trống = mã kệ + số tầng, vd A2)')}
                 {field('number', 'Số tầng (1–50)', 'number')}
 
                 <Choice
@@ -1199,32 +1206,51 @@ export default function LocationsPage() {
             sx={{ mb: 2 }}
           >
             <Box sx={{ flex: 1 }}>
-              <Choice
-                label="Tìm vị trí theo sản phẩm / màu / size"
-                value={selectedVariant}
-                onChange={(e) => {
-                  const next = new URLSearchParams(params);
-
-                  e.target.value
-                    ? next.set('variant', e.target.value)
-                    : next.delete('variant');
-
-                  setParams(next, { replace: true });
-                }}
-              >
-                <MenuItem value="">
-                  Xem toàn bộ kho
-                </MenuItem>
-
-                {data.variants.map((v) => (
-                  <MenuItem
-                    key={v.detail_id}
-                    value={v.detail_id}
-                  >
-                    {variantLabel(v)}
-                  </MenuItem>
-                ))}
-              </Choice>
+              {/* Gõ tên, màu, size hoặc mã để tìm; xóa ô tìm = xem toàn bộ kho. */}
+              <Field label="Tìm vị trí theo sản phẩm / màu / size">
+                <Autocomplete
+                  size="small"
+                  options={data.variants}
+                  value={variant || null}
+                  onChange={(_, v) => {
+                    const next = new URLSearchParams(params);
+                    v ? next.set('variant', v.detail_id) : next.delete('variant');
+                    setParams(next, { replace: true });
+                  }}
+                  getOptionLabel={(v) => variantLabel(v)}
+                  isOptionEqualToValue={(a, b) => a.detail_id === b.detail_id}
+                  filterOptions={(options, { inputValue }) => {
+                    const words = inputValue.toLowerCase().trim().split(/\s+/).filter(Boolean);
+                    return options
+                      .filter((v) => {
+                        const text = `${variantLabel(v)} ${v.barcode || ''}`.toLowerCase();
+                        return words.every((w) => text.includes(w));
+                      })
+                      .slice(0, 100);
+                  }}
+                  renderOption={(props, v) => (
+                    <li {...props} key={v.detail_id}>
+                      <Stack direction="row" spacing={1} sx={{ width: '100%', justifyContent: 'space-between' }}>
+                        <span>{variantLabel(v)}</span>
+                        <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+                          {v.barcode ? `${v.barcode} · ` : ''}tồn {number(v.stock_quantity)}
+                        </Typography>
+                      </Stack>
+                    </li>
+                  )}
+                  noOptionsText="Không tìm thấy hàng phù hợp"
+                  renderInput={(input) => (
+                    <TextField
+                      {...input}
+                      placeholder="Gõ tên sản phẩm, màu, size hoặc mã để tìm · để trống = xem toàn bộ kho"
+                      slotProps={{
+                        ...input.slotProps,
+                        htmlInput: { ...input.slotProps?.htmlInput, 'aria-label': 'Tìm vị trí theo sản phẩm / màu / size' }
+                      }}
+                    />
+                  )}
+                />
+              </Field>
             </Box>
 
             {editLayout && (
@@ -1451,9 +1477,13 @@ export default function LocationsPage() {
                         return (
                           <Button
                             key={t.shelf_level_id}
-                            onClick={() =>
-                              setSelected(t.shelf_level_id)
-                            }
+                            onClick={() => {
+                              setSelected(t.shelf_level_id);
+                              // Đang sửa bố cục: bấm vào tầng là sửa tên / số / trạng thái của tầng đó.
+                              if (editLayout && owner)
+                                setRackForm({ tier: t, rackId: t.rack_id });
+                            }}
+                            title={editLayout && owner ? `Sửa tầng ${tierName(r, t)}` : undefined}
                             aria-pressed={
                               selected === t.shelf_level_id
                             }
@@ -1494,10 +1524,12 @@ export default function LocationsPage() {
                                 flex: 1,
                                 textAlign: 'left'
                               }}
-                              title={`${r.rack_code}${t.level_number}`}
+                              title={tierName(r, t)}
                             >
-                              {r.rack_code}
-                              {t.level_number}
+                              {editLayout && owner && (
+                                <EditOutlined style={{ fontSize: 12, marginRight: 4 }} />
+                              )}
+                              {tierName(r, t)}
                             </Typography>
 
                             <Typography

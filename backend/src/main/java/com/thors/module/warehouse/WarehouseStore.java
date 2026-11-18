@@ -25,6 +25,38 @@ public class WarehouseStore {
         return db;
     }
 
+    private volatile Boolean tierNames;
+    private volatile long tierNamesCheckedAt;
+
+    /** Cột shelf_level.level_name đã có chưa (migration 2026-11-18_shelf_level_name.sql). */
+    public boolean tierNamesReady() {
+        if (Boolean.TRUE.equals(tierNames)) return true;
+        long now = System.currentTimeMillis();
+        if (tierNames != null && now - tierNamesCheckedAt < 30_000) return false;
+        try {
+            db.queryForObject("SELECT COUNT(level_name) FROM shelf_level WHERE 1=0", Long.class);
+            tierNames = true;
+        } catch (org.springframework.dao.DataAccessException e) {
+            tierNames = false;
+        }
+        tierNamesCheckedAt = now;
+        return tierNames;
+    }
+
+    /**
+     * SQL nhãn của một tầng: tên tầng chủ cửa hàng đặt, nếu chưa đặt thì mã kệ + số tầng (vd A2).
+     * {@code rack}/{@code tier} là bí danh bảng rack / shelf_level trong câu SQL. NULL khi không có tầng.
+     */
+    public String tierLabel(String rack, String tier) {
+        String plain = "CONCAT(" + rack + ".rack_code," + tier + ".level_number)";
+        return tierNamesReady() ? "COALESCE(NULLIF(TRIM(" + tier + ".level_name),'')," + plain + ")" : plain;
+    }
+
+    /** Thay {@code TIER_LABEL} trong câu SQL bằng nhãn tầng của bí danh r (rack) / t (shelf_level). */
+    public String withTierLabel(String sql) {
+        return sql.replace("TIER_LABEL", tierLabel("r", "t"));
+    }
+
     public Map<String, Object> one(String sql, Object... args) {
         var rows = db.queryForList(sql, args);
         if (rows.isEmpty()) throw new ApiException(404, "NOT_FOUND", "Không tìm thấy dữ liệu kho.");

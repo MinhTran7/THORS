@@ -401,6 +401,15 @@ ORDER BY p.product_name,d.color,d.size
                 s.jdbc().queryForList("SELECT * FROM rack"),
                 s.jdbc().queryForList("SELECT * FROM shelf_level"));
 
+        String name = r.name() == null || r.name().isBlank() ? null : r.name().trim().replaceAll("\\s+", " ");
+        if (s.tierNamesReady())
+            s.jdbc().update("UPDATE shelf_level SET level_name=? WHERE shelf_level_id=?", name, id);
+        else if (name != null)
+            throw new com.thors.common.ApiException(
+                    503,
+                    "MIGRATION_REQUIRED",
+                    "Database chưa có cột tên tầng. Cần chạy database/migrations/2026-11-18_shelf_level_name.sql.");
+
         s.audit(a.id(), "TIER_SAVE", id, r.status());
 
         return s.one(

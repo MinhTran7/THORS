@@ -100,10 +100,12 @@ export const textMatches = (text, input) => {
     .every((w) => hay.includes(w));
 };
 export const when = (v) => (v ? new Date(v).toLocaleString('vi-VN') : '—');
+/** Tên tầng chủ cửa hàng đặt; chưa đặt thì mã kệ + số tầng (vd A2). */
+export const tierName = (rack, tier) => tier?.level_name?.trim() || `${rack?.rack_code || '?'}${tier?.level_number ?? ''}`;
 export const locationLabel = (data, id) => {
   const t = data.tiers.find((x) => x.shelf_level_id === id);
   const r = data.racks.find((x) => x.rack_id === t?.rack_id);
-  return t && r ? `${r.rack_code}${t.level_number}` : 'Chưa xếp vị trí';
+  return t && r ? tierName(r, t) : 'Chưa xếp vị trí';
 };
 // Receiving progress of a purchase order, derived by the backend from confirmed receipts.
 export const progressLabel = {

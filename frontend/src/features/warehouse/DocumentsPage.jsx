@@ -99,7 +99,7 @@ function ReturnHistory({ id }) {
               {
                 key: 'location',
                 label: 'Vị trí lấy',
-                render: (m) => (m.source_location_id ? `${m.rack_code}${m.level_number}` : 'Chưa xếp vị trí')
+                render: (m) => (m.source_location_id ? m.tier_label || `${m.rack_code}${m.level_number}` : 'Chưa xếp vị trí')
               },
               { key: 'quantity_change', label: 'Thay đổi tồn', align: 'right', render: (m) => number(m.quantity_change) },
               { key: 'actor_name', label: 'Người thực hiện' }

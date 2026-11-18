@@ -47,7 +47,7 @@ public class WarehouseMoveRequests {
 
     private Map<String, Object> record(Account a, Move r) {
         s.lock();
-        var old = s.jdbc().queryForList(SELECT + " WHERE m.idempotency_key=?", KEY + r.requestKey());
+        var old = s.jdbc().queryForList(select() + " WHERE m.idempotency_key=?", KEY + r.requestKey());
         if (!old.isEmpty()) {
             var m = old.get(0);
             if (num(m, "detail_id") != r.detailId()
@@ -84,7 +84,7 @@ public class WarehouseMoveRequests {
 
     public List<Map<String, Object>> list(Account a, String status) {
         policy.view(a);
-        return s.migrated(() -> s.jdbc().queryForList(SELECT + " WHERE m.request_status IS NOT NULL AND (? IS NULL OR m.request_status=?)"
+        return s.migrated(() -> s.jdbc().queryForList(select() + " WHERE m.request_status IS NOT NULL AND (? IS NULL OR m.request_status=?)"
                 + " ORDER BY m.adjustment_id DESC LIMIT 200",
                 blank(status), blank(status)));
     }
@@ -93,7 +93,7 @@ public class WarehouseMoveRequests {
     public Map<String, Object> approve(Account a, int id) {
         policy.owner(a);
         s.lock();
-        var m = s.one(SELECT + " WHERE m.adjustment_id=? AND m.request_status IS NOT NULL", id);
+        var m = s.one(select() + " WHERE m.adjustment_id=? AND m.request_status IS NOT NULL", id);
         if (is(m, "status", "APPROVED")) return view(id);
         if (!is(m, "status", PENDING)) throw invalid("Yêu cầu này đã được xử lý.");
         String keys = (String) m.get("photo_keys");
@@ -124,7 +124,7 @@ public class WarehouseMoveRequests {
     public Map<String, Object> end(Account a, int id, String action, String reason) {
         policy.view(a);
         s.lock();
-        var m = s.one(SELECT + " WHERE m.adjustment_id=? AND m.request_status IS NOT NULL", id);
+        var m = s.one(select() + " WHERE m.adjustment_id=? AND m.request_status IS NOT NULL", id);
         boolean reject = "reject".equals(action);
         if (reject) policy.owner(a);
         else if (num(m, "requested_by") != a.id()) policy.owner(a);
@@ -196,7 +196,7 @@ public class WarehouseMoveRequests {
               SUBSTRING(m.idempotency_key,9) AS request_key,m.request_status AS status,
               m.adjusted_by AS requested_by,m.adjusted_at AS requested_at,m.decided_by,m.decided_at,
               d.color,d.size,p.product_name,u.full_name AS requester_name,v.full_name AS decider_name,
-              CONCAT(fr.rack_code,ft.level_number) AS from_label,CONCAT(tr.rack_code,tt.level_number) AS to_label
+              FROM_LABEL AS from_label,TO_LABEL AS to_label
             FROM stock_adjustment m
             JOIN product_detail d ON d.detail_id=m.detail_id JOIN product p ON p.product_id=d.product_id
             JOIN `user` u ON u.user_id=m.adjusted_by LEFT JOIN `user` v ON v.user_id=m.decided_by
@@ -205,8 +205,13 @@ public class WarehouseMoveRequests {
             LEFT JOIN shelf_level tt ON tt.shelf_level_id=m.request_shelf_id LEFT JOIN rack tr ON tr.rack_id=tt.rack_id
             """;
 
+    /** SELECT with the source / destination tier labels (tier names when set). */
+    private String select() {
+        return SELECT.replace("FROM_LABEL", s.tierLabel("fr", "ft")).replace("TO_LABEL", s.tierLabel("tr", "tt"));
+    }
+
     private Map<String, Object> view(int id) {
-        return s.one(SELECT + " WHERE m.adjustment_id=?", id);
+        return s.one(select() + " WHERE m.adjustment_id=?", id);
     }
 
     private static String describe(Map<String, Object> m) {

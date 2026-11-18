@@ -234,4 +234,23 @@ class WarehouseMoveRequestsTest {
                 + " ON l.product_location_id=u.product_location_id WHERE l.shelf_level_id=? AND u.scanned_at IS NULL", Long.class, tierA2),
                 "chiếc chuyển đi là chiếc đã xác nhận");
     }
+
+    @Test
+    void tierNameReplacesRackCodeAndNumberWhenSet() {
+        // database/migrations/2026-11-18_shelf_level_name.sql
+        db.execute("ALTER TABLE shelf_level ADD COLUMN level_name VARCHAR(50)");
+        var store = new WarehouseStore(db);
+        var policy = new WarehousePolicy();
+        var photos = new WarehousePhotos(photosDir.toString());
+        var layout = new WarehouseLayout(store, policy, photos);
+        var named = new WarehouseMoveRequests(store, policy, layout, photos);
+
+        db.update("UPDATE shelf_level SET level_name='Góc cửa' WHERE shelf_level_id=?", tierA2);
+        var request = run(() -> named.submit(FAMILY, move(placeA1, tierA2, 1, null, null)));
+        assertEquals("A1", request.get("from_label"), "tầng chưa đặt tên: mã kệ + số tầng");
+        assertEquals("Góc cửa", request.get("to_label"), "tầng đã đặt tên: hiện tên");
+
+        db.update("UPDATE shelf_level SET level_name='  ' WHERE shelf_level_id=?", tierA2);
+        assertEquals("A2", run(() -> named.list(OWNER, "PENDING")).get(0).get("to_label"), "tên trống = như cũ");
+    }
 }

@@ -164,9 +164,9 @@ public class WarehouseCounts {
                 id);
         var labels = new HashMap<Integer, String>();
         for (var row : s.jdbc().queryForList(
-                "SELECT l.product_location_id,r.rack_code,t.level_number FROM product_location l JOIN shelf_level t"
-                        + " ON t.shelf_level_id=l.shelf_level_id JOIN rack r ON r.rack_id=t.rack_id"))
-            labels.put(num(row, "product_location_id"), "" + row.get("rack_code") + row.get("level_number"));
+                s.withTierLabel("SELECT l.product_location_id,TIER_LABEL AS tier_label FROM product_location l JOIN shelf_level t"
+                        + " ON t.shelf_level_id=l.shelf_level_id JOIN rack r ON r.rack_id=t.rack_id")))
+            labels.put(num(row, "product_location_id"), (String) row.get("tier_label"));
         var changed = new ArrayList<String>();
         var missing = new ArrayList<String>();
         for (var l : lines) {
@@ -314,18 +314,18 @@ public class WarehouseCounts {
         var lines = new ArrayList<Map<String, Object>>();
         boolean open = is(doc, "status", "DRAFT") || is(doc, "status", "PENDING_CONFIRMATION");
         for (var row : s.jdbc().queryForList(
-                """
-                SELECT i.*,p.product_name,p.product_id,d.color,d.size,d.barcode,d.stock_quantity,r.rack_code,t.level_number,
+                s.withTierLabel("""
+                SELECT i.*,p.product_name,p.product_id,d.color,d.size,d.barcode,d.stock_quantity,TIER_LABEL AS tier_label,
                   (SELECT COALESCE(SUM(x.quantity),0) FROM product_location x WHERE x.detail_id=i.detail_id) AS assigned_now,
                   l.quantity AS location_now
                 FROM stock_count_item i JOIN product_detail d ON d.detail_id=i.detail_id JOIN product p ON p.product_id=d.product_id
                 LEFT JOIN product_location l ON l.product_location_id=i.product_location_id
                 LEFT JOIN shelf_level t ON t.shelf_level_id=l.shelf_level_id LEFT JOIN rack r ON r.rack_id=t.rack_id
                 WHERE i.count_id=? ORDER BY p.product_name,d.color,d.size,i.count_item_id
-                """,
+                """),
                 id)) {
             var line = copy(row);
-            line.put("location_label", row.get("product_location_id") == null ? null : "" + row.get("rack_code") + row.get("level_number"));
+            line.put("location_label", row.get("product_location_id") == null ? null : row.get("tier_label"));
             line.put("difference", num(row, "counted_quantity") - num(row, "system_quantity"));
             line.put("reason_label", row.get("reason_code") == null ? null : REASONS.get((String) row.get("reason_code")));
             if (open) {

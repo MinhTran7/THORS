@@ -142,7 +142,9 @@ public final class WarehouseRequests {
             @NotBlank
             @Pattern(regexp = "AVAILABLE|FULL|BLOCKED|MAINTENANCE")
             String status,
-            @NotNull Boolean active) {}
+            @NotNull Boolean active,
+            // Tên tầng hiển thị (không bắt buộc); để trống = mã kệ + số tầng (vd A2).
+            @Size(max = 50) String name) {}
 
     public record Metadata(
             @Size(max = 2000) String description,

@@ -200,11 +200,11 @@ public class WarehouseInventory {
         for (var row :
                 s.jdbc()
                         .queryForList(
-                                """
-                SELECT l.product_location_id,r.rack_code,t.level_number FROM product_location l
+                                s.withTierLabel("""
+                SELECT l.product_location_id,TIER_LABEL AS tier_label FROM product_location l
                 JOIN shelf_level t ON t.shelf_level_id=l.shelf_level_id JOIN rack r ON r.rack_id=t.rack_id
-                """))
-            labels.put(num(row, "product_location_id"), "" + row.get("rack_code") + row.get("level_number"));
+                """)))
+            labels.put(num(row, "product_location_id"), (String) row.get("tier_label"));
         return labels;
     }
 
