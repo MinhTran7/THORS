@@ -8,6 +8,10 @@ public final class AccountMapper {
 
   // Đổi Account thành dữ liệu gửi cho frontend; chỉ gồm các trường được phép lộ ra (không có password_hash)
   public static AccountView view(Account a) {
+    return view(a, false);
+  }
+
+  public static AccountView view(Account a, boolean passwordChangeRequired) {
     return new AccountView(
             a.id(),
             a.role(),
@@ -19,6 +23,7 @@ public final class AccountMapper {
             false, // SMS verification is no longer supported; preserve API shape.
             a.googleSubject() != null,
             !a.passwordHash().startsWith("!"),
-            a.avatarUrl());
+            a.avatarUrl(),
+            passwordChangeRequired);
   }
 }

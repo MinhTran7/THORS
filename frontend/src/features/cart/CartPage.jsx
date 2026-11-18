@@ -17,7 +17,8 @@ const toUi = (r) => ({
   id: r.cartItemId,
   name: r.productName,
   variant: `Size ${r.size} · ${r.color}`,
-  price: Number(r.price),
+  originalPrice: Number(r.price),
+  price: Number(r.salePrice ?? r.price),
   qty: Number(r.quantity),
   stock: Number(r.stock),
   imageUrl: r.imageUrl,
@@ -41,8 +42,10 @@ export default function CartPage({ onCheckout }) {
       const data = await api('/cart');
       const list = (data.items || []).map(toUi);
       setItems(list);
+      // Mới vào giỏ hàng: chưa tick sản phẩm nào, khách tự chọn món muốn mua.
+      // Tải lại sau khi đổi số lượng / xóa: giữ nguyên các món đang tick.
       setSelected((prev) =>
-        new Set(list.filter((i) => canBuy(i) && (!keepSelection || prev.has(i.id))).map((i) => i.id))
+        keepSelection ? new Set(list.filter((i) => canBuy(i) && prev.has(i.id)).map((i) => i.id)) : new Set()
       );
     } catch (e) {
       setError(e.message);
@@ -176,7 +179,10 @@ export default function CartPage({ onCheckout }) {
                     </div>
                   </div>
 
-                  <div className="thc-c thc-price" data-label="Đơn giá">{money(item.price)}</div>
+                  <div className="thc-c thc-price" data-label="Đơn giá">
+                    {item.price < item.originalPrice && <s className="thc-old">{money(item.originalPrice)}</s>}
+                    {money(item.price)}
+                  </div>
 
                   <div className="thc-c" data-label="Số lượng">
                     <div className="thc-qty">
@@ -272,74 +278,77 @@ export default function CartPage({ onCheckout }) {
 }
 
 const CSS = `
-.thc{--bg:#fbfaf2;--card:#fff;--ink:#16222e;--mute:#6b7683;--line:#e8e6d9;--cy:#8fe6f2;--cy-d:#27a9bd;
---warn:#fff4c4;--warn-l:#efe3a0;--red:#d6453d;
+/* Đồng màu với giao diện cửa hàng (features/shop/storeTheme): màu chủ đạo đỏ đô, chữ đen, nền be, nút vuông */
+.thc{--bg:transparent;--card:#fff;--ink:#111111;--mute:#5C5650;--line:#E6E3DE;--sand:#EFEBE5;--accent:#8A2B2B;
+--warn:#F7F1E6;--warn-l:#E6DCCB;--red:#8A2B2B;
 font-family:'Be Vietnam Pro','Inter',system-ui,-apple-system,'Segoe UI',sans-serif;color:var(--ink);
-background:var(--bg);padding:28px;min-height:100%;box-sizing:border-box}
+background:var(--bg);padding:8px 0 28px;min-height:100%;box-sizing:border-box}
 .thc *{box-sizing:border-box}
 .thc button{font:inherit;cursor:pointer}
 .thc button:disabled{cursor:not-allowed;opacity:.45}
-.thc :focus-visible{outline:2px solid var(--cy-d);outline-offset:2px}
+.thc :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .thc-head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:20px}
-.thc-head h1{margin:0;font-size:26px;font-weight:700;letter-spacing:-.01em}
+.thc-head h1{margin:0;font-size:32px;font-weight:700;letter-spacing:-.01em}
 .thc-head p{margin:4px 0 0;color:var(--mute);font-size:14px}
-.thc-chip{background:var(--cy);padding:6px 12px;border-radius:999px;font-size:13px;font-weight:600}
-.thc-card{background:var(--card);border:1px solid var(--line);border-radius:14px}
+.thc-chip{background:#F6ECEA;color:var(--accent);padding:6px 12px;font-size:13px;font-weight:600}
+.thc-card{background:var(--card);border:1px solid var(--line)}
 .thc-layout{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:20px;align-items:start}
 .thc-row{display:grid;grid-template-columns:32px minmax(0,2.6fr) 1fr 1.2fr 1.1fr .7fr;gap:12px;align-items:center;
 padding:16px 20px;border-bottom:1px solid var(--line)}
-.thc-row-head{font-size:13px;color:var(--mute);padding:12px 20px;background:#fdfcf6;border-radius:14px 14px 0 0}
+.thc-row-head{font-size:13px;color:var(--mute);padding:12px 20px;background:#FAF8F5}
 .thc-c{text-align:center}
 .thc-prod{display:flex;gap:14px;align-items:center;min-width:0}
-.thc-thumb{flex:none;width:64px;height:64px;border-radius:12px;background:var(--cy);display:grid;place-items:center;
-font-size:24px;font-weight:700;color:#0f4c57}
+.thc-thumb{flex:none;position:relative;width:64px;height:80px;overflow:hidden;background:var(--sand);
+display:grid;place-items:center;font-size:24px;font-weight:700;color:#B5AFA6}
 .thc-name{font-weight:600;font-size:15px;line-height:1.35}
 .thc-variant{font-size:13px;color:var(--mute);margin-top:2px}
 .thc-low{display:inline-block;margin-top:6px;font-size:12px;background:var(--warn);border:1px solid var(--warn-l);
-padding:2px 8px;border-radius:6px}
+padding:2px 8px}
 .thc-price{font-size:14px;color:var(--mute)}
-.thc-sub{font-weight:700;color:var(--cy-d)}
-.thc-qty{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff}
-.thc-qty button{width:32px;height:34px;border:0;background:#faf9f1;font-size:17px;color:var(--ink)}
-.thc-qty button:hover:not(:disabled){background:var(--cy)}
+.thc-old{display:block;font-size:12.5px;opacity:.7}
+.thc-sub{font-weight:700;color:var(--ink)}
+.thc-qty{display:inline-flex;border:1px solid var(--line);overflow:hidden;background:#fff}
+.thc-qty button{width:32px;height:34px;border:0;background:#fff;font-size:17px;color:var(--ink)}
+.thc-qty button:hover:not(:disabled){background:var(--sand)}
 .thc-qty input{width:46px;height:34px;border:0;border-inline:1px solid var(--line);text-align:center;font:inherit;font-size:14px;
 background:#fff;color:var(--ink)}
 .thc-link-danger{background:none;border:0;color:var(--red);font-size:14px;padding:4px 6px;border-radius:6px}
-.thc-link-danger:hover:not(:disabled){background:#fdecea}
+.thc-link-danger:hover:not(:disabled){text-decoration:underline}
 .thc-listfoot{display:flex;align-items:center;gap:12px;padding:14px 20px;font-size:14px}
 .thc-listfoot .thc-link-danger{margin-left:auto}
 .thc-check{position:relative;display:inline-flex;width:20px;height:20px}
 .thc-check input{position:absolute;inset:0;opacity:0;margin:0;cursor:pointer}
-.thc-check span{width:20px;height:20px;border:1.5px solid #b9bfc6;border-radius:6px;background:#fff;display:grid;place-items:center}
-.thc-check input:checked+span{background:var(--cy-d);border-color:var(--cy-d)}
+.thc-check span{width:20px;height:20px;border:1.5px solid #8C857B;background:#fff;display:grid;place-items:center}
+.thc-check input:checked+span{background:var(--accent);border-color:var(--accent)}
 .thc-check input:checked+span::after{content:'';width:5px;height:10px;border:solid #fff;border-width:0 2px 2px 0;
 transform:rotate(45deg) translate(-1px,-1px)}
-.thc-check input:focus-visible+span{outline:2px solid var(--cy-d);outline-offset:2px}
+.thc-check input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
 .thc-sum{padding:20px;position:sticky;top:20px}
-.thc-sum h2{margin:0 0 14px;font-size:17px}
+.thc-sum h2{margin:0 0 14px;font-size:19px;font-weight:700}
 .thc-sum dl{margin:0 0 16px}
 .thc-sum dl div{display:flex;justify-content:space-between;padding:8px 0;font-size:14px;color:var(--mute)}
 .thc-sum dd{margin:0;color:var(--ink);font-weight:600}
 .thc-sum .thc-total{border-top:1px dashed var(--line);margin-top:6px;padding-top:14px;color:var(--ink);font-weight:600}
-.thc-sum .thc-total dd{font-size:21px;color:var(--cy-d)}
-.thc-btn{border:1px solid var(--line);background:#fff;color:var(--ink);padding:10px 18px;border-radius:10px;font-weight:600;font-size:14px}
-.thc-btn-primary{background:var(--cy);border-color:var(--cy);color:#0b3a43}
-.thc-btn-primary:hover:not(:disabled){background:#78dcea}
-.thc-btn-danger{background:var(--red);border-color:var(--red);color:#fff}
-.thc-block{width:100%;padding:13px}
-.thc-note{margin-top:14px;background:var(--warn);border:1px solid var(--warn-l);border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.45}
+.thc-sum .thc-total dd{font-size:21px;color:var(--ink)}
+.thc-btn{border:1px solid var(--line);background:#fff;color:var(--ink);padding:10px 18px;font-weight:600;font-size:14px;letter-spacing:.04em}
+.thc-btn-primary{background:var(--accent);border-color:var(--accent);color:#fff;text-transform:uppercase}
+.thc-btn-primary:hover:not(:disabled){background:#6E1F1F}
+.thc-btn-danger{background:var(--accent);border-color:var(--accent);color:#fff}
+.thc-block{width:100%;padding:14px}
+.thc-note{margin-top:14px;background:var(--warn);border:1px solid var(--warn-l);padding:10px 12px;font-size:13px;line-height:1.45}
 .thc-empty{text-align:center;padding:56px 20px}
-.thc-empty-mark{width:72px;height:72px;margin:0 auto 14px;border-radius:50%;background:var(--cy);display:grid;place-items:center;font-size:28px;font-weight:700}
-.thc-empty h2{margin:0 0 6px;font-size:19px}
+.thc-empty-mark{width:72px;height:72px;margin:0 auto 14px;border-radius:50%;background:var(--sand);display:grid;place-items:center;font-size:28px;font-weight:700}
+.thc-empty h2{margin:0 0 6px;font-size:22px;font-weight:700}
 .thc-empty p{margin:0 0 18px;color:var(--mute);font-size:14px}
-.thc-overlay{position:fixed;inset:0;background:rgba(22,34,46,.4);display:grid;place-items:center;padding:16px;z-index:1300}
-.thc-dialog{background:#fff;border-radius:14px;padding:22px;max-width:380px;width:100%}
+.thc-overlay{position:fixed;inset:0;background:rgba(17,17,17,.45);display:grid;place-items:center;padding:16px;z-index:1300}
+.thc-dialog{background:#fff;padding:24px;max-width:380px;width:100%}
 .thc-dialog h3{margin:0 0 8px;font-size:18px}
 .thc-dialog p{margin:0 0 20px;color:var(--mute);font-size:14px;line-height:1.5}
 .thc-dialog-actions{display:flex;gap:10px;justify-content:flex-end}
-.thc-thumb img{width:100%;height:100%;object-fit:cover;border-radius:12px}
-.thc-bad{display:inline-block;margin-top:6px;font-size:12px;color:var(--red);background:#fdecea;border-radius:6px;padding:2px 8px}
-.thc-err{margin-bottom:16px;background:var(--warn);border:1px solid var(--warn-l);border-radius:10px;padding:10px 14px;font-size:14px}
+/* Ảnh phủ kín ô 64x64, cắt phần thừa (ảnh dọc không bị kéo dài xuống dòng dưới) */
+.thc-thumb img{position:absolute;inset:0;display:block;width:100%;height:100%;object-fit:contain}
+.thc-bad{display:inline-block;margin-top:6px;font-size:12px;color:var(--red);background:#F6E9E7;padding:2px 8px}
+.thc-err{margin-bottom:16px;background:var(--warn);border:1px solid var(--warn-l);padding:10px 14px;font-size:14px}
 .thc-row-off .thc-prod,.thc-row-off .thc-price,.thc-row-off .thc-sub{opacity:.55}
 @media (max-width:960px){.thc-layout{grid-template-columns:1fr}.thc-sum{position:static}}
 @media (max-width:720px){

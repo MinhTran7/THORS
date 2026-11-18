@@ -683,7 +683,8 @@ class AuthIntegrationTest {
     }
     assertEquals(429, request("/api/auth/login", Map.of("identifier", a.email(), "password", password), new MockHttpSession()).getResponse().getStatus());
     var restarted = new com.thors.module.auth.service.AuthService(
-            new AccountRepository(db), passwords, new com.thors.module.auth.repository.OtpRepository(db), otp, notices);
+            new AccountRepository(db), passwords, new com.thors.module.auth.repository.OtpRepository(db), otp, notices,
+            new com.thors.module.account.repository.PasswordChangeRequirementRepository(db));
     assertEquals("LOGIN_COOLDOWN", assertThrows(ApiException.class,
             () -> restarted.authenticate(a.email(), password)).code);
     var known = request("/api/auth/login", Map.of("identifier", a.email(), "password", "Wrong-password"), new MockHttpSession()).getResponse();

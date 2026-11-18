@@ -1,6 +1,7 @@
 package com.thors.config;
 
 import com.thors.module.account.repository.AccountRepository;
+import com.thors.module.account.repository.PasswordChangeRequirementRepository;
 import com.thors.module.auth.controller.GoogleLoginHandler;
 import com.thors.module.auth.controller.FacebookLoginHandler;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
@@ -74,7 +75,7 @@ public class SecurityConfig {
         @Bean
         SecurityFilterChain security(
                         HttpSecurity http, Settings settings, AccountRepository users, GoogleLoginHandler handler,
-                        FacebookLoginHandler facebookHandler)
+                        FacebookLoginHandler facebookHandler, PasswordChangeRequirementRepository passwordChanges)
                         throws Exception {
                 // CSRF: mọi POST/PUT/DELETE phải gửi kèm token lấy từ GET /api/auth/csrf (frontend: http.js
                 // refreshCsrf). Token lưu trong session; thiếu hoặc sai → 403, request không tới controller.
@@ -172,12 +173,12 @@ public class SecurityConfig {
                                                                                                                         + " không có quyền truy cập.\"}");
                                                                 }));
                 http.addFilterAfter(
-                                new AccountStateFilter(users),
+                                new AccountStateFilter(users, passwordChanges),
                                 org.springframework.security.web.context.SecurityContextHolderFilter.class);
                 if (settings.google().enabled() || (settings.facebook() != null && settings.facebook().enabled()))
                         http.oauth2Login(
                                         c -> c.successHandler((req, res, auth) -> {
-                                                if (auth instanceof OAuth2AuthenticationToken token && "facebook"
+                                                                           if (auth instanceof OAuth2AuthenticationToken token && "facebook"
                                                                 .equals(token.getAuthorizedClientRegistrationId()))
                                                         facebookHandler.onAuthenticationSuccess(req, res, auth);
                                                 else

@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link as RouterLink, useNavigate, useOutletContext, useParams, useSearchParams } from 'react-router-dom';
 import { Box } from '@mui/material';
 import { useAuth } from 'features/auth/AuthProvider';
 import { api } from 'services/http';
 import PendingCartHandler from './PendingCartHandler';
-import { colorHex, fetchProductVariants } from './ShopCommon';
+import { categoryTree, colorHex, fetchProductVariants } from './ShopCommon';
 import { ProductCard } from './ShopPage';
 import { C, SERIF, Icon, btnSx, container, focusRing, h2Sx, linkSx, srOnly } from './storeTheme';
 
@@ -18,7 +18,7 @@ import { C, SERIF, Icon, btnSx, container, focusRing, h2Sx, linkSx, srOnly } fro
  * Bộ lọc lưu trên đường dẫn để chia sẻ được: ?size=M,L&color=Đen,Trắng&price=200-500
  *  - Danh mục: lọc ở backend (categoryId).
  *  - Kích thước, màu sắc, giá: lọc ngay trên trình duyệt vì API danh sách chưa hỗ trợ.
- *    Vì vậy trang tải sẵn tối đa FETCH_SIZE sản phẩm rồi lọc, hiện dần từng STEP sản phẩm.
+ *    Vì vậy trang tải sẵn tối đa FETCH_SIZE sản phẩm rồi lọc, chia trang PAGE_SIZE sản phẩm (?page=).
  */
 
 const COLLECTIONS = {
@@ -43,7 +43,7 @@ const SORTS = [
 ];
 
 const FETCH_SIZE = 100;
-const STEP = 20;
+const PAGE_SIZE = 9; // số sản phẩm mỗi trang
 const SIZE_ORDER = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', '2XL', 'XXXL', '3XL', '4XL', 'FREESIZE', 'FREE SIZE'];
 
 const splitParam = (v) => (v ? v.split(',').filter(Boolean) : []);
@@ -121,9 +121,187 @@ function Option({ type = 'radio', name, checked, onChange, children }) {
         name={name}
         checked={checked}
         onChange={onChange}
-        sx={{ width: 18, height: 18, m: 0, accentColor: C.ink, cursor: 'pointer', flexShrink: 0 }}
+        sx={{ width: 18, height: 18, m: 0, accentColor: C.primary, cursor: 'pointer', flexShrink: 0 }}
       />
       {children}
+    </Box>
+  );
+}
+
+/* ---------- Danh mục dạng cây: danh mục lớn, bấm mũi tên để xổ danh mục con ---------- */
+
+// Đường đi từ gốc tới danh mục id (gồm cả nó), không có thì []
+function pathTo(nodes, id) {
+  for (const n of nodes) {
+    if (n.categoryId === id) return [n.categoryId];
+    const sub = pathTo(n.children, id);
+    if (sub.length) return [n.categoryId, ...sub];
+  }
+  return [];
+}
+
+function CategoryNode({ node, depth, selectedId, expanded, onToggle, onPick }) {
+  const hasKids = node.children.length > 0;
+  const open = expanded.has(node.categoryId);
+  return (
+    <Box component="li" sx={{ listStyle: 'none' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', pl: depth * 3.5 }}>
+        <Box sx={{ flex: 1, minWidth: 0, '& label': { fontWeight: depth === 0 ? 600 : 400, color: depth === 0 ? C.ink : C.muted } }}>
+          <Option name="category" checked={selectedId === node.categoryId} onChange={() => onPick(node.categoryId)}>
+            {node.categoryName}
+          </Option>
+        </Box>
+        {hasKids && (
+          <Box
+            component="button"
+            type="button"
+            aria-label={`${open ? 'Thu gọn' : 'Xem'} danh mục con của ${node.categoryName}`}
+            aria-expanded={open}
+            onClick={() => onToggle(node.categoryId)}
+            sx={{
+              width: 32,
+              height: 32,
+              p: 0,
+              border: 0,
+              bgcolor: 'transparent',
+              color: C.muted,
+              cursor: 'pointer',
+              display: 'grid',
+              placeItems: 'center',
+              flexShrink: 0,
+              '&:hover': { color: C.ink },
+              ...focusRing
+            }}
+          >
+            <Box component="span" sx={{ display: 'flex', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }}>
+              <Icon size={16}>
+                <path d="M6 9l6 6 6-6" />
+              </Icon>
+            </Box>
+          </Box>
+        )}
+      </Box>
+      {hasKids && open && (
+        <Box component="ul" sx={{ m: 0, p: 0 }}>
+          {node.children.map((child) => (
+            <CategoryNode
+              key={child.categoryId}
+              node={child}
+              depth={depth + 1}
+              selectedId={selectedId}
+              expanded={expanded}
+              onToggle={onToggle}
+              onPick={onPick}
+            />
+          ))}
+        </Box>
+      )}
+    </Box>
+  );
+}
+
+function CategoryFilter({ categories, selectedId, onPick }) {
+  const tree = useMemo(() => categoryTree(categories), [categories]);
+  const [expanded, setExpanded] = useState(() => new Set());
+  // Danh mục đang chọn nằm sâu bên trong thì tự mở các danh mục cha của nó
+  useEffect(() => {
+    const path = pathTo(tree, selectedId);
+    if (path.length > 1) setExpanded((prev) => new Set([...prev, ...path.slice(0, -1)]));
+  }, [tree, selectedId]);
+  const toggle = (id) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  return (
+    <>
+      <Option name="category" checked={selectedId === 0} onChange={() => onPick(0)}>
+        Tất cả
+      </Option>
+      <Box component="ul" sx={{ m: 0, p: 0 }}>
+        {tree.map((node) => (
+          <CategoryNode
+            key={node.categoryId}
+            node={node}
+            depth={0}
+            selectedId={selectedId}
+            expanded={expanded}
+            onToggle={toggle}
+            onPick={onPick}
+          />
+        ))}
+      </Box>
+    </>
+  );
+}
+
+/* ---------- Phân trang: ‹ 1 2 3 … 8 › ---------- */
+
+// Các số trang cần hiện: trang đầu, trang cuối, 1 trang quanh trang hiện tại; chỗ bị bỏ qua thành "…"
+function pageItems(page, total) {
+  const keep = new Set([1, total, page - 1, page, page + 1].filter((n) => n >= 1 && n <= total));
+  const list = [...keep].sort((a, b) => a - b);
+  const out = [];
+  list.forEach((n, i) => {
+    if (i > 0 && n - list[i - 1] > 1) out.push(n - list[i - 1] === 2 ? n - 1 : `gap-${n}`);
+    out.push(n);
+  });
+  return out;
+}
+
+function Pagination({ page, totalPages, onChange }) {
+  const cell = {
+    minWidth: 40,
+    height: 40,
+    px: 1,
+    border: `1px solid ${C.line}`,
+    bgcolor: '#FFFFFF',
+    font: 'inherit',
+    fontSize: 15,
+    color: C.ink,
+    cursor: 'pointer',
+    display: 'inline-grid',
+    placeItems: 'center',
+    '&:hover:not(:disabled)': { borderColor: C.primary, color: C.primary },
+    '&:disabled': { opacity: 0.35, cursor: 'default' },
+    ...focusRing
+  };
+  return (
+    <Box component="nav" aria-label="Phân trang" sx={{ mt: 6, display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: 1 }}>
+      <Box component="button" type="button" aria-label="Trang trước" disabled={page <= 1} onClick={() => onChange(page - 1)} sx={cell}>
+        <Icon size={16}>
+          <path d="M15 6l-6 6 6 6" />
+        </Icon>
+      </Box>
+      {pageItems(page, totalPages).map((n) =>
+        typeof n === 'string' ? (
+          <Box key={n} component="span" aria-hidden="true" sx={{ minWidth: 24, height: 40, display: 'inline-grid', placeItems: 'center', color: C.muted }}>
+            …
+          </Box>
+        ) : (
+          <Box
+            key={n}
+            component="button"
+            type="button"
+            aria-label={`Trang ${n}`}
+            aria-current={n === page ? 'page' : undefined}
+            onClick={() => n !== page && onChange(n)}
+            sx={{
+              ...cell,
+              ...(n === page && { bgcolor: C.primary, color: '#FFFFFF', borderColor: C.primary, fontWeight: 600, cursor: 'default' })
+            }}
+          >
+            {n}
+          </Box>
+        )
+      )}
+      <Box component="button" type="button" aria-label="Trang sau" disabled={page >= totalPages} onClick={() => onChange(page + 1)} sx={cell}>
+        <Icon size={16}>
+          <path d="M9 6l6 6-6 6" />
+        </Icon>
+      </Box>
     </Box>
   );
 }
@@ -169,7 +347,6 @@ export default function ShopCollectionPage({ collection }) {
   const [variantMap, setVariantMap] = useState({}); // productId -> variants
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [visible, setVisible] = useState(STEP);
 
   // Màn hình nhỏ: mặc định ẩn thanh lọc
   useEffect(() => {
@@ -252,13 +429,13 @@ export default function ShopCollectionPage({ collection }) {
     });
   }, [items, variantMap, sizes, colors, priceRange, promoMap, coll]);
 
-  useEffect(() => setVisible(STEP), [categoryId, query, sort, priceKey, sizes, colors]);
 
   // Ghi bộ lọc lên đường dẫn
   const update = (key, value) => {
     const next = new URLSearchParams(params);
     if (value && (!Array.isArray(value) || value.length)) next.set(key, Array.isArray(value) ? value.join(',') : String(value));
     else next.delete(key);
+    next.delete('page'); // đổi bộ lọc / sắp xếp thì quay về trang 1
     setParams(next, { replace: true, preventScrollReset: true });
   };
   const toggleIn = (key, list, value) => update(key, list.includes(value) ? list.filter((x) => x !== value) : [...list, value]);
@@ -267,6 +444,7 @@ export default function ShopCollectionPage({ collection }) {
     if (coll) return update('category', id);
     const next = new URLSearchParams(params);
     next.delete('q');
+    next.delete('page');
     const qs = next.toString();
     navigate(`/shop/category/${id || 'all'}${qs ? `?${qs}` : ''}`, { preventScrollReset: true });
   };
@@ -301,14 +479,7 @@ export default function ShopCollectionPage({ collection }) {
   const sidebar = (
     <Box component="aside" aria-label="Bộ lọc">
       <FilterSection title="Danh mục" defaultOpen>
-        <Option name="category" checked={categoryId === 0} onChange={() => pickCategory(0)}>
-          Tất cả
-        </Option>
-        {categories.map((c) => (
-          <Option key={c.categoryId} name="category" checked={categoryId === c.categoryId} onChange={() => pickCategory(c.categoryId)}>
-            {c.categoryName}
-          </Option>
-        ))}
+        <CategoryFilter categories={categories} selectedId={categoryId} onPick={pickCategory} />
       </FilterSection>
 
       <FilterSection title="Kích thước" defaultOpen={sizes.length > 0}>
@@ -329,8 +500,8 @@ export default function ShopCollectionPage({ collection }) {
                     minWidth: 48,
                     height: 40,
                     px: 1.5,
-                    border: `1px solid ${on ? C.ink : '#CFCAC2'}`,
-                    bgcolor: on ? C.ink : '#FFFFFF',
+                    border: `1px solid ${on ? C.primary : '#CFCAC2'}`,
+                    bgcolor: on ? C.primary : '#FFFFFF',
                     color: on ? '#FFFFFF' : C.ink,
                     font: 'inherit',
                     fontSize: 14,
@@ -387,7 +558,7 @@ export default function ShopCollectionPage({ collection }) {
                       flexShrink: 0,
                       bgcolor: hex || '#E6E3DE',
                       border: '1px solid #8C857B',
-                      boxShadow: on ? `0 0 0 2px #FFFFFF, 0 0 0 4px ${C.ink}` : 'none'
+                      boxShadow: on ? `0 0 0 2px #FFFFFF, 0 0 0 4px ${C.primary}` : 'none'
                     }}
                   />
                   <Box component="span" sx={{ fontWeight: on ? 600 : 400 }}>
@@ -413,7 +584,20 @@ export default function ShopCollectionPage({ collection }) {
     </Box>
   );
 
-  const shown = filtered.slice(0, visible);
+  // Phân trang: ?page=2 ... (trang 1 thì không ghi lên đường dẫn)
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const page = Math.min(Math.max(1, Number(params.get('page')) || 1), totalPages);
+  const shown = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const listTopRef = useRef(null);
+  const goPage = (n) => {
+    const next = new URLSearchParams(params);
+    if (n > 1) next.set('page', String(n));
+    else next.delete('page');
+    setParams(next, { preventScrollReset: true });
+    // Cuộn lên đầu danh sách sản phẩm
+    const top = listTopRef.current?.getBoundingClientRect().top;
+    if (top !== undefined && top < 0) window.scrollBy({ top: top - 96, behavior: 'smooth' });
+  };
 
   return (
     <Box sx={{ ...container, py: { xs: 3, md: 5 } }}>
@@ -549,7 +733,7 @@ export default function ShopCollectionPage({ collection }) {
 
           {!busy && !error && filtered.length === 0 && (
             <Box sx={{ textAlign: 'center', py: 8, color: C.muted }}>
-              <Box sx={{ fontFamily: SERIF, fontSize: 24, color: C.ink, mb: 1 }}>Không có sản phẩm phù hợp</Box>
+              <Box sx={{ fontFamily: SERIF, fontWeight: 700, fontSize: 22, color: C.ink, mb: 1 }}>Không có sản phẩm phù hợp</Box>
               <Box sx={{ mb: 3 }}>{active.length ? 'Thử bỏ bớt bộ lọc.' : emptyText}</Box>
               {active.length > 0 && (
                 <Box component="button" type="button" onClick={clearAll} sx={btnSx('outline')}>
@@ -560,6 +744,7 @@ export default function ShopCollectionPage({ collection }) {
           )}
 
           <Box
+            ref={listTopRef}
             sx={{
               display: 'grid',
               gap: { xs: '24px 12px', sm: '32px 20px' },
@@ -575,13 +760,7 @@ export default function ShopCollectionPage({ collection }) {
             ))}
           </Box>
 
-          {filtered.length > visible && (
-            <Box sx={{ textAlign: 'center', mt: 6 }}>
-              <Box component="button" type="button" onClick={() => setVisible((v) => v + STEP)} sx={btnSx('outline')}>
-                XEM THÊM ({filtered.length - visible})
-              </Box>
-            </Box>
-          )}
+          {!busy && totalPages > 1 && <Pagination page={page} totalPages={totalPages} onChange={goPage} />}
         </Box>
       </Box>
 

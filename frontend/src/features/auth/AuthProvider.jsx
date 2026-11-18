@@ -29,8 +29,13 @@ export function AuthProvider({ children }) {
   // http.js phát sự kiện 'thors:unauthorized' khi gặp lỗi 401 → xóa tài khoản đang lưu
   useEffect(() => {
     const clear = () => setAccount(null);
+    const mustChange = () => setAccount((a) => (a ? { ...a, passwordChangeRequired: true } : a));
     window.addEventListener('thors:unauthorized', clear);
-    return () => window.removeEventListener('thors:unauthorized', clear);
+    window.addEventListener('thors:password-change-required', mustChange);
+    return () => {
+      window.removeEventListener('thors:unauthorized', clear);
+      window.removeEventListener('thors:password-change-required', mustChange);
+    };
   }, []);
   // Đăng xuất: POST /api/auth/logout, xóa tài khoản và CSRF token đang giữ
   async function logout() {

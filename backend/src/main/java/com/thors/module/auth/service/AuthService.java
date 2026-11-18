@@ -3,6 +3,7 @@ package com.thors.module.auth.service;
 import com.thors.common.*;
 import com.thors.module.account.entity.Account;
 import com.thors.module.account.repository.AccountRepository;
+import com.thors.module.account.repository.PasswordChangeRequirementRepository;
 import com.thors.module.auth.dto.AuthRequests.*;
 import com.thors.module.auth.repository.OtpRepository;
 import com.thors.module.notification.service.NotificationPublisher;
@@ -18,6 +19,7 @@ public class AuthService {
   private final OtpRepository codes;
   private final OtpService otp;
   private final NotificationPublisher notices;
+  private final PasswordChangeRequirementRepository passwordChanges;
   private final String dummy;
 
   public AuthService(
@@ -25,12 +27,14 @@ public class AuthService {
           PasswordEncoder passwords,
           OtpRepository codes,
           OtpService otp,
-          NotificationPublisher notices) {
+          NotificationPublisher notices,
+          PasswordChangeRequirementRepository passwordChanges) {
     this.users = users;
     this.passwords = passwords;
     this.codes = codes;
     this.otp = otp;
     this.notices = notices;
+    this.passwordChanges = passwordChanges;
     this.dummy = passwords.encode(java.util.UUID.randomUUID().toString());
   }
 
@@ -121,7 +125,10 @@ public class AuthService {
             || a.passwordHash().startsWith("!")
             || !passwords.matches(request.currentPassword(), a.passwordHash()))
       throw new ApiException(400, "PASSWORD_CURRENT", "Mật khẩu hiện tại không đúng.");
+    if (passwords.matches(request.password(), a.passwordHash()))
+      throw new ApiException(400, "PASSWORD_SAME", "Mật khẩu mới phải khác mật khẩu hiện tại.");
     users.password(a.id(), passwords.encode(request.password()), false);
+    passwordChanges.clear(a.id());
     codes.invalidateAll(a.id());
     users.audit(a.id(), "PASSWORD_CHANGE", a.id(), "Password replaced; sessions revoked");
     notices.toUser(

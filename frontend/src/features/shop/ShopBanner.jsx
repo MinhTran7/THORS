@@ -1,4 +1,22 @@
 import { useEffect, useState } from 'react';
+
+// Chiều cao banner trên máy tính = phần màn hình còn lại dưới header (không chừa khoảng trắng phía dưới)
+function useFillHeight() {
+  const [height, setHeight] = useState(null);
+  useEffect(() => {
+    const measure = () => {
+      const header = document.querySelector('header');
+      if (!header) return;
+      const top = header.offsetTop + header.offsetHeight;
+      setHeight(`max(520px, calc(100svh - ${Math.round(top)}px))`);
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
+  return height;
+}
+import { keyframes } from '@emotion/react';
 import { Link as RouterLink } from 'react-router-dom';
 import { Box } from '@mui/material';
 import { api } from 'services/http';
@@ -7,7 +25,8 @@ import { money, priceText } from './ShopCommon';
 import { C, SERIF, Icon, btnSx, container, eyebrowSx, focusRing, iconBtnSx } from './storeTheme';
 
 /**
- * Banner lớn đầu trang chủ. Tự chuyển slide mỗi 5 giây, xen kẽ:
+ * Banner lớn đầu trang chủ. Slide đầu là voucher / khuyến mãi mới nhất (prop voucher, nếu có),
+ * sau đó tự chuyển slide mỗi 5 giây, xen kẽ:
  *   hàng mới về -> hàng đang khuyến mãi -> hàng mới về -> ...
  * Dữ liệu: GET /api/shop/products?sort=newest và GET /api/shop/promotions.
  * Nếu chưa có khuyến mãi nào, banner chỉ chạy các slide hàng mới về.
@@ -15,14 +34,25 @@ import { C, SERIF, Icon, btnSx, container, eyebrowSx, focusRing, iconBtnSx } fro
  * Rê chuột hoặc focus vào banner thì tạm dừng; người dùng bật "giảm chuyển động" thì không tự chạy.
  */
 
-const PER_KIND = 4; // số sản phẩm tối đa mỗi loại
+const PER_KIND = 4; // số sản phẩm khuyến mãi tối đa
+const TOTAL = 5; // banner luôn có 5 slide; thiếu khuyến mãi thì lấy thêm hàng mới bù vào
 const INTERVAL_MS = 5000;
-const HEIGHT = { xs: 660, md: 600 };
+// Banner tràn hết bề ngang màn hình (kiểu Coolmate)
+const HEIGHT = { xs: 660, md: 'clamp(560px, 72vh, 760px)' };
+// Lề trái phần chữ canh thẳng với nội dung trang (khung 1320px, lề 40px)
+const EDGE = 'max(40px, calc((100vw - 1320px) / 2 + 40px))';
 
 // Mỗi loại slide một tông màu
 const THEME = {
   new: { bg: C.sand, text: C.ink, sub: '#3F3A34', eyebrow: '#5A544C', tag: 'Hàng mới về', mainBtn: 'dark' },
-  promo: { bg: C.accent, text: '#FFFFFF', sub: 'rgba(255,255,255,.85)', eyebrow: 'rgba(255,255,255,.85)', tag: 'Đang khuyến mãi', mainBtn: 'light' }
+  promo: {
+    bg: C.accent,
+    text: '#FFFFFF',
+    sub: 'rgba(255,255,255,.85)',
+    eyebrow: 'rgba(255,255,255,.85)',
+    tag: 'Đang khuyến mãi',
+    mainBtn: 'light'
+  }
 };
 
 function interleave(a, b) {
@@ -53,9 +83,10 @@ function SlideFrame({ kind, active, children, image }) {
     >
       <Box
         sx={{
-          flex: { xs: '0 0 auto', md: '1 1 0' },
+          // Phần chữ rộng hơn ảnh một chút để tên dài đỡ xuống dòng
+          flex: { xs: '0 0 auto', md: '1.2 1 0' },
           minWidth: 0,
-          p: { xs: '32px 24px', md: '72px 56px' },
+          p: { xs: '32px 24px 88px', md: `72px 56px 112px ${EDGE}` },
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
@@ -64,7 +95,16 @@ function SlideFrame({ kind, active, children, image }) {
       >
         {children}
       </Box>
-      <Box sx={{ flex: { xs: '1 1 0', md: '1.15 1 0' }, minHeight: 0, position: 'relative', overflow: 'hidden', bgcolor: kind === 'promo' ? '#3A1212' : '#CFC6BA' }}>
+      <Box
+        sx={{
+          flex: { xs: '1 1 0', md: '1 1 0' },
+          minHeight: 0,
+          position: 'relative',
+          overflow: 'hidden',
+          // Nền sáng trung tính để ảnh sản phẩm (thường nền trắng/xám nhạt) hòa vào, không lộ viền
+          bgcolor: '#F3F1EE'
+        }}
+      >
         {image}
       </Box>
     </Box>
@@ -73,11 +113,22 @@ function SlideFrame({ kind, active, children, image }) {
 
 function SlideImage({ src, name, kind }) {
   if (src) {
-    return <Box component="img" src={src} alt={name} sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />;
+    return (
+      <Box
+        component="img"
+        src={src}
+        alt={name}
+        // contain: hiện trọn sản phẩm, không bị cắt mất phần đầu (mũ áo, quai túi...)
+        sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' }}
+      />
+    );
   }
   return (
     <Box sx={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}>
-      <Box component="span" sx={{ fontFamily: SERIF, fontSize: 120, color: kind === 'promo' ? 'rgba(255,255,255,.3)' : 'rgba(17,17,17,.25)' }}>
+      <Box
+        component="span"
+        sx={{ fontFamily: SERIF, fontSize: 120, color: kind === 'promo' ? 'rgba(255,255,255,.3)' : 'rgba(17,17,17,.25)' }}
+      >
         {name?.charAt(0)}
       </Box>
     </Box>
@@ -87,11 +138,11 @@ function SlideImage({ src, name, kind }) {
 const titleSx = {
   m: 0,
   fontFamily: SERIF,
-  fontWeight: 400,
-  fontSize: { xs: 34, sm: 44, md: 'clamp(44px, 5vw, 64px)' },
+  fontWeight: 700,
+  fontSize: { xs: 32, sm: 40, md: 'clamp(40px, 4.5vw, 58px)' },
   lineHeight: 1.08,
   display: '-webkit-box',
-  WebkitLineClamp: 2,
+  WebkitLineClamp: 3,
   WebkitBoxOrient: 'vertical',
   overflow: 'hidden'
 };
@@ -99,7 +150,18 @@ const titleSx = {
 // Banner giới thiệu khi chưa có sản phẩm để chạy slide
 function IntroSlide() {
   return (
-    <SlideFrame kind="new" active image={<Box component="img" src={heroImage} alt="" sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}>
+    <SlideFrame
+      kind="new"
+      active
+      image={
+        <Box
+          component="img"
+          src={heroImage}
+          alt=""
+          sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+        />
+      }
+    >
       <Box component="p" sx={{ ...eyebrowSx, color: THEME.new.eyebrow }}>
         Bộ sưu tập mới
       </Box>
@@ -120,6 +182,20 @@ function IntroSlide() {
   );
 }
 
+// Tên sản phẩm: phần trong ngoặc xuống dòng riêng, vd "Áo Khoác Nam" / "(Form Basic Có Mũ)"
+function ProductTitle({ name }) {
+  const text = String(name || '');
+  const cut = text.indexOf(' (');
+  if (cut <= 0) return text;
+  return (
+    <>
+      {text.slice(0, cut)}
+      <br />
+      {text.slice(cut + 1)}
+    </>
+  );
+}
+
 function ProductSlide({ p, active }) {
   const theme = THEME[p.kind];
   const tab = active ? 0 : -1;
@@ -130,14 +206,17 @@ function ProductSlide({ p, active }) {
           {theme.tag}
         </Box>
         {p.kind === 'promo' && (
-          <Box component="span" sx={{ bgcolor: '#FFFFFF', color: C.accent, fontSize: 12, fontWeight: 600, letterSpacing: '0.08em', px: 1, py: '4px' }}>
+          <Box
+            component="span"
+            sx={{ bgcolor: '#FFFFFF', color: C.accent, fontSize: 12, fontWeight: 600, letterSpacing: '0.08em', px: 1, py: '4px' }}
+          >
             {p.discountLabel}
           </Box>
         )}
       </Box>
 
       <Box component="h2" sx={titleSx}>
-        {p.productName}
+        <ProductTitle name={p.productName} />
       </Box>
 
       {p.kind === 'promo' ? (
@@ -173,38 +252,212 @@ function ProductSlide({ p, active }) {
   );
 }
 
-const arrowSx = (dark) => ({
+/* ---------- Slide voucher / khuyến mãi (chuyển từ khối ưu đãi cũ ở ShopPage) ---------- */
+
+const rise = keyframes`from { transform: translateY(105%); } to { transform: none; }`;
+const fadeUp = keyframes`from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; }`;
+const drift = keyframes`50% { transform: translate(-1.5%, 1%) rotate(-1deg); }`;
+
+const fade = (delay) => ({ opacity: 0, animation: `${fadeUp} .6s ${delay}s forwards` });
+
+const LETTERS = [
+  ['S', -30, 400, -12],
+  ['A', 300, 520, 8],
+  ['L', 640, 600, -16],
+  ['E', 900, 450, 14]
+];
+
+const discountText = (p) => {
+  const v = Number(p.discountValue) || 0;
+  if (['PERCENT', 'PERCENTAGE'].includes(p.discountType)) return `${v}%`;
+  return v >= 1000 ? `${Math.round(v / 1000)}K` : money(v);
+};
+
+// Voucher đang chạy mới nhất; không có voucher thì lấy chương trình khuyến mãi sản phẩm đầu tiên
+export const latestVoucher = (promos, vouchers) => {
+  const now = new Date();
+  const active = vouchers.filter((v) => (!v.status || v.status === 'ACTIVE') && new Date(v.startDate) <= now && now <= new Date(v.endDate));
+  if (active.length > 0) {
+    const v = active.reduce((a, b) => (b.promotionId > a.promotionId ? b : a));
+    const note = [
+      Number(v.minOrderValue) > 0 && `Đơn từ ${money(v.minOrderValue)}`,
+      v.applyScope === 'ALL' ? 'Toàn shop' : 'Một số sản phẩm',
+      `Đến ${new Date(v.endDate).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}`
+    ];
+    return { ...v, note: note.filter(Boolean).join(' · ') };
+  }
+  const p = promos[0];
+  if (!p) return null;
+  const count = promos.filter((x) => x.promotionName === p.promotionName).length;
+  return { ...p, name: p.promotionName, note: count > 1 ? `Áp dụng cho ${count} sản phẩm` : p.productName };
+};
+
+function RiseLine({ children, size, spacing, delay }) {
+  return (
+    <Box
+      component="span"
+      sx={{ display: 'block', overflow: 'hidden', pt: '.16em', fontSize: size, letterSpacing: `${spacing} !important` }}
+    >
+      <Box
+        component="span"
+        sx={{
+          display: 'inline-block',
+          transform: 'translateY(105%)',
+          animation: `${rise} .8s cubic-bezier(.2,.8,.2,1) ${delay}s forwards`
+        }}
+      >
+        {children}
+      </Box>
+    </Box>
+  );
+}
+
+// Slide voucher: nền hồng, chữ SALE chạy nền, "GIẢM ĐẾN ..." và nút sang kho voucher
+function VoucherSlide({ voucher, active }) {
+  return (
+    <Box
+      aria-hidden={!active}
+      sx={{
+        position: 'absolute',
+        inset: 0,
+        bgcolor: '#E98AAB',
+        color: '#FFFFFF',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        textAlign: 'center',
+        px: 3,
+        overflow: 'hidden',
+        opacity: active ? 1 : 0,
+        visibility: active ? 'visible' : 'hidden',
+        transition: 'opacity .6s ease, visibility .6s',
+        '@media (prefers-reduced-motion: reduce)': { transition: 'none' }
+      }}
+    >
+      <Box
+        component="svg"
+        viewBox="0 0 1200 560"
+        preserveAspectRatio="xMidYMid slice"
+        aria-hidden="true"
+        sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', animation: `${drift} 14s ease-in-out infinite` }}
+      >
+        {LETTERS.map(([ch, x, y, deg]) => (
+          <text
+            key={ch}
+            x={x}
+            y={y}
+            transform={`rotate(${deg} ${x} ${y})`}
+            fontSize="460"
+            fontWeight="800"
+            fill="none"
+            stroke="#C9475F"
+            strokeWidth="3"
+          >
+            {ch}
+          </text>
+        ))}
+      </Box>
+      {/* key đổi theo active: mỗi lần slide hiện lại thì hiệu ứng chữ chạy lại từ đầu */}
+      <Box key={active ? 'on' : 'off'} sx={{ position: 'relative' }}>
+        <Box component="p" sx={{ ...eyebrowSx, fontSize: { xs: 18, md: 24 }, fontWeight: 800, letterSpacing: '.12em', ...fade(0.2) }}>
+          {voucher.name}
+        </Box>
+        <Box sx={{ width: 32, height: 3, bgcolor: '#FFFFFF', mx: 'auto', my: 2.5, ...fade(0.3) }} />
+        <Box component="h2" sx={{ m: 0, fontWeight: '800 !important', lineHeight: 0.86 }}>
+          <RiseLine size={{ xs: 22, md: 30 }} spacing=".08em" delay={0.4}>
+            GIẢM ĐẾN
+          </RiseLine>
+          <RiseLine size={{ xs: 110, md: 180 }} spacing="-3px" delay={0.5}>
+            {discountText(voucher)}
+          </RiseLine>
+        </Box>
+        <Box sx={{ mt: 2.25, fontSize: 14, fontWeight: 700, letterSpacing: '.14em', textTransform: 'uppercase', ...fade(0.8) }}>
+          {voucher.note}
+        </Box>
+        <Box sx={{ mt: 3.5, ...fade(1) }}>
+          <Box
+            component={RouterLink}
+            to="/promotions"
+            tabIndex={active ? 0 : -1}
+            sx={{ ...btnSx('light'), color: C.ink, '&:hover': { bgcolor: '#FFF3B0', borderColor: '#FFF3B0', color: C.ink } }}
+          >
+            KHÁM PHÁ KHO VOUCHER
+          </Box>
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
+// Nút mũi tên trong suốt kiểu Coolmate: viền trắng, mũi tên trắng, nền tối mờ để vẫn thấy trên ảnh sáng
+const arrowSx = () => ({
   ...iconBtnSx,
-  border: `1px solid ${C.ink}`,
-  bgcolor: dark ? C.ink : '#FFFFFF',
-  color: dark ? '#FFFFFF' : C.ink,
-  '&:hover': { opacity: 0.85 }
+  border: '1px solid rgba(255,255,255,.9)',
+  bgcolor: 'rgba(0,0,0,.18)',
+  color: '#FFFFFF',
+  backdropFilter: 'blur(2px)',
+  '&:hover': { bgcolor: 'rgba(0,0,0,.35)', color: '#FFFFFF' }
 });
 
-export default function ShopBanner() {
-  const [slides, setSlides] = useState([]);
+// Lưu tạm slide đã tải để lần sau quay lại trang chủ hiện ngay, không phải chờ tải lại
+let cachedSlides = null;
+
+// Khung chờ trong lúc đang tải (cùng kích thước banner, không nháy sang banner giới thiệu)
+function LoadingSlide() {
+  return (
+    <Box
+      aria-hidden
+      sx={{
+        position: 'absolute',
+        inset: 0,
+        bgcolor: C.sand,
+        '@keyframes bannerPulse': { '0%, 100%': { opacity: 1 }, '50%': { opacity: 0.6 } },
+        animation: 'bannerPulse 1.4s ease-in-out infinite',
+        '@media (prefers-reduced-motion: reduce)': { animation: 'none' }
+      }}
+    />
+  );
+}
+
+export default function ShopBanner({ voucher = null }) {
+  const fillHeight = useFillHeight();
+  const [slides, setSlides] = useState(cachedSlides || []);
+  const [loaded, setLoaded] = useState(Boolean(cachedSlides));
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
 
   useEffect(() => {
     let alive = true;
     Promise.all([
-      api(`/shop/products?page=0&size=${PER_KIND}&sort=newest`).then((d) => d.items || []).catch(() => []),
-      api(`/shop/promotions?size=${PER_KIND}`).then((d) => d.items || []).catch(() => [])
+      api(`/shop/products?page=0&size=${TOTAL + PER_KIND}&sort=newest`)
+        .then((d) => d.items || [])
+        .catch(() => []),
+      api(`/shop/promotions?size=${PER_KIND}`)
+        .then((d) => d.items || [])
+        .catch(() => [])
     ]).then(([news, promos]) => {
       if (!alive) return;
       const promoIds = new Set(promos.map((p) => p.productId));
       const newSlides = news.filter((p) => !promoIds.has(p.productId)).map((p) => ({ ...p, kind: 'new' }));
       const promoSlides = promos.map((p) => ({ ...p, kind: 'promo' }));
-      setSlides(interleave(newSlides, promoSlides));
-      setIndex(0);
+      // Xen kẽ hàng mới / khuyến mãi; khuyến mãi ít thì phần còn lại là hàng mới (đủ TOTAL slide)
+      const next = interleave(newSlides.slice(0, Math.max(TOTAL - promoSlides.length, Math.ceil(TOTAL / 2))), promoSlides);
+      cachedSlides = next;
+      setSlides(next);
+      setLoaded(true);
     });
     return () => {
       alive = false;
     };
   }, []);
 
-  const count = slides.length;
+  // Có voucher thì đứng đầu, sau đó là các slide sản phẩm
+  const allSlides = (voucher ? [{ kind: 'voucher', productId: 'voucher', productName: voucher.name }, ...slides] : slides).slice(0, TOTAL);
+  const count = allSlides.length;
+  // Voucher tải xong sau thì số slide thay đổi; giữ vị trí hiện tại trong phạm vi
+  const current = count ? index % count : 0;
+  // Slide nền sáng (hàng mới, nền be) thì chấm chuyển màu tối cho dễ thấy
+  const onLight = allSlides[current]?.kind === 'new';
 
   useEffect(() => {
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -213,7 +466,7 @@ export default function ShopBanner() {
     return () => clearInterval(timer);
   }, [count, paused, index]); // phụ thuộc index: bấm mũi tên/chấm thì đếm lại 5 giây
 
-  const go = (delta) => setIndex((i) => (i + delta + count) % count);
+  const go = (delta) => setIndex((i) => ((i % count) + delta + count) % count);
 
   return (
     <Box
@@ -226,22 +479,49 @@ export default function ShopBanner() {
       onBlur={(e) => {
         if (!e.currentTarget.contains(e.relatedTarget)) setPaused(false);
       }}
-      sx={{ ...container, pt: 4 }}
+      sx={{ position: 'relative' }}
     >
-      <Box sx={{ position: 'relative', height: HEIGHT, overflow: 'hidden' }}>
-        {count === 0 ? <IntroSlide /> : slides.map((p, i) => <ProductSlide key={`${p.kind}-${p.productId}`} p={p} active={i === index} />)}
+      <Box sx={{ position: 'relative', height: fillHeight ? { xs: HEIGHT.xs, md: fillHeight } : HEIGHT, overflow: 'hidden' }}>
+        {/* Đang tải: khung chờ; tải xong mà chưa có sản phẩm: banner giới thiệu; có sản phẩm: chạy slide */}
+        {!loaded && !voucher ? (
+          <LoadingSlide />
+        ) : count === 0 ? (
+          <IntroSlide />
+        ) : (
+          allSlides.map((p, i) =>
+            p.kind === 'voucher' ? (
+              <VoucherSlide key="voucher" voucher={voucher} active={i === current} />
+            ) : (
+              <ProductSlide key={`${p.kind}-${p.productId}`} p={p} active={i === current} />
+            )
+          )
+        )}
       </Box>
 
       {count > 1 && (
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, mt: 2 }}>
+        // Thanh chấm + mũi tên nằm đè lên đáy banner, canh theo khung nội dung
+        <Box
+          sx={{
+            ...container,
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            bottom: { xs: 20, md: 32 },
+            zIndex: 2,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 2
+          }}
+        >
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            {slides.map((p, i) => (
+            {allSlides.map((p, i) => (
               <Box
                 key={`${p.kind}-${p.productId}`}
                 component="button"
                 type="button"
                 aria-label={`Slide ${i + 1}: ${p.productName}`}
-                aria-current={i === index}
+                aria-current={i === current}
                 onClick={() => setIndex(i)}
                 sx={{
                   width: 32,
@@ -258,14 +538,14 @@ export default function ShopBanner() {
                     display: 'block',
                     width: '100%',
                     height: 2,
-                    bgcolor: i === index ? C.ink : '#CFCAC2',
+                    bgcolor: onLight ? (i === current ? C.primary : 'rgba(17,17,17,.25)') : i === current ? '#FFFFFF' : 'rgba(255,255,255,.5)',
                     transition: 'background-color .25s'
                   }
                 }}
               />
             ))}
-            <Box component="span" sx={{ ml: 1, fontSize: 13, color: C.muted, fontVariantNumeric: 'tabular-nums' }}>
-              {String(index + 1).padStart(2, '0')} / {String(count).padStart(2, '0')}
+            <Box component="span" sx={{ ml: 1, fontSize: 13, whiteSpace: 'nowrap', color: onLight ? C.muted : '#FFFFFF', fontVariantNumeric: 'tabular-nums' }}>
+              {String(current + 1).padStart(2, '0')} / {String(count).padStart(2, '0')}
             </Box>
           </Box>
           <Box sx={{ display: 'flex', gap: 1 }}>

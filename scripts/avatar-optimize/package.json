@@ -1,0 +1,17 @@
+{
+  "name": "thors-avatar-optimize",
+  "private": true,
+  "description": "Tối ưu file người mẫu 3D (.glb) xuất từ Blender/MPFB cho trang web THORS",
+  "type": "module",
+  "scripts": {
+    "female": "node optimize.mjs D:/THORS-3D/avatar-female-v1.glb ../../frontend/public/models/avatar-female.glb",
+    "male": "node optimize.mjs D:/THORS-3D/avatar-male.glb ../../frontend/public/models/avatar-male.glb",
+    "garment": "node garment.mjs"
+  },
+  "dependencies": {
+    "@gltf-transform/core": "4.2.1",
+    "@gltf-transform/extensions": "4.2.1",
+    "@gltf-transform/functions": "4.2.1",
+    "meshoptimizer": "0.25.0"
+  }
+}

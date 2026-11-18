@@ -75,6 +75,9 @@ public class OrderViews {
             LocalDateTime pickedUpAt,
             LocalDateTime deliveredAt) {}
 
+    /** Tài khoản ngân hàng (bankBin = mã BIN NAPAS, dùng tạo mã VietQR). */
+    public record BankAccount(String bankBin, String bankName, String accountNumber, String accountName) {}
+
     /** Thông tin khách đặt đơn; chỉ trả cho Owner, Family Member và Staff. */
     public record Customer(int userId, String fullName, String email, String phone) {}
 
@@ -103,5 +106,9 @@ public class OrderViews {
             String cancelReason,
             Shipment shipment,
             Customer customer,
-            List<Line> lines) {}
+            List<Line> lines,
+            // Tài khoản nhận tiền hoàn (đơn đã thanh toán online bị hủy / từ chối); null = chưa có
+            BankAccount refundAccount,
+            // Tài khoản khách đã dùng để chuyển khoản (PayOS gửi kèm); dùng điền sẵn khi hoàn tiền
+            BankAccount payerAccount) {}
 }

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Box, Typography, TextField, Button, Divider, IconButton, Autocomplete } from '@mui/material';
 import { StarFilled, StarOutlined, EnvironmentOutlined, RightOutlined } from '@ant-design/icons';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
-import { SANS } from 'features/shop/storeTheme';
+import { C as STORE, SANS } from 'features/shop/storeTheme';
 import { fetchProvinces, fetchWards } from '../cart/vnAddress';
 import { C, cardSx, outlineButtonSx, primaryButtonSx } from './theme';
 import AddressMap, { fullAddress } from './AddressMap';
@@ -14,10 +14,8 @@ const inputSx = (hasError) => ({
     borderRadius: '14px',
     minHeight: 46,
     bgcolor: '#FAFDFD',
-    '& fieldset': { borderWidth: '1.5px' },
-    '&.Mui-focused fieldset': { borderWidth: '1.5px' },
-    '& fieldset': { borderColor: hasError ? C.error : C.border },
-    '&:hover fieldset, &.Mui-focused fieldset': { borderColor: hasError ? C.error : C.cyan }
+    '&.Mui-focused': { boxShadow: 'none' },
+    '& fieldset, &:hover fieldset, &.Mui-focused fieldset': { borderWidth: '1.5px', borderColor: hasError ? C.error : C.border }
   }
 });
 
@@ -130,20 +128,20 @@ export default function AddressForm({ title, subtitle, submitLabel, initial, loc
           component={RouterLink}
           to="/addresses"
           sx={{
-            display: "inline-flex",
-            alignItems: "center",
+            display: 'inline-flex',
+            alignItems: 'center',
             gap: 1,
-            color: "#1E293B",
-            textDecoration: "none",
+            color: '#1E293B',
+            textDecoration: 'none',
             fontSize: 15,
             fontWeight: 600
           }}
         >
-          <EnvironmentOutlined style={{ fontSize: 16, color: "#475569" }} />
+          <EnvironmentOutlined style={{ fontSize: 16, color: '#475569' }} />
           <span>Địa chỉ giao hàng</span>
         </Box>
         <RightOutlined style={{ fontSize: 11, color: '#64748B', margin: '0 2px' }} />
-        <Typography component="span" sx={{ color: '#D7428B', fontWeight: 700, fontSize: 15 }}>
+        <Typography component="span" sx={{ color: STORE.accent, fontWeight: 700, fontSize: 15 }}>
           {title}
         </Typography>
       </Box>
@@ -262,8 +260,8 @@ export default function AddressForm({ title, subtitle, submitLabel, initial, loc
             display: 'flex',
             alignItems: 'center',
             gap: 1.5,
-            border: form.isDefault ? '1.5px solid #F2E3B0' : `1.5px solid ${C.border}`,
-            bgcolor: form.isDefault ? '#FFF6DA' : '#FAFDFD'
+            border: form.isDefault ? '1.5px solid #FDE047' : `1.5px solid ${C.border}`,
+            bgcolor: form.isDefault ? '#FEF9C3' : '#FAFDFD'
           }}
         >
           <IconButton size="small" disabled={lockDefault} onClick={() => change('isDefault', !form.isDefault)}>
@@ -273,14 +271,7 @@ export default function AddressForm({ title, subtitle, submitLabel, initial, loc
               <StarOutlined style={{ fontSize: 24, color: '#94A3B8' }} />
             )}
           </IconButton>
-          <Box>
-            <Typography sx={{ fontWeight: 700, fontSize: 13.5 }}>Đặt làm địa chỉ mặc định</Typography>
-            <Typography sx={{ fontSize: 12.5, color: form.isDefault ? '#713F12' : C.muted, mt: 0.25 }}>
-              {lockDefault
-                ? 'Đây là địa chỉ mặc định hiện tại, được ưu tiên khi thanh toán.'
-                : 'Bấm vào ngôi sao để ưu tiên địa chỉ này khi thanh toán.'}
-            </Typography>
-          </Box>
+          <Typography sx={{ fontWeight: 700, fontSize: 13.5, color: form.isDefault ? '#854D0E' : 'inherit' }}>Đặt làm địa chỉ mặc định</Typography>
         </Box>
 
         <Box

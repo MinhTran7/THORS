@@ -18,6 +18,7 @@ import UpdateProfilePage from 'features/account/pages/UpdateProfilePage';
 import ChangePasswordPage from 'features/account/pages/ChangePasswordPage';
 import FamilyListPage from 'features/account/pages/FamilyListPage';
 import FamilyFormPage from 'features/account/pages/FamilyFormPage';
+import WebsiteSettingsPage from 'features/website/WebsiteSettingsPage';
 import FamilyDetailPage from 'features/account/pages/FamilyDetailPage';
 import AccountsPage from 'features/account/pages/AccountListPage';
 import SystemLogPage from 'features/account/pages/SystemLogPage';
@@ -58,11 +59,13 @@ import FacebookPOSPage from 'features/facebook/FacebookPOSPage';
 import CustomerAddressPage from 'features/customer/CustomerAddressPage';
 import AddAddressPage from 'features/customer/AddAddressPage';
 import EditAddressPage from 'features/customer/EditAddressPage';
+// Số đo cơ thể (gợi ý size / thử đồ ảo)
+import BodyProfilePage from 'features/fitting/BodyProfilePage';
+import OutfitPage from 'features/outfit/OutfitPage';
 
 // Shop management
 import ShopPage from 'features/shop/ShopPage';
 import ShopProductPage from 'features/shop/ShopProductPage';
-import PromotionProductsPage from 'features/promotion/PromotionProductsPage';
 import ShopCollectionPage from 'features/shop/ShopCollectionPage';
 
 // Cart (Giỏ hàng)
@@ -94,11 +97,12 @@ export default createBrowserRouter([
     children: [
       { path: '/', element: <ShopPage /> },
       { path: '/shop/products/:productId', element: <ShopProductPage /> },
-      { path: '/promotions/:promotionId/products', element: <PromotionProductsPage /> },
       { path: '/shop/category/:categoryId', element: <ShopCollectionPage /> },
       { path: '/shop/best-sellers', element: <ShopCollectionPage key="best" collection="best_selling" /> },
       { path: '/shop/new-arrivals', element: <ShopCollectionPage key="new" collection="newest" /> },
       { path: '/shop/sale', element: <ShopCollectionPage key="sale" collection="sale" /> },
+      // Phối đồ theo dịp / ngân sách (module outfit)
+      { path: '/outfit', element: <OutfitPage /> },
       { path: '/tracking/:orderNumber', element: <OrderTrackingPage /> },
       {
         element: <RequireAuth />,
@@ -123,9 +127,12 @@ export default createBrowserRouter([
             element: <RequireAuth roles={['CUSTOMER', 'OWNER', 'FAMILY_MEMBER']} />,
             children: [
               { path: '/orders', element: <OrderListPage /> },
-              { path: '/orders/:id', element: <OrderDetailPage /> },
-              { path: '/promotions', element: <PromotionPage /> }
+              { path: '/orders/:id', element: <OrderDetailPage /> }
             ]
+          },
+          {
+            element: <RequireAuth roles={['CUSTOMER', 'OWNER']} />,
+            children: [{ path: '/promotions', element: <PromotionPage /> }]
           },
           {
             // Quản lý địa chỉ giao hàng của Customer
@@ -133,7 +140,8 @@ export default createBrowserRouter([
             children: [
               { path: '/addresses', element: <CustomerAddressPage /> },
               { path: '/addresses/new', element: <AddAddressPage /> },
-              { path: '/addresses/:id/edit', element: <EditAddressPage /> }
+              { path: '/addresses/:id/edit', element: <EditAddressPage /> },
+              { path: '/body-profile', element: <BodyProfilePage /> }
             ]
           },
           {
@@ -177,10 +185,16 @@ export default createBrowserRouter([
               { path: '/products/:productId', element: <ProductDetailPage /> },
               { path: '/products/:productId/edit', element: <EditProductPage /> },
               { path: '/returns', element: <ReturnsPage /> },
+              // Kênh bán hàng > Website: thông tin chung của website (footer, thanh thông báo)
+              { path: '/website', element: <WebsiteSettingsPage /> },
               // Promotion (của phuoc)
               { path: '/promotions/add', element: <AddPromotionPage /> },
               { path: '/promotions/:promotionId', element: <PromotionDetailPage /> },
-              { path: '/promotions/:promotionId/edit', element: <EditPromotionPage /> }
+              { path: '/promotions/:promotionId/edit', element: <EditPromotionPage /> },
+              { path: '/order-discounts', element: <PromotionPage kind="ORDER" /> },
+              { path: '/order-discounts/add', element: <AddPromotionPage kind="ORDER" /> },
+              { path: '/order-discounts/:promotionId', element: <PromotionDetailPage kind="ORDER" /> },
+              { path: '/order-discounts/:promotionId/edit', element: <EditPromotionPage kind="ORDER" /> }
             ]
           }
         ]
@@ -197,4 +211,4 @@ export default createBrowserRouter([
       </ShopAuthShell>
     )
   }
-]);
+]);

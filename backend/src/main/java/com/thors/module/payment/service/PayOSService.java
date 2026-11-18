@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.thors.common.ApiException;
 import com.thors.config.Settings;
 import com.thors.module.account.entity.Account;
+import com.thors.module.order.service.OrderService;
 import com.thors.module.payment.config.PayOSProperties;
 import com.thors.module.payment.dto.*;
 import com.thors.module.payment.repository.PaymentRepository;
@@ -31,16 +32,19 @@ public class PayOSService {
     private final PaymentRepository paymentRepository;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
+    private final OrderService orderService;
 
     public PayOSService(
             PayOSProperties properties,
             Settings settings,
             PaymentRepository paymentRepository,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            OrderService orderService) {
         this.properties = properties;
         this.settings = settings;
         this.paymentRepository = paymentRepository;
         this.objectMapper = objectMapper;
+        this.orderService = orderService;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
@@ -86,6 +90,13 @@ public class PayOSService {
 
         if (order.totalAmount() <= 0) {
             throw new ApiException(400, "INVALID_AMOUNT", "Số tiền thanh toán phải lớn hơn 0.");
+        }
+
+        // Đơn chuyển khoản chỉ được giữ 10 phút: quá hạn thì không tạo mã nữa (đơn sẽ bị hủy, hàng trả về kho)
+        Long secondsLeft = paymentRepository.secondsUntilPaymentDeadline(order.orderId()).orElse(null);
+        if (secondsLeft != null && secondsLeft <= 0) {
+            throw new ApiException(400, "PAYMENT_EXPIRED",
+                    "Đơn hàng đã quá thời gian thanh toán (10 phút) nên không thể thanh toán nữa. Vui lòng đặt lại đơn mới.");
         }
 
         // Tạo orderCode duy nhất (13 chữ số, nhỏ hơn 9007199254740991 của JS number)
@@ -137,6 +148,10 @@ public class PayOSService {
         payosReq.setCancelUrl(cancelUrl);
         payosReq.setReturnUrl(returnUrl);
         payosReq.setSignature(signature);
+        // Mã QR / link hết hạn cùng lúc với hạn giữ đơn
+        if (secondsLeft != null) {
+            payosReq.setExpiredAt(java.time.Instant.now().getEpochSecond() + secondsLeft);
+        }
 
         try {
             String jsonPayload = objectMapper.writeValueAsString(payosReq);
@@ -169,7 +184,7 @@ public class PayOSService {
             // Lưu lịch sử lần thử thanh toán vào bảng payment
             paymentRepository.insertPaymentAttempt(order.orderId(), String.valueOf(orderCode), order.totalAmount(), "PAYOS");
 
-            return new PaymentLinkResponse(
+            PaymentLinkResponse linkResponse = new PaymentLinkResponse(
                     order.orderId(),
                     order.orderNumber(),
                     orderCode,
@@ -181,6 +196,8 @@ public class PayOSService {
                     bin,
                     status
             );
+            linkResponse.setExpiresInSeconds(secondsLeft);
+            return linkResponse;
 
         } catch (ApiException ae) {
             throw ae;
@@ -222,7 +239,10 @@ public class PayOSService {
             if (paymentOpt.isPresent()) {
                 var payment = paymentOpt.get();
                 paymentRepository.markPaymentSuccess(payment.transactionRef());
-                paymentRepository.markOrderPaid(payment.orderId());
+                // PayOS gửi kèm tài khoản người chuyển (counterAccount*) -> lưu để hoàn tiền khi cần
+                paymentRepository.savePayerAccount(payment.transactionRef(), data);
+                // Cập nhật đơn và gửi thông báo (chỉ báo một lần dù webhook gọi lại)
+                orderService.onOnlinePaymentPaid(payment.orderId());
                 log.info("PayOS Webhook: Đã cập nhật thành công đơn hàng orderId={}, code={}", payment.orderId(), transactionRef);
             } else {
                 log.warn("PayOS Webhook: Không tìm thấy giao dịch với transactionRef={}", transactionRef);
@@ -253,7 +273,7 @@ public class PayOSService {
 
         var p = latestPayment.get();
         if ("SUCCESS".equalsIgnoreCase(p.paymentStatus())) {
-            paymentRepository.markOrderPaid(orderId);
+            orderService.onOnlinePaymentPaid(orderId);
             return Map.of("paid", true, "orderId", orderId, "paymentStatus", "PAID");
         }
 
@@ -275,7 +295,19 @@ public class PayOSService {
                         String status = (String) apiResponse.getData().get("status");
                         if ("PAID".equalsIgnoreCase(status)) {
                             paymentRepository.markPaymentSuccess(p.transactionRef());
-                            paymentRepository.markOrderPaid(orderId);
+                            // Giao dịch đầu tiên có tài khoản người chuyển (counterAccount*)
+                            Object txs = apiResponse.getData().get("transactions");
+                            if (txs instanceof List<?> list) {
+                                for (Object tx : list) {
+                                    if (tx instanceof Map<?, ?> m && m.get("counterAccountNumber") != null) {
+                                        @SuppressWarnings("unchecked")
+                                        Map<String, Object> txMap = (Map<String, Object>) m;
+                                        paymentRepository.savePayerAccount(p.transactionRef(), txMap);
+                                        break;
+                                    }
+                                }
+                            }
+                            orderService.onOnlinePaymentPaid(orderId);
                             log.info("PayOS CheckStatus: Đã đồng bộ thành công trạng thái PAID cho orderId={}", orderId);
                             return Map.of("paid", true, "orderId", orderId, "paymentStatus", "PAID");
                         }

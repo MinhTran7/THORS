@@ -69,6 +69,11 @@ export default function LoginPage() {
     // Đăng nhập thành công: lưu tài khoản vào AuthProvider để cả app biết ai đang đăng nhập
     setAccount(result.account);
     sessionStorage.removeItem('thorsReturnTo');
+    // Tài khoản do Admin / Owner tạo: phải đổi mật khẩu trước khi vào hệ thống
+    if (result.passwordChangeRequired) {
+      navigate('/profile/password', { replace: true });
+      return;
+    }
     // Chuyển trang (validation.js): khách hàng về trang đang xem dở, vai trò khác vào /workspace.
     // replace: true → bấm Back không quay lại trang đăng nhập
     navigate(landingAfterLogin(result.account, returnTo), { replace: true });

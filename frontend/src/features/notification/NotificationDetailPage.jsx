@@ -17,6 +17,7 @@ const BACK = { to: '/notifications', label: 'Tất cả thông báo', icon: <Bel
 const RELATED_LABEL = {
   ORDER: 'Xem đơn hàng',
   USER: 'Mở trang tài khoản',
+  PROMOTION: 'Xem khuyến mãi',
   stock_receipt: 'Xem phiếu kho',
   location_move_request: 'Xem yêu cầu xếp kệ'
 };
