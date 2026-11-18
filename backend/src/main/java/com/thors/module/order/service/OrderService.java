@@ -29,6 +29,9 @@ public class OrderService {
     /** Các vai trò xử lý đơn online của cửa hàng. */
     private static final Set<String> STORE_ROLES = Set.of("OWNER", "FAMILY_MEMBER");
 
+    /** Vai trò nhận thông báo hoàn tiền (chỉ chủ shop; cùng tên với Account.role()). */
+    private static final String OWNER_ROLE = "OWNER";
+
     /** Luồng xử lý của cửa hàng (Owner và Family Member): trạng thái hiện tại -> các trạng thái được chuyển tới. */
     private static final Map<String, List<String>> OWNER_FLOW =
             Map.of(

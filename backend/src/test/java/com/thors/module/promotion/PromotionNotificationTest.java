@@ -36,16 +36,16 @@ class PromotionNotificationTest {
                         "ACTIVE", LocalDateTime.now(), LocalDateTime.now(), null, 1L, null));
         service = new PromotionService(repository, sessions, notifications);
 
-        when(repository.create(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyInt()))
+        when(repository.create(any(), any(), any(), any(), any(), any(), any(), any(), any(), anyInt()))
                 .thenReturn(7);
         when(repository.findById(7))
                 .thenReturn(Optional.of(new Promotion(7, "Sale", null, BigDecimal.TEN, LocalDateTime.now(),
-                        LocalDateTime.now().plusDays(1), "ACTIVE", 1, "PERCENT", BigDecimal.ZERO, null, null,
-                        "ALL", List.of())));
+                        LocalDateTime.now().plusDays(1), "ACTIVE", 1, "PERCENT", BigDecimal.ZERO, null,
+                        "ALL", List.of(), 0)));
     }
 
     private CreatePromotionRequest request(String type, String value, LocalDateTime start) {
-        return new CreatePromotionRequest("Sale 11/11", null, type, new BigDecimal(value), BigDecimal.ZERO, null,
+        return new CreatePromotionRequest("Sale 11/11", null, type, new BigDecimal(value), BigDecimal.ZERO,
                 start, start.plusDays(3), null, "ALL", null);
     }
 
