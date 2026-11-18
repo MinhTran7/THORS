@@ -123,7 +123,7 @@ public class WarehouseDefects {
               u.defect_source AS source,u.defect_photos AS photo_keys,u.defect_status AS status,u.defect_at AS reported_at,
               u.defect_resolved_at AS resolved_at,u.defect_resolve_note AS resolve_note,ru.full_name AS reporter_name,
               vu.full_name AS resolver_name,u.serial_code,u.status AS unit_status,d.color,d.size,p.product_name,p.product_id,
-              r.rack_code,t.level_number
+              TIER_LABEL AS tier_label
             FROM product_unit u
             JOIN product_detail d ON d.detail_id=u.detail_id JOIN product p ON p.product_id=d.product_id
             LEFT JOIN product_location l ON l.product_location_id=u.product_location_id
@@ -136,7 +136,7 @@ public class WarehouseDefects {
         var out = new ArrayList<Map<String, Object>>();
         for (var row : rows) {
             var m = copy(row);
-            m.put("location", row.get("rack_code") == null ? null : "" + row.get("rack_code") + row.get("level_number"));
+            m.put("location", row.get("tier_label"));
             m.put("photo_keys", row.get("photo_keys") == null ? List.of() : List.of(((String) row.get("photo_keys")).split(",")));
             m.put("types", List.of(((String) row.get("defect_types")).split(", ")));
             storeTime(m, offset, "reported_at", "resolved_at");
@@ -146,7 +146,7 @@ public class WarehouseDefects {
     }
 
     private Map<String, Object> one(int unitId) {
-        return shaped(s.jdbc().queryForList(ROW + " WHERE u.unit_id=?", unitId)).get(0);
+        return shaped(s.jdbc().queryForList(s.withTierLabel(ROW) + " WHERE u.unit_id=?", unitId)).get(0);
     }
 
     /** Danh sách chiếc lỗi theo trạng thái lỗi (mặc định đang lỗi), tìm theo mã serial / tên sản phẩm. */
@@ -168,7 +168,7 @@ public class WarehouseDefects {
             args.add(like.toUpperCase(Locale.ROOT));
             args.add(like);
         }
-        var rows = s.jdbc().queryForList(ROW + where + " ORDER BY u.defect_at DESC,u.unit_id DESC LIMIT 500", args.toArray());
+        var rows = s.jdbc().queryForList(s.withTierLabel(ROW) + where + " ORDER BY u.defect_at DESC,u.unit_id DESC LIMIT 500", args.toArray());
         var counts = new LinkedHashMap<String, Long>();
         for (var row : s.jdbc().queryForList(
                 "SELECT defect_status,COUNT(*) AS n FROM product_unit WHERE defect_status IS NOT NULL GROUP BY defect_status"))

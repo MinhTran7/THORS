@@ -769,16 +769,16 @@ public class WarehouseDocuments {
             var rows =
                     s.jdbc()
                             .queryForList(
-                                    """
-                SELECT l.quantity,l.detail_id,r.rack_code,t.level_number FROM product_location l
+                                    s.withTierLabel("""
+                SELECT l.quantity,l.detail_id,TIER_LABEL AS tier_label FROM product_location l
                 JOIN shelf_level t ON t.shelf_level_id=l.shelf_level_id JOIN rack r ON r.rack_id=t.rack_id
                 WHERE l.product_location_id=? FOR UPDATE
-                """,
+                """),
                                     p.locationId());
             if (rows.isEmpty() || num(rows.get(0), "detail_id") != detail)
                 throw invalid(label + ": vị trí đã chọn không chứa biến thể này.");
             var loc = rows.get(0);
-            String where = "" + loc.get("rack_code") + loc.get("level_number");
+            String where = (String) loc.get("tier_label");
             int changed =
                     s.jdbc()
                             .update(
@@ -838,9 +838,9 @@ public class WarehouseDocuments {
         var movements =
                 s.jdbc()
                         .queryForList(
-                                """
+                                s.withTierLabel("""
                 SELECT m.adjustment_id,m.movement_type,m.quantity_change,m.adjusted_at,m.source_location_id,
-                  u.full_name AS actor_name,p.product_name,d.color,d.size,r.rack_code,t.level_number
+                  u.full_name AS actor_name,p.product_name,d.color,d.size,r.rack_code,t.level_number,TIER_LABEL AS tier_label
                 FROM stock_adjustment m JOIN stock_receipt_item i ON i.receipt_item_id=m.receipt_item_id
                 JOIN product_detail d ON d.detail_id=m.detail_id JOIN product p ON p.product_id=d.product_id
                 JOIN `user` u ON u.user_id=m.adjusted_by
@@ -848,7 +848,7 @@ public class WarehouseDocuments {
                 LEFT JOIN shelf_level t ON t.shelf_level_id=l.shelf_level_id
                 LEFT JOIN rack r ON r.rack_id=t.rack_id
                 WHERE i.receipt_id=? ORDER BY m.adjustment_id
-                """,
+                """),
                                 id);
         return Map.of("actions", actions, "movements", movements);
     }

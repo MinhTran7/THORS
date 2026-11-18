@@ -96,15 +96,15 @@ public class WarehouseBarcodes {
             throw new ApiException(404, "BARCODE_NOT_FOUND", "Không tìm thấy hàng hóa có mã vạch này.");
         }
         var variant = rows.get(0);
-        var locations = s.jdbc().queryForList("""
+        var locations = s.jdbc().queryForList(s.withTierLabel("""
                 SELECT l.product_location_id,l.shelf_level_id,l.quantity,l.description,
-                  r.rack_code,t.level_number
+                  r.rack_code,t.level_number,TIER_LABEL AS tier_label
                 FROM product_location l
                 JOIN shelf_level t ON t.shelf_level_id=l.shelf_level_id
                 JOIN rack r ON r.rack_id=t.rack_id
                 WHERE l.detail_id=? AND l.quantity>0
                 ORDER BY r.rack_code,t.level_number
-                """, variant.get("detail_id"));
+                """), variant.get("detail_id"));
         if (unit == null) return Map.of("variant", variant, "locations", locations);
         return Map.of("variant", variant, "locations", locations, "unit", unit);
     }

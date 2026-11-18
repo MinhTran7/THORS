@@ -7,7 +7,7 @@ import MainCard from 'components/MainCard';
 import { api } from 'services/http';
 import { useWarehouse } from './WarehouseContext';
 import { ActionDialog, DataTable, Metrics, Title } from './components';
-import { money, number, stockStateColor, stockStateLabel, variantLabel } from './model';
+import { money, number, stockStateColor, stockStateLabel, tierName, variantLabel } from './model';
 import { exportSheet } from './excelWorkbook';
 import SerialPrintDialog from './SerialPrintDialog';
 import BarcodeScannerDialog from './BarcodeScannerDialog';
@@ -142,7 +142,7 @@ export default function InventoryPage() {
   const shelves = snapshot.tiers
     .map((t) => ({
       id: t.shelf_level_id,
-      label: `${snapshot.racks.find((r) => r.rack_id === t.rack_id)?.rack_code || '?'}${t.level_number}`
+      label: tierName(snapshot.racks.find((r) => r.rack_id === t.rack_id), t)
     }))
     .sort((a, b) => a.label.localeCompare(b.label, 'vi'));
 

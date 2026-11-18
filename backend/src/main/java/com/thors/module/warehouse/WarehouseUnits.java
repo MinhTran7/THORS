@@ -34,9 +34,10 @@ public class WarehouseUnits {
 
     /** Cột của một chiếc; có thêm lỗi đang mở (defect_*) khi database đã có bảng hàng lỗi. */
     private String columns() {
-        if (!s.units().defectsReady()) return COLUMNS;
+        String columns = s.withTierLabel(COLUMNS);
+        if (!s.units().defectsReady()) return columns;
         // Lỗi đang mở của chiếc (defect_id = unit_id khi đang lỗi, null khi không)
-        return COLUMNS
+        return columns
                 .replace("o.order_id,o.order_number", "o.order_id,o.order_number,"
                         + "CASE WHEN u.defect_status='OPEN' THEN u.unit_id END AS defect_id,u.defect_status,u.defect_types,"
                         + "u.defect_note AS defect_description,u.defect_source,u.defect_photos AS defect_photo_keys,"
@@ -50,7 +51,7 @@ public class WarehouseUnits {
             SELECT u.unit_id,u.serial_code,u.seq,u.status,u.detail_id,u.product_location_id,u.in_receipt_item_id,
               u.out_order_item_id,u.out_receipt_item_id,u.note,u.printed_at,u.scanned_at,u.created_at,u.in_at,u.out_at,
               d.color,d.size,d.price,d.barcode,d.product_id,p.product_name,
-              r.rack_code,t.level_number,ri.receipt_id AS in_receipt_id,ro.receipt_id AS out_receipt_id,
+              TIER_LABEL AS tier_label,ri.receipt_id AS in_receipt_id,ro.receipt_id AS out_receipt_id,
               o.order_id,o.order_number
             FROM product_unit u
             JOIN product_detail d ON d.detail_id=u.detail_id JOIN product p ON p.product_id=d.product_id
@@ -66,7 +67,7 @@ public class WarehouseUnits {
         var out = new ArrayList<Map<String, Object>>(rows.size());
         for (var row : rows) {
             var m = copy(row);
-            m.put("location", row.get("rack_code") == null ? null : "" + row.get("rack_code") + row.get("level_number"));
+            m.put("location", row.get("tier_label"));
             storeTime(m, offset, "printed_at", "scanned_at", "created_at", "in_at", "out_at", "defect_reported_at");
             out.add(m);
         }
