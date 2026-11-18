@@ -335,10 +335,7 @@ export default function BarcodePrintDialog({ variants, onClose, serial = false, 
                 />
               )}
               <Alert severity="info" icon={false} sx={{ mt: 1, '& .MuiAlert-message': { fontSize: 13 } }}>
-                <b>Có máy in tem:</b> bấm “In ngay”, chọn máy in, tỷ lệ 100%, lề “Không”, tắt đầu/chân trang.
-                <br />
-                <b>Chưa có máy in:</b> bấm “Tải file PDF” rồi gửi tiệm in, in lên giấy decal (A4 decal hoặc tem cuộn đúng khổ) để bóc dán.
-                Dặn tiệm in ở tỷ lệ 100%, không co giãn.
+                In ở tỷ lệ 100%, lề “Không”. Chưa có máy in thì tải file PDF mang ra tiệm in decal.
               </Alert>
             </Box>
             <Box sx={{ flex: 1 }}>

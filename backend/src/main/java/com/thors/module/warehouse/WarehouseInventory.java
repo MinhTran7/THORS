@@ -675,7 +675,8 @@ public class WarehouseInventory {
                 LEFT JOIN order_item oi ON oi.order_item_id=m.order_item_id
                 LEFT JOIN orders o ON o.order_id=oi.order_id
                 LEFT JOIN return_request_item rri ON rri.return_request_item_id=m.return_request_item_id
-                WHERE m.detail_id=? ORDER BY m.adjusted_at DESC,m.adjustment_id DESC
+                WHERE m.detail_id=? AND (m.idempotency_key IS NULL OR m.idempotency_key NOT LIKE 'movereq:%')
+                ORDER BY m.adjusted_at DESC,m.adjustment_id DESC
                 """,
                                 detail);
         int balance = num(variant, "stock_quantity");

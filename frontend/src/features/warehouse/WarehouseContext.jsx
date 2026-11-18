@@ -1,4 +1,5 @@
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import useSWR, { mutate as mutateGlobal } from 'swr';
 import { Alert, Button, CircularProgress, Stack } from '@mui/material';
 import { api } from 'services/http';
@@ -25,6 +26,19 @@ export function WarehouseProvider({ children }) {
       )
     ]);
   };
+  // Provider nằm ở route cha /warehouse nên không remount khi đổi trang con: mỗi lần bấm menu sang trang khác
+  // (hoặc bấm lại đúng trang đang mở) thì tải lại dữ liệu kho. Chỉ đổi ?id=… để mở chi tiết thì không tải lại.
+  const location = useLocation();
+  const reloadRef = useRef(reload);
+  reloadRef.current = reload;
+  const last = useRef(null);
+  useEffect(() => {
+    const prev = last.current;
+    last.current = location;
+    if (!prev || prev.key === location.key) return;
+    const samePage = prev.pathname === location.pathname;
+    if (!samePage || prev.search === location.search) reloadRef.current();
+  }, [location]);
   const run = async (fn, success) => {
     setError('');
     setMessage('');

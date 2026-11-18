@@ -145,7 +145,7 @@ public final class WarehouseRequests {
             @NotNull Boolean active) {}
 
     public record Metadata(
-            @NotBlank @Size(max = 2000) String description,
+            @Size(max = 2000) String description,
             @Size(max = 8) List<@Positive Integer> keepImageIds,
             @Size(max = 8)
             List<@Pattern(regexp = "[a-f0-9]{32}\\.(jpg|png|webp)") String> photoKeys) {}

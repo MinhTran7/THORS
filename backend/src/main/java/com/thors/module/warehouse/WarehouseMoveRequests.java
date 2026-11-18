@@ -14,12 +14,16 @@ import org.springframework.transaction.annotation.Transactional;
  * product_location and stock_adjustment change when the owner confirms (the exact same move the
  * owner would do himself, keyed by the request key so a retried approval moves goods once).
  * The owner's own moves keep going straight through {@link WarehouseLayout#move}.
- * Table: database/migrations/2026-11-10_location_move_request.sql.
+ * No table of its own: a request is a stock_adjustment row of type MOVE (quantity_change 0) with
+ * request_status set — see database/migrations/2026-11-18_move_request_columns.sql. Stock card and
+ * reports skip rows whose request_status is not NULL; the real move gets its own row on approval.
  */
 @Service
 @Transactional(isolation = Isolation.READ_COMMITTED)
 public class WarehouseMoveRequests {
     private static final String PENDING = "PENDING";
+    /** idempotency_key of a request row; the approved move itself keeps 'move:' + request key. */
+    private static final String KEY = "movereq:";
 
     private final WarehouseStore s;
     private final WarehousePolicy policy;
@@ -30,8 +34,8 @@ public class WarehouseMoveRequests {
             WarehouseStore s, WarehousePolicy policy, WarehouseLayout layout, WarehousePhotos photos) {
         this.s = s;
         this.policy = policy;
-        this.photos = photos;
         this.layout = layout;
+        this.photos = photos;
     }
 
     /** Family: record the move for the owner. Owner: apply it at once, as before. */
@@ -43,7 +47,7 @@ public class WarehouseMoveRequests {
 
     private Map<String, Object> record(Account a, Move r) {
         s.lock();
-        var old = s.jdbc().queryForList("SELECT * FROM location_move_request WHERE request_key=?", r.requestKey());
+        var old = s.jdbc().queryForList(SELECT + " WHERE m.idempotency_key=?", KEY + r.requestKey());
         if (!old.isEmpty()) {
             var m = old.get(0);
             if (num(m, "detail_id") != r.detailId()
@@ -56,16 +60,17 @@ public class WarehouseMoveRequests {
         check(r);
         int id =
                 s.insert(
-                        "INSERT INTO location_move_request(detail_id,from_location_id,to_shelf_id,quantity,description,"
-                                + "photo_keys,request_key,requested_by) VALUES(?,?,?,?,?,?,?,?)",
+                        "INSERT INTO stock_adjustment(detail_id,quantity_change,reason,adjusted_by,movement_type,movement_quantity,"
+                                + "source_location_id,idempotency_key,request_status,request_shelf_id,request_note,request_photo_keys)"
+                                + " VALUES(?,0,'Yêu cầu xếp/chuyển kệ',?,'MOVE',?,?,?,'PENDING',?,?,?)",
                         r.detailId(),
-                        r.fromLocationId(),
-                        r.toShelfId(),
+                        a.id(),
                         r.quantity(),
+                        r.fromLocationId(),
+                        KEY + r.requestKey(),
+                        r.toShelfId(),
                         r.description() == null || r.description().isBlank() ? null : r.description().trim(),
-                        r.photoKeys() == null || r.photoKeys().isEmpty() ? null : String.join(",", r.photoKeys()),
-                        r.requestKey(),
-                        a.id());
+                        r.photoKeys() == null || r.photoKeys().isEmpty() ? null : String.join(",", r.photoKeys()));
         var row = view(id);
         notify(
                 null,
@@ -79,7 +84,8 @@ public class WarehouseMoveRequests {
 
     public List<Map<String, Object>> list(Account a, String status) {
         policy.view(a);
-        return s.migrated(() -> s.jdbc().queryForList(SELECT + " WHERE (? IS NULL OR m.status=?) ORDER BY m.request_id DESC LIMIT 200",
+        return s.migrated(() -> s.jdbc().queryForList(SELECT + " WHERE m.request_status IS NOT NULL AND (? IS NULL OR m.request_status=?)"
+                + " ORDER BY m.adjustment_id DESC LIMIT 200",
                 blank(status), blank(status)));
     }
 
@@ -87,7 +93,7 @@ public class WarehouseMoveRequests {
     public Map<String, Object> approve(Account a, int id) {
         policy.owner(a);
         s.lock();
-        var m = s.one("SELECT * FROM location_move_request WHERE request_id=? FOR UPDATE", id);
+        var m = s.one(SELECT + " WHERE m.adjustment_id=? AND m.request_status IS NOT NULL", id);
         if (is(m, "status", "APPROVED")) return view(id);
         if (!is(m, "status", PENDING)) throw invalid("Yêu cầu này đã được xử lý.");
         String keys = (String) m.get("photo_keys");
@@ -103,8 +109,8 @@ public class WarehouseMoveRequests {
                         (String) m.get("request_key")));
         s.jdbc()
                 .update(
-                        "UPDATE location_move_request SET status='APPROVED',decided_by=?,decided_at=CURRENT_TIMESTAMP"
-                                + " WHERE request_id=?",
+                        "UPDATE stock_adjustment SET request_status='APPROVED',decided_by=?,decided_at=CURRENT_TIMESTAMP"
+                                + " WHERE adjustment_id=?",
                         a.id(),
                         id);
         var row = view(id);
@@ -118,7 +124,7 @@ public class WarehouseMoveRequests {
     public Map<String, Object> end(Account a, int id, String action, String reason) {
         policy.view(a);
         s.lock();
-        var m = s.one("SELECT * FROM location_move_request WHERE request_id=? FOR UPDATE", id);
+        var m = s.one(SELECT + " WHERE m.adjustment_id=? AND m.request_status IS NOT NULL", id);
         boolean reject = "reject".equals(action);
         if (reject) policy.owner(a);
         else if (num(m, "requested_by") != a.id()) policy.owner(a);
@@ -126,11 +132,12 @@ public class WarehouseMoveRequests {
         if (reject && (reason == null || reason.isBlank())) throw invalid("Nhập lý do từ chối.");
         s.jdbc()
                 .update(
-                        "UPDATE location_move_request SET status=?,decided_by=?,decided_at=CURRENT_TIMESTAMP,"
-                                + "rejection_reason=? WHERE request_id=?",
+                        // Lý do từ chối ghi vào cột reason có sẵn.
+                        "UPDATE stock_adjustment SET request_status=?,decided_by=?,decided_at=CURRENT_TIMESTAMP,"
+                                + "reason=COALESCE(?,reason) WHERE adjustment_id=?",
                         reject ? "REJECTED" : "CANCELLED",
                         a.id(),
-                        reason == null || reason.isBlank() ? null : reason.trim(),
+                        reject ? truncate(reason.trim()) : null,
                         id);
         var row = view(id);
         if (reject)
@@ -148,8 +155,8 @@ public class WarehouseMoveRequests {
             if (r.toShelfId() == null) throw invalid("Phải chọn vị trí đích.");
             long waiting =
                     s.count(
-                            "SELECT COALESCE(SUM(quantity),0) FROM location_move_request WHERE detail_id=? AND"
-                                    + " from_location_id IS NULL AND status='PENDING'",
+                            "SELECT COALESCE(SUM(movement_quantity),0) FROM stock_adjustment WHERE detail_id=? AND"
+                                    + " source_location_id IS NULL AND request_status='PENDING'",
                             r.detailId());
             if (r.quantity() > num(variant, "stock_quantity") - assigned - waiting)
                 throw invalid(
@@ -159,8 +166,8 @@ public class WarehouseMoveRequests {
             var from = s.one("SELECT * FROM product_location WHERE product_location_id=?", r.fromLocationId());
             long waiting =
                     s.count(
-                            "SELECT COALESCE(SUM(quantity),0) FROM location_move_request WHERE from_location_id=? AND"
-                                    + " status='PENDING'",
+                            "SELECT COALESCE(SUM(movement_quantity),0) FROM stock_adjustment WHERE source_location_id=? AND"
+                                    + " request_status='PENDING'",
                             r.fromLocationId());
             if (num(from, "detail_id") != r.detailId() || num(from, "quantity") - waiting < r.quantity())
                 throw invalid(
@@ -176,35 +183,30 @@ public class WarehouseMoveRequests {
                         r.toShelfId());
         if (num(tier, "is_active") != 1 || num(tier, "rack_active") != 1 || !is(tier, "status", "AVAILABLE"))
             throw invalid("Chỉ được đưa hàng vào tầng đang hoạt động và còn chỗ.");
-        boolean newPlace =
-                s.count(
-                                "SELECT COUNT(*) FROM product_location WHERE detail_id=? AND shelf_level_id=?",
-                                r.detailId(),
-                                r.toShelfId())
-                        == 0;
-        if (newPlace
-                && (r.description() == null
-                        || r.description().isBlank()
-                        || r.photoKeys() == null
-                        || r.photoKeys().isEmpty()))
-            throw invalid("Lần đầu gán vị trí phải có mô tả và ảnh thực tế.");
+        // Mô tả và ảnh thực tế tại vị trí: không bắt buộc.
         if (r.photoKeys() != null) r.photoKeys().forEach(photos::existing);
     }
 
     private static final String SELECT =
             """
-            SELECT m.*,d.color,d.size,p.product_name,u.full_name AS requester_name,v.full_name AS decider_name,
+            SELECT m.adjustment_id AS request_id,m.detail_id,m.source_location_id AS from_location_id,
+              m.request_shelf_id AS to_shelf_id,m.movement_quantity AS quantity,
+              m.request_note AS description,m.request_photo_keys AS photo_keys,
+              CASE WHEN m.request_status='REJECTED' THEN m.reason END AS rejection_reason,
+              SUBSTRING(m.idempotency_key,9) AS request_key,m.request_status AS status,
+              m.adjusted_by AS requested_by,m.adjusted_at AS requested_at,m.decided_by,m.decided_at,
+              d.color,d.size,p.product_name,u.full_name AS requester_name,v.full_name AS decider_name,
               CONCAT(fr.rack_code,ft.level_number) AS from_label,CONCAT(tr.rack_code,tt.level_number) AS to_label
-            FROM location_move_request m
+            FROM stock_adjustment m
             JOIN product_detail d ON d.detail_id=m.detail_id JOIN product p ON p.product_id=d.product_id
-            JOIN `user` u ON u.user_id=m.requested_by LEFT JOIN `user` v ON v.user_id=m.decided_by
-            LEFT JOIN product_location fl ON fl.product_location_id=m.from_location_id
+            JOIN `user` u ON u.user_id=m.adjusted_by LEFT JOIN `user` v ON v.user_id=m.decided_by
+            LEFT JOIN product_location fl ON fl.product_location_id=m.source_location_id
             LEFT JOIN shelf_level ft ON ft.shelf_level_id=fl.shelf_level_id LEFT JOIN rack fr ON fr.rack_id=ft.rack_id
-            LEFT JOIN shelf_level tt ON tt.shelf_level_id=m.to_shelf_id LEFT JOIN rack tr ON tr.rack_id=tt.rack_id
+            LEFT JOIN shelf_level tt ON tt.shelf_level_id=m.request_shelf_id LEFT JOIN rack tr ON tr.rack_id=tt.rack_id
             """;
 
     private Map<String, Object> view(int id) {
-        return s.one(SELECT + " WHERE m.request_id=?", id);
+        return s.one(SELECT + " WHERE m.adjustment_id=?", id);
     }
 
     private static String describe(Map<String, Object> m) {
@@ -233,6 +235,10 @@ public class WarehouseMoveRequests {
                                     + " JOIN `role` r ON r.role_id=u.role_id WHERE r.role_name='OWNER' AND"
                                     + " u.account_status='ACTIVE'",
                             n);
+    }
+
+    private static String truncate(String v) {
+        return v.length() > 255 ? v.substring(0, 255) : v;
     }
 
     private static String blank(String v) {

@@ -36,6 +36,7 @@ class WarehouseOrderFlowTest {
     private JdbcTemplate db;
     private TransactionTemplate tx;
     private WarehouseDocuments docs;
+    private WarehouseUnits units;
     private WarehouseOrders orders;
     private WarehouseCatalog catalog;
     private WarehouseSettlements settlements;
@@ -67,6 +68,7 @@ class WarehouseOrderFlowTest {
         var store = new WarehouseStore(db);
         var policy = new WarehousePolicy();
         docs = new WarehouseDocuments(store, policy);
+        units = new WarehouseUnits(store, policy);
         orders = new WarehouseOrders(store, policy);
         settlements = new WarehouseSettlements(store, policy);
         var productRepository = new ProductRepository(db);
@@ -92,7 +94,10 @@ class WarehouseOrderFlowTest {
         var doc = run(() -> docs.confirm(OWNER, id, expected));
         if ("APPROVED".equals(doc.get("status")) && "RECEIPT".equals(doc.get("receipt_type"))) {
             db.update("UPDATE stock_receipt_item SET scanned_quantity=quantity WHERE receipt_id=?", id);
-            return run(() -> docs.receive(OWNER, id, null));
+            var received = run(() -> docs.receive(OWNER, id, null));
+            // Như đã quét tem serial từng chiếc khi kiểm hàng (đã xác nhận tem).
+            db.update("UPDATE product_unit SET scanned_at=CURRENT_TIMESTAMP WHERE status='IN_STOCK' AND scanned_at IS NULL");
+            return received;
         }
         return doc;
     }
@@ -158,6 +163,29 @@ class WarehouseOrderFlowTest {
         return fails(() -> docs.scan(who, receipt, new Scan(code, null, null, null)));
     }
 
+    /** In tem serial cho phiếu nhập đang chờ kiểm hàng; trả về các tem chưa quét của một biến thể. */
+    @SuppressWarnings("unchecked")
+    private List<String> labels(int receipt, int detail) {
+        var rows = (List<Map<String, Object>>) run(() -> units.receiptLabels(FAMILY, receipt, null, null)).get("units");
+        return rows.stream()
+                .filter(u -> ((Number) u.get("detail_id")).intValue() == detail)
+                .map(u -> (String) u.get("serial_code"))
+                .toList();
+    }
+
+    /** In thêm 1 tem cho dòng hàng (hàng giao thừa); trả về mã tem mới. */
+    @SuppressWarnings("unchecked")
+    private String extraLabel(int receipt, int detail) {
+        int item = db.queryForObject("SELECT receipt_item_id FROM stock_receipt_item WHERE receipt_id=? AND detail_id=?",
+                Integer.class, receipt, detail);
+        var rows = (List<Map<String, Object>>) run(() -> units.receiptLabels(FAMILY, receipt, item, 1)).get("units");
+        return (String) rows.get(rows.size() - 1).get("serial_code");
+    }
+
+    private void scanOk(Account who, int receipt, String code) {
+        run(() -> docs.scan(who, receipt, new Scan(code, null, null, null)));
+    }
+
     private int scanned(int receipt, int detail) {
         return db.queryForObject("SELECT scanned_quantity FROM stock_receipt_item WHERE receipt_id=? AND detail_id=?",
                 Integer.class, receipt, detail);
@@ -180,17 +208,21 @@ class WarehouseOrderFlowTest {
         assertEquals(0, stock(1), "confirming the receipt only puts it in the goods check");
         assertEquals(0, db.queryForObject("SELECT COUNT(*) FROM stock_adjustment", Integer.class));
 
-        // Family scans the labels stuck on the goods.
-        for (int i = 0; i < 3; i++) run(() -> docs.scan(FAMILY, r, new Scan("th000001", null, null, null)));
-        assertEquals("SCAN_OVER", scanFails(FAMILY, r, "TH000001").code, "4th label of a line of 3 is not counted");
+        // Family prints a serial label for each piece, sticks it on and scans it.
+        var tems1 = labels(r, 1);
+        var tems2 = labels(r, 2);
+        assertEquals(3, tems1.size());
+        assertEquals(2, tems2.size());
+        assertEquals("SCAN_NEED_SERIAL", scanFails(FAMILY, r, "TH000001").code, "a variant barcode does not count a piece");
+        for (var t : tems1) scanOk(FAMILY, r, t.toLowerCase());
+        assertEquals("SCAN_OVER", scanFails(FAMILY, r, extraLabel(r, 1)).code, "4th label of a line of 3 is not counted");
         assertEquals(3, scanned(r, 1));
-        assertEquals("SCAN_NOT_IN_RECEIPT", scanFails(FAMILY, r, "TH000003").code, "wrong variant delivered");
         assertEquals("BARCODE_NOT_FOUND", scanFails(FAMILY, r, "XX999").code);
-        run(() -> docs.scan(FAMILY, r, new Scan("TH000002", null, null, null)));
-        run(() -> docs.scan(FAMILY, r, new Scan("TH000002", null, null, null)));
-        int item2 = db.queryForObject("SELECT receipt_item_id FROM stock_receipt_item WHERE receipt_id=? AND detail_id=2",
-                Integer.class, r);
-        run(() -> docs.scan(FAMILY, r, new Scan(null, item2, 1, null))); // "bớt 1": one label was scanned twice
+        assertEquals("BARCODE_NOT_FOUND", scanFails(FAMILY, r, "TH000001-0099").code, "unknown label");
+        assertEquals("WAREHOUSE_CONFLICT", fails(() -> docs.scan(FAMILY, r, new Scan(null, line(r, 2), 1, null))).code,
+                "counts are never typed in");
+        scanOk(FAMILY, r, tems2.get(0));
+        assertEquals("SCAN_DUPLICATE", scanFails(FAMILY, r, tems2.get(0)).code, "a label counts once");
         assertEquals(1, scanned(r, 2));
 
         // A difference: family cannot close the check, the owner must, with a reason.
@@ -200,6 +232,11 @@ class WarehouseOrderFlowTest {
         run(() -> docs.receive(OWNER, r, "NCC giao thiếu 1 áo L"));
         assertEquals(3, stock(1));
         assertEquals(1, stock(2), "stock increases by what was scanned, not by the receipt");
+        assertEquals(4, db.queryForObject(
+                "SELECT COUNT(*) FROM product_unit WHERE status='IN_STOCK' AND scanned_at IS NOT NULL", Integer.class),
+                "exactly the scanned pieces are in stock, already confirmed");
+        assertEquals("VOID", db.queryForObject("SELECT status FROM product_unit WHERE serial_code=?", String.class, tems2.get(1)),
+                "the label never scanned did not enter stock");
         assertEquals("CONFIRMED", db.queryForObject("SELECT status FROM stock_receipt WHERE receipt_id=?", String.class, r));
         assertEquals(1, db.queryForObject("SELECT quantity FROM stock_receipt_item WHERE receipt_id=? AND detail_id=2",
                 Integer.class, r));
@@ -221,16 +258,25 @@ class WarehouseOrderFlowTest {
         int r = receipt(FAMILY, po, 1, 2);
         run(() -> docs.confirm(OWNER, r));
         assertTrue(fails(() -> docs.receive(FAMILY, r, null)).getMessage().contains("Chưa quét"));
-        run(() -> docs.scan(FAMILY, r, new Scan("TH000001", null, null, null)));
-        run(() -> docs.scan(FAMILY, r, new Scan("TH000001", null, null, null)));
-        assertEquals("SCAN_OVER", scanFails(FAMILY, r, "TH000001").code);
-        assertEquals("SCAN_OVER", fails(() -> docs.scan(FAMILY, r, new Scan("TH000001", null, null, true))).code,
+        for (var t : labels(r, 1)) scanOk(FAMILY, r, t);
+        String extra = extraLabel(r, 1);
+        assertEquals("SCAN_OVER", scanFails(FAMILY, r, extra).code);
+        assertEquals("SCAN_OVER", fails(() -> docs.scan(FAMILY, r, new Scan(extra, null, null, true))).code,
                 "only the owner accepts extra goods");
-        run(() -> docs.scan(OWNER, r, new Scan("TH000001", null, null, true)));
-        assertEquals(3, scanned(r, 1));
-        run(() -> docs.scan(FAMILY, r, new Scan(null, line(r, 1), 2, null)));
         run(() -> docs.receive(FAMILY, r, null)); // everything matches: family may close it
         assertEquals(2, stock(1));
+        assertEquals("VOID", db.queryForObject("SELECT status FROM product_unit WHERE serial_code=?", String.class, extra));
+
+        // The owner accepts a piece more than the receipt.
+        int po3 = confirmedOrder("A", 2, 1, 50000);
+        int r3 = receipt(FAMILY, po3, 2, 1);
+        run(() -> docs.confirm(OWNER, r3));
+        for (var t : labels(r3, 2)) scanOk(FAMILY, r3, t);
+        String extra3 = extraLabel(r3, 2);
+        run(() -> docs.scan(OWNER, r3, new Scan(extra3, null, null, true)));
+        assertEquals(2, scanned(r3, 2));
+        run(() -> docs.receive(OWNER, r3, "NCC giao dư 1"));
+        assertEquals(2, stock(2));
 
         // A receipt waiting for its check keeps the order open and can still be cancelled.
         int po2 = confirmedOrder("A", 3, 5, 50000);

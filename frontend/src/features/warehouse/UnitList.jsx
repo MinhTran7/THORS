@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Alert, Button, Checkbox, Chip, CircularProgress, Stack, Typography } from '@mui/material';
+import { Alert, Button, Checkbox, Chip, CircularProgress, Stack, Tooltip, Typography } from '@mui/material';
 import useSWR from 'swr';
 import { api } from 'services/http';
 import { DataTable } from './components';
@@ -42,7 +42,9 @@ export default function UnitList({ variant }) {
   const [picked, setPicked] = useState(() => new Set());
   const [printing, setPrinting] = useState(null);
   // 'DEFECT' = chiếc đang báo lỗi (ghi ở Bán hàng → Xử lý hàng lỗi; ở đây chỉ hiển thị)
-  const key = `/warehouse/units?detail=${variant.detail_id}${status === 'DEFECT' ? '&defective=true' : status ? `&status=${status}` : ''}`;
+  // 'UNCONFIRMED' = chiếc trong kho chưa quét xác nhận tem (quét ở Kho hàng → Xác nhận tem)
+  const filter = { DEFECT: '&defective=true', UNCONFIRMED: '&unconfirmed=true' }[status] ?? (status ? `&status=${status}` : '');
+  const key = `/warehouse/units?detail=${variant.detail_id}${filter}`;
   const { data, error, isLoading, mutate } = useSWR(key, api, { keepPreviousData: true });
   const units = useMemo(() => data?.units || [], [data]);
   const chosen = units.filter((u) => picked.has(u.unit_id));
@@ -66,7 +68,7 @@ export default function UnitList({ variant }) {
   return (
     <Stack spacing={1.5}>
       <Typography variant="body2" color="text.secondary">
-        Mỗi chiếc có một mã riêng (mã biến thể + số thứ tự), in trên tem dán vào từng chiếc. Số chiếc “Trong kho” luôn bằng tổng tồn.
+        Mỗi chiếc có một mã tem riêng. “Chưa xác nhận” là chiếc trong kho chưa được quét tem.
       </Typography>
       <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
         {FILTERS.map((f) => (
@@ -86,6 +88,15 @@ export default function UnitList({ variant }) {
           label={`Tất cả (${number(total)})`}
           onClick={() => (setStatus(''), setPicked(new Set()))}
         />
+        {Number(data?.unconfirmed) > 0 && (
+          <Chip
+            clickable
+            color="warning"
+            variant={status === 'UNCONFIRMED' ? 'filled' : 'outlined'}
+            label={`Chưa xác nhận (${number(data.unconfirmed)})`}
+            onClick={() => (setStatus('UNCONFIRMED'), setPicked(new Set()))}
+          />
+        )}
         {Number(data?.defective) > 0 && (
           <Chip
             clickable
@@ -143,7 +154,14 @@ export default function UnitList({ variant }) {
             key: 'status',
             label: 'Trạng thái',
             render: (u) => (
-              <Chip size="small" variant="outlined" color={unitStatusColor[u.status]} label={unitStatusLabel[u.status] || u.status} />
+              <Stack direction="row" sx={{ gap: 0.5, flexWrap: 'wrap' }}>
+                <Chip size="small" variant="outlined" color={unitStatusColor[u.status]} label={unitStatusLabel[u.status] || u.status} />
+                {u.status === 'IN_STOCK' && !u.scanned_at && (
+                  <Tooltip title="Tem của chiếc này chưa được quét. Quét ở Kho hàng → Xác nhận tem.">
+                    <Chip size="small" color="warning" label="Chưa xác nhận" />
+                  </Tooltip>
+                )}
+              </Stack>
             )
           },
           {

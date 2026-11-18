@@ -1,4 +1,4 @@
-import { Outlet } from 'react-router-dom';
+import { Navigate, Outlet } from 'react-router-dom';
 import { Box, Chip, Stack, Typography } from '@mui/material';
 import { WarehouseProvider, useWarehouse } from './WarehouseContext';
 import InventoryPage from './InventoryPage';
@@ -40,8 +40,9 @@ export const warehouseRoutes = [
   { path: 'returns', element: <DocumentsPage key="returns" type="SUPPLIER_RETURN" /> },
   { path: 'counts', element: <CountsPage /> },
   { path: 'report', element: <ReportPage /> },
-  { path: 'layout', element: <LocationsPage key="layout" editLayout /> },
-  { path: 'locations', element: <LocationsPage key="locations" /> },
+  // Bố cục kho nay là nút "Sửa bố cục kho" trong trang Vị trí kho; giữ đường dẫn cũ cho link/thông báo cũ.
+  { path: 'layout', element: <Navigate to="/warehouse/locations" replace /> },
+  { path: 'locations', element: <LocationsPage /> },
   { path: 'suppliers', element: <SuppliersPage /> },
   // Hiện trong menu Bán hàng → Xử lý hàng lỗi (layouts/navigation.jsx)
   { path: 'defects', element: <DefectsPage /> }

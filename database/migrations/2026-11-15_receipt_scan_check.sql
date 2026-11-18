@@ -1,5 +1,6 @@
 -- Nhận hàng bằng quét tem — 15/11/2026
--- CHƯA CHẠY trên database nào. Sao lưu DB và chạy thử trên bản sao trước.
+-- ĐÃ CHẠY trên thors_restore (Aiven) ngày 17/11/2026. Database khác: chạy một lần (kiểm tra bằng
+-- SHOW COLUMNS FROM stock_receipt_item LIKE '%_quantity'; nếu đã có scanned_quantity thì bỏ qua).
 --
 -- Quy trình mới của phiếu nhập (RECEIPT):
 --   DRAFT/PENDING_CONFIRMATION --(chủ cửa hàng xác nhận)--> APPROVED = "Chờ kiểm hàng" (tồn CHƯA tăng)

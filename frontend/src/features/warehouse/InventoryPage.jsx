@@ -50,12 +50,16 @@ function exportColumns(owner) {
       ? [
           { header: 'Giá vốn BQ liên hoàn', key: 'unit_cost', width: 16 },
           { header: 'Giá trị tồn', key: 'stock_value', width: 14 },
-          { header: 'SL chưa đủ cơ sở giá vốn', key: 'unvalued_quantity', width: 16 },
+          { header: 'SL chưa rõ giá nhập', key: 'unvalued_quantity', width: 16 },
           { header: 'Lý do', key: 'cost_note', width: 40 }
         ]
       : [])
   ];
 }
+
+// Hàng đang đặt chưa về: tem serial được in khi kiểm hàng ở phiếu nhập, không in ở Tồn kho.
+const INCOMING_TIP =
+  'Hàng đang đặt, chưa về kho nên chưa có chiếc nào để in tem. Khi hàng về: Nhập hàng → Phiếu nhập hàng → mở phiếu “Chờ kiểm hàng” → In tem, dán và quét từng chiếc.';
 
 export default function InventoryPage() {
   const { owner, data: snapshot, reload: reloadWarehouse } = useWarehouse();
@@ -160,15 +164,15 @@ export default function InventoryPage() {
           threshold: r.min_stock_quantity ?? 'Chưa thiết lập',
           state: stockStateLabel[r.stock_state],
           places: r.locations.map((l) => `${l.label} (${l.quantity})`).join(', '),
-          unit_cost: owner ? (r.stock_value == null ? 'Chưa đủ cơ sở' : r.unit_cost == null ? '' : Number(r.unit_cost)) : undefined,
-          stock_value: owner ? (r.stock_value == null ? 'Chưa đủ cơ sở' : Number(r.stock_value)) : undefined
+          unit_cost: owner ? (r.stock_value == null ? 'Chưa rõ giá nhập' : r.unit_cost == null ? '' : Number(r.unit_cost)) : undefined,
+          stock_value: owner ? (r.stock_value == null ? 'Chưa rõ giá nhập' : Number(r.stock_value)) : undefined
         })),
         notes: [
           `Xuất lúc ${new Date().toLocaleString('vi-VN')}, ${result.total} biến thể theo bộ lọc hiện tại (toàn bộ kết quả, không chỉ trang đang xem).`,
           'Có thể bán = Tổng tồn − Đang giữ cho đơn. Hàng đang đặt không cộng vào tồn.',
           ...(owner
             ? [
-                'Giá vốn = bình quân gia quyền liên hoàn: tính lại sau mỗi lần nhập theo đúng thứ tự thời gian của thẻ kho; xuất bán/kiểm kê giảm theo giá bình quân tại thời điểm đó; trả NCC theo đơn giá dòng nhập được trả; khách trả nhập lại theo giá vốn lúc bán. Tồn không có chứng từ giá ghi "Chưa đủ cơ sở", không tính bằng 0, giá bán hay giá nhập gần nhất.'
+                'Giá vốn = giá nhập trung bình, tính lại sau mỗi lần nhập hàng. Hàng không rõ giá nhập ghi "Chưa rõ giá nhập" và không tính vào giá trị tồn.'
               ]
             : [])
         ]
@@ -512,7 +516,9 @@ export default function InventoryPage() {
                           title={
                             printable.length
                               ? `In tem serial cho ${number(r.stock_quantity)} chiếc trong kho`
-                              : 'Sản phẩm đang hết hàng, không có chiếc nào để in tem'
+                              : Number(r.incoming_quantity) > 0
+                                ? INCOMING_TIP
+                                : 'Sản phẩm đang hết hàng, không có chiếc nào để in tem'
                           }
                         >
                           <span>
@@ -542,7 +548,9 @@ export default function InventoryPage() {
                         title={
                           Number(r.stock_quantity) > 0
                             ? `In tem serial cho ${number(r.stock_quantity)} chiếc trong kho`
-                            : 'Đang hết hàng, không có chiếc nào để in tem'
+                            : Number(r.incoming_quantity) > 0
+                              ? INCOMING_TIP
+                              : 'Đang hết hàng, không có chiếc nào để in tem'
                         }
                       >
                         <span>
@@ -576,8 +584,8 @@ export default function InventoryPage() {
           title={`Xóa ${variantLabel(deleting)}?`}
           text={
             Number(deleting.stock_quantity) > 0
-              ? `Biến thể này còn ${number(deleting.stock_quantity)} sản phẩm trong kho nên chưa xóa được. Hãy kiểm kê về 0 hoặc trả nhà cung cấp trước.`
-              : 'Biến thể sẽ bị ẩn khỏi tồn kho và các danh sách chọn hàng. Dữ liệu và lịch sử (phiếu nhập, đơn hàng, thẻ kho) vẫn được giữ nguyên trong hệ thống. Thêm lại đúng màu/size này cho sản phẩm sẽ khôi phục biến thể.'
+              ? `Màu/size này còn ${number(deleting.stock_quantity)} sản phẩm trong kho nên chưa xóa được.`
+              : 'Màu/size này sẽ bị ẩn khỏi tồn kho và danh sách chọn hàng. Các phiếu cũ vẫn giữ nguyên. Thêm lại đúng màu/size này thì sẽ hiện lại.'
           }
           onClose={() => setDeleting(null)}
           onConfirm={async () => {

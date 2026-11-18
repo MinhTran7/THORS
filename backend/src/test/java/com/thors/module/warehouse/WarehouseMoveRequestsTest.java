@@ -55,15 +55,10 @@ class WarehouseMoveRequestsTest {
         db.execute("""
                 CREATE TABLE product_location_image (product_location_image_id INT AUTO_INCREMENT PRIMARY KEY, product_location_id INT NOT NULL,
                   image_url VARCHAR(500) NOT NULL, cloud_public_id VARCHAR(255), deleted_at TIMESTAMP)""");
-        // database/migrations/2026-11-10_location_move_request.sql
+        // database/migrations/2026-11-18_move_request_columns.sql: không bảng mới, chỉ thêm cột vào stock_adjustment
         db.execute("""
-                CREATE TABLE location_move_request (request_id INT AUTO_INCREMENT PRIMARY KEY, detail_id INT NOT NULL,
-                  from_location_id INT, to_shelf_id INT, quantity INT NOT NULL, description VARCHAR(2000), photo_keys VARCHAR(400),
-                  request_key VARCHAR(36) NOT NULL UNIQUE, status VARCHAR(20) NOT NULL DEFAULT 'PENDING', requested_by INT NOT NULL,
-                  requested_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, decided_by INT, decided_at TIMESTAMP,
-                  rejection_reason VARCHAR(255),
-                  CONSTRAINT ck_move_request_quantity CHECK (quantity > 0),
-                  CONSTRAINT ck_move_request_status CHECK (status IN ('PENDING','APPROVED','REJECTED','CANCELLED')))""");
+                ALTER TABLE stock_adjustment ADD (request_status VARCHAR(20), request_shelf_id INT, request_note VARCHAR(2000),
+                  request_photo_keys VARCHAR(400), decided_by INT, decided_at TIMESTAMP)""");
         db.update("INSERT INTO `user` VALUES (4, 2, 'Người nhà 2', 'ACTIVE')");
         db.update("INSERT INTO rack(rack_id,rack_code) VALUES(1,'A')");
         tierA1 = insert("INSERT INTO shelf_level(rack_id,level_number) VALUES(1,1)");
@@ -76,6 +71,9 @@ class WarehouseMoveRequestsTest {
         var policy = new WarehousePolicy();
         var photos = new WarehousePhotos(photosDir.toString());
         requests = new WarehouseMoveRequests(store, policy, new WarehouseLayout(store, policy, photos), photos);
+        // 10 chiếc đã dán tem và quét xác nhận (chuyển kệ chỉ lấy chiếc đã xác nhận).
+        tx.execute(st -> store.units().sync(1));
+        db.update("UPDATE product_unit SET scanned_at=CURRENT_TIMESTAMP WHERE status='IN_STOCK'");
     }
 
     @AfterEach
@@ -106,7 +104,7 @@ class WarehouseMoveRequestsTest {
     }
 
     private long moves() {
-        return db.queryForObject("SELECT COUNT(*) FROM stock_adjustment WHERE movement_type='MOVE'", Long.class);
+        return db.queryForObject("SELECT COUNT(*) FROM stock_adjustment WHERE movement_type='MOVE' AND request_status IS NULL", Long.class);
     }
 
     private static Move move(Integer from, Integer to, int qty, String description, List<String> photos) {
@@ -121,6 +119,9 @@ class WarehouseMoveRequestsTest {
     void familyMoveWaitsUntilOwnerConfirms() {
         var request = run(() -> requests.submit(FAMILY, move(placeA1, tierA2, 3, "Tầng 2 bên phải", List.of(PHOTO))));
         assertEquals("PENDING", request.get("status"));
+        assertEquals("Tầng 2 bên phải", request.get("description"));
+        assertEquals(PHOTO, request.get("photo_keys"), "thành viên gia đình gửi được ảnh vị trí");
+        assertNull(request.get("decided_at"));
         assertEquals(4, at(tierA1), "nothing moves while the request waits");
         assertEquals(0, at(tierA2));
         assertEquals(0, moves());
@@ -137,6 +138,16 @@ class WarehouseMoveRequestsTest {
                 "moving never changes total stock");
         run(() -> requests.approve(OWNER, id(request)));
         assertEquals(1, moves(), "a repeated approval moves goods once");
+        var done = run(() -> requests.list(OWNER, "APPROVED")).get(0);
+        assertEquals("Chủ cửa hàng", done.get("decider_name"));
+        assertEquals(1L, db.queryForObject("SELECT COUNT(*) FROM product_location_image i JOIN product_location l"
+                + " ON l.product_location_id=i.product_location_id WHERE l.shelf_level_id=?", Long.class, tierA2),
+                "ảnh của thành viên gia đình được gắn vào vị trí khi xác nhận");
+        assertNotNull(done.get("decided_at"));
+        assertEquals("Tầng 2 bên phải", db.queryForObject(
+                "SELECT description FROM product_location WHERE detail_id=1 AND shelf_level_id=?", String.class, tierA2));
+        assertEquals(0L, db.queryForObject("SELECT COUNT(*) FROM stock_adjustment WHERE request_status IS NOT NULL"
+                + " AND (quantity_change<>0 OR movement_type<>'MOVE')", Long.class), "dòng yêu cầu không làm đổi tồn");
         assertEquals(1L, db.queryForObject(
                 "SELECT COUNT(*) FROM user_notification un JOIN notification n ON n.notification_id=un.notification_id"
                         + " WHERE un.user_id=2 AND n.type='WAREHOUSE_MOVE_APPROVED'", Long.class), "the requester is told");
@@ -147,7 +158,11 @@ class WarehouseMoveRequestsTest {
         var placed = run(() -> requests.submit(FAMILY, move(null, tierA1, 2, null, null)));
         assertEquals("Nhập lý do từ chối.", fails(() -> requests.end(OWNER, id(placed), "reject", " ")).getMessage());
         run(() -> requests.end(OWNER, id(placed), "reject", "Sai kệ"));
-        assertEquals("REJECTED", db.queryForObject("SELECT status FROM location_move_request WHERE request_id=?", String.class, id(placed)));
+        var rejected = run(() -> requests.list(OWNER, "REJECTED")).get(0);
+        assertEquals("Sai kệ", rejected.get("rejection_reason"));
+        assertEquals("Chủ cửa hàng", rejected.get("decider_name"), "ghi người từ chối");
+        assertNotNull(rejected.get("decided_at"), "ghi giờ từ chối");
+        assertEquals("REJECTED", db.queryForObject("SELECT request_status FROM stock_adjustment WHERE adjustment_id=?", String.class, id(placed)));
         assertEquals("Yêu cầu này đã được xử lý.", fails(() -> requests.approve(OWNER, id(placed))).getMessage());
         assertEquals(4, at(tierA1));
         assertEquals(0, moves());
@@ -156,7 +171,7 @@ class WarehouseMoveRequestsTest {
         assertEquals("WAREHOUSE_FORBIDDEN", fails(() -> requests.end(OTHER_FAMILY, id(mine), "cancel", null)).code);
         assertEquals("WAREHOUSE_FORBIDDEN", fails(() -> requests.end(FAMILY, id(mine), "reject", "x")).code);
         run(() -> requests.end(FAMILY, id(mine), "cancel", null));
-        assertEquals("CANCELLED", db.queryForObject("SELECT status FROM location_move_request WHERE request_id=?", String.class, id(mine)));
+        assertEquals("CANCELLED", db.queryForObject("SELECT request_status FROM stock_adjustment WHERE adjustment_id=?", String.class, id(mine)));
         assertEquals(4, at(tierA1));
     }
 
@@ -166,8 +181,8 @@ class WarehouseMoveRequestsTest {
         run(() -> requests.submit(FAMILY, move(null, tierA1, 5, null, null)));
         assertTrue(fails(() -> requests.submit(FAMILY, move(null, tierA1, 2, null, null))).getMessage().contains("đang chờ duyệt"),
                 "the 5 already requested are not offered twice");
-        assertTrue(fails(() -> requests.submit(FAMILY, move(null, tierA2, 1, null, null))).getMessage().contains("mô tả và ảnh"),
-                "a new place needs a description and a photo");
+        assertEquals("PENDING", run(() -> requests.submit(FAMILY, move(null, tierA2, 1, null, null))).get("status"),
+                "description and photo are optional, even for a new place");
         assertTrue(fails(() -> requests.submit(FAMILY, move(placeA1, tierA1, 1, null, null))).getMessage().contains("khác nhau"));
         db.update("UPDATE shelf_level SET status='FULL' WHERE shelf_level_id=?", tierA2);
         assertTrue(fails(() -> requests.submit(FAMILY, move(placeA1, tierA2, 1, "x", List.of(PHOTO)))).getMessage().contains("còn chỗ"));
@@ -177,13 +192,13 @@ class WarehouseMoveRequestsTest {
     void ownerMovesAtOnceAndRetriedRequestIsNotDuplicated() {
         run(() -> requests.submit(OWNER, move(null, tierA1, 2, null, null)));
         assertEquals(6, at(tierA1), "the owner's own move is saved immediately");
-        assertEquals(0L, db.queryForObject("SELECT COUNT(*) FROM location_move_request", Long.class));
+        assertEquals(0L, db.queryForObject("SELECT COUNT(*) FROM stock_adjustment WHERE request_status IS NOT NULL", Long.class));
 
         var same = move(null, tierA1, 1, null, null);
         var first = run(() -> requests.submit(FAMILY, same));
         var again = run(() -> requests.submit(FAMILY, same));
         assertEquals(id(first), id(again));
-        assertEquals(1L, db.queryForObject("SELECT COUNT(*) FROM location_move_request", Long.class));
+        assertEquals(1L, db.queryForObject("SELECT COUNT(*) FROM stock_adjustment WHERE request_status IS NOT NULL", Long.class));
     }
 
     @Test
@@ -191,8 +206,32 @@ class WarehouseMoveRequestsTest {
         var request = run(() -> requests.submit(FAMILY, move(placeA1, tierA2, 4, "Tầng 2", List.of(PHOTO))));
         db.update("UPDATE product_location SET quantity=1 WHERE product_location_id=?", placeA1); // sold / moved meanwhile
         assertTrue(fails(() -> requests.approve(OWNER, id(request))).getMessage().contains("không đủ"));
-        assertEquals("PENDING", db.queryForObject("SELECT status FROM location_move_request WHERE request_id=?", String.class, id(request)),
+        assertEquals("PENDING", db.queryForObject("SELECT request_status FROM stock_adjustment WHERE adjustment_id=?", String.class, id(request)),
                 "nothing is saved; the owner can reject it");
         assertEquals(0, moves());
+    }
+
+    @Test
+    void ownerMovesToANewPlaceWithoutDescriptionOrPhoto() {
+        run(() -> requests.submit(OWNER, move(null, tierA2, 2, null, null)));
+        assertEquals(2, at(tierA2));
+        assertNull(db.queryForObject("SELECT description FROM product_location WHERE detail_id=1 AND shelf_level_id=?",
+                String.class, tierA2));
+    }
+
+    @Test
+    void onlyConfirmedUnitsCanBeMoved() {
+        // 2 trong 4 chiếc ở A1 chưa quét xác nhận tem
+        db.update("UPDATE product_unit SET scanned_at=NULL WHERE product_location_id=? AND unit_id IN"
+                + " (SELECT unit_id FROM product_unit WHERE product_location_id=? ORDER BY unit_id LIMIT 2)", placeA1, placeA1);
+        var e = fails(() -> requests.submit(OWNER, move(placeA1, tierA2, 3, "Tầng 2", List.of(PHOTO))));
+        assertEquals("UNITS_UNCONFIRMED", e.code);
+        assertTrue(e.getMessage().contains("chỉ có 2 chiếc"), e.getMessage());
+        assertEquals(4, at(tierA1));
+        run(() -> requests.submit(OWNER, move(placeA1, tierA2, 2, "Tầng 2", List.of(PHOTO))));
+        assertEquals(2, at(tierA2));
+        assertEquals(0L, db.queryForObject("SELECT COUNT(*) FROM product_unit u JOIN product_location l"
+                + " ON l.product_location_id=u.product_location_id WHERE l.shelf_level_id=? AND u.scanned_at IS NULL", Long.class, tierA2),
+                "chiếc chuyển đi là chiếc đã xác nhận");
     }
 }
