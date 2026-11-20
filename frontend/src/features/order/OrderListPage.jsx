@@ -29,6 +29,7 @@ import {
 import { Stack } from 'features/account/components/Flex';
 import { CarOutlined, EyeOutlined, InboxOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { post } from 'services/http';
+import { openCustomerChat, useChatStatus } from 'features/chat/api';
 import { useCrumbs } from 'layouts/crumbs';
 import { useAuth } from 'features/auth/AuthProvider';
 import { PAGE_SIZE } from 'features/account/constants';
@@ -190,7 +191,7 @@ const DELIVERY_NOTE = {
   COMPLETED: 'Giao hàng thành công'
 };
 
-function CustomerOrderCard({ order, onOpen, actions, onAction, busy, onRebuy, rebuying }) {
+function CustomerOrderCard({ order, onOpen, actions, onAction, busy, onRebuy, rebuying, chatAvailable }) {
   const meta = orderStatusMeta(order.orderStatus);
   const pay = orderPaymentMeta(order);
   const returnMeta = order.returnStatus ? RETURN_STATUS[order.returnStatus] ?? { label: order.returnStatus, tone: 'neutral' } : null;
@@ -358,16 +359,17 @@ function CustomerOrderCard({ order, onOpen, actions, onAction, busy, onRebuy, re
                 TRẢ HÀNG
               </Box>
             )}
-            {/* Chat với cửa hàng sẽ làm sau: giữ sẵn chỗ cho nút */}
-            <Box
-              component="button"
-              type="button"
-              disabled
-              title="Tính năng chat với cửa hàng sẽ có sớm"
-              sx={{ ...storeBtnSx('outline'), opacity: 0.5, cursor: 'not-allowed' }}
-            >
-              LIÊN HỆ NGƯỜI BÁN
-            </Box>
+            {/* Mở khung chat với cửa hàng, đính kèm thẻ đơn này vào tin nhắn tiếp theo */}
+            {chatAvailable && (
+              <Box
+                component="button"
+                type="button"
+                onClick={() => openCustomerChat({ orderId: order.id, orderNumber: order.orderNumber })}
+                sx={storeBtnSx('outline')}
+              >
+                LIÊN HỆ NGƯỜI BÁN
+              </Box>
+            )}
             {lines.length > 0 && (
               <Box component="button" type="button" disabled={busy || rebuying} onClick={onRebuy} sx={storeBtnSx('outline')}>
                 {rebuying ? 'ĐANG THÊM…' : 'MUA LẠI'}
@@ -404,6 +406,8 @@ export default function OrderListPage() {
   const [createError, setCreateError] = useState('');
   const [busyId, setBusyId] = useState(null);
   const [rebuyId, setRebuyId] = useState(null); // đơn đang được "Mua lại"
+  // Nút "Liên hệ người bán" chỉ hiện khi chat đã bật (database đã chạy migration chat)
+  const chat = useChatStatus(isCustomer);
 
   // Khách bấm "Mua lại": thêm lại các sản phẩm của đơn vào giỏ (đúng biến thể, số lượng) rồi mở giỏ hàng
   const rebuy = async (order) => {
@@ -832,6 +836,7 @@ export default function OrderListPage() {
             onAction={(action) => startAction(order, action)}
             onRebuy={() => rebuy(order)}
             rebuying={rebuyId === order.id}
+            chatAvailable={chat.available}
           />
         ))}
 

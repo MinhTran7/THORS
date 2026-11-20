@@ -21,6 +21,7 @@ import AppFooter from './AppFooter';
 import AppHeader from './AppHeader';
 import { CrumbsContext } from './crumbs';
 import { navFor } from './navigation';
+import { useChatStatus } from 'features/chat/api';
 import ThorsMark from './ThorsMark';
 
 const SIDEBAR_WIDTH = 256;
@@ -103,7 +104,23 @@ function NavLink({ item, selected, nested = false, onClick }) {
         {item.icon}
       </ListItemIcon>
       <ListItemText primary={item.label} primaryTypographyProps={textProps} />
+      {item.chatBadge && <ChatUnreadCount />}
     </ListItemButton>
+  );
+}
+
+/** Số cuộc trò chuyện có tin khách gửi chưa đọc, hiện cạnh mục "Tin nhắn" (ẩn khi bằng 0 hoặc chat chưa bật). */
+function ChatUnreadCount() {
+  const { unread } = useChatStatus(true);
+  if (!unread) return null;
+  return (
+    <Box
+      component="span"
+      aria-label={`${unread} cuộc trò chuyện có tin chưa đọc`}
+      sx={{ minWidth: 20, height: 20, px: 0.75, borderRadius: 10, bgcolor: '#EF4444', color: '#FFF', fontSize: 11.5, fontWeight: 700, display: 'grid', placeItems: 'center' }}
+    >
+      {unread > 99 ? '99+' : unread}
+    </Box>
   );
 }
 

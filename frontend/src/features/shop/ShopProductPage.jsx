@@ -13,6 +13,8 @@ import { getImageColors, imagesForColor } from 'features/product/productDescript
 import { savePending } from './pendingCart';
 import { C, SERIF } from './storeTheme';
 import { ProductCard } from './ShopPage';
+import { MessageOutlined } from '@ant-design/icons';
+import { openCustomerChat, useChatStatus } from 'features/chat/api';
 
 const RELATED_COUNT = 4; // số sản phẩm gợi ý ở cuối trang
 
@@ -119,6 +121,7 @@ export default function ShopProductPage() {
   const sizeDisabled = (s) => !variants.some((v) => v.size === s && v.stock > 0 && (!color || v.color === color));
   const colorDisabled = (c) => !variants.some((v) => v.color === c && v.stock > 0 && (!size || v.size === size));
   const isCustomer = account?.role === 'CUSTOMER';
+  const chat = useChatStatus(isCustomer);
 
   const pick = (current, setter, value) => {
     setter(current === value ? '' : value);
@@ -470,6 +473,17 @@ export default function ShopProductPage() {
                   <Button variant="contained" size="large" disabled={busy} onClick={() => submit(true)}>
                     Mua ngay
                   </Button>
+                  {/* Hỏi cửa hàng về sản phẩm này: mở khung chat, đính kèm thẻ sản phẩm (chỉ khi chat đã bật) */}
+                  {isCustomer && chat.available && (
+                    <Button
+                      variant="text"
+                      size="large"
+                      startIcon={<MessageOutlined />}
+                      onClick={() => openCustomerChat({ productId: Number(productId), productName: data.product.productName })}
+                    >
+                      Chat với cửa hàng
+                    </Button>
+                  )}
                 </Box>
               ) : (
                 <Typography variant="body2" sx={{ color: C.muted }}>
