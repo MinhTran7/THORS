@@ -67,6 +67,23 @@ class WarehouseInventoryTest {
         database.shutdown();
     }
 
+    /**
+     * Owner confirmation as before the goods check existed: a receipt now waits in APPROVED
+     * ("Chờ kiểm hàng"), so everything on it is scanned and the check closed right away.
+     */
+    private Map<String, Object> confirmAll(int id, Map<Integer, Integer> expected) {
+        var doc = run(() -> docs.confirm(OWNER, id, expected));
+        if ("APPROVED".equals(doc.get("status")) && "RECEIPT".equals(doc.get("receipt_type"))) {
+            db.update("UPDATE stock_receipt_item SET scanned_quantity=quantity WHERE receipt_id=?", id);
+            return run(() -> docs.receive(OWNER, id, null));
+        }
+        return doc;
+    }
+
+    private Map<String, Object> confirmAll(int id) {
+        return confirmAll(id, null);
+    }
+
     private <T> T run(Supplier<T> action) {
         return tx.execute(status -> action.get());
     }
@@ -94,11 +111,11 @@ class WarehouseInventoryTest {
     private int receive(int detail, int ordered, int received, int price) {
         int po = id(run(() -> docs.create(OWNER, new Document("PURCHASE_ORDER", null, "NCC A", null,
                 List.of(new Line(detail, ordered, BigDecimal.valueOf(price), null))))), "receipt_id");
-        run(() -> docs.confirm(OWNER, po));
+        confirmAll(po);
         int line = db.queryForObject("SELECT receipt_item_id FROM stock_receipt_item WHERE receipt_id=?", Integer.class, po);
         int rc = id(run(() -> docs.create(OWNER, new Document("RECEIPT", po, null, null,
                 List.of(new Line(detail, received, BigDecimal.valueOf(price), line))))), "receipt_id");
-        run(() -> docs.confirm(OWNER, rc));
+        confirmAll(rc);
         return po;
     }
 
@@ -204,6 +221,37 @@ class WarehouseInventoryTest {
         run(() -> inventory.threshold(OWNER, 1, null));
         assertNull(row(OWNER, 1).get("min_stock_quantity"));
         assertEquals(403, fails(() -> inventory.threshold(FAMILY, 1, 3)).status);
+    }
+
+    @Test
+    void deleteIsSoftOwnerOnlyAndNeedsEmptyStock() {
+        receive(1, 10, 5, 1000);
+        assertEquals(409, fails(() -> inventory.deleteVariant(OWNER, 1)).status, "stock left: cannot delete");
+        assertEquals(403, fails(() -> inventory.deleteVariant(FAMILY, 2)).status);
+        run(() -> inventory.deleteVariant(OWNER, 2));
+        assertEquals("DELETED", db.queryForObject("SELECT status FROM product_detail WHERE detail_id=2", String.class),
+                "row kept in the database, only marked deleted");
+        var items = (List<?>) run(() -> inventory.list(OWNER, null, null, null, null, null, null, null, null, 0, 100, true)).get("items");
+        assertTrue(items.stream().noneMatch(r -> id((Map<String, Object>) r, "detail_id") == 2), "hidden from inventory");
+        run(() -> inventory.deleteVariant(OWNER, 2)); // deleting again is harmless
+    }
+
+    @Test
+    void ownerIsNotifiedOnceWhenAVariantDropsToItsMinimumAndWhenItRunsOut() {
+        receive(1, 10, 10, 1000);
+        run(() -> inventory.threshold(OWNER, 1, 5));
+        int first = hold(1, 6);
+        run(() -> { store.lock(); return store.sell(1, 1, 6, 6, first, "POS:a", "Bán"); }); // 10 -> 4
+        db.update("UPDATE order_item SET reserved_quantity=0"); // the caller releases the hold after selling
+        int second = hold(1, 1);
+        run(() -> { store.lock(); return store.sell(1, 1, 1, 1, second, "POS:b", "Bán"); }); // 4 -> 3: still low, no repeat
+        db.update("UPDATE order_item SET reserved_quantity=0");
+        int last = hold(1, 3);
+        run(() -> { store.lock(); return store.sell(1, 1, 3, 3, last, "POS:c", "Bán"); }); // 3 -> 0
+        assertEquals(
+                List.of("STOCK_LOW", "STOCK_OUT"),
+                db.queryForList("SELECT type FROM notification WHERE related_entity_type='product_detail' AND related_entity_id=1"
+                        + " ORDER BY notification_id", String.class));
     }
 
     @Test

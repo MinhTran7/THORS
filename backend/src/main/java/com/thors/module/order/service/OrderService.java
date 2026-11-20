@@ -29,7 +29,10 @@ public class OrderService {
     /** Các vai trò xử lý đơn online của cửa hàng. */
     private static final Set<String> STORE_ROLES = Set.of("OWNER", "FAMILY_MEMBER");
 
-    /** Luồng xử lý của cửa hàng (chỉ Owner): trạng thái hiện tại -> các trạng thái được chuyển tới. */
+    /** Vai trò nhận thông báo hoàn tiền (chỉ chủ shop; cùng tên với Account.role()). */
+    private static final String OWNER_ROLE = "OWNER";
+
+    /** Luồng xử lý của cửa hàng (Owner và Family Member): trạng thái hiện tại -> các trạng thái được chuyển tới. */
     private static final Map<String, List<String>> OWNER_FLOW =
             Map.of(
                     OrderStatus.PENDING_CONFIRMATION,
@@ -50,15 +53,23 @@ public class OrderService {
     /** Số ngày sau khi giao mà khách chưa xác nhận thì đơn tự hoàn tất. */
     private static final int AUTO_COMPLETE_DAYS = 7;
 
-    /** Vai trò nhận thông báo của chủ shop (cùng tên với Account.role()). */
-    private static final String OWNER_ROLE = "OWNER";
+    /**
+     * Các vai trò nhận thông báo đơn hàng phía cửa hàng (cùng tên với Account.role()). Người nhà xử lý đơn
+     * như chủ shop nên cũng nhận đủ thông báo.
+     */
+    private static final List<String> STORE_NOTIFY_ROLES = List.of("OWNER", "FAMILY_MEMBER");
 
-    /** Hình thức giao: SELF = cửa hàng tự giao (địa chỉ gần), còn lại là đơn vị vận chuyển (địa chỉ xa). */
-    private static final Set<String> ALLOWED_CARRIERS =
-            Set.of("SELF", "GHN", "GHTK", "VIETTEL_POST", "JT");
+    /**
+     * Hình thức giao: SELF = cửa hàng tự giao (địa chỉ gần), GHN = tạo vận đơn GHN (địa chỉ xa). Chỉ GHN đã
+     * kết nối API nên các hãng khác (GHTK, Viettel Post, J&T) không còn chọn được; đơn cũ vẫn giữ giá trị.
+     */
+    private static final Set<String> ALLOWED_CARRIERS = Set.of("SELF", "GHN");
 
     /** Bộ lọc hình thức thanh toán: khớp đúng giá trị cột orders.payment_method. */
     private static final Set<String> PAYMENT_FILTERS = Set.of("COD", "ONLINE", "CASH");
+
+    /** Bộ lọc nguồn đơn: WEB (khách tự đặt) hoặc FACEBOOK (nhân viên tạo từ Social POS). */
+    private static final Set<String> SOURCE_FILTERS = Set.of("WEB", "FACEBOOK");
 
     private final OrderRepository orders;
     private final NotificationPublisher notifications;
@@ -104,6 +115,7 @@ public class OrderService {
             LocalDate dateFrom,
             LocalDate dateTo,
             String paymentMethod,
+            String source,
             int page,
             int size) {
         requireOrderAccess(actor);
@@ -122,6 +134,14 @@ public class OrderService {
                 throw new ApiException(400, "PAYMENT_METHOD", "Hình thức thanh toán không hợp lệ.");
         }
 
+        // Khách chỉ thấy đơn của mình nên bộ lọc nguồn không có ý nghĩa, bỏ qua
+        String safeSource = isCustomer(actor) ? null : blankToNull(source);
+        if (safeSource != null) {
+            safeSource = safeSource.toUpperCase();
+            if (!SOURCE_FILTERS.contains(safeSource))
+                throw new ApiException(400, "SOURCE", "Nguồn đơn không hợp lệ.");
+        }
+
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), MAX_SIZE);
         Integer customerId = isCustomer(actor) ? actor.id() : null;
@@ -135,6 +155,7 @@ public class OrderService {
                         dateFrom,
                         dateTo,
                         safePayment,
+                        safeSource,
                         safePage,
                         safeSize);
         int totalPages = (int) Math.ceil(slice.total() / (double) safeSize);
@@ -164,12 +185,12 @@ public class OrderService {
 
     /**
      * Chỉ để test: tạo một đơn online mẫu cho tài khoản customer@thors.shop rồi gửi thông báo.
-     * Chỉ Owner được dùng; Customer và các vai trò khác bị chặn.
+     * Chỉ Owner và Family Member được dùng; Customer và các vai trò khác bị chặn.
      */
     @Transactional
     public Detail createSample(Account actor) {
-        if (!"OWNER".equals(actor.role()))
-            throw new ApiException(403, "ROLE", "Chỉ Owner được dùng chức năng tạo đơn mẫu.");
+        if (!isStore(actor))
+            throw new ApiException(403, "ROLE", "Chỉ cửa hàng được dùng chức năng tạo đơn mẫu.");
         int customerId =
                 orders.findUserIdByEmail(TEST_CUSTOMER_EMAIL)
                         .orElseThrow(
@@ -224,13 +245,58 @@ public class OrderService {
      * chuyển từ AWAITING_PAYMENT sang PENDING_CONFIRMATION).
      */
     public void notifyOwnersNewOrder(int orderId, String orderNumber) {
-        notifications.toRole(
-                OWNER_ROLE,
-                NotificationTypes.ORDER_STATUS,
-                "Có đơn hàng online mới",
-                "Đơn " + orderNumber + " đang chờ xác nhận.",
-                NotificationTypes.ENTITY_ORDER,
-                orderId);
+        notifyStore(orderId, "Có đơn hàng online mới", "Đơn " + orderNumber + " đang chờ xác nhận.");
+    }
+
+    /** Báo cho mọi người xử lý đơn của cửa hàng (chủ shop và người nhà). */
+    private void notifyStore(int orderId, String title, String message) {
+        for (String role : STORE_NOTIFY_ROLES)
+            notifications.toRole(
+                    role, NotificationTypes.ORDER_STATUS, title, message, NotificationTypes.ENTITY_ORDER, orderId);
+    }
+
+    /**
+     * Module thanh toán gọi khi xác nhận khách đã trả tiền online (webhook PayOS hoặc lần kiểm tra trạng
+     * thái), thay cho việc tự cập nhật bảng orders. Gọi nhiều lần cho cùng một đơn cũng chỉ báo một lần.
+     *
+     * <ul>
+     *   <li>Đơn đang chờ thanh toán: chuyển sang chờ xác nhận, báo khách và báo chủ shop có đơn mới.
+     *   <li>Đơn đã hủy / hết hạn / bị từ chối mà khách vẫn trả tiền: báo chủ shop để hoàn tiền.
+     * </ul>
+     */
+    @Transactional
+    public void onOnlinePaymentPaid(int orderId) {
+        var p = orders.findPayableForUpdate(orderId).orElse(null);
+        if (p == null || "PAID".equalsIgnoreCase(p.paymentStatus())) return;
+        orders.markOnlinePaid(orderId);
+
+        String number = p.orderNumber();
+        switch (p.orderStatus()) {
+            case OrderStatus.AWAITING_PAYMENT -> {
+                notifyCustomer(p.userId(), orderId, "Thanh toán thành công",
+                        "Đơn " + number + " đã được thanh toán và đang chờ cửa hàng xác nhận.");
+                notifyOwnersNewOrder(orderId, number);
+            }
+            case OrderStatus.CANCELLED, OrderStatus.EXPIRED, OrderStatus.REJECTED -> {
+                notifyCustomer(p.userId(), orderId, "Đã nhận thanh toán cho đơn đã đóng",
+                        "Cửa hàng đã nhận tiền cho đơn " + number
+                                + " nhưng đơn đã đóng trước đó. Cửa hàng sẽ liên hệ để hoàn tiền cho bạn.");
+                notifyStore(
+                        orderId,
+                        "Cần hoàn tiền cho khách",
+                        "Đơn " + number + " đã " + closedLabel(p.orderStatus())
+                                + " nhưng khách vừa thanh toán online. Vui lòng hoàn tiền cho khách.");
+            }
+            default -> {}
+        }
+    }
+
+    private static String closedLabel(String status) {
+        return switch (status) {
+            case OrderStatus.EXPIRED -> "hết hạn thanh toán";
+            case OrderStatus.REJECTED -> "bị từ chối";
+            default -> "bị hủy";
+        };
     }
 
     /**
@@ -273,8 +339,8 @@ public class OrderService {
             String ghnWardCode,
             OrderViews.BankAccount refundAccount) {
         requireOrderAccess(actor);
-        if (!isCustomer(actor) && !"OWNER".equals(actor.role()))
-            throw new ApiException(403, "ROLE", "Chỉ Owner được xử lý đơn hàng online.");
+        if (!isCustomer(actor) && !isStore(actor))
+            throw new ApiException(403, "ROLE", "Chỉ chủ shop và người nhà được xử lý đơn hàng online.");
         if (target == null || !OrderStatus.ALL.contains(target))
             throw new ApiException(400, "ORDER_STATUS", "Trạng thái đơn hàng không hợp lệ.");
         String safeReason = blankToNull(reason);
@@ -405,21 +471,12 @@ public class OrderService {
                     notifyCustomer(customerId, orderId, "Đơn hàng đã giao",
                             "Đơn " + number + " đã được giao thành công.");
             case OrderStatus.COMPLETED ->
-                    notifications.toRole(
-                            OWNER_ROLE,
-                            NotificationTypes.ORDER_STATUS,
-                            "Khách đã nhận hàng",
-                            "Đơn " + number + " đã được khách xác nhận nhận hàng.",
-                            NotificationTypes.ENTITY_ORDER,
-                            orderId);
-            case OrderStatus.CANCELLED ->
-                    notifications.toRole(
-                            OWNER_ROLE,
-                            NotificationTypes.ORDER_STATUS,
-                            "Khách đã hủy đơn",
-                            "Đơn " + number + " đã bị khách hủy: " + finalReason,
-                            NotificationTypes.ENTITY_ORDER,
-                            orderId);
+                    notifyStore(orderId, "Khách đã nhận hàng", "Đơn " + number + " đã được khách xác nhận nhận hàng.");
+            // Đơn hủy lúc còn chờ thanh toán thì chủ shop chưa từng được báo có đơn, nên không báo hủy
+            case OrderStatus.CANCELLED -> {
+                if (OrderStatus.PENDING_CONFIRMATION.equals(current))
+                    notifyStore(orderId, "Khách đã hủy đơn", "Đơn " + number + " đã bị khách hủy: " + finalReason);
+            }
             default -> {}
         }
         return detail(actor, orderId);
@@ -554,6 +611,11 @@ public class OrderService {
                     "Đơn hàng hoàn tất",
                     "Đơn " + due.orderNumber() + " đã tự động hoàn tất sau " + AUTO_COMPLETE_DAYS
                             + " ngày kể từ khi giao.");
+            notifyStore(
+                    due.orderId(),
+                    "Đơn hàng tự động hoàn tất",
+                    "Đơn " + due.orderNumber() + " đã tự hoàn tất vì khách chưa xác nhận sau "
+                            + AUTO_COMPLETE_DAYS + " ngày kể từ khi giao.");
             count++;
         }
         return count;

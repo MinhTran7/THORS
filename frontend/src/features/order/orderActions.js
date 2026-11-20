@@ -9,7 +9,8 @@ export const OWNER_ACTIONS = {
     { to: 'REJECTED', label: 'Từ chối đơn', askReason: true }
   ],
   AWAITING_PICKUP: [{ to: 'SHIPPING', label: 'Giao hàng', primary: true, askCarrier: true }],
-  SHIPPING: [{ to: 'DELIVERED', label: 'Xác nhận đã giao', primary: true }]
+  // askProof: phải chụp ảnh lúc giao làm minh chứng (khi database đã bật tính năng này)
+  SHIPPING: [{ to: 'DELIVERED', label: 'Xác nhận đã giao', primary: true, askProof: true }]
 };
 
 // Hãng giao tự báo trạng thái về hệ thống: khi đã tạo vận đơn, đơn tự chuyển "Đang giao" lúc hãng lấy
@@ -23,6 +24,21 @@ export const ownerActionsFor = (order) => {
   return CARRIER_MANAGED.includes(carrier) ? actions.filter((a) => a.to !== 'SHIPPING' && a.to !== 'DELIVERED') : actions;
 };
 
+// Danh sách chỉ có 2 chỗ nút cố định: nút bước tiếp theo (đổi chữ theo trạng thái) và nút từ chối.
+// Nút không dùng được vẫn hiện nhưng bị làm mờ, để các dòng thẳng hàng và không nhảy layout.
+const FIRST_STEP = OWNER_ACTIONS.PENDING_CONFIRMATION[0];
+const REJECT = OWNER_ACTIONS.PENDING_CONFIRMATION[1];
+
+/** 2 nút của Owner cho một dòng đơn, kèm cờ enabled. */
+export const ownerActionSlots = (order) => {
+  const available = new Set(ownerActionsFor(order).map((a) => a.to));
+  const next = (OWNER_ACTIONS[order?.orderStatus] ?? []).find((a) => a.primary) ?? FIRST_STEP;
+  return [
+    { ...next, enabled: available.has(next.to) },
+    { ...REJECT, enabled: available.has(REJECT.to) }
+  ];
+};
+
 // Khách: hủy khi cửa hàng chưa xác nhận, xác nhận đã nhận hàng khi đơn đã giao
 const CANCEL = { to: 'CANCELLED', label: 'Hủy đơn', askReason: true };
 export const CUSTOMER_ACTIONS = {
@@ -31,13 +47,13 @@ export const CUSTOMER_ACTIONS = {
   DELIVERED: [{ to: 'COMPLETED', label: 'Đã nhận hàng', primary: true }]
 };
 
-// Hình thức giao: địa chỉ gần thì cửa hàng tự giao, địa chỉ xa mới cần đơn vị vận chuyển
+// Hình thức giao: địa chỉ gần thì cửa hàng tự giao, địa chỉ xa thì gửi GHN (hãng duy nhất đã kết nối API)
 export const CARRIERS = [
   { value: 'SELF', label: 'Cửa hàng tự giao' },
-  { value: 'GHN', label: 'Giao Hàng Nhanh' },
-  { value: 'GHTK', label: 'Giao Hàng Tiết Kiệm' },
-  { value: 'VIETTEL_POST', label: 'Viettel Post' },
-  { value: 'JT', label: 'J&T Express' }
+  { value: 'GHN', label: 'Giao Hàng Nhanh' }
 ];
 
-export const carrierLabel = (code) => CARRIERS.find((c) => c.value === code)?.label ?? code;
+// Hãng không còn chọn được nhưng có thể đã nằm trong đơn cũ, giữ tên để vẫn hiển thị đúng
+const OLD_CARRIER_LABELS = { GHTK: 'Giao Hàng Tiết Kiệm', VIETTEL_POST: 'Viettel Post', JT: 'J&T Express' };
+
+export const carrierLabel = (code) => CARRIERS.find((c) => c.value === code)?.label ?? OLD_CARRIER_LABELS[code] ?? code;

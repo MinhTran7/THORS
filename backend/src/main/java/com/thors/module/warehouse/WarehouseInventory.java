@@ -200,11 +200,11 @@ public class WarehouseInventory {
         for (var row :
                 s.jdbc()
                         .queryForList(
-                                """
-                SELECT l.product_location_id,r.rack_code,t.level_number FROM product_location l
+                                s.withTierLabel("""
+                SELECT l.product_location_id,TIER_LABEL AS tier_label FROM product_location l
                 JOIN shelf_level t ON t.shelf_level_id=l.shelf_level_id JOIN rack r ON r.rack_id=t.rack_id
-                """))
-            labels.put(num(row, "product_location_id"), "" + row.get("rack_code") + row.get("level_number"));
+                """)))
+            labels.put(num(row, "product_location_id"), (String) row.get("tier_label"));
         return labels;
     }
 
@@ -251,7 +251,7 @@ public class WarehouseInventory {
                   WHERE quantity_change>0 GROUP BY detail_id) fin ON fin.detail_id=d.detail_id
                 LEFT JOIN (SELECT detail_id,SUM(quantity_change) AS total FROM stock_adjustment GROUP BY detail_id) led
                   ON led.detail_id=d.detail_id
-                WHERE (? IS NULL OR d.detail_id=?)
+                WHERE (? IS NULL OR d.detail_id=?) AND d.status<>'DELETED'
                 ORDER BY p.product_name,d.color,d.size,d.detail_id
                 """,
                                 onlyDetail,
@@ -344,6 +344,27 @@ public class WarehouseInventory {
             int page,
             int pageSize,
             boolean all) {
+        return list(a, q, color, size, categoryId, shelfId, state, slowDays, sort, page, pageSize, all, false);
+    }
+
+    /**
+     * Same as {@link #list} with {@code group=true}: items are products, each holding its matching
+     * variants (already filtered and sorted) and their summed quantities; paging counts products.
+     */
+    public Map<String, Object> list(
+            Account a,
+            String q,
+            String color,
+            String size,
+            Integer categoryId,
+            Integer shelfId,
+            String state,
+            Integer slowDays,
+            String sort,
+            int page,
+            int pageSize,
+            boolean all,
+            boolean group) {
         policy.view(a);
         if (state != null && !state.isBlank() && !STATES.contains(state))
             throw new ApiException(400, "INVENTORY_FILTER", "Bộ lọc trạng thái tồn không hợp lệ.");
@@ -411,12 +432,15 @@ public class WarehouseInventory {
             case "stock_desc" -> byStock.reversed().thenComparing(byName);
             default -> byName;
         });
-        int size2 = all ? Math.max(1, rows.size()) : Math.max(1, Math.min(pageSize, 100));
+        // group=true: one line per product (its variants inside), paged by product.
+        List<Map<String, Object>> lines = group && !all ? groupByProduct(rows, sort) : rows;
+        int size2 = all ? Math.max(1, lines.size()) : Math.max(1, Math.min(pageSize, 100));
         int pageNo = all ? 0 : Math.max(0, page);
-        int from = Math.min(rows.size(), pageNo * size2);
+        int from = Math.min(lines.size(), pageNo * size2);
         var result = new LinkedHashMap<String, Object>();
-        result.put("items", rows.subList(from, Math.min(rows.size(), from + size2)));
-        result.put("total", rows.size());
+        result.put("items", lines.subList(from, Math.min(lines.size(), from + size2)));
+        result.put("total", lines.size());
+        result.put("total_variants", rows.size());
         result.put("page", pageNo);
         result.put("size", size2);
         result.put("metrics", metrics);
@@ -428,6 +452,55 @@ public class WarehouseInventory {
         result.put(
                 "categories",
                 s.jdbc().queryForList("SELECT category_id,category_name FROM category ORDER BY category_name"));
+        return result;
+    }
+
+    /**
+     * One line per product from already filtered + sorted variant rows. Name sorts keep the order of
+     * the first variant; stock sorts use the product total. Quantities are summed over the variants
+     * shown, locations are merged by label, and the state is counted per variant (out / low / in).
+     */
+    @SuppressWarnings("unchecked")
+    static List<Map<String, Object>> groupByProduct(List<Map<String, Object>> rows, String sort) {
+        var groups = new LinkedHashMap<Integer, Map<String, Object>>();
+        for (var r : rows) {
+            var g = groups.computeIfAbsent(num(r, "product_id"), id -> {
+                var n = new LinkedHashMap<String, Object>();
+                n.put("product_id", id);
+                n.put("product_code", r.get("product_code"));
+                n.put("product_name", r.get("product_name"));
+                n.put("category_name", r.get("category_name"));
+                for (var k : List.of("stock_quantity", "assigned_quantity", "unassigned_quantity", "held_quantity",
+                        "available_quantity", "incoming_quantity", "count_in", "count_low", "count_out"))
+                    n.put(k, 0L);
+                n.put("locations", new LinkedHashMap<String, Long>());
+                n.put("variants", new ArrayList<Map<String, Object>>());
+                return n;
+            });
+            for (var k : List.of("stock_quantity", "assigned_quantity", "unassigned_quantity", "held_quantity",
+                    "available_quantity", "incoming_quantity"))
+                g.put(k, (long) g.get(k) + ((Number) r.get(k)).longValue());
+            String counter = "count_" + String.valueOf(r.get("stock_state")).toLowerCase(Locale.ROOT);
+            g.put(counter, (long) g.get(counter) + 1);
+            var merged = (Map<String, Long>) g.get("locations");
+            for (var p : (List<Map<String, Object>>) r.get("locations"))
+                merged.merge(String.valueOf(p.get("label")), ((Number) p.get("quantity")).longValue(), Long::sum);
+            ((List<Map<String, Object>>) g.get("variants")).add(r);
+        }
+        var result = new ArrayList<Map<String, Object>>();
+        for (var g : groups.values()) {
+            var merged = (Map<String, Long>) g.get("locations");
+            var places = new ArrayList<Map<String, Object>>();
+            merged.entrySet().stream()
+                    .sorted(Map.Entry.<String, Long>comparingByValue().reversed().thenComparing(Map.Entry.comparingByKey()))
+                    .forEach(e -> places.add(Map.of("label", e.getKey(), "quantity", e.getValue())));
+            g.put("locations", places);
+            g.put("variant_count", ((List<?>) g.get("variants")).size());
+            result.add(g);
+        }
+        Comparator<Map<String, Object>> byStock = Comparator.comparing(g -> (long) g.get("stock_quantity"));
+        if ("stock_asc".equals(sort)) result.sort(byStock);
+        else if ("stock_desc".equals(sort)) result.sort(byStock.reversed());
         return result;
     }
 
@@ -514,6 +587,38 @@ public class WarehouseInventory {
         return Map.of("detail_id", detail, "min_stock_quantity", min == null ? "" : min);
     }
 
+    /**
+     * Owner soft-deletes a variant: status becomes DELETED and it disappears from inventory and
+     * pickers, but the row and all its history (documents, stock ledger, orders) stay in the database.
+     * Only a variant with nothing in stock and nothing held for orders can be deleted.
+     */
+    @Transactional
+    public Map<String, Object> deleteVariant(Account a, int detail) {
+        policy.owner(a);
+        s.lock();
+        var v =
+                s.one(
+                        "SELECT d.stock_quantity,d.status,(SELECT COALESCE(SUM(i.reserved_quantity),0) FROM order_item i"
+                                + " WHERE i.detail_id=d.detail_id AND i.reserved_quantity>0) AS held"
+                                + " FROM product_detail d WHERE d.detail_id=? FOR UPDATE",
+                        detail);
+        if ("DELETED".equals(v.get("status"))) return Map.of("detail_id", detail, "status", "DELETED");
+        int stock = num(v, "stock_quantity");
+        if (stock > 0)
+            throw new ApiException(
+                    409,
+                    "VARIANT_HAS_STOCK",
+                    "Còn " + stock + " sản phẩm trong kho. Chỉ xóa được khi tồn bằng 0 (kiểm kê hoặc trả nhà cung cấp trước).");
+        if (((Number) v.get("held")).longValue() > 0)
+            throw new ApiException(409, "VARIANT_HELD", "Biến thể đang được giữ cho đơn hàng, chưa xóa được.");
+        s.jdbc()
+                .update(
+                        "UPDATE product_detail SET status='DELETED',online_sales_enabled=0 WHERE detail_id=?",
+                        detail);
+        s.audit(a.id(), "INVENTORY_VARIANT_DELETE", detail, v.get("status") + " -> DELETED");
+        return Map.of("detail_id", detail, "status", "DELETED");
+    }
+
     /** Where a ledger row came from, for "open the source document". */
     private static void source(Map<String, Object> m) {
         String key = Objects.toString(m.get("idempotency_key"), "");
@@ -570,7 +675,8 @@ public class WarehouseInventory {
                 LEFT JOIN order_item oi ON oi.order_item_id=m.order_item_id
                 LEFT JOIN orders o ON o.order_id=oi.order_id
                 LEFT JOIN return_request_item rri ON rri.return_request_item_id=m.return_request_item_id
-                WHERE m.detail_id=? ORDER BY m.adjusted_at DESC,m.adjustment_id DESC
+                WHERE m.detail_id=? AND (m.idempotency_key IS NULL OR m.idempotency_key NOT LIKE 'movereq:%')
+                ORDER BY m.adjusted_at DESC,m.adjustment_id DESC
                 """,
                                 detail);
         int balance = num(variant, "stock_quantity");

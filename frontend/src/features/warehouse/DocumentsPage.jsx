@@ -1,28 +1,46 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import useSWR from 'swr';
 import {
   Alert,
   Button,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  IconButton,
   Link as MuiLink,
   MenuItem,
   Stack,
   TextField,
   Typography
 } from '@mui/material';
+import { CloseOutlined } from '@ant-design/icons';
 import MainCard from 'components/MainCard';
 import { api } from 'services/http';
 import { useWarehouse } from './WarehouseContext';
 import { ActionDialog, DataTable, Metrics, Status, Title } from './components';
 import DocumentForm from './DocumentForm';
 import OrderDetail from './OrderDetail';
+import ReceiptCheck from './ReceiptCheck';
 import ReturnDispatchDialog from './ReturnDispatchDialog';
-import SettlementPanel, { SettlementStatus } from './SettlementPanel';
-import { docCode, handledQty, money, number, returnableQty, statusText, totalQty, typeLabel, variantLabel, when } from './model';
+import SettlementPanel from './SettlementPanel';
+import { MoveForm } from './LocationsPage';
+import {
+  docCode,
+  handledQty,
+  money,
+  number,
+  returnStage,
+  returnStages,
+  returnableQty,
+  statusText,
+  totalQty,
+  typeLabel,
+  variantLabel,
+  when
+} from './model';
 
 const historyNames = {
   DOCUMENT_CREATE: 'Lập phiếu',
@@ -31,6 +49,7 @@ const historyNames = {
   DOCUMENT_APPROVE: 'Duyệt phiếu',
   DOCUMENT_DISPATCH: 'Xác nhận xuất trả',
   DOCUMENT_CONFIRM: 'Xác nhận',
+  DOCUMENT_RECEIVE: 'Xác nhận nhập kho',
   DOCUMENT_REJECT: 'Từ chối',
   DOCUMENT_CANCEL: 'Hủy phiếu',
   DOCUMENT_REFUND: 'Nhận hoàn tiền',
@@ -38,11 +57,18 @@ const historyNames = {
   DOCUMENT_CREDIT_HOLD: 'Giữ tiền đối trừ',
   DOCUMENT_CREDIT_USE: 'Dùng tiền đối trừ',
   DOCUMENT_EXCHANGE: 'Đổi hàng',
-  DOCUMENT_SETTLEMENT_VOID: 'Hủy bút toán',
+  DOCUMENT_SETTLEMENT_VOID: 'Hủy lần trả / xử lý tiền',
   DOCUMENT_PAYMENT: 'Thanh toán nhập hàng',
   DOCUMENT_PAYMENT_BASIS: 'Khai báo số đã trả trước khi theo dõi'
 };
-const moneyActions = ['DOCUMENT_PAYMENT', 'DOCUMENT_REFUND', 'DOCUMENT_DEBT_OFFSET', 'DOCUMENT_CREDIT_HOLD', 'DOCUMENT_CREDIT_USE', 'DOCUMENT_EXCHANGE'];
+const moneyActions = [
+  'DOCUMENT_PAYMENT',
+  'DOCUMENT_REFUND',
+  'DOCUMENT_DEBT_OFFSET',
+  'DOCUMENT_CREDIT_HOLD',
+  'DOCUMENT_CREDIT_USE',
+  'DOCUMENT_EXCHANGE'
+];
 
 // Audit trail + stock movements of a supplier return, from the existing audit_log/stock_adjustment.
 function ReturnHistory({ id }) {
@@ -55,7 +81,10 @@ function ReturnHistory({ id }) {
       {data.actions.map((h, index) => (
         <Typography key={index} variant="body2">
           {when(h.performed_at)} · {historyNames[h.action_type] || h.action_type} · {h.actor_name || 'Hệ thống'}
-          {['DOCUMENT_REJECT', 'DOCUMENT_CANCEL', 'DOCUMENT_SETTLEMENT_VOID', 'DOCUMENT_PAYMENT_BASIS'].includes(h.action_type) && h.new_value ? ` · ${h.new_value}` : ''}
+          {['DOCUMENT_REJECT', 'DOCUMENT_CANCEL', 'DOCUMENT_SETTLEMENT_VOID', 'DOCUMENT_PAYMENT_BASIS'].includes(h.action_type) &&
+          h.new_value
+            ? ` · ${h.new_value}`
+            : ''}
           {moneyActions.includes(h.action_type) && h.new_value ? ` · ${money(h.new_value)}` : ''}
         </Typography>
       ))}
@@ -70,7 +99,7 @@ function ReturnHistory({ id }) {
               {
                 key: 'location',
                 label: 'Vị trí lấy',
-                render: (m) => (m.source_location_id ? `${m.rack_code}${m.level_number}` : 'Chưa xếp vị trí')
+                render: (m) => (m.source_location_id ? m.tier_label || `${m.rack_code}${m.level_number}` : 'Chưa xếp vị trí')
               },
               { key: 'quantity_change', label: 'Thay đổi tồn', align: 'right', render: (m) => number(m.quantity_change) },
               { key: 'actor_name', label: 'Người thực hiện' }
@@ -83,12 +112,14 @@ function ReturnHistory({ id }) {
 }
 
 export function DocumentDetail({ id, onClose, onEdit, onAction, readOnly = false }) {
-  const { documents, owner, account, busy } = useWarehouse();
+  const { documents, owner, account, busy, data } = useWarehouse();
   const [nested, setNested] = useState(null);
   const [returnForm, setReturnForm] = useState(false);
+  const [placing, setPlacing] = useState(null);
   const d = documents.find((x) => x.receipt_id === id);
   if (!d) return null;
-  if (d.receipt_type === 'SUPPLIER_RETURN') return <ReturnDetail d={d} onClose={onClose} onEdit={onEdit} onAction={onAction} readOnly={readOnly} />;
+  if (d.receipt_type === 'SUPPLIER_RETURN')
+    return <ReturnDetail d={d} onClose={onClose} onEdit={onEdit} onAction={onAction} readOnly={readOnly} />;
   if (d.receipt_type === 'PURCHASE_ORDER')
     return (
       <>
@@ -101,10 +132,16 @@ export function DocumentDetail({ id, onClose, onEdit, onAction, readOnly = false
   const canEdit = canAct && d.status === 'DRAFT' && (owner || (d.receipt_type === 'RECEIPT' && d.created_by === account.id));
   const source = documents.find((x) => x.receipt_id === d.source_receipt_id);
   const canReturn = canAct && d.receipt_type === 'RECEIPT' && d.status === 'CONFIRMED' && d.items.some((i) => returnableQty(i) > 0);
+  // Confirmed receipt waiting for its labels to be scanned; stock is unchanged until the check is closed.
+  const checking = d.receipt_type === 'RECEIPT' && d.status === 'APPROVED';
+  const canPlace = canAct && d.receipt_type === 'RECEIPT' && d.status === 'CONFIRMED';
   return (
     <Dialog open onClose={onClose} fullWidth maxWidth="lg">
-      <DialogTitle>
-        {docCode(d)} · {typeLabel[d.receipt_type]} <Status value={d.status} />
+      <DialogTitle sx={{ pr: 7 }}>
+        {docCode(d)} · {typeLabel[d.receipt_type]} <Status value={d.status} type={d.receipt_type} />
+        <IconButton aria-label="Đóng" onClick={onClose} sx={{ position: 'absolute', right: 12, top: 12 }}>
+          <CloseOutlined />
+        </IconButton>
       </DialogTitle>
       <DialogContent>
         <Stack spacing={2}>
@@ -131,31 +168,70 @@ export function DocumentDetail({ id, onClose, onEdit, onAction, readOnly = false
               Đóng đơn: {d.close_reason} · {when(d.closed_at)}
             </Alert>
           )}
-          <DataTable
-            rows={d.items.map((i) => ({ ...i, _key: i.receipt_item_id }))}
-            columns={[
-              { key: 'product', label: 'Sản phẩm · màu · size', render: variantLabel },
-              { key: 'quantity', label: 'Số lượng', align: 'right', render: (i) => number(i.quantity) },
-              { key: 'unit_price', label: 'Đơn giá nhập', align: 'right', render: (i) => money(i.unit_price) },
-              { key: 'amount', label: 'Thành tiền', align: 'right', render: (i) => money(i.quantity * i.unit_price) },
-              ...(d.receipt_type !== 'SUPPLIER_RETURN'
-                ? [
-                    {
-                      key: 'handled_quantity',
-                      label: d.receipt_type === 'PURCHASE_ORDER' ? 'Đã nhận' : 'Đã trả NCC',
-                      align: 'right',
-                      render: (i) => number(i.handled_quantity)
-                    },
-                    {
-                      key: 'remaining',
-                      label: d.receipt_type === 'PURCHASE_ORDER' ? 'Còn thiếu' : 'Còn được trả',
-                      align: 'right',
-                      render: (i) => number(d.receipt_type === 'PURCHASE_ORDER' ? i.quantity - i.handled_quantity : returnableQty(i))
-                    }
-                  ]
-                : [])
-            ]}
-          />
+          {d.receive_note && <Alert severity="warning">Chênh lệch khi kiểm hàng: {d.receive_note}</Alert>}
+          {checking ? (
+            <ReceiptCheck doc={d} readOnly={!canAct} />
+          ) : (
+            <DataTable
+              rows={d.items.map((i) => ({ ...i, _key: i.receipt_item_id }))}
+              columns={[
+                { key: 'product', label: 'Sản phẩm · màu · size', render: variantLabel },
+                // After a goods check with differences: what the receipt said vs what was scanned in.
+                ...(d.receipt_type === 'RECEIPT' && d.items.some((i) => i.expected_quantity != null && i.expected_quantity !== i.quantity)
+                  ? [{ key: 'expected', label: 'Trên phiếu', align: 'right', render: (i) => number(i.expected_quantity ?? i.quantity) }]
+                  : []),
+                {
+                  key: 'quantity',
+                  label: d.receipt_type === 'RECEIPT' ? 'Thực nhận' : 'Số lượng',
+                  align: 'right',
+                  render: (i) => number(i.quantity)
+                },
+                { key: 'unit_price', label: 'Đơn giá nhập', align: 'right', render: (i) => money(i.unit_price) },
+                { key: 'amount', label: 'Thành tiền', align: 'right', render: (i) => money(i.quantity * i.unit_price) },
+                // Phiếu nhập đã nhập kho: xếp hàng vừa nhận lên kệ ngay tại đây.
+                ...(canPlace
+                  ? [
+                      {
+                        key: 'place',
+                        label: 'Xếp lên kệ',
+                        render: (i) => {
+                          const v = data.variants.find((x) => x.detail_id === i.detail_id);
+                          const left = Number(v?.unassigned_quantity || 0);
+                          if (!v || !Number(i.quantity)) return '—';
+                          if (!left) return <Chip size="small" color="success" variant="outlined" label="Đã xếp hết" />;
+                          return (
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              disabled={busy}
+                              onClick={() => setPlacing({ variant: v, initialQuantity: Number(i.quantity) })}
+                            >
+                              Xếp lên kệ ({number(left)} chưa xếp)
+                            </Button>
+                          );
+                        }
+                      }
+                    ]
+                  : []),
+                ...(d.receipt_type !== 'SUPPLIER_RETURN'
+                  ? [
+                      {
+                        key: 'handled_quantity',
+                        label: d.receipt_type === 'PURCHASE_ORDER' ? 'Đã nhận' : 'Đã trả NCC',
+                        align: 'right',
+                        render: (i) => number(i.handled_quantity)
+                      },
+                      {
+                        key: 'remaining',
+                        label: d.receipt_type === 'PURCHASE_ORDER' ? 'Còn thiếu' : 'Còn được trả',
+                        align: 'right',
+                        render: (i) => number(d.receipt_type === 'PURCHASE_ORDER' ? i.quantity - i.handled_quantity : returnableQty(i))
+                      }
+                    ]
+                  : [])
+              ]}
+            />
+          )}
           <Typography variant="h5">
             Tổng: {number(totalQty(d))} sản phẩm · {money(d.total_amount)}
           </Typography>
@@ -172,7 +248,11 @@ export function DocumentDetail({ id, onClose, onEdit, onAction, readOnly = false
         </Stack>
       </DialogContent>
       <DialogActions sx={{ flexWrap: 'wrap', gap: 1 }}>
-        <Button onClick={onClose}>Đóng</Button>
+        {canAct && owner && (['DRAFT', 'PENDING_CONFIRMATION'].includes(d.status) || checking) && (
+          <Button color="error" disabled={busy} onClick={() => onAction(d, 'cancel')}>
+            Hủy phiếu
+          </Button>
+        )}
         {canReturn && (
           <Button variant="outlined" disabled={busy} onClick={() => setReturnForm(true)}>
             Trả hàng nhà cung cấp
@@ -180,9 +260,6 @@ export function DocumentDetail({ id, onClose, onEdit, onAction, readOnly = false
         )}
         {canEdit && (
           <>
-            <Button disabled={busy} onClick={() => onEdit(d)}>
-              Sửa nháp
-            </Button>
             {/* Owner confirms drafts directly; only Family sends a draft for confirmation. */}
             {!owner && (
               <Button disabled={busy} onClick={() => onAction(d, 'submit')}>
@@ -201,13 +278,9 @@ export function DocumentDetail({ id, onClose, onEdit, onAction, readOnly = false
             Từ chối
           </Button>
         )}
-        {canAct && owner && ['DRAFT', 'PENDING_CONFIRMATION'].includes(d.status) && (
-          <Button color="error" disabled={busy} onClick={() => onAction(d, 'cancel')}>
-            Hủy phiếu
-          </Button>
-        )}
       </DialogActions>
       {returnForm && <DocumentForm type="SUPPLIER_RETURN" source={d} onClose={() => setReturnForm(false)} />}
+      {placing && <MoveForm {...placing} mode="place" onClose={() => setPlacing(null)} />}
     </Dialog>
   );
 }
@@ -223,8 +296,11 @@ function ReturnDetail({ d, onClose, onEdit, onAction, readOnly }) {
   const pending = ['DRAFT', 'PENDING_CONFIRMATION'].includes(d.status);
   return (
     <Dialog open onClose={onClose} fullWidth maxWidth="lg">
-      <DialogTitle>
+      <DialogTitle sx={{ pr: 7 }}>
         {docCode(d)} · {typeLabel[d.receipt_type]} <Status value={d.status} type={d.receipt_type} />
+        <IconButton aria-label="Đóng" onClick={onClose} sx={{ position: 'absolute', right: 12, top: 12 }}>
+          <CloseOutlined />
+        </IconButton>
       </DialogTitle>
       <DialogContent>
         <Stack spacing={2}>
@@ -241,7 +317,14 @@ function ReturnDetail({ d, onClose, onEdit, onAction, readOnly }) {
             </Typography>
           )}
           <Typography>
-            Lý do trả hàng: {hasReason ? d.note : <Typography component="span" color="error">chưa nhập</Typography>}
+            Lý do trả hàng:{' '}
+            {hasReason ? (
+              d.note
+            ) : (
+              <Typography component="span" color="error">
+                chưa nhập
+              </Typography>
+            )}
           </Typography>
           <Typography color="text.secondary">
             Người lập: {d.creator_name} · {when(d.receipt_date)}
@@ -269,10 +352,14 @@ function ReturnDetail({ d, onClose, onEdit, onAction, readOnly }) {
         </Stack>
       </DialogContent>
       <DialogActions sx={{ flexWrap: 'wrap', gap: 1 }}>
-        <Button onClick={onClose}>Đóng</Button>
+        {canAct && owner && (pending || d.status === 'APPROVED') && (
+          <Button color="error" disabled={busy} onClick={() => onAction(d, 'cancel')}>
+            Hủy phiếu
+          </Button>
+        )}
         {canEdit && (
           <Button disabled={busy} onClick={() => onEdit(d)}>
-            Sửa nháp
+            Sửa phiếu
           </Button>
         )}
         {/* Family sends drafts for approval; the owner never has to send a draft to themselves. */}
@@ -301,11 +388,6 @@ function ReturnDetail({ d, onClose, onEdit, onAction, readOnly }) {
             Từ chối
           </Button>
         )}
-        {canAct && owner && (pending || d.status === 'APPROVED') && (
-          <Button color="error" disabled={busy} onClick={() => onAction(d, 'cancel')}>
-            Hủy phiếu
-          </Button>
-        )}
       </DialogActions>
       {nested && <DocumentDetail id={nested} readOnly onClose={() => setNested(null)} />}
     </Dialog>
@@ -313,7 +395,7 @@ function ReturnDetail({ d, onClose, onEdit, onAction, readOnly }) {
 }
 export const confirmLabel = {
   PURCHASE_ORDER: 'Xác nhận đặt hàng',
-  RECEIPT: 'Xác nhận nhập hàng',
+  RECEIPT: 'Xác nhận phiếu nhập',
   SUPPLIER_RETURN: 'Xác nhận xuất trả'
 };
 const actionNames = {
@@ -337,7 +419,6 @@ const expectedRemaining = (doc, documents) => {
 export function DocumentAction({ action, onClose, onDone }) {
   const { run, documents } = useWarehouse();
   const { doc, kind } = action;
-  const confirmedOrder = doc.receipt_type === 'PURCHASE_ORDER' && doc.status === 'CONFIRMED';
   const isReturn = doc.receipt_type === 'SUPPLIER_RETURN';
   // Dispatching a supplier return needs the pick locations, so it has its own dialog.
   if (kind === 'dispatch') return <ReturnDispatchDialog doc={doc} onClose={onClose} onDone={onDone} />;
@@ -357,24 +438,26 @@ export function DocumentAction({ action, onClose, onDone }) {
       reason={['cancel', 'reject', 'close'].includes(kind)}
       text={
         kind === 'approve'
-          ? 'Phiếu chuyển sang “Chờ xuất trả”. Tồn kho chưa thay đổi; số lượng trên phiếu được giữ chỗ để không phiếu trả khác vượt số đã nhập. Tồn chỉ giảm khi xác nhận xuất trả.'
+          ? 'Hàng chưa bị trừ khỏi kho. Kho chỉ trừ khi bạn xác nhận đã xuất trả.'
           : isReturn && kind === 'submit'
-            ? 'Gửi phiếu cho chủ cửa hàng duyệt. Tồn kho chưa thay đổi.'
+            ? 'Gửi phiếu cho chủ cửa hàng duyệt.'
             : kind === 'confirm'
-          ? doc.receipt_type === 'PURCHASE_ORDER'
-            ? 'Xác nhận đơn đặt để bắt đầu lập các đợt nhập. Tồn kho chưa thay đổi.'
-            : doc.receipt_type === 'RECEIPT'
-              ? 'Xác nhận số thực nhận trên phiếu. Tổng tồn sẽ tăng một lần theo đúng từng màu/size; phiếu sẽ không sửa được.'
-              : 'Xác nhận trả nhà cung cấp. Tổng tồn và số lượng tại vị trí sẽ giảm; phiếu sẽ không sửa được.'
-          : kind === 'close'
-            ? 'Đóng đơn đặt và ghi nhận phần chưa được giao (giữ nguyên số đặt và lịch sử nhập). Không thể lập thêm đợt nhập cho đơn đã đóng.'
-            : kind === 'copy'
-              ? 'Tạo phiếu đặt nháp mới với cùng nhà cung cấp, dòng hàng, số lượng và đơn giá. Không mang theo lịch sử nhận hoặc duyệt.'
-              : kind === 'cancel' && confirmedOrder
-                ? 'Hủy đơn đặt đã xác nhận nhưng chưa có hàng nhập thực tế. Các phiếu nhập nháp/chờ duyệt phải được xử lý trước.'
-                : kind === 'submit' && doc.receipt_type === 'PURCHASE_ORDER'
-                  ? 'Gửi phiếu đặt cho chủ cửa hàng xác nhận. Sau khi gửi bạn không sửa được nữa; chủ cửa hàng có thể sửa trước khi xác nhận.'
-                  : 'Thao tác sẽ được lưu vào lịch sử chứng từ.'
+              ? doc.receipt_type === 'PURCHASE_ORDER'
+                ? 'Sau khi xác nhận, bạn có thể nhận hàng theo đơn này.'
+                : doc.receipt_type === 'RECEIPT'
+                  ? 'Hàng chưa được cộng vào kho. Tiếp theo: in tem, dán lên từng chiếc rồi quét tem.'
+                  : 'Hàng sẽ bị trừ khỏi kho và không sửa được phiếu nữa.'
+              : kind === 'close'
+                ? 'Phần hàng chưa giao sẽ không nhận nữa.'
+                : kind === 'copy'
+                  ? 'Tạo phiếu đặt mới giống phiếu này.'
+                  : kind === 'cancel'
+                    ? 'Phiếu bị hủy sẽ không dùng được nữa.'
+                    : kind === 'reject'
+                      ? 'Phiếu sẽ được trả lại cho người lập.'
+                      : kind === 'submit' && doc.receipt_type === 'PURCHASE_ORDER'
+                        ? 'Gửi phiếu cho chủ cửa hàng xác nhận. Sau khi gửi bạn không sửa được nữa.'
+                        : ''
       }
       onClose={onClose}
       onConfirm={async (reason) => {
@@ -396,27 +479,73 @@ export function DocumentAction({ action, onClose, onDone }) {
   );
 }
 export default function DocumentsPage({ type }) {
-  const { documents, owner } = useWarehouse();
+  const { documents, owner, account } = useWarehouse();
   const [params] = useSearchParams();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   // ?id= opens a document directly (links from the stock card).
   const [detail, setDetail] = useState(() => (params.get('id') ? Number(params.get('id')) : null));
+  // A new ?id= (e.g. clicking a notification while already on this page) opens that document.
+  const linkedId = params.get('id');
+  useEffect(() => {
+    if (linkedId) setDetail(Number(linkedId));
+  }, [linkedId]);
   const [form, setForm] = useState(null);
   const [action, setAction] = useState(null);
   const [sourceView, setSourceView] = useState(null);
   const isReturn = type === 'SUPPLIER_RETURN';
+  const isReceipt = type === 'RECEIPT';
   const docs = documents.filter((d) => d.receipt_type === type);
   const sourceOf = (d) => documents.find((x) => x.receipt_id === d.source_receipt_id);
-  const filtered = docs.filter(
-    (d) =>
-      (!status || d.status === status) &&
-      `${docCode(d)} ${isReturn && sourceOf(d) ? docCode(sourceOf(d)) : ''} ${d.manufacturer_name || ''} ${d.creator_name}`
-        .toLocaleLowerCase('vi')
-        .includes(search.toLocaleLowerCase('vi'))
-  );
+  // Receipts page: every confirmed purchase order (or exchange return) with goods still to come shows up
+  // as a "Chờ nhận hàng" row, so no separate "create receipt" step is needed. A source that already has a
+  // draft/pending receipt is skipped: that receipt row is shown instead.
+  const waiting = isReceipt
+    ? documents
+        .filter(
+          (d) =>
+            ['PURCHASE_ORDER', 'SUPPLIER_RETURN'].includes(d.receipt_type) &&
+            d.status === 'CONFIRMED' &&
+            !docs.some((r) => r.source_receipt_id === d.receipt_id && ['DRAFT', 'PENDING_CONFIRMATION', 'APPROVED'].includes(r.status))
+        )
+        .map((d) => {
+          const lines = (d.items || []).map((i) => ({
+            i,
+            open:
+              (d.receipt_type === 'SUPPLIER_RETURN' ? Number(i.exchanged_quantity || 0) : Number(i.quantity)) -
+              Number(i.handled_quantity || 0)
+          }));
+          const open = lines.reduce((n, l) => n + Math.max(0, l.open), 0);
+          const value = lines.reduce((n, l) => n + Math.max(0, l.open) * Number(l.i.unit_price || 0), 0);
+          return { ...d, _key: `waiting-${d.receipt_id}`, _waiting: true, _open: open, _value: value };
+        })
+        .filter((d) => d._open > 0)
+    : [];
+  const matches = (d) =>
+    `${docCode(d)} ${(isReturn || isReceipt) && sourceOf(d) ? docCode(sourceOf(d)) : ''} ${d.manufacturer_name || ''} ${d.creator_name}`
+      .toLocaleLowerCase('vi')
+      .includes(search.toLocaleLowerCase('vi'));
+  // Receipts page groups document statuses into the three that matter: waiting, received, cancelled.
+  const receiptGroup = (s) =>
+    s === 'CONFIRMED' ? 'RECEIVED' : s === 'APPROVED' ? 'CHECKING' : ['CANCELLED', 'REJECTED'].includes(s) ? 'CANCELLED' : 'WAITING';
+  const statusMatches = (d) =>
+    !status || (isReceipt ? receiptGroup(d.status) === status : isReturn ? returnStage(d) === status : d.status === status);
+  const filtered = [
+    ...waiting.filter((d) => (!status || status === 'WAITING') && matches(d)),
+    ...docs.filter((d) => statusMatches(d) && matches(d))
+  ];
   // Family members draft receipts and supplier returns; the backend enforces the same rule.
   const canCreate = owner || type === 'RECEIPT' || isReturn;
+  // Phiếu nhập đang nhập dở: mở thẳng form để sửa số lượng rồi xác nhận, không qua màn chi tiết.
+  const editableDraft = (d) => isReceipt && d.status === 'DRAFT' && (owner || d.created_by === account?.id);
+  const openRow = (d) =>
+    d._waiting ? setForm({ source: d }) : editableDraft(d) ? setForm({ document: d }) : setDetail(d.receipt_id);
+  // Phiếu nhập chưa nhận gì vào kho (nháp, chờ xác nhận, chờ kiểm hàng chưa quét tem nào): hủy ngay ở danh sách.
+  const cancellable = (d) =>
+    owner &&
+    isReceipt &&
+    (['DRAFT', 'PENDING_CONFIRMATION'].includes(d.status) ||
+      (d.status === 'APPROVED' && !d.items.some((i) => Number(i.scanned_quantity || 0) > 0)));
   const closeForm = () => setForm(null);
   return (
     <>
@@ -426,11 +555,12 @@ export default function DocumentsPage({ type }) {
           type === 'PURCHASE_ORDER'
             ? 'Đặt theo từng màu/size, theo dõi số đã giao và còn thiếu qua từng đợt.'
             : type === 'RECEIPT'
-              ? 'Lập phiếu từ đơn đặt; Owner xác nhận số hàng thực nhận.'
+              ? 'Đơn đặt đã xác nhận tự hiện ở đây với trạng thái “Chờ nhận hàng”. Bấm vào để nhập số thực nhận; phần chưa nhận vẫn chờ, hoặc đóng phần còn thiếu.'
               : 'Trả hàng cho nhà cung cấp theo phiếu nhập đã xác nhận: lập phiếu, duyệt, rồi xác nhận xuất trả tại vị trí lấy hàng.'
         }
         action={
-          canCreate && (
+          canCreate &&
+          !isReceipt && (
             <Button variant="contained" onClick={() => setForm({})}>
               {isReturn ? 'Tạo phiếu trả' : `Tạo ${typeLabel[type].toLowerCase()}`}
             </Button>
@@ -451,25 +581,31 @@ export default function DocumentsPage({ type }) {
                 ]
               ]
             : [
-          ['Tổng số phiếu', docs.length, 'Trong loại chứng từ này'],
-          ['Chờ xác nhận', docs.filter((d) => d.status === 'PENDING_CONFIRMATION').length, 'Cần chủ cửa hàng xử lý'],
-          [
-            type === 'PURCHASE_ORDER' ? 'Còn thiếu' : 'Số lượng đã xác nhận',
-            docs
-              .filter((d) => d.status === 'CONFIRMED')
-              .reduce((n, d) => n + (type === 'PURCHASE_ORDER' ? totalQty(d) - handledQty(d) : totalQty(d)), 0),
-            type === 'PURCHASE_ORDER' ? 'Trên các đơn đặt đang mở' : 'Tính theo số thực nhận'
-          ],
-          ...(type === 'RECEIPT'
-            ? [
+                ['Tổng số phiếu', docs.length, ''],
+                isReceipt
+                  ? [
+                      'Chờ nhận / kiểm hàng',
+                      waiting.length + docs.filter((d) => ['WAITING', 'CHECKING'].includes(receiptGroup(d.status))).length,
+                      `${number(docs.filter((d) => d.status === 'APPROVED').length)} phiếu đang chờ quét tem`
+                    ]
+                  : ['Chờ xác nhận', docs.filter((d) => d.status === 'PENDING_CONFIRMATION').length, 'Cần chủ cửa hàng xử lý'],
                 [
-                  'Số lượng đã xác nhận trả',
-                  docs.filter((d) => d.status === 'CONFIRMED').reduce((n, d) => n + handledQty(d), 0),
-                  'Đã xác nhận xuất trả nhà cung cấp'
-                ]
+                  type === 'PURCHASE_ORDER' ? 'Còn thiếu' : 'Số lượng đã nhận',
+                  docs
+                    .filter((d) => d.status === 'CONFIRMED')
+                    .reduce((n, d) => n + (type === 'PURCHASE_ORDER' ? totalQty(d) - handledQty(d) : totalQty(d)), 0),
+                  type === 'PURCHASE_ORDER' ? 'Trên các đơn đặt đang mở' : 'Tính theo số thực nhận'
+                ],
+                ...(type === 'RECEIPT'
+                  ? [
+                      [
+                        'Số lượng đã xác nhận trả',
+                        docs.filter((d) => d.status === 'CONFIRMED').reduce((n, d) => n + handledQty(d), 0),
+                        'Đã xác nhận xuất trả nhà cung cấp'
+                      ]
+                    ]
+                  : [])
               ]
-            : [])
-        ]
         }
       />
       <MainCard>
@@ -480,7 +616,7 @@ export default function DocumentsPage({ type }) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             sx={{ minWidth: 280, flex: 1 }}
-            slotProps={{ htmlInput: { 'aria-label': 'Tìm chứng từ' } }}
+            slotProps={{ htmlInput: { 'aria-label': 'Tìm phiếu' } }}
           />
           <TextField
             size="small"
@@ -491,24 +627,43 @@ export default function DocumentsPage({ type }) {
             slotProps={{ select: { displayEmpty: true, inputProps: { 'aria-label': 'Lọc trạng thái' } } }}
           >
             <MenuItem value="">Tất cả trạng thái</MenuItem>
-            {[
-              'DRAFT',
-              'PENDING_CONFIRMATION',
-              ...(isReturn ? ['APPROVED'] : []),
-              'CONFIRMED',
-              'REJECTED',
-              'CANCELLED',
-              ...(type === 'PURCHASE_ORDER' ? ['CLOSED'] : [])
-            ].map((s) => (
-              <MenuItem key={s} value={s}>
-                {statusText(s, type)}
-              </MenuItem>
-            ))}
+            {isReceipt &&
+              [
+                ['WAITING', 'Chờ nhận hàng'],
+                ['CHECKING', 'Chờ kiểm hàng'],
+                ['RECEIVED', 'Đã nhận'],
+                ['CANCELLED', 'Đã hủy']
+              ].map(([value, label]) => (
+                <MenuItem key={value} value={value}>
+                  {label}
+                </MenuItem>
+              ))}
+            {isReturn &&
+              returnStages.map(([value, label]) => (
+                <MenuItem key={value} value={value}>
+                  {label}
+                </MenuItem>
+              ))}
+            {!isReceipt &&
+              !isReturn &&
+              [
+                'DRAFT',
+                'PENDING_CONFIRMATION',
+                ...(isReturn ? ['APPROVED'] : []),
+                'CONFIRMED',
+                'REJECTED',
+                'CANCELLED',
+                ...(type === 'PURCHASE_ORDER' ? ['CLOSED'] : [])
+              ].map((s) => (
+                <MenuItem key={s} value={s}>
+                  {statusText(s, type)}
+                </MenuItem>
+              ))}
           </TextField>
         </Stack>
         <DataTable
           rows={filtered}
-          onRow={(d) => setDetail(d.receipt_id)}
+          onRow={openRow}
           columns={
             isReturn
               ? [
@@ -544,64 +699,164 @@ export default function DocumentsPage({ type }) {
                   { key: 'receipt_date', label: 'Ngày lập', render: (d) => when(d.receipt_date) },
                   { key: 'quantity', label: 'Số lượng trả', align: 'right', render: (d) => number(totalQty(d)) },
                   { key: 'total', label: 'Tổng giá trị trả', align: 'right', render: (d) => money(d.total_amount) },
-                  { key: 'status', label: 'Trạng thái phiếu', render: (d) => <Status value={d.status} type={type} /> },
                   {
-                    key: 'settlement',
-                    label: 'Tiền NCC trả lại',
+                    key: 'status',
+                    label: 'Trạng thái',
+                    render: (d) => {
+                      const stage = returnStage(d);
+                      const [, label, color] = returnStages.find(([v]) => v === stage) || [stage, stage, 'default'];
+                      return (
+                        <>
+                          <Chip size="small" variant="outlined" color={color} label={label} />
+                          {['UNPAID', 'PARTIAL'].includes(stage) && (
+                            <Typography variant="caption" color="text.secondary" component="div">
+                              Còn nợ {money(d.unsettled_amount)}
+                            </Typography>
+                          )}
+                        </>
+                      );
+                    }
+                  }
+                ]
+              : [
+                  {
+                    key: 'code',
+                    label: 'Mã phiếu',
                     render: (d) => (
                       <>
-                        <SettlementStatus value={d.settlement_status} />
-                        {d.status === 'CONFIRMED' && (
+                        <Typography color="primary" variant="subtitle2">
+                          {d._waiting ? 'Chưa lập phiếu' : docCode(d)}
+                        </Typography>
+                        {isReceipt && (d._waiting || sourceOf(d)) && (
                           <Typography variant="caption" color="text.secondary" component="div">
-                            Đã nhận {money(d.settled_amount)} · Còn {money(d.unsettled_amount)}
+                            Từ {docCode(d._waiting ? d : sourceOf(d))}
                           </Typography>
                         )}
                       </>
                     )
-                  }
-                ]
-              : [
-            {
-              key: 'code',
-              label: 'Mã phiếu',
-              render: (d) => (
-                <Typography color="primary" variant="subtitle2">
-                  {docCode(d)}
-                </Typography>
-              )
-            },
-            { key: 'manufacturer_name', label: 'Nhà sản xuất / nhà cung cấp' },
-            { key: 'receipt_date', label: 'Ngày lập', render: (d) => when(d.receipt_date) },
-            { key: 'quantity', label: 'Số lượng', align: 'right', render: (d) => number(totalQty(d)) },
-            ...(type === 'PURCHASE_ORDER'
-              ? [
+                  },
+                  { key: 'manufacturer_name', label: 'Nhà sản xuất / nhà cung cấp' },
+                  { key: 'receipt_date', label: 'Ngày lập', render: (d) => when(d.receipt_date) },
                   {
-                    key: 'handled',
-                    label: 'Đã nhận / Còn thiếu',
-                    render: (d) => `${number(handledQty(d))} / ${number(totalQty(d) - handledQty(d))}`
+                    key: 'quantity',
+                    label: 'Số lượng',
+                    align: 'right',
+                    render: (d) =>
+                      d._waiting ? (
+                        <>
+                          {number(d._open)}
+                          <Typography variant="caption" color="text.secondary" component="div">
+                            còn chờ nhận
+                          </Typography>
+                        </>
+                      ) : (
+                        number(totalQty(d))
+                      )
+                  },
+                  ...(type === 'PURCHASE_ORDER'
+                    ? [
+                        {
+                          key: 'handled',
+                          label: 'Đã nhận / Còn thiếu',
+                          render: (d) => `${number(handledQty(d))} / ${number(totalQty(d) - handledQty(d))}`
+                        }
+                      ]
+                    : type === 'RECEIPT'
+                      ? [
+                          {
+                            key: 'returned',
+                            label: 'Đã xác nhận trả',
+                            align: 'right',
+                            // handled_quantity of a receipt line = dispatched (CONFIRMED) supplier returns only.
+                            render: (d) => (d._waiting ? '—' : number(d.status === 'CONFIRMED' ? handledQty(d) : 0))
+                          }
+                        ]
+                      : []),
+                  { key: 'total', label: 'Tổng tiền', align: 'right', render: (d) => money(d._waiting ? d._value : d.total_amount) },
+                  {
+                    key: 'status',
+                    label: 'Trạng thái',
+                    render: (d) =>
+                      d._waiting ? (
+                        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+                          <Chip size="small" color="warning" label="Chờ nhận hàng" />
+                          {owner &&
+                            d.receipt_type === 'PURCHASE_ORDER' &&
+                            (docs.some((r) => r.source_receipt_id === d.receipt_id && r.status === 'CONFIRMED') ? (
+                              // Đã nhận một phần: đóng phần NCC không giao nữa
+                              <Button
+                                size="small"
+                                color="warning"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setAction({ doc: d, kind: 'close' });
+                                }}
+                              >
+                                Đóng phần còn thiếu
+                              </Button>
+                            ) : (
+                              // Chưa nhận được gì: hủy cả đơn
+                              <Button
+                                size="small"
+                                color="error"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setAction({ doc: d, kind: 'cancel' });
+                                }}
+                              >
+                                Hủy đơn
+                              </Button>
+                            ))}
+                        </Stack>
+                      ) : isReceipt ? (
+                        <>
+                          <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+                            <Chip
+                              size="small"
+                              color={
+                                { WAITING: 'warning', CHECKING: 'info', RECEIVED: 'success', CANCELLED: 'default' }[receiptGroup(d.status)]
+                              }
+                              label={
+                                { WAITING: 'Chờ nhận hàng', CHECKING: 'Chờ kiểm hàng', RECEIVED: 'Đã nhận', CANCELLED: 'Đã hủy' }[
+                                  receiptGroup(d.status)
+                                ]
+                              }
+                            />
+                            {cancellable(d) && (
+                              <Button
+                                size="small"
+                                color="error"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setAction({ doc: d, kind: 'cancel' });
+                                }}
+                              >
+                                Hủy phiếu
+                              </Button>
+                            )}
+                          </Stack>
+                          {d.status === 'APPROVED' && (
+                            <Typography variant="caption" color="text.secondary" component="div">
+                              Đã quét {number(d.items.reduce((n, i) => n + Number(i.scanned_quantity || 0), 0))} / {number(totalQty(d))}
+                            </Typography>
+                          )}
+                          {['DRAFT', 'PENDING_CONFIRMATION'].includes(d.status) && (
+                            <Typography variant="caption" color="text.secondary" component="div">
+                              {d.status === 'DRAFT' ? 'Phiếu đang nhập dở' : 'Chờ chủ cửa hàng xác nhận'}
+                            </Typography>
+                          )}
+                        </>
+                      ) : (
+                        <Status value={d.status} type={type} />
+                      )
                   }
                 ]
-              : type === 'RECEIPT'
-                ? [
-                    {
-                      key: 'returned',
-                      label: 'Đã xác nhận trả',
-                      align: 'right',
-                      // handled_quantity of a receipt line = dispatched (CONFIRMED) supplier returns only.
-                      render: (d) => number(d.status === 'CONFIRMED' ? handledQty(d) : 0)
-                    }
-                  ]
-                : []),
-            { key: 'total', label: 'Tổng tiền', align: 'right', render: (d) => money(d.total_amount) },
-            { key: 'status', label: 'Trạng thái', render: (d) => <Status value={d.status} /> }
-          ]
           }
         />
       </MainCard>
       {!owner && (
         <Alert severity="info" sx={{ mt: 2 }}>
-          Bạn được xem dữ liệu kho, lập/sửa phiếu nhập và phiếu trả nháp do mình tạo rồi gửi duyệt. Chủ cửa hàng duyệt, xác nhận và thay
-          đổi tồn kho.
+          Bạn lập phiếu rồi gửi chủ cửa hàng duyệt.
         </Alert>
       )}
       {sourceView && <DocumentDetail id={sourceView} readOnly onClose={() => setSourceView(null)} />}
@@ -617,7 +872,13 @@ export default function DocumentsPage({ type }) {
         />
       )}
       {form && canCreate && (
-        <DocumentForm key={`${type}-${form.document?.receipt_id || 'new'}`} type={type} document={form.document} onClose={closeForm} />
+        <DocumentForm
+          key={`${type}-${form.document?.receipt_id || (form.source ? `from-${form.source.receipt_id}` : 'new')}`}
+          type={type}
+          document={form.document}
+          source={form.source}
+          onClose={closeForm}
+        />
       )}
       {action && <DocumentAction action={action} onClose={() => setAction(null)} />}
     </>

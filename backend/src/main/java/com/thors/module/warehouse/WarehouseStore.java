@@ -9,13 +9,52 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class WarehouseStore {
     private final JdbcTemplate db;
+    private final ProductUnits units;
 
     public WarehouseStore(JdbcTemplate db) {
         this.db = db;
+        this.units = new ProductUnits(db);
+    }
+
+    /** Serial từng chiếc hàng; gọi {@link ProductUnits#sync} sau mỗi thay đổi số lượng. */
+    public ProductUnits units() {
+        return units;
     }
 
     public JdbcTemplate jdbc() {
         return db;
+    }
+
+    private volatile Boolean tierNames;
+    private volatile long tierNamesCheckedAt;
+
+    /** Cột shelf_level.level_name đã có chưa (migration 2026-11-18_shelf_level_name.sql). */
+    public boolean tierNamesReady() {
+        if (Boolean.TRUE.equals(tierNames)) return true;
+        long now = System.currentTimeMillis();
+        if (tierNames != null && now - tierNamesCheckedAt < 30_000) return false;
+        try {
+            db.queryForObject("SELECT COUNT(level_name) FROM shelf_level WHERE 1=0", Long.class);
+            tierNames = true;
+        } catch (org.springframework.dao.DataAccessException e) {
+            tierNames = false;
+        }
+        tierNamesCheckedAt = now;
+        return tierNames;
+    }
+
+    /**
+     * SQL nhãn của một tầng: tên tầng chủ cửa hàng đặt, nếu chưa đặt thì mã kệ + số tầng (vd A2).
+     * {@code rack}/{@code tier} là bí danh bảng rack / shelf_level trong câu SQL. NULL khi không có tầng.
+     */
+    public String tierLabel(String rack, String tier) {
+        String plain = "CONCAT(" + rack + ".rack_code," + tier + ".level_number)";
+        return tierNamesReady() ? "COALESCE(NULLIF(TRIM(" + tier + ".level_name),'')," + plain + ")" : plain;
+    }
+
+    /** Thay {@code TIER_LABEL} trong câu SQL bằng nhãn tầng của bí danh r (rack) / t (shelf_level). */
+    public String withTierLabel(String sql) {
+        return sql.replace("TIER_LABEL", tierLabel("r", "t"));
     }
 
     public Map<String, Object> one(String sql, Object... args) {
@@ -41,7 +80,7 @@ public class WarehouseStore {
                     Map.entry("supplier_settlement", "settlement_id"),
                     Map.entry("stock_count", "count_id"),
                     Map.entry("stock_count_item", "count_item_id"),
-                    Map.entry("location_move_request", "request_id"));
+                    Map.entry("product_unit", "unit_id"));
 
     public int insert(String sql, Object... args) {
         var match =
@@ -127,6 +166,7 @@ public class WarehouseStore {
                     String.format(
                             "Biến thể #%d không đủ hàng có thể bán: tồn %d, đang giữ cho đơn khác %d, cần %d.",
                             detail, stock, Math.max(0, others), qty));
+        units.sync(detail); // chênh lệch có từ trước (bán tại quầy…) không bị tính vào đơn này
         var taken = take(actor, detail, qty, stock, orderItem, key, reason);
         if (db.update(
                         "UPDATE product_detail SET stock_quantity=stock_quantity-? WHERE detail_id=? AND stock_quantity>=?",
@@ -134,6 +174,8 @@ public class WarehouseStore {
                         detail,
                         qty)
                 != 1) throw invalid("Biến thể #" + detail + ": tồn vừa thay đổi, hãy tải lại.");
+        stockAlert(detail, stock);
+        units.sync(detail, new ProductUnits.Out(ProductUnits.SOLD, orderItem, null, reason), ProductUnits.EXTERNAL_IN);
         return taken;
     }
 
@@ -146,6 +188,7 @@ public class WarehouseStore {
     public void recordSold(int actor, int detail, int qty, int orderItem, String key, String reason) {
         var variant = one("SELECT stock_quantity FROM product_detail WHERE detail_id=? FOR UPDATE", detail);
         take(actor, detail, qty, num(variant, "stock_quantity") + qty, orderItem, key, reason);
+        units.sync(detail, new ProductUnits.Out(ProductUnits.SOLD, orderItem, null, reason), ProductUnits.EXTERNAL_IN);
     }
 
     /** Unplaced first, then the fullest locations; one ORDER_OUT row per source. {@code stock} = before the sale. */
@@ -222,17 +265,70 @@ public class WarehouseStore {
         for (var f : fields) if (row.get(f) != null) row.put(f, time(row.get(f)).minus(offset));
     }
 
+    /** One notification for every active Owner (the bell in the header). */
+    public void notifyOwners(String entityType, int entity, String title, String message, String type) {
+        int id =
+                insert(
+                        "INSERT INTO notification(title,message,type,related_entity_type,related_entity_id)"
+                                + " VALUES(?,?,?,?,?)",
+                        title.length() > 200 ? title.substring(0, 200) : title,
+                        message,
+                        type,
+                        entityType,
+                        entity);
+        db.update(
+                "INSERT INTO user_notification(user_id,notification_id) SELECT u.user_id,? FROM `user`"
+                        + " u JOIN `role` r ON r.role_id=u.role_id WHERE r.role_name='OWNER' AND"
+                        + " u.account_status='ACTIVE'",
+                id);
+    }
+
+    /**
+     * Call after stock of a variant went down from {@code before}. Notifies the Owner once when it
+     * runs out (0) or first drops to its minimum stock; replaces the warning panel on the inventory page.
+     */
+    public void stockAlert(int detail, int before) {
+        var v =
+                one(
+                        "SELECT d.stock_quantity,d.min_stock_quantity,d.color,d.size,p.product_name FROM product_detail d"
+                                + " JOIN product p ON p.product_id=d.product_id WHERE d.detail_id=?",
+                        detail);
+        int after = num(v, "stock_quantity");
+        if (after >= before) return;
+        String name = v.get("product_name") + " · " + v.get("color") + " · " + v.get("size");
+        Integer min = v.get("min_stock_quantity") == null ? null : num(v, "min_stock_quantity");
+        if (after == 0)
+            notifyOwners("product_detail", detail, "Hết hàng: " + name, name + " đã hết hàng trong kho.", "STOCK_OUT");
+        else if (min != null && before > min && after <= min)
+            notifyOwners(
+                    "product_detail",
+                    detail,
+                    "Sắp hết hàng: " + name,
+                    name + " chỉ còn " + after + " sản phẩm (ngưỡng tối thiểu " + min + ").",
+                    "STOCK_LOW");
+    }
+
     /** Runs a query that needs database/migrations/2026-11-06_inventory.sql; explains instead of a 500. */
     public <T> T migrated(java.util.function.Supplier<T> action) {
         try {
             return action.get();
         } catch (org.springframework.jdbc.BadSqlGrammarException e) {
             String m = String.valueOf(e.getMostSpecificCause().getMessage()).toLowerCase(Locale.ROOT);
-            if (m.contains("location_move_request"))
+            if (m.contains("scanned_quantity") || m.contains("expected_quantity") || m.contains("receive_note"))
                 throw new ApiException(
                         503,
                         "MIGRATION_REQUIRED",
-                        "Database chưa có bảng yêu cầu xếp kệ. Cần chạy database/migrations/2026-11-10_location_move_request.sql.");
+                        "Database chưa có phần kiểm hàng bằng quét. Cần chạy database/migrations/2026-11-15_receipt_scan_check.sql.");
+            if (m.contains("product_unit"))
+                throw new ApiException(
+                        503,
+                        "MIGRATION_REQUIRED",
+                        "Database chưa có bảng serial từng chiếc. Cần chạy database/migrations/2026-11-16_product_unit.sql.");
+            if (m.contains("request_status") || m.contains("request_shelf_id"))
+                throw new ApiException(
+                        503,
+                        "MIGRATION_REQUIRED",
+                        "Database chưa có phần yêu cầu xếp kệ. Cần chạy database/migrations/2026-11-18_move_request_columns.sql.");
             if (m.contains("min_stock_quantity") || m.contains("stock_count"))
                 throw new ApiException(
                         503,

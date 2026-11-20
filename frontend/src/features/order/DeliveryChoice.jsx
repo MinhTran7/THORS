@@ -106,7 +106,7 @@ export default function DeliveryChoice({ orderId, address, carrier, onChange, gh
             ? `Bạn đang chọn khác gợi ý (bán kính tự giao: ${formatKm(data.selfRadiusKm)}).`
             : carrier === 'SELF'
               ? 'Cửa hàng tự giao, không cần mã vận đơn.'
-              : 'Giao qua đơn vị vận chuyển đối tác.'
+              : 'Tạo vận đơn GHN; trạng thái đơn tự cập nhật theo GHN.'
         }
         slotProps={{ select: { sx: { borderRadius: '10px' } } }}
       >

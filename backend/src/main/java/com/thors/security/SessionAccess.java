@@ -36,16 +36,25 @@ public class SessionAccess {
     return a;
   }
 
+  /**
+   * TẠO PHIÊN ĐĂNG NHẬP sau khi đã kiểm tra đúng (gọi từ AuthController.login, Google/Facebook handler...).
+   * Sau hàm này trình duyệt giữ cookie JSESSIONID; các request sau dùng cookie đó để biết ai đang đăng nhập.
+   */
   public void login(Account a, HttpServletRequest request, HttpServletResponse response) {
+    // Đổi mã phiên: chống chiếm phiên (session fixation) — mã phiên trước đăng nhập không dùng được nữa
     if (request.getSession(false) != null) request.changeSessionId();
+    // Tạo "giấy thông hành" Spring Security: SessionUser (id, vai trò, phiên bản mật khẩu...) + quyền ROLE_<vai trò>
     var context = SecurityContextHolder.createEmptyContext();
     context.setAuthentication(
             new UsernamePasswordAuthenticationToken(
                     SessionUser.from(a), null, List.of(new SimpleGrantedAuthority("ROLE_" + a.role()))));
     SecurityContextHolder.setContext(context);
+    // Lưu vào session → trình duyệt nhận cookie JSESSIONID
     contexts.saveContext(context, request, response);
+    // Xóa dữ liệu OTP / đặt lại mật khẩu còn sót trong session
     request.getSession().removeAttribute("OTP_CHALLENGE");
     request.getSession().removeAttribute("RESET_GRANT");
+    // Ghi audit_log: LOGIN kèm địa chỉ IP
     users.audit(a.id(), "LOGIN", a.id(), "IP " + request.getRemoteAddr());
   }
 

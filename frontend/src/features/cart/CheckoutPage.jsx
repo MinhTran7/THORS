@@ -8,7 +8,6 @@ import {
   Card,
   Checkbox,
   Chip,
-  Collapse,
   CircularProgress,
   Dialog,
   DialogActions,
@@ -23,7 +22,7 @@ import {
   TextField,
   Typography
 } from '@mui/material';
-import { TagOutlined, CloseOutlined, ShoppingCartOutlined, DownOutlined, StarFilled, StarOutlined, PlusOutlined, ArrowLeftOutlined, EnvironmentOutlined, CreditCardOutlined } from '@ant-design/icons';
+import { TagOutlined, CloseOutlined, ShoppingCartOutlined, DownOutlined, StarFilled, StarOutlined, PlusOutlined, ArrowLeftOutlined, EnvironmentOutlined } from '@ant-design/icons';
 import { StoreCrumb } from 'features/account/components/StoreAccount';
 import { api } from 'services/http';
 import { useAuth } from 'features/auth/AuthProvider';
@@ -52,6 +51,9 @@ const readStored = () => {
 
 const money = (n) => `${new Intl.NumberFormat('vi-VN').format(n || 0)} ₫`;
 
+const dateTimeText = (value) =>
+  value ? new Date(value).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
+
 const pick = (obj, ...keys) => {
   for (const k of keys) if (obj?.[k] != null) return obj[k];
   return undefined;
@@ -59,14 +61,15 @@ const pick = (obj, ...keys) => {
 
 
 function normalize(item) {
+  const originalPrice = Number(pick(item, 'unitPrice', 'price') ?? 0);
   return {
     id: pick(item, 'id', 'cartItemId', 'variantId'),
-    productId: pick(item, 'productId'),
     name: pick(item, 'productName', 'name', 'title') ?? 'Sản phẩm',
     image: pick(item, 'imageUrl', 'image', 'thumbnail', 'productImage'),
     size: pick(item, 'size', 'sizeName'),
     color: pick(item, 'color', 'colorName'),
-    price: Number(pick(item, 'unitPrice', 'price', 'salePrice') ?? 0),
+    originalPrice,
+    price: Number(item.salePrice ?? originalPrice),
     quantity: Number(pick(item, 'quantity', 'qty') ?? 1)
   };
 }
@@ -107,28 +110,6 @@ function SectionCard({ title, icon, children }) {
       </Stack>
       {children}
     </Card>
-  );
-}
-
-function AddressOption({ value, selected, children }) {
-  return (
-    <Box
-      component="label"
-      sx={{
-        display: 'flex',
-        gap: 1,
-        alignItems: 'flex-start',
-        p: 1.5,
-        border: '1px solid',
-        borderColor: selected ? 'primary.main' : 'divider',
-        bgcolor: selected ? 'action.hover' : 'transparent',
-        borderRadius: 2,
-        cursor: 'pointer'
-      }}
-    >
-      <Radio value={value} sx={{ p: 0.5, color: '#9CA3AF', '&.Mui-checked': { color: '#8A2B2B !important' } }} />
-      <Box sx={{ flexGrow: 1, minWidth: 0, pt: 0.5 }}>{children}</Box>
-    </Box>
   );
 }
 
@@ -268,7 +249,6 @@ export default function CheckoutPage() {
   const [allPromotions, setAllPromotions] = useState([]);
   const [promosLoading, setPromosLoading] = useState(false);
   const [expandedPromoId, setExpandedPromoId] = useState(null);
-  const [tempVoucher, setTempVoucher] = useState(null);
   const [openAddressDialog, setOpenAddressDialog] = useState(false);
   const [isCreatingAddress, setIsCreatingAddress] = useState(false);
   const [savingAddress, setSavingAddress] = useState(false);
@@ -309,41 +289,6 @@ export default function CheckoutPage() {
     }
   };
 
-  const checkPromoEligibility = (p) => {
-    if (p.status && p.status !== 'ACTIVE') {
-      return { eligible: false, reason: 'Chương trình hiện không khả dụng' };
-    }
-    const today = new Date().toISOString().slice(0, 10);
-    const start = p.startDate ? String(p.startDate).slice(0, 10) : '';
-    const end = p.endDate ? String(p.endDate).slice(0, 10) : '';
-    if (start && today < start) return { eligible: false, reason: 'Chưa đến thời gian áp dụng' };
-    if (end && today > end) return { eligible: false, reason: 'Mã đã hết hạn sử dụng' };
-
-    let eligibleSubtotal = 0;
-    if (p.applyScope === 'ALL' || !p.applyScope) {
-      eligibleSubtotal = subtotal;
-    } else if (p.applyScope === 'SELECTED') {
-      const allowedIds = new Set((p.productIds || []).map(Number));
-      const matched = (items || []).filter((item) => {
-        const idVal = item.productId != null ? Number(item.productId) : Number(item.id);
-        return allowedIds.has(idVal);
-      });
-      eligibleSubtotal = matched.reduce((s, i) => s + i.price * i.quantity, 0);
-      if (eligibleSubtotal === 0) {
-        return { eligible: false, reason: 'Không áp dụng cho sản phẩm trong đơn' };
-      }
-    }
-    const minOrder = Number(p.minOrderValue || 0);
-    if (eligibleSubtotal < minOrder) {
-      const diff = minOrder - eligibleSubtotal;
-      return {
-        eligible: false,
-        reason: `Cần thêm ${new Intl.NumberFormat('vi-VN').format(diff)} ₫ để áp dụng`
-      };
-    }
-    return { eligible: true };
-  };
-
   const [voucher, setVoucher] = useState(() => {
     try {
       const raw = sessionStorage.getItem('thors:applied_voucher');
@@ -353,113 +298,43 @@ export default function CheckoutPage() {
     }
   });
 
-  useEffect(() => {
-    if (!voucher?.promotionId) return;
-    if (voucher.applyScope === 'SELECTED' && (!voucher.productIds || voucher.productIds.length === 0)) {
-      api('/promotions/' + voucher.promotionId)
-        .then((res) => {
-          if (res && res.productIds && res.productIds.length > 0) {
-            setVoucher(res);
-            try {
-              sessionStorage.setItem('thors:applied_voucher', JSON.stringify(res));
-            } catch {}
-          }
-        })
-        .catch(() => {});
-    }
-  }, [voucher?.promotionId, voucher?.applyScope]);
-
-  useEffect(() => {
-    if (buyNow && items.length > 0 && !items[0]?.productId) {
-      api('/shop/products?size=100')
-        .then((res) => {
-          const list = res?.items || [];
-          const matched = list.find((p) => p.productName === items[0]?.name);
-          if (matched) {
-            setItems((prev) => prev.map((it) => ({ ...it, productId: matched.productId })));
-          }
-        })
-        .catch(() => {});
-    }
-  }, [buyNow, items]);
-
   const subtotal = useMemo(() => items.reduce((s, i) => s + i.price * i.quantity, 0), [items]);
   const totalQty = useMemo(() => items.reduce((s, i) => s + i.quantity, 0), [items]);
 
-  const voucherResult = useMemo(() => {
-    if (!voucher) return null;
-
-    const today = new Date().toISOString().slice(0, 10);
-    const startDate = voucher.startDate ? String(voucher.startDate).slice(0, 10) : '';
-    const endDate = voucher.endDate ? String(voucher.endDate).slice(0, 10) : '';
-
-    if (startDate && today < startDate) {
-      return { valid: false, reason: 'Chương trình ưu đãi chưa bắt đầu.' };
-    }
-    if (endDate && today > endDate) {
-      return { valid: false, reason: 'Mã giảm giá đã hết hạn sử dụng.' };
-    }
-    if (voucher.status && voucher.status !== 'ACTIVE') {
-      return { valid: false, reason: 'Chương trình ưu đãi hiện không khả dụng.' };
-    }
-
-    let eligibleSubtotal = 0;
-    if (voucher.applyScope === 'ALL' || !voucher.applyScope) {
-      eligibleSubtotal = subtotal;
-    } else if (voucher.applyScope === 'SELECTED') {
-      const eligibleIds = new Set((voucher.productIds || []).map(Number));
-      const eligibleItems = items.filter((item) => {
-        const pId = item.productId != null ? Number(item.productId) : Number(item.id);
-        return eligibleIds.has(pId);
-      });
-      eligibleSubtotal = eligibleItems.reduce((s, i) => s + i.price * i.quantity, 0);
-      if (eligibleSubtotal === 0) {
-        return {
-          valid: false,
-          reason: 'Đơn hàng chưa có sản phẩm nào thuộc phạm vi áp dụng của mã này.'
-        };
-      }
-    }
-
-    const minOrder = Number(voucher.minOrderValue || 0);
-    if (eligibleSubtotal < minOrder) {
-      const diff = minOrder - eligibleSubtotal;
-      return {
-        valid: false,
-        reason: `Chưa đủ điều kiện: Cần thêm ${new Intl.NumberFormat('vi-VN').format(diff)} ₫ để áp dụng.`
-      };
-    }
-
-    let discount = 0;
-    const isPercent = ['PERCENT', 'PERCENTAGE'].includes(voucher.discountType);
-    const discountVal = Number(voucher.discountValue || 0);
-
-    if (isPercent) {
-      discount = Math.round((eligibleSubtotal * discountVal) / 100);
-      const maxDiscount = Number(voucher.maxDiscountAmount || 0);
-      if (maxDiscount > 0 && discount > maxDiscount) {
-        discount = maxDiscount;
-      }
-    } else {
-      discount = Math.min(discountVal, eligibleSubtotal);
-    }
-
-    return {
-      valid: true,
-      discount,
-      eligibleSubtotal
-    };
-  }, [voucher, subtotal, items]);
-
-  const discountAmount = voucherResult?.valid ? voucherResult.discount : 0;
-  const total = Math.max(0, subtotal - discountAmount) + SHIPPING_FEE;
-
-  const handleRemoveVoucher = () => {
-    try {
-      sessionStorage.removeItem('thors:applied_voucher');
-    } catch {}
-    setVoucher(null);
+  const voucherStatus = (p) => {
+    const now = new Date();
+    if (p.status !== 'ACTIVE') return { reason: 'Chương trình hiện không khả dụng' };
+    if (new Date(p.startDate) > now) return { reason: 'Chưa đến thời gian áp dụng' };
+    if (new Date(p.endDate) <= now) return { reason: 'Mã đã hết hạn sử dụng' };
+    if (subtotal < Number(p.minOrderValue)) return {};
+    const value = Number(p.discountValue);
+    return { eligible: true, discount: p.discountType === 'PERCENT' ? Math.round((subtotal * value) / 100) : Math.min(value, subtotal) };
   };
+
+  const voucherResult = voucher && voucherStatus(voucher);
+  const discountAmount = voucherResult?.eligible ? voucherResult.discount : 0;
+  const total = subtotal - discountAmount + SHIPPING_FEE;
+
+  const applyVoucher = (value) => {
+    try {
+      if (value) sessionStorage.setItem('thors:applied_voucher', JSON.stringify(value));
+      else sessionStorage.removeItem('thors:applied_voucher');
+    } catch {}
+    setVoucher(value);
+  };
+
+  const syncVoucher = async (current) => {
+    if (!current) return;
+    const res = await getPromotions().catch(() => null);
+    if (!res) return;
+    const fresh = (Array.isArray(res) ? res : res?.data || []).find((p) => p.promotionId === current.promotionId);
+    applyVoucher(fresh || null);
+    if (!fresh) setSubmitError(`Mã "${current.name}" đã hết lượt hoặc không còn khả dụng. Vui lòng chọn mã khác.`);
+  };
+
+  useEffect(() => {
+    syncVoucher(voucher);
+  }, []);
 
   
   // Đã đặt hàng, đang chờ quét mã thanh toán (giỏ hàng đã được xóa nên phải hiện trước kiểm tra giỏ trống)
@@ -540,7 +415,7 @@ export default function CheckoutPage() {
 
       
       
-      const appliedPromoId = voucherResult?.valid && voucher?.promotionId != null ? voucher.promotionId : null;
+      const appliedPromoId = voucherResult?.eligible ? voucher.promotionId : null;
       const base = { ...addressPart, paymentMethod: form.paymentMethod, ...(appliedPromoId != null && { promotionId: appliedPromoId }) };
       const body = buyNow
         ? { ...base, items: [{ productVariantId: buyNow.variantId, quantity: buyNow.quantity }] }
@@ -585,6 +460,7 @@ export default function CheckoutPage() {
       navigate('/order-success', { replace: true, state: successState });
     } catch (e) {
       setSubmitError(e.message || 'Đặt hàng thất bại, vui lòng thử lại');
+      await syncVoucher(voucher);
     } finally {
       setSubmitting(false);
     }
@@ -774,6 +650,11 @@ export default function CheckoutPage() {
                         {[i.size && `Size ${i.size}`, i.color].filter(Boolean).join(' · ')}
                       </Typography>
                       <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                        {i.price < i.originalPrice && (
+                          <Box component="s" sx={{ mr: 0.75 }}>
+                            {money(i.originalPrice)}
+                          </Box>
+                        )}
                         {money(i.price)} × {i.quantity}
                       </Typography>
                     </Box>
@@ -822,11 +703,10 @@ export default function CheckoutPage() {
                   disableRipple
                   disableElevation
                   onClick={() => {
-                    setTempVoucher(voucher);
                     setOpenPromoDialog(true);
                     setPromosLoading(true);
                     getPromotions()
-                      .then((res) => setAllPromotions(Array.isArray(res) ? res : res?.data || []))
+                      .then((res) => setAllPromotions((Array.isArray(res) ? res : res?.data || []).filter((p) => Number(p.minOrderValue) > 0)))
                       .catch(() => setAllPromotions([]))
                       .finally(() => setPromosLoading(false));
                   }}
@@ -868,14 +748,14 @@ export default function CheckoutPage() {
                         {voucher.minOrderValue > 0 && ` · Đơn từ ${new Intl.NumberFormat('vi-VN').format(voucher.minOrderValue)} ₫`}
                       </Typography>
                     </Box>
-                    <IconButton size="small" onClick={handleRemoveVoucher} sx={{ color: '#94A3B8', p: 0.5 }}>
+                    <IconButton size="small" onClick={() => applyVoucher(null)} sx={{ color: '#94A3B8', p: 0.5 }}>
                       <CloseOutlined style={{ fontSize: 12 }} />
                     </IconButton>
                   </Stack>
 
-                  {!voucherResult?.valid && (
+                  {!voucherResult.eligible && (
                     <Typography sx={{ mt: 1, fontSize: 12, color: '#8A2B2B', fontWeight: 600 }}>
-                      {voucherResult?.reason}
+                      {voucherResult.reason || 'Đơn hàng chưa đạt giá trị tối thiểu để dùng mã này.'}
                     </Typography>
                   )}
                 </Box>
@@ -969,24 +849,37 @@ export default function CheckoutPage() {
             </Box>
           ) : (
             <Stack spacing={2}>
-              {allPromotions.map((p) => {
-                const status = checkPromoEligibility(p);
-                const isPercentType = ['PERCENT', 'PERCENTAGE'].includes(p.discountType);
+              {allPromotions
+                .map((p) => ({ p, status: voucherStatus(p) }))
+                .sort((a, b) => b.status.eligible - a.status.eligible)
+                .map(({ p, status }) => {
+                const isPercentType = p.discountType === 'PERCENT';
                 const dVal = Number(p.discountValue || 0);
-                const isCurrent = tempVoucher?.promotionId === p.promotionId;
+                const isCurrent = voucher?.promotionId === p.promotionId;
                 const isExpanded = expandedPromoId === p.promotionId;
 
                 return (
                   <Card
                     key={p.promotionId}
                     variant="outlined"
+                    onClick={
+                      status.eligible
+                        ? () => {
+                            applyVoucher(isCurrent ? null : p);
+                            setSubmitError('');
+                            setOpenPromoDialog(false);
+                          }
+                        : undefined
+                    }
                     sx={{
+                      cursor: status.eligible ? 'pointer' : 'default',
                       borderRadius: '16px',
                       border: '2px solid',
                       borderColor: isCurrent ? '#8A2B2B' : '#E6E3DE',
                       bgcolor: '#FFFFFF',
                       overflow: 'hidden',
-                      boxShadow: 'none !important'
+                      boxShadow: 'none !important',
+                      opacity: status.eligible ? 1 : 0.55
                     }}
                   >
                     <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' } }}>
@@ -1015,48 +908,13 @@ export default function CheckoutPage() {
 
                       <Box sx={{ flex: 1, p: 2, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                         <Box>
-                          <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
-                            <Typography sx={{ fontWeight: 700, fontSize: 14, color: status.eligible ? '#1F2937' : '#94A3B8' }}>
-                              {p.name}
-                            </Typography>
-                            <Box
-                              onClick={() => {
-                                if (!status.eligible) return;
-                                if (isCurrent) {
-                                  setTempVoucher(null);
-                                } else {
-                                  setTempVoucher(p);
-                                }
-                              }}
-                              sx={{
-                                cursor: status.eligible ? 'pointer' : 'default',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                width: 26,
-                                height: 26,
-                                flexShrink: 0,
-                                color: isCurrent ? '#FFB800' : status.eligible ? '#9CA3AF' : '#D1D5DB',
-                                '&:hover': status.eligible ? { color: '#FFB800' } : {}
-                              }}
-                            >
-                              {isCurrent ? (
-                                <StarFilled style={{ fontSize: 20, color: '#FFB800' }} />
-                              ) : (
-                                <StarOutlined style={{ fontSize: 20 }} />
-                              )}
-                            </Box>
-                          </Box>
+                          <Typography sx={{ fontWeight: 700, fontSize: 14, color: status.eligible ? '#1F2937' : '#94A3B8' }}>
+                            {p.name}
+                          </Typography>
                           <Typography sx={{ fontSize: 12.5, color: '#6B7280', mt: 0.5 }}>
                             Đơn tối thiểu: <strong>{money(p.minOrderValue)}</strong>
-                            {isPercentType && p.maxDiscountAmount && (
-                              <span> · Tối đa: <strong>{money(p.maxDiscountAmount)}</strong></span>
-                            )}
                           </Typography>
-                          <Typography sx={{ fontSize: 11.5, color: '#94A3B8', mt: 0.25 }}>
-                            HSD: {p.endDate ? String(p.endDate).slice(0, 10).split('-').reverse().join('/') : '—'}
-                          </Typography>
-                          {!status.eligible && (
+                          {status.reason && (
                             <Typography sx={{ fontSize: 12, color: '#8A2B2B', fontWeight: 600, mt: 0.75 }}>
                               {status.reason}
                             </Typography>
@@ -1067,7 +925,10 @@ export default function CheckoutPage() {
                           <Button
                             size="small"
                             disableRipple
-                            onClick={() => setExpandedPromoId((prev) => (prev === p.promotionId ? null : p.promotionId))}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpandedPromoId((prev) => (prev === p.promotionId ? null : p.promotionId));
+                            }}
                             sx={{
                               textTransform: 'none',
                               fontSize: 12,
@@ -1116,7 +977,6 @@ export default function CheckoutPage() {
                             <Typography sx={{ fontSize: 11.5, color: '#6B7280' }}>Mức ưu đãi</Typography>
                             <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: '#8A2B2B' }}>
                               {isPercentType ? `Giảm ${dVal}%` : `Giảm ${money(dVal)}`}
-                              {isPercentType && p.maxDiscountAmount && ` (Tối đa ${money(p.maxDiscountAmount)})`}
                             </Typography>
                           </Box>
                           <Box>
@@ -1128,15 +988,13 @@ export default function CheckoutPage() {
                           <Box sx={{ gridColumn: { xs: 'span 1', sm: 'span 2' } }}>
                             <Typography sx={{ fontSize: 11.5, color: '#6B7280' }}>Phạm vi áp dụng</Typography>
                             <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: '#1F2937' }}>
-                              {p.applyScope === 'ALL'
-                                ? 'Toàn bộ sản phẩm trong cửa hàng'
-                                : 'Chỉ áp dụng cho một số sản phẩm thuộc chương trình'}
+                              Toàn bộ đơn hàng
                             </Typography>
                           </Box>
                           <Box sx={{ gridColumn: { xs: 'span 1', sm: 'span 2' } }}>
                             <Typography sx={{ fontSize: 11.5, color: '#6B7280' }}>Thời gian áp dụng</Typography>
                             <Typography sx={{ fontSize: 12, color: '#1F2937' }}>
-                              {p.startDate ? String(p.startDate).slice(0, 10).split('-').reverse().join('/') : '—'} đến ${p.endDate ? String(p.endDate).slice(0, 10).split('-').reverse().join('/') : '—'}
+                              {dateTimeText(p.startDate)} đến {dateTimeText(p.endDate)}
                             </Typography>
                           </Box>
                         </Box>
@@ -1148,38 +1006,6 @@ export default function CheckoutPage() {
             </Stack>
           )}
         </DialogContent>
-        <DialogActions sx={{ p: 1.5, px: 2, borderTop: '1px solid #F1F5F9' }}>
-          <Button
-            fullWidth
-            variant="contained"
-            disableRipple
-            onClick={() => {
-              setVoucher(tempVoucher);
-              try {
-                if (tempVoucher) {
-                  sessionStorage.setItem('thors:applied_voucher', JSON.stringify(tempVoucher));
-                } else {
-                  sessionStorage.removeItem('thors:applied_voucher');
-                }
-              } catch {}
-              setOpenPromoDialog(false);
-            }}
-            sx={{
-              bgcolor: '#8A2B2B',
-              color: '#FFFFFF',
-              fontWeight: 700,
-              fontSize: 13.5,
-              borderRadius: '12px',
-              py: 0.85,
-              boxShadow: 'none !important',
-              textTransform: 'none',
-              '&:hover': { bgcolor: '#6E1F1F', boxShadow: 'none !important' },
-              '&:active': { bgcolor: '#5A1A1A', boxShadow: 'none !important' }
-            }}
-          >
-            Đồng ý
-          </Button>
-        </DialogActions>
       </Dialog>
       <Dialog
         open={openAddressDialog}

@@ -128,8 +128,7 @@ function CountForm({ count, initialVariant, onClose, onSaved }) {
       <DialogContent>
         <Stack spacing={2} sx={{ pt: 1 }}>
           <Alert severity="info">
-            Đếm thực tế từng vị trí và phần chưa xếp. Số hệ thống được chụp khi lưu phiếu; phiếu nháp / chờ xác nhận chưa đổi tồn. Khi xác
-            nhận, nếu tồn đã phát sinh thêm sau lúc đếm, hệ thống dừng lại để đếm/lưu lại — không ghi đè âm thầm.
+            Nhập số đếm thực tế ở từng vị trí. Tồn kho chỉ thay đổi khi phiếu được xác nhận.
           </Alert>
           <Autocomplete
             options={data.variants.filter((v) => !used.has(v.detail_id))}
@@ -232,8 +231,7 @@ function CountForm({ count, initialVariant, onClose, onSaved }) {
           />
           {lines.some((l) => l.reason === 'MISSING_DOCUMENT' && Number(l.counted) !== l.system) && (
             <Alert severity="warning">
-              Chênh lệch do thiếu chứng từ không được xác nhận bằng điều chỉnh kho: hãy lập đúng phiếu nhập / đơn bán / phiếu trả NCC trước,
-              rồi lưu lại phiếu kiểm kê.
+              Hàng lệch do quên lập phiếu thì hãy lập phiếu nhập / đơn bán / phiếu trả còn thiếu trước, rồi lưu lại phiếu kiểm kê.
             </Alert>
           )}
           <TextField

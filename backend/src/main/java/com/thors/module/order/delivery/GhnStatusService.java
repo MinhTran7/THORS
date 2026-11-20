@@ -8,6 +8,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
+import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,7 +22,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class GhnStatusService {
     private static final Logger log = LoggerFactory.getLogger(GhnStatusService.class);
-    private static final String OWNER_ROLE = "OWNER";
+    /** Người xử lý đơn phía cửa hàng: chủ shop và người nhà đều nhận thông báo GHN. */
+    private static final List<String> STORE_NOTIFY_ROLES = List.of("OWNER", "FAMILY_MEMBER");
 
     /** Trạng thái GHN -> shipment_status (theo ràng buộc ck_orders_12). Trạng thái không có ở đây bị bỏ qua. */
     private static final Map<String, String> STATUS =
@@ -105,10 +107,19 @@ public class GhnStatusService {
                             "Đơn " + t.orderNumber() + " đã được GHN giao thành công.");
                 notifyOwner(t, "GHN đã giao đơn", "Đơn " + t.orderNumber() + " đã được GHN giao thành công.");
             }
-            case "FAILED" -> notifyOwner(t, "GHN giao không thành công",
-                    "Đơn " + t.orderNumber() + " giao không thành công (" + status + "). Vui lòng kiểm tra trên GHN.");
-            case "RETURNING" -> notifyOwner(t, "Đơn đang hoàn về",
-                    "Đơn " + t.orderNumber() + " đang được GHN hoàn về cửa hàng.");
+            case "FAILED" -> {
+                notifyCustomer(t, "Giao hàng không thành công",
+                        "GHN chưa giao được đơn " + t.orderNumber()
+                                + ". Cửa hàng sẽ liên hệ với bạn để sắp xếp lại việc giao hàng.");
+                notifyOwner(t, "GHN giao không thành công",
+                        "Đơn " + t.orderNumber() + " giao không thành công (" + status + "). Vui lòng kiểm tra trên GHN.");
+            }
+            case "RETURNING" -> {
+                notifyCustomer(t, "Đơn hàng đang được hoàn về",
+                        "Đơn " + t.orderNumber() + " không giao được và đang được GHN hoàn về cửa hàng.");
+                notifyOwner(t, "Đơn đang hoàn về",
+                        "Đơn " + t.orderNumber() + " đang được GHN hoàn về cửa hàng.");
+            }
             case "RETURNED" -> notifyOwner(t, "Đơn đã hoàn về",
                     "Đơn " + t.orderNumber() + " đã được GHN hoàn về cửa hàng.");
             case "CANCELLED" -> {
@@ -142,8 +153,9 @@ public class GhnStatusService {
     }
 
     private void notifyOwner(Tracked t, String title, String message) {
-        notifications.toRole(
-                OWNER_ROLE, NotificationTypes.ORDER_STATUS, title, message, NotificationTypes.ENTITY_ORDER, t.orderId());
+        for (String role : STORE_NOTIFY_ROLES)
+            notifications.toRole(
+                    role, NotificationTypes.ORDER_STATUS, title, message, NotificationTypes.ENTITY_ORDER, t.orderId());
     }
 
     private static boolean blank(String s) {

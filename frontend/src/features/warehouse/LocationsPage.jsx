@@ -4,6 +4,7 @@ import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   Checkbox,
@@ -15,9 +16,11 @@ import {
   FormControlLabel,
   MenuItem,
   Stack,
+  TextField,
   Typography
 } from '@mui/material';
 
+import { EditOutlined } from '@ant-design/icons';
 import MainCard from 'components/MainCard';
 import { api } from 'services/http';
 import { useWarehouse } from './WarehouseContext';
@@ -28,10 +31,10 @@ import {
   Metrics,
   PhotoPicker,
   Status,
-  Title
-} from './components';
+  Title, DialogClose } from './components';
 import {
   locationLabel,
+  tierName,
   number,
   statusLabel,
   variantLabel
@@ -112,6 +115,7 @@ function RackForm({ rack, tier, rackId, onClose }) {
     initialValues: isTier
       ? {
           number: tier?.level_number || 1,
+          name: tier?.level_name || '',
           status: tier?.status || 'AVAILABLE',
           active: tier ? active(tier.is_active) : true
         }
@@ -124,6 +128,7 @@ function RackForm({ rack, tier, rackId, onClose }) {
 
     validationSchema: isTier
       ? Yup.object({
+          name: Yup.string().max(50, 'Tên tầng tối đa 50 ký tự.'),
           number: Yup.number()
             .integer()
             .min(1)
@@ -297,11 +302,13 @@ function RackForm({ rack, tier, rackId, onClose }) {
               ? 'Sửa kệ'
               : 'Thêm kệ'}
         </DialogTitle>
+        <DialogClose onClick={onClose} disabled={f.isSubmitting} />
 
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
             {isTier ? (
               <>
+                {field('name', 'Tên tầng (không bắt buộc · để trống = mã kệ + số tầng, vd A2)')}
                 {field('number', 'Số tầng (1–50)', 'number')}
 
                 <Choice
@@ -402,9 +409,7 @@ function RackForm({ rack, tier, rackId, onClose }) {
             />
 
             <Alert severity="info">
-              Chỉ ẩn kệ/tầng khi đã chuyển hết hàng. Trạng thái
-              “Đã đầy”, “Tạm khóa”, “Bảo trì” ngăn đưa thêm hàng
-              vào tầng đó.
+              Chỉ ẩn được kệ/tầng đã hết hàng.
             </Alert>
 
             {error && <Alert severity="error">{error}</Alert>}
@@ -412,9 +417,6 @@ function RackForm({ rack, tier, rackId, onClose }) {
         </DialogContent>
 
         <DialogActions>
-          <Button disabled={f.isSubmitting} onClick={onClose}>
-            Quay lại
-          </Button>
           <Button
             type="submit"
             variant="contained"
@@ -436,7 +438,7 @@ const UNASSIGNED = 'UNASSIGNED';
  * mode = 'move': chuyển từ một tầng (nguồn cố định là dòng hàng của tầng đó).
  * Không truyền mode: form chung, được chọn nguồn.
  */
-function MoveForm({ variant, selectedShelf, from, mode, onClose }) {
+export function MoveForm({ variant, selectedShelf, from, mode, initialQuantity, onClose }) {
   const { data, run, owner } = useWarehouse();
   const [error, setError] = useState('');
   const requestKey = useRef(crypto.randomUUID());
@@ -458,7 +460,8 @@ function MoveForm({ variant, selectedShelf, from, mode, onClose }) {
     initialValues: {
       fromLocationId: mode === 'place' ? '' : from || '',
       toShelfId: selectedShelf || '',
-      quantity: 1,
+      // Mở từ phiếu nhập vừa nhận: điền sẵn số vừa nhận (không quá số đang chưa xếp).
+      quantity: initialQuantity ? Math.max(1, Math.min(initialQuantity, Number(variant.unassigned_quantity) || 1)) : 1,
       description: '',
       photoKeys: []
     },
@@ -568,12 +571,13 @@ function MoveForm({ variant, selectedShelf, from, mode, onClose }) {
         <DialogTitle>
           {title} · {variantLabel(variant)}
         </DialogTitle>
+        <DialogClose onClick={onClose} disabled={f.isSubmitting} />
 
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
             <Alert severity="info">
-              Thao tác chỉ đổi vị trí lưu hàng. Tổng tồn không thay đổi.
-              {!owner && ' Bấm “Gửi yêu cầu” sau khi đã xếp/chuyển hàng: kho chỉ cập nhật khi chủ cửa hàng xác nhận.'}
+              Chỉ đổi vị trí, tổng tồn không đổi.
+              {!owner && ' Kho cập nhật khi chủ cửa hàng xác nhận.'}
             </Alert>
 
             <Choice
@@ -668,7 +672,7 @@ function MoveForm({ variant, selectedShelf, from, mode, onClose }) {
               <>
                 <Field
                   id="move-desc"
-                  label="Mô tả thực tế tại vị trí mới"
+                  label="Mô tả thực tế tại vị trí mới (không bắt buộc)"
                   name="description"
                   value={f.values.description}
                   onChange={f.handleChange}
@@ -681,6 +685,7 @@ function MoveForm({ variant, selectedShelf, from, mode, onClose }) {
 
                 <PhotoPicker
                   keys={f.values.photoKeys}
+                  title="Ảnh thực tế tại vị trí (không bắt buộc · JPG/PNG, tối đa 5 MB/ảnh)"
                   onChange={(keys) =>
                     f.setFieldValue('photoKeys', keys)
                   }
@@ -693,9 +698,6 @@ function MoveForm({ variant, selectedShelf, from, mode, onClose }) {
         </DialogContent>
 
         <DialogActions>
-          <Button disabled={f.isSubmitting} onClick={onClose}>
-            Quay lại
-          </Button>
 
           <Button
             type="submit"
@@ -703,14 +705,7 @@ function MoveForm({ variant, selectedShelf, from, mode, onClose }) {
             disabled={
               f.isSubmitting ||
               !f.isValid ||
-              available < 1 ||
-              (
-                needMetadata &&
-                (
-                  !f.values.description.trim() ||
-                  !f.values.photoKeys.length
-                )
-              )
+              available < 1
             }
           >
             {owner ? 'Lưu vị trí' : 'Gửi yêu cầu'}
@@ -744,12 +739,13 @@ function MetadataForm({ location, onClose }) {
       onClose={() => !waiting && onClose()}
     >
       <DialogTitle>Mô tả và ảnh vị trí</DialogTitle>
+      <DialogClose onClick={onClose} disabled={waiting} />
 
       <DialogContent>
         <Stack spacing={2} sx={{ pt: 1 }}>
           <Field
             id="location-description"
-            label="Mô tả thực tế"
+            label="Mô tả thực tế (không bắt buộc)"
             multiline
             minRows={3}
             value={description}
@@ -795,21 +791,12 @@ function MetadataForm({ location, onClose }) {
       </DialogContent>
 
       <DialogActions>
-        <Button disabled={waiting} onClick={onClose}>
-          Quay lại
-        </Button>
 
         <Button
           variant="contained"
           disabled={
             waiting ||
-            !description.trim() ||
-            keep.length + keys.length > 8 ||
-            (
-              location.quantity > 0 &&
-              !keep.length &&
-              !keys.length
-            )
+            keep.length + keys.length > 8
           }
           onClick={async () => {
             setWaiting(true);
@@ -848,8 +835,10 @@ function MetadataForm({ location, onClose }) {
   );
 }
 
-export default function LocationsPage({ editLayout = false }) {
+export default function LocationsPage() {
   const { data, owner, busy, run } = useWarehouse();
+  // Bố cục kho không còn là trang riêng: chủ cửa hàng bấm "Sửa bố cục kho" ngay trên trang này.
+  const [editLayout, setEditLayout] = useState(false);
   const [params, setParams] = useSearchParams();
   const [selected, setSelected] = useState(null);
   const [rackForm, setRackForm] = useState(null);
@@ -1109,7 +1098,7 @@ export default function LocationsPage({ editLayout = false }) {
         }
         action={
           owner &&
-          editLayout && (
+          (editLayout ? (
             <Stack
               direction="row"
               spacing={1}
@@ -1124,14 +1113,30 @@ export default function LocationsPage({ editLayout = false }) {
               </Button>
 
               <Button
-                variant="contained"
+                variant="outlined"
                 onClick={addRack}
                 disabled={busy}
               >
                 Thêm kệ
               </Button>
+
+              <Button
+                variant="contained"
+                onClick={() => setEditLayout(false)}
+                disabled={busy}
+              >
+                Xong
+              </Button>
             </Stack>
-          )
+          ) : (
+            <Button
+              variant="outlined"
+              onClick={() => setEditLayout(true)}
+              disabled={busy}
+            >
+              Sửa bố cục kho
+            </Button>
+          ))
         }
       />
 
@@ -1201,32 +1206,51 @@ export default function LocationsPage({ editLayout = false }) {
             sx={{ mb: 2 }}
           >
             <Box sx={{ flex: 1 }}>
-              <Choice
-                label="Tìm vị trí theo sản phẩm / màu / size"
-                value={selectedVariant}
-                onChange={(e) => {
-                  const next = new URLSearchParams(params);
-
-                  e.target.value
-                    ? next.set('variant', e.target.value)
-                    : next.delete('variant');
-
-                  setParams(next, { replace: true });
-                }}
-              >
-                <MenuItem value="">
-                  Xem toàn bộ kho
-                </MenuItem>
-
-                {data.variants.map((v) => (
-                  <MenuItem
-                    key={v.detail_id}
-                    value={v.detail_id}
-                  >
-                    {variantLabel(v)}
-                  </MenuItem>
-                ))}
-              </Choice>
+              {/* Gõ tên, màu, size hoặc mã để tìm; xóa ô tìm = xem toàn bộ kho. */}
+              <Field label="Tìm vị trí theo sản phẩm / màu / size">
+                <Autocomplete
+                  size="small"
+                  options={data.variants}
+                  value={variant || null}
+                  onChange={(_, v) => {
+                    const next = new URLSearchParams(params);
+                    v ? next.set('variant', v.detail_id) : next.delete('variant');
+                    setParams(next, { replace: true });
+                  }}
+                  getOptionLabel={(v) => variantLabel(v)}
+                  isOptionEqualToValue={(a, b) => a.detail_id === b.detail_id}
+                  filterOptions={(options, { inputValue }) => {
+                    const words = inputValue.toLowerCase().trim().split(/\s+/).filter(Boolean);
+                    return options
+                      .filter((v) => {
+                        const text = `${variantLabel(v)} ${v.barcode || ''}`.toLowerCase();
+                        return words.every((w) => text.includes(w));
+                      })
+                      .slice(0, 100);
+                  }}
+                  renderOption={(props, v) => (
+                    <li {...props} key={v.detail_id}>
+                      <Stack direction="row" spacing={1} sx={{ width: '100%', justifyContent: 'space-between' }}>
+                        <span>{variantLabel(v)}</span>
+                        <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+                          {v.barcode ? `${v.barcode} · ` : ''}tồn {number(v.stock_quantity)}
+                        </Typography>
+                      </Stack>
+                    </li>
+                  )}
+                  noOptionsText="Không tìm thấy hàng phù hợp"
+                  renderInput={(input) => (
+                    <TextField
+                      {...input}
+                      placeholder="Gõ tên sản phẩm, màu, size hoặc mã để tìm · để trống = xem toàn bộ kho"
+                      slotProps={{
+                        ...input.slotProps,
+                        htmlInput: { ...input.slotProps?.htmlInput, 'aria-label': 'Tìm vị trí theo sản phẩm / màu / size' }
+                      }}
+                    />
+                  )}
+                />
+              </Field>
             </Box>
 
             {editLayout && (
@@ -1331,8 +1355,8 @@ export default function LocationsPage({ editLayout = false }) {
             >
               {!visible.length && (
                 <Typography sx={{ p: 4 }}>
-                  Chưa có kệ. Chủ cửa hàng có thể thêm kệ
-                  ở mục Bố cục kho.
+                  Chưa có kệ. Chủ cửa hàng bấm “Sửa bố cục kho”
+                  để thêm kệ.
                 </Typography>
               )}
 
@@ -1453,9 +1477,13 @@ export default function LocationsPage({ editLayout = false }) {
                         return (
                           <Button
                             key={t.shelf_level_id}
-                            onClick={() =>
-                              setSelected(t.shelf_level_id)
-                            }
+                            onClick={() => {
+                              setSelected(t.shelf_level_id);
+                              // Đang sửa bố cục: bấm vào tầng là sửa tên / số / trạng thái của tầng đó.
+                              if (editLayout && owner)
+                                setRackForm({ tier: t, rackId: t.rack_id });
+                            }}
+                            title={editLayout && owner ? `Sửa tầng ${tierName(r, t)}` : undefined}
                             aria-pressed={
                               selected === t.shelf_level_id
                             }
@@ -1496,10 +1524,12 @@ export default function LocationsPage({ editLayout = false }) {
                                 flex: 1,
                                 textAlign: 'left'
                               }}
-                              title={`${r.rack_code}${t.level_number}`}
+                              title={tierName(r, t)}
                             >
-                              {r.rack_code}
-                              {t.level_number}
+                              {editLayout && owner && (
+                                <EditOutlined style={{ fontSize: 12, marginRight: 4 }} />
+                              )}
+                              {tierName(r, t)}
                             </Typography>
 
                             <Typography

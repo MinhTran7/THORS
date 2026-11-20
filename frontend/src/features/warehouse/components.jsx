@@ -8,6 +8,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  IconButton,
   Stack,
   Table,
   TableBody,
@@ -24,7 +25,16 @@ import { Pager } from 'features/account/components/Blocks';
 import { statusText, number } from './model';
 import { api } from 'services/http';
 import { useWarehouse } from './WarehouseContext';
+import { CloseOutlined } from '@ant-design/icons';
 export const active = (v) => Boolean(Number(v));
+/** Nút X góc trên bên phải hộp thoại (thay cho nút "Quay lại"). Đặt ngay sau DialogTitle. */
+export function DialogClose({ onClick, disabled }) {
+  return (
+    <IconButton aria-label="Đóng" onClick={onClick} disabled={disabled} sx={{ position: 'absolute', right: 12, top: 12 }}>
+      <CloseOutlined />
+    </IconButton>
+  );
+}
 export function Status({ value, type }) {
   return (
     <Chip
@@ -63,7 +73,7 @@ export function Title({ title, subtitle, action }) {
 export function Metrics({ items, columns, loading = false }) {
   return (
     <Box
-      sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', lg: `repeat(${columns || items.length},1fr)` }, gap: 2, mb: 3 }}
+      sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', lg: `repeat(${columns || items.length}, minmax(0, 1fr))` }, gap: 2, mb: 3 }}
     >
       {items.map(([title, val, hint, onClick, activeCard, display]) => (
         <MainCard
@@ -151,8 +161,9 @@ export function DataTable({ columns, rows, empty = 'Chưa có dữ liệu.', onR
                 <TableRow
                   hover
                   key={row._key ?? row.detail_id ?? row.receipt_id ?? index}
+                  aria-expanded={row._expanded}
                   onClick={onRow ? () => onRow(row) : undefined}
-                  sx={{ cursor: onRow ? 'pointer' : 'default' }}
+                  sx={{ cursor: onRow ? 'pointer' : 'default', ...row._sx }}
                 >
                   {columns.map((c) => (
                     <TableCell key={c.key} align={c.align}>
@@ -181,13 +192,14 @@ export function DataTable({ columns, rows, empty = 'Chưa có dữ liệu.', onR
     </>
   );
 }
-export function PhotoPicker({ keys, onChange }) {
+// anyone: mọi người dùng kho đều tải ảnh được (ảnh bằng chứng hàng lỗi), không chỉ chủ cửa hàng.
+export function PhotoPicker({ keys, onChange, anyone = false, title = 'Ảnh thực tế tại vị trí (JPG/PNG, tối đa 5 MB/ảnh)' }) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const { owner } = useWarehouse();
   return (
     <Stack spacing={1}>
-      <Typography variant="subtitle2">Ảnh thực tế tại vị trí (JPG/PNG, tối đa 5 MB/ảnh)</Typography>
+      <Typography variant="subtitle2">{title}</Typography>
       <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
         {keys.map((key) => (
           <Stack key={key}>
@@ -203,7 +215,7 @@ export function PhotoPicker({ keys, onChange }) {
           </Stack>
         ))}
       </Stack>
-      <Button component="label" variant="outlined" disabled={!owner || uploading || keys.length >= 8}>
+      <Button component="label" variant="outlined" disabled={(!owner && !anyone) || uploading || keys.length >= 8}>
         {uploading ? 'Đang tải ảnh…' : 'Chọn ảnh'}
         <input
           hidden
@@ -243,6 +255,7 @@ export function ActionDialog({ title, text, reason = false, onConfirm, onClose }
   return (
     <Dialog open onClose={() => !waiting && onClose()} maxWidth="sm" fullWidth>
       <DialogTitle>{title}</DialogTitle>
+      <DialogClose onClick={onClose} disabled={waiting} />
       <DialogContent>
         <Typography sx={{ mb: 2 }}>{text}</Typography>
         {reason && (
@@ -263,9 +276,6 @@ export function ActionDialog({ title, text, reason = false, onConfirm, onClose }
         )}
       </DialogContent>
       <DialogActions>
-        <Button disabled={waiting} onClick={onClose}>
-          Quay lại
-        </Button>
         <Button
           variant="contained"
           disabled={waiting || (reason && !value.trim())}

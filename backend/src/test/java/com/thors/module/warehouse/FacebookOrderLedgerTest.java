@@ -90,6 +90,23 @@ class FacebookOrderLedgerTest {
         database.shutdown();
     }
 
+    /**
+     * Owner confirmation as before the goods check existed: a receipt now waits in APPROVED
+     * ("Chờ kiểm hàng"), so everything on it is scanned and the check closed right away.
+     */
+    private Map<String, Object> confirmAll(int id, Map<Integer, Integer> expected) {
+        var doc = run(() -> docs.confirm(OWNER, id, expected));
+        if ("APPROVED".equals(doc.get("status")) && "RECEIPT".equals(doc.get("receipt_type"))) {
+            db.update("UPDATE stock_receipt_item SET scanned_quantity=quantity WHERE receipt_id=?", id);
+            return run(() -> docs.receive(OWNER, id, null));
+        }
+        return doc;
+    }
+
+    private Map<String, Object> confirmAll(int id) {
+        return confirmAll(id, null);
+    }
+
     private <T> T run(Supplier<T> action) {
         return tx.execute(status -> action.get());
     }
@@ -101,11 +118,11 @@ class FacebookOrderLedgerTest {
     private void receive(int detail, int qty) {
         int po = id(run(() -> docs.create(OWNER, new Document("PURCHASE_ORDER", null, "NCC A", null,
                 List.of(new Line(detail, qty, BigDecimal.valueOf(1000), null))))));
-        run(() -> docs.confirm(OWNER, po));
+        confirmAll(po);
         int line = db.queryForObject("SELECT receipt_item_id FROM stock_receipt_item WHERE receipt_id=?", Integer.class, po);
         int rc = id(run(() -> docs.create(OWNER, new Document("RECEIPT", po, null, null,
                 List.of(new Line(detail, qty, BigDecimal.valueOf(1000), line))))));
-        run(() -> docs.confirm(OWNER, rc));
+        confirmAll(rc);
     }
 
     private int place(int detail, int qty) {

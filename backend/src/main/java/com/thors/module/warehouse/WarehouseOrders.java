@@ -156,6 +156,19 @@ public class WarehouseOrders {
         return fulfilled == 0 ? "NOT_RECEIVED" : "PARTIAL";
     }
 
+    /**
+     * One combined state for the order list. Confirmed orders collapse to WAITING / RECEIVED /
+     * CLOSED_SHORT / CANCELLED; an order closed before anything arrived counts as CANCELLED.
+     * Draft, pending and rejected orders keep their document status.
+     */
+    private static String state(String status, String progress, long fulfilled) {
+        if ("CANCELLED".equals(status)) return "CANCELLED";
+        if ("CLOSED_SHORT".equals(progress)) return fulfilled == 0 ? "CANCELLED" : "CLOSED_SHORT";
+        if ("RECEIVED".equals(progress)) return "RECEIVED";
+        if ("NOT_RECEIVED".equals(progress) || "PARTIAL".equals(progress)) return "WAITING";
+        return status;
+    }
+
     private static Map<String, Object> summary(Map<String, Object> doc, List<LineState> lines) {
         var row = new LinkedHashMap<String, Object>();
         row.put("receipt_id", doc.get("receipt_id"));
@@ -182,6 +195,7 @@ public class WarehouseOrders {
         row.put("returned_quantity", lines.stream().mapToLong(l -> l.returned).sum());
         row.put("pending_receipt_quantity", lines.stream().mapToLong(l -> l.pending).sum());
         row.put("progress", progress((String) doc.get("status"), lines));
+        row.put("state", state((String) doc.get("status"), (String) row.get("progress"), (Long) row.get("fulfilled_quantity")));
         return row;
     }
 
@@ -201,6 +215,11 @@ public class WarehouseOrders {
     /** Paged purchase-order list; search/filter run on backend data, not on the open page. */
     public Map<String, Object> list(
             Account a, String q, String status, String progress, String supplier, int page, int size) {
+        return list(a, q, status, progress, null, supplier, page, size);
+    }
+
+    public Map<String, Object> list(
+            Account a, String q, String status, String progress, String state, String supplier, int page, int size) {
         policy.view(a);
         int pageSize = Math.max(1, Math.min(size, 100));
         int pageNo = Math.max(0, page);
@@ -212,7 +231,8 @@ public class WarehouseOrders {
         for (var doc : orderHeaders()) {
             var row = summary(doc, byOrder.getOrDefault(num(doc, "receipt_id"), List.of()));
             if (status != null && !status.isBlank() && !status.equals(row.get("status"))) continue;
-            if (progress != null && !progress.isBlank() && !progress.equals(row.get("progress"))) continue;
+            if (progress != null && !progress.isBlank() && !List.of(progress.split(",")).contains(row.get("progress"))) continue;
+            if (state != null && !state.isBlank() && !state.equals(row.get("state"))) continue;
             if (!supplierFilter.isEmpty() && !supplierFilter.equals(supplierKey(row.get("manufacturer_name"))))
                 continue;
             if (!query.isEmpty()
@@ -359,6 +379,8 @@ public class WarehouseOrders {
         var onOrderHere = new HashMap<Integer, Long>();
         var onOrderOther = new HashMap<Integer, Long>();
         var otherSuppliers = new HashMap<Integer, Set<String>>();
+        // Open lines of other suppliers per variant, so the picker can show which orders make up "on order elsewhere".
+        var otherOrders = new HashMap<Integer, List<Map<String, Object>>>();
         var receivedHere = new HashMap<Integer, Long>();
         for (var l : lineStates().values()) {
             if (excludeOrderId != null && l.orderId == excludeOrderId) continue;
@@ -376,6 +398,16 @@ public class WarehouseOrders {
                 otherSuppliers
                         .computeIfAbsent(l.detailId, k -> new TreeSet<>())
                         .add(l.supplier == null ? "" : l.supplier.trim());
+                var o = new LinkedHashMap<String, Object>();
+                o.put("order_id", l.orderId);
+                o.put("code", code(l.orderId));
+                o.put("supplier", l.supplier);
+                o.put("order_date", l.orderDate);
+                o.put("price", l.price);
+                o.put("ordered_quantity", l.ordered);
+                o.put("fulfilled_quantity", l.fulfilled());
+                o.put("remaining_quantity", open);
+                otherOrders.computeIfAbsent(l.detailId, k -> new ArrayList<>()).add(o);
             }
         }
         String query = searchKey(q);
@@ -389,6 +421,7 @@ public class WarehouseOrders {
                   p.category_id,c.category_name
                 FROM product_detail d JOIN product p ON p.product_id=d.product_id
                 LEFT JOIN category c ON c.category_id=p.category_id
+                WHERE d.status<>'DELETED'
                 ORDER BY p.product_name,d.color,d.size,d.detail_id
                 """)) {
             int detail = num(v, "detail_id");
@@ -409,6 +442,9 @@ public class WarehouseOrders {
             row.put("on_order_supplier", onOrderHere.getOrDefault(detail, 0L));
             row.put("on_order_other", onOrderOther.getOrDefault(detail, 0L));
             row.put("other_suppliers", otherSuppliers.getOrDefault(detail, Set.of()));
+            var others = new ArrayList<>(otherOrders.getOrDefault(detail, List.of()));
+            others.sort((x, y) -> Integer.compare((Integer) y.get("order_id"), (Integer) x.get("order_id")));
+            row.put("other_orders", others);
             rows.add(row);
         }
         int pageSize = Math.max(1, Math.min(size, 100));

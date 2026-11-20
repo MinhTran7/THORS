@@ -37,6 +37,7 @@ SELECT d.detail_id,d.product_id,d.barcode,d.color,d.size,d.stock_quantity,d.stat
   COALESCE(l.assigned,0) AS assigned_quantity,GREATEST(0,d.stock_quantity-COALESCE(l.assigned,0)) AS unassigned_quantity
 FROM product_detail d JOIN product p ON p.product_id=d.product_id
 LEFT JOIN (SELECT detail_id,SUM(quantity) AS assigned FROM product_location GROUP BY detail_id) l ON l.detail_id=d.detail_id
+WHERE d.status<>'DELETED'
 ORDER BY p.product_name,d.color,d.size
 """);
 
@@ -400,6 +401,15 @@ ORDER BY p.product_name,d.color,d.size
                 s.jdbc().queryForList("SELECT * FROM rack"),
                 s.jdbc().queryForList("SELECT * FROM shelf_level"));
 
+        String name = r.name() == null || r.name().isBlank() ? null : r.name().trim().replaceAll("\\s+", " ");
+        if (s.tierNamesReady())
+            s.jdbc().update("UPDATE shelf_level SET level_name=? WHERE shelf_level_id=?", name, id);
+        else if (name != null)
+            throw new com.thors.common.ApiException(
+                    503,
+                    "MIGRATION_REQUIRED",
+                    "Database chưa có cột tên tầng. Cần chạy database/migrations/2026-11-18_shelf_level_name.sql.");
+
         s.audit(a.id(), "TIER_SAVE", id, r.status());
 
         return s.one(
@@ -517,6 +527,20 @@ ORDER BY p.product_name,d.color,d.size
             }
         }
 
+        s.units().sync(r.detailId());
+        if (s.units().ready()) {
+            // Chỉ chuyển chiếc đã dán tem và quét xác nhận.
+            var name = s.one(
+                    "SELECT p.product_name,d.color,d.size FROM product_detail d JOIN product p ON p.product_id=d.product_id"
+                            + " WHERE d.detail_id=?",
+                    r.detailId());
+            s.units().requireConfirmed(
+                    r.detailId(),
+                    r.fromLocationId(),
+                    r.quantity(),
+                    name.get("product_name") + " · " + name.get("color") + " · " + name.get("size"),
+                    r.fromLocationId() == null ? "hàng chưa xếp" : "vị trí nguồn");
+        }
         Integer destination = null;
 
         if (r.toShelfId() != null) {
@@ -539,14 +563,13 @@ ORDER BY p.product_name,d.color,d.size
                     r.toShelfId());
 
             if (found.isEmpty()) {
-                requireMetadata(r.description(), r.photoKeys());
-
+                // Mô tả và ảnh thực tế tại vị trí: không bắt buộc.
                 destination = s.insert(
                         "INSERT INTO product_location(detail_id,shelf_level_id,quantity,description)"
                                 + " VALUES(?,?,0,?)",
                         r.detailId(),
                         r.toShelfId(),
-                        r.description().trim());
+                        r.description() == null || r.description().isBlank() ? null : r.description().trim());
             } else {
                 destination = num(
                         found.get(0),
@@ -570,16 +593,6 @@ ORDER BY p.product_name,d.color,d.size
                     "SELECT * FROM product_location WHERE product_location_id=?",
                     destination);
 
-            if (dest.get("description") == null
-                    || dest.get("description").toString().isBlank()
-                    || s.count(
-                    "SELECT COUNT(*) FROM product_location_image "
-                            + "WHERE product_location_id=? AND deleted_at IS NULL",
-                    destination) == 0) {
-                throw invalid(
-                        "Vị trí phải có mô tả và ít nhất một ảnh thực tế.");
-            }
-
             if ((long) num(dest, "quantity")
                     + r.quantity() > Integer.MAX_VALUE) {
                 throw invalid(
@@ -601,6 +614,7 @@ ORDER BY p.product_name,d.color,d.size
                     r.fromLocationId());
         }
 
+        s.units().sync(r.detailId()); // tổng tồn không đổi: chỉ chuyển serial giữa các ô
         int id = s.insert("""
 INSERT INTO stock_adjustment(detail_id,quantity_change,reason,adjusted_by,movement_type,movement_quantity,source_location_id,destination_location_id,idempotency_key)
 VALUES(?,0,'Sắp xếp vị trí kho',?,'MOVE',?,?,?,?)
@@ -621,18 +635,6 @@ VALUES(?,0,'Sắp xếp vị trí kho',?,'MOVE',?,?,?,?)
         return Map.of(
                 "message",
                 "Đã cập nhật vị trí; tổng tồn giữ nguyên.");
-    }
-
-    private void requireMetadata(
-            String description,
-            List<String> keys) {
-        if (description == null
-                || description.isBlank()
-                || keys == null
-                || keys.isEmpty()) {
-            throw invalid(
-                    "Lần đầu gán vị trí phải có mô tả và ảnh thực tế.");
-        }
     }
 
     private void attach(
@@ -707,26 +709,19 @@ VALUES(?,0,'Sắp xếp vị trí kho',?,'MOVE',?,?,?,?)
             attach(id, r.photoKeys());
         }
 
-        if (num(location, "quantity") > 0
-                && s.count(
-                "SELECT COUNT(*) FROM product_location_image "
-                        + "WHERE product_location_id=? AND deleted_at IS NULL",
-                id) == 0) {
-            throw invalid(
-                    "Vị trí còn hàng phải giữ ít nhất một ảnh.");
-        }
-
+        // Mô tả và ảnh thực tế tại vị trí: không bắt buộc.
+        String description = r.description() == null || r.description().isBlank() ? null : r.description().trim();
         s.jdbc().update(
                 "UPDATE product_location SET description=?,updated_at=CURRENT_TIMESTAMP "
                         + "WHERE product_location_id=?",
-                r.description().trim(),
+                description,
                 id);
 
         s.audit(
                 a.id(),
                 "LOCATION_METADATA",
                 id,
-                r.description());
+                description);
 
         return Map.of(
                 "message",

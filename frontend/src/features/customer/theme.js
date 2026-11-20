@@ -1,8 +1,8 @@
 // Màu và kiểu nút / thẻ của trang địa chỉ giao hàng, đồng bộ với trang Đăng nhập và các trang tài khoản của khách
+import { C as STORE } from 'features/shop/storeTheme';
+
 export const C = {
   cyan: '#A8F1F8',
-  cyanHover: '#8EECF5',
-  cyanInk: '#0E3A41',
   teal: '#1BA3B3',
   text: '#1F2937',
   muted: '#6B7280',
@@ -13,8 +13,8 @@ export const C = {
 };
 
 export const primaryButtonSx = {
-  bgcolor: C.cyan,
-  color: C.cyanInk,
+  bgcolor: STORE.accent,
+  color: '#FFFFFF',
   fontWeight: 800,
   fontSize: 14.5,
   px: 3,
@@ -22,7 +22,8 @@ export const primaryButtonSx = {
   borderRadius: '14px',
   textTransform: 'none',
   boxShadow: 'none',
-  '&:hover': { bgcolor: C.cyanHover, boxShadow: 'none' },
+  '&:hover': { bgcolor: STORE.accent, color: '#FFFFFF', boxShadow: 'none' },
+  '&::after': { display: 'none' },
   '&.Mui-disabled': { bgcolor: '#E5E7EB', color: '#9CA3AF' }
 };
 
@@ -36,7 +37,7 @@ export const outlineButtonSx = {
   height: 46,
   borderRadius: '14px',
   border: `1.5px solid ${C.border}`,
-  '&:hover': { bgcolor: '#FAFDFD', borderColor: C.cyan }
+  '&:hover': { bgcolor: C.surface, borderColor: STORE.ink, color: '#374151' }
 };
 
 // Thẻ trắng bo góc, bóng nhẹ như khung form Đăng nhập

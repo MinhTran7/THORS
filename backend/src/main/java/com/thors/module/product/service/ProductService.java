@@ -413,9 +413,8 @@ public class ProductService {
                         variant
                 );
             }
-
-            // Biến thể chưa có mã: TH + id biến thể (giống module Kho)
-            codes.assignVariantCodes(productId);
+            // Biến thể còn trống mã (DB chưa có cột SKU) -> tự gán mã ngay khi tạo
+            codes.fillMissingVariantCodes(productId);
         } catch (org.springframework.dao.DuplicateKeyException e) {
             // Hai người tạo cùng lúc lấy trùng mã, hoặc biến thể trùng theo cách so của DB
             throw new ApiException(409, "PRODUCT_CODE_CONFLICT",
@@ -879,8 +878,8 @@ public class ProductService {
             }
         }
 
-        // 9c. Biến thể chưa có mã (mới thêm hoặc dữ liệu cũ): TH + id biến thể, giống module Kho
-        codes.assignVariantCodes(productId);
+        // 9c. Biến thể còn trống mã (biến thể mới khi chưa có SKU, hoặc biến thể cũ) -> tự gán mã
+        codes.fillMissingVariantCodes(productId);
 
         logger.info(
                 "Product {} updated successfully",

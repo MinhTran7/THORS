@@ -28,6 +28,9 @@ import {
 } from '@ant-design/icons';
 
 import { getProductById, setVariantOnline } from '../../services/productService';
+import { useAuth } from 'features/auth/AuthProvider';
+import SizeChartEditor from 'features/fitting/SizeChartEditor';
+import ProductStyleEditor from 'features/outfit/ProductStyleEditor';
 import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../customer/theme';
 import { descriptionToText } from './productDescription';
 
@@ -110,6 +113,8 @@ function InfoCard({ label, value, highlight = false }) {
 export default function ProductDetailPage() {
   const { productId } = useParams();
   const navigate = useNavigate();
+  // Sửa bảng size: chỉ Owner (Family Member chỉ xem) - khớp quyền PUT /api/products/** ở backend
+  const canEditSizeChart = useAuth()?.account?.role === 'OWNER';
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -856,6 +861,11 @@ export default function ProductDetailPage() {
               </Typography>
             </Box>
           </Box>
+
+          {/* Bảng size: số đo cơ thể theo từng size -> gợi ý size cho khách trên cửa hàng (module fitting) */}
+          <SizeChartEditor productId={productId} sizes={[...new Set(variants.map((v) => v.size))]} canEdit={canEditSizeChart} />
+          {/* Thẻ dịp mặc / phong cách cho "Phối đồ cho bạn" (module outfit) */}
+          <ProductStyleEditor productId={productId} canEdit={canEditSizeChart} />
         </Grid>
 
         {/* STATUS AND VISIBILITY */}

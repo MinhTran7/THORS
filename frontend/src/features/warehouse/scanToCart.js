@@ -7,6 +7,8 @@ import { api } from 'services/http';
  * the existing warehouse API and returns a line in the exact shape the sales page's cart uses
  * ({ key, productId, variantId, name, image, size, color, price, stock, quantity }).
  * Nothing here changes stock; the sale itself still goes through the sales module on checkout.
+ * A serial label (TH000006-0001, one per piece) gives the same line plus `serials: [code]`, so the
+ * same label cannot be added twice to one bill.
  */
 export async function scanToCartLine(rawCode) {
   const code = String(rawCode ?? '')
@@ -29,6 +31,14 @@ export async function scanToCartLine(rawCode) {
   if (v.price == null) throw new Error(`${label} chưa có giá bán. Hãy nhập giá trong trang Sản phẩm trước khi bán.`);
   const stock = Number(v.stock_quantity) || 0;
   if (stock <= 0) throw new Error(`${label} đã hết hàng.`);
+  if (found.unit?.defect_id)
+    throw new Error(
+      `Chiếc ${found.unit.serial_code} đang báo lỗi (${found.unit.defect_types}), không bán chiếc này. Lấy chiếc khác hoặc xử lý ở Bán hàng → Xử lý hàng lỗi.`
+    );
+  if (found.unit?.status === 'IN_STOCK' && !found.unit.scanned_at)
+    throw new Error(
+      `Chiếc ${found.unit.serial_code} chưa quét xác nhận vào kho, chưa bán được. Quét tem này ở Kho hàng → Xác nhận tem trước.`
+    );
   return {
     key: `${v.product_id}-${v.detail_id}`,
     productId: v.product_id,
@@ -39,7 +49,8 @@ export async function scanToCartLine(rawCode) {
     color: v.color ?? '',
     price: Number(v.price),
     stock,
-    quantity: 1
+    quantity: 1,
+    ...(found.unit ? { serials: [found.unit.serial_code] } : {})
   };
 }
 
@@ -50,8 +61,18 @@ export async function scanToCartLine(rawCode) {
 export function addScannedLine(cart, line) {
   const existing = cart.find((item) => item.key === line.key);
   if (!existing) return { cart: [...cart, line] };
+  // Quantity lowered by hand: the last scanned labels no longer count.
+  const scanned = (existing.serials || []).slice(0, existing.quantity);
+  const serial = line.serials?.[0];
+  if (serial && scanned.includes(serial))
+    return { error: `Tem ${serial} đã quét trong hóa đơn này. Mỗi chiếc chỉ quét một lần.` };
   const stock = Math.min(existing.stock ?? line.stock, line.stock);
   if (existing.quantity >= stock)
     return { error: `${line.name} · ${line.color} · ${line.size}: trong hóa đơn đã đủ ${stock} (hết tồn kho).` };
-  return { cart: cart.map((item) => (item.key === line.key ? { ...item, quantity: item.quantity + 1, stock: line.stock } : item)) };
+  const serials = serial ? [...scanned, serial] : existing.serials;
+  return {
+    cart: cart.map((item) =>
+      item.key === line.key ? { ...item, quantity: item.quantity + 1, stock: line.stock, ...(serials ? { serials } : {}) } : item
+    )
+  };
 }

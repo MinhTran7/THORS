@@ -11,4 +11,6 @@ public record AccountView(
         boolean phoneVerified,
         boolean googleLinked,
         boolean passwordEnabled,
-        String avatarUrl) {}
+        String avatarUrl,
+        /** true: phải đổi mật khẩu trước khi dùng hệ thống (tài khoản do Admin / Owner tạo). */
+        boolean passwordChangeRequired) {}

@@ -30,6 +30,8 @@ export default function MoveRequestsPanel() {
   });
   const rows = (data || []).filter((r) => owner || view === 'PENDING' || r.requested_by === account.id).slice(0, 30);
   if (!error && view === 'PENDING' && !rows.length) return null;
+  // Database chưa có bảng yêu cầu xếp kệ (chưa chạy migration): không hiện khung báo lỗi kỹ thuật.
+  if (error?.status === 503) return null;
 
   return (
     <MainCard

@@ -11,6 +11,8 @@ public final class AuthRequests {
           @NotBlank(message = "Nhập mật khẩu.") String password,
           @NotBlank(message = "Xác nhận mật khẩu.") String confirmPassword) {}
 
+  // Dữ liệu gửi lên khi đăng nhập: POST /api/auth/login { identifier, password }.
+  // identifier là email. @NotBlank: trống thì ApiErrors.validation trả 400 với câu lỗi ghi ở đây.
   public record Login(
           @NotBlank(message = "Nhập email hoặc số điện thoại.") String identifier,
           @NotBlank(message = "Nhập mật khẩu.") String password) {}

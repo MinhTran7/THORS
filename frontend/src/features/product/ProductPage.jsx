@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import {
   Alert,
@@ -56,15 +56,13 @@ const C = {
   subtle: '#94A3B8',
   border: '#E2E8F0',
   borderLight: '#F1F5F9',
-  bg: '#F8FAFC',
   surface: '#FFFFFF',
   cyan: '#8EECF5',
   cyanHover: '#76E5EF',
   cyanText: '#0E7490',
   cream: '#FFF7AE',
   creamHover: '#FFF294',
-  creamText: '#713F12',
-  error: '#EF4444'
+  creamText: '#713F12'
 };
 
 const PAGE_SIZE = 8;
@@ -210,9 +208,17 @@ export default function ProductPage() {
   // STATES - SEARCH AND FILTER
   // ==========================================
 
-  // Tab, ô tìm, danh mục và trang đang xem được nhớ lại (sessionStorage) để khi vào chi tiết / sửa sản phẩm
-  // rồi bấm "Quay lại danh sách sản phẩm" thì về đúng trang chứa sản phẩm đó.
-  const [saved] = useState(readListState);
+  // Link từ trang khác có thể mở sẵn tab và ô tìm kiếm, ví dụ /products?tab=INACTIVE&q=%2393 (Kho → phiếu đặt hàng).
+  // Không có link thì tab, ô tìm, danh mục và trang đang xem được nhớ lại (sessionStorage) để khi vào chi tiết / sửa
+  // sản phẩm rồi bấm "Quay lại danh sách sản phẩm" thì về đúng trang chứa sản phẩm đó.
+  const [searchParams] = useSearchParams();
+  const [saved] = useState(() => {
+    const tab = searchParams.get('tab');
+    const q = searchParams.get('q');
+    const validTab = ['ACTIVE', 'INACTIVE', 'ONLINE', 'LOW_STOCK', 'ALL'].includes(tab);
+    if (validTab || q) return { activeTab: validTab ? tab : 'ACTIVE', search: q || '' };
+    return readListState();
+  });
   const [activeTab, setActiveTab] = useState(saved.activeTab ?? 'ACTIVE');
   const [search, setSearch] = useState(saved.search ?? '');
   const [categoryFilter, setCategoryFilter] = useState(saved.categoryFilter ?? 'ALL');

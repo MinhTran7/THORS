@@ -7,13 +7,13 @@ import {
   FacebookOutlined,
   FileAddOutlined,
   FileDoneOutlined,
+  GiftOutlined,
   GlobalOutlined,
   HistoryOutlined,
   HomeOutlined,
   IdcardOutlined,
   ImportOutlined,
   InboxOutlined,
-  LayoutOutlined,
   MobileOutlined,
   PercentageOutlined,
   PieChartOutlined,
@@ -26,9 +26,12 @@ import {
   ShoppingOutlined,
   SkinOutlined,
   SwapOutlined,
+  TagOutlined,
   TeamOutlined,
   UnorderedListOutlined,
-  UserOutlined
+  UserOutlined,
+  ColumnHeightOutlined,
+  WarningOutlined
 } from '@ant-design/icons';
 
 
@@ -55,7 +58,15 @@ const OWNER_MENU = [
       { to: '/in-store-sales/history', label: 'Đơn hàng tại quầy', icon: <FileDoneOutlined /> },
       { to: '/orders', label: 'Đơn hàng online', icon: <MobileOutlined /> },
       { to: '/returns', label: 'Đổi trả', icon: <SwapOutlined /> },
-      promotions
+      { to: '/warehouse/defects', label: 'Xử lý hàng lỗi', icon: <WarningOutlined /> }
+    ]
+  },
+  {
+    label: 'Khuyến mãi',
+    icon: <PercentageOutlined />,
+    children: [
+      { to: '/promotions', label: 'Khuyến mãi sản phẩm', icon: <GiftOutlined /> },
+      { to: '/order-discounts', label: 'Giảm giá đơn hàng', icon: <TagOutlined /> }
     ]
   },
   {
@@ -81,7 +92,6 @@ const OWNER_MENU = [
     icon: <DatabaseOutlined />,
     children: [
       { to: '/warehouse/inventory', label: 'Tồn kho', icon: <InboxOutlined /> },
-      { to: '/warehouse/layout', label: 'Bố cục kho', icon: <LayoutOutlined /> },
       { to: '/warehouse/locations', label: 'Vị trí kho', icon: <PushpinOutlined /> }
     ]
   },
@@ -89,7 +99,7 @@ const OWNER_MENU = [
 ];
 
 // Các trang chỉ OWNER được vào (khớp với RequireAuth roles={['OWNER']} trong routes/index.jsx).
-const OWNER_ONLY = new Set(['/products', '/categories', '/returns', '/family', '/website']);
+const OWNER_ONLY = new Set(['/products', '/categories', '/returns', '/family', '/promotions', '/order-discounts', '/website']);
 
 const without = (menu, hidden) =>
   menu
@@ -112,6 +122,7 @@ export const NAVIGATION = {
     promotions,
     { to: '/orders', label: 'Đơn hàng', icon: <ShoppingOutlined /> },
     { to: '/addresses', label: 'Địa chỉ của tôi', icon: <EnvironmentOutlined /> },
+    { to: '/body-profile', label: 'Số đo của tôi', icon: <ColumnHeightOutlined /> },
     profile
   ]
 };

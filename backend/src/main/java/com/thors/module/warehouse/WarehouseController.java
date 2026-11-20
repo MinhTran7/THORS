@@ -22,6 +22,8 @@ public class WarehouseController {
     private final WarehouseInventory inventory;
     private final WarehouseCounts counts;
     private final WarehouseMoveRequests moveRequests;
+    private final WarehouseUnits units;
+    private final WarehouseDefects defects;
 
     public WarehouseController(
             SessionAccess sessions,
@@ -35,7 +37,9 @@ public class WarehouseController {
             WarehouseSettlements settlements,
             WarehouseInventory inventory,
             WarehouseCounts counts,
-            WarehouseMoveRequests moveRequests) {
+            WarehouseMoveRequests moveRequests,
+            WarehouseUnits units,
+            WarehouseDefects defects) {
         this.sessions = sessions;
         this.docs = docs;
         this.layout = layout;
@@ -48,6 +52,8 @@ public class WarehouseController {
         this.inventory = inventory;
         this.counts = counts;
         this.moveRequests = moveRequests;
+        this.units = units;
+        this.defects = defects;
     }
 
     /** Inventory list with metrics over every matching variant; all=true for the Excel export. */
@@ -63,8 +69,10 @@ public class WarehouseController {
             @RequestParam(required = false) String sort,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize,
-            @RequestParam(defaultValue = "false") boolean all) {
-        return inventory.list(sessions.current(), q, color, size, categoryId, shelfId, state, slowDays, sort, page, pageSize, all);
+            @RequestParam(defaultValue = "false") boolean all,
+            @RequestParam(defaultValue = "false") boolean group) {
+        return inventory.list(
+                sessions.current(), q, color, size, categoryId, shelfId, state, slowDays, sort, page, pageSize, all, group);
     }
 
     @GetMapping("/inventory/report")
@@ -80,6 +88,12 @@ public class WarehouseController {
     @GetMapping("/inventory/{detail}")
     public Object inventoryDetail(@PathVariable int detail) {
         return inventory.detail(sessions.current(), detail);
+    }
+
+    /** Soft delete (status = DELETED); nothing is removed from the database. */
+    @PostMapping("/inventory/{detail}/delete")
+    public Object deleteVariant(@PathVariable int detail) {
+        return inventory.deleteVariant(sessions.current(), detail);
     }
 
     @PutMapping("/inventory/{detail}/threshold")
@@ -132,10 +146,11 @@ public class WarehouseController {
             @RequestParam(required = false) String q,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String progress,
+            @RequestParam(required = false) String state,
             @RequestParam(required = false) String supplier,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return orders.list(sessions.current(), q, status, progress, supplier, page, size);
+        return orders.list(sessions.current(), q, status, progress, state, supplier, page, size);
     }
 
     @GetMapping("/orders/{id}")
@@ -191,6 +206,56 @@ public class WarehouseController {
         return barcodes.generate(sessions.current(), r == null ? null : r.detailIds());
     }
 
+    /** Serial từng chiếc của các biến thể (?detail=1&detail=2), lọc theo trạng thái hoặc chưa in tem. */
+    @GetMapping("/units")
+    public Object units(
+            @RequestParam java.util.List<Integer> detail,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "false") boolean unprinted,
+            @RequestParam(defaultValue = "false") boolean defective,
+            @RequestParam(defaultValue = "false") boolean unconfirmed) {
+        return units.list(sessions.current(), detail, status, unprinted, defective, unconfirmed);
+    }
+
+    @PostMapping("/units/printed")
+    public Object unitsPrinted(@Valid @RequestBody UnitsPrinted r) {
+        return units.printed(sessions.current(), r.unitIds());
+    }
+
+    /** Tem serial (chờ nhận) cho phiếu nhập đang chờ kiểm hàng. */
+    @PostMapping("/documents/{id}/unit-labels")
+    public Object unitLabels(@PathVariable int id, @Valid @RequestBody(required = false) UnitLabels r) {
+        return units.receiptLabels(sessions.current(), id, r == null ? null : r.itemId(), r == null ? null : r.extra());
+    }
+
+    // ---- Hàng lỗi từng chiếc (trang Bán hàng → Xử lý hàng lỗi) ----
+
+    @GetMapping("/defect-types")
+    public Object defectTypes() {
+        return defects.types(sessions.current());
+    }
+
+    @GetMapping("/defects")
+    public Object defects(@RequestParam(required = false) String status, @RequestParam(required = false) String q) {
+        return defects.list(sessions.current(), status, q);
+    }
+
+    @PostMapping("/defects")
+    public Object reportDefect(@Valid @RequestBody DefectReport r) {
+        return defects.report(sessions.current(), r.serial(), r.types(), r.description(), r.source(), r.photoKeys());
+    }
+
+    /** id = unit_id của chiếc lỗi. */
+    @PostMapping("/defects/{id}/fix")
+    public Object fixDefect(@PathVariable int id, @Valid @RequestBody(required = false) DefectResolve r) {
+        return defects.fix(sessions.current(), id, r == null ? null : r.note());
+    }
+
+    @PostMapping("/defects/{id}/discard")
+    public Object discardDefect(@PathVariable int id, @Valid @RequestBody DefectResolve r) {
+        return defects.discard(sessions.current(), id, r.note());
+    }
+
     @GetMapping("/barcodes/lookup")
     public Object lookupBarcode(@RequestParam String code) {
         return barcodes.lookup(sessions.current(), code);
@@ -227,6 +292,18 @@ public class WarehouseController {
                 id,
                 r == null ? null : r.expectedRemaining(),
                 r == null ? null : r.picks());
+    }
+
+    /** Goods check of a receipt waiting for it ("Chờ kiểm hàng"): one scanned label or a typed count. */
+    @PostMapping("/documents/{id}/scan")
+    public Object scan(@PathVariable int id, @Valid @RequestBody Scan r) {
+        return docs.scan(sessions.current(), id, r);
+    }
+
+    /** "Chốt nhận hàng": stock increases by the scanned quantities only. */
+    @PostMapping("/documents/{id}/receive")
+    public Object receive(@PathVariable int id, @Valid @RequestBody(required = false) Receive r) {
+        return docs.receive(sessions.current(), id, r == null ? null : r.reason());
     }
 
     /** Owner approves a supplier return (waits for dispatch; stock unchanged). */

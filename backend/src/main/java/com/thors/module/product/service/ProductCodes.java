@@ -194,4 +194,44 @@ public class ProductCodes {
         taken.add(code);
         return code;
     }
+
+    /**
+     * Gán mã cho mọi biến thể của sản phẩm còn trống mã, ngay lúc tạo/thêm biến thể (không cần bấm "Tạo mã" ở Kho).
+     * Sản phẩm có SKU → SKU-SIZE-MÀU; chưa có SKU (DB chưa chạy migration) → TH + 6 số mã biến thể, vd TH000123.
+     * Mã đã có giữ nguyên.
+     */
+    public int fillMissingVariantCodes(int productId) {
+        String sku = null;
+        if (supportsSku()) {
+            List<String> skus = jdbc.queryForList(
+                    "SELECT sku FROM product WHERE product_id = ?", String.class, productId);
+            sku = skus.isEmpty() ? null : skus.get(0);
+        }
+        List<java.util.Map<String, Object>> rows = jdbc.queryForList("""
+                SELECT detail_id, size, color FROM product_detail
+                WHERE product_id = ? AND (barcode IS NULL OR barcode = '')
+                ORDER BY detail_id
+                """, productId);
+        Set<String> taken = new java.util.HashSet<>();
+        int filled = 0;
+        for (var row : rows) {
+            int detailId = ((Number) row.get("detail_id")).intValue();
+            String code = sku != null
+                    ? uniqueVariantCode(sku, String.valueOf(row.get("size")), String.valueOf(row.get("color")), taken)
+                    : fallbackVariantCode(detailId, taken);
+            filled += jdbc.update(
+                    "UPDATE product_detail SET barcode = ? WHERE detail_id = ? AND (barcode IS NULL OR barcode = '')",
+                    code, detailId);
+        }
+        return filled;
+    }
+
+    /** TH + 6 số mã biến thể (định dạng mã vạch cũ của module Kho), thêm hậu tố nếu trùng. */
+    private String fallbackVariantCode(int detailId, Set<String> taken) {
+        String base = String.format(Locale.ROOT, "TH%06d", detailId);
+        String code = base;
+        for (int n = 1; taken.contains(code) || variantCodeExists(code); n++) code = base + "-" + n;
+        taken.add(code);
+        return code;
+    }
 }
