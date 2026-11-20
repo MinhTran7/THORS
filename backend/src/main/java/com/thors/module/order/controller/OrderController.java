@@ -58,8 +58,8 @@ public class OrderController {
 
     /**
      * POST /api/orders/{id}/status?status=SHIPPING&carrier=SELF|GHN&reason=&weightG=
-     *     &ghnDistrictId=&ghnWardCode=
-     * (khi gửi GHN: cân nặng gram, bỏ trống = mặc định; Quận-Huyện / Phường-Xã theo GHN Owner chọn)
+     *     &ghnProvinceId=&ghnWardId=
+     * (khi gửi GHN: cân nặng gram, bỏ trống = mặc định; Tỉnh / Phường-Xã theo danh mục mới của GHN)
      */
     /** POST /api/orders/{id}/refunded: Owner xác nhận đã hoàn tiền cho đơn đang "Chờ hoàn tiền" */
     @PostMapping("/{id}/refunded")
@@ -74,8 +74,8 @@ public class OrderController {
             @RequestParam(required = false) String reason,
             @RequestParam(required = false) String carrier,
             @RequestParam(required = false) Integer weightG,
-            @RequestParam(required = false) Integer ghnDistrictId,
-            @RequestParam(required = false) String ghnWardCode,
+            @RequestParam(required = false) Integer ghnProvinceId,
+            @RequestParam(required = false) Integer ghnWardId,
             // Khách hủy đơn đã thanh toán online: tài khoản nhận tiền hoàn
             @RequestParam(required = false) String refundBankBin,
             @RequestParam(required = false) String refundBankName,
@@ -89,7 +89,7 @@ public class OrderController {
         // Đã bắt buộc minh chứng thì "Đã giao" phải đi qua POST /{id}/delivered kèm ảnh
         deliveryProofs.guardStatusChange(status);
         return service.changeStatus(
-                sessions.current(), id, status, reason, carrier, weightG, ghnDistrictId, ghnWardCode, refund);
+                sessions.current(), id, status, reason, carrier, weightG, ghnProvinceId, ghnWardId, refund);
     }
 
     /** PUT /api/orders/{id}/refund-account: khách nhập / sửa tài khoản nhận tiền hoàn (đơn đang chờ hoàn tiền) */

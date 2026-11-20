@@ -24,7 +24,8 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
 /**
- * Gọi API Giao Hàng Nhanh (GHN): danh mục địa chỉ, tính phí, tạo và hủy vận đơn.
+ * Gọi API Giao Hàng Nhanh (GHN): danh mục địa chỉ theo địa giới mới 2 cấp (34 tỉnh, không còn Quận/Huyện),
+ * tạo, theo dõi và hủy vận đơn.
  *
  * <p>Cấu hình qua biến môi trường GHN_TOKEN, GHN_SHOP_ID, GHN_BASE_URL (mặc định là môi trường thử
  * nghiệm dev-online-gateway). Tài liệu: https://api.ghn.vn/home/docs/detail
@@ -36,14 +37,17 @@ public class GhnClient {
     /** Một dòng hàng gửi kèm vận đơn. */
     public record Item(String name, String code, int quantity, long price, int weightG) {}
 
-    /** Dữ liệu tạo vận đơn. */
+    /**
+     * Dữ liệu tạo vận đơn. Địa chỉ nhận theo địa giới mới 2 cấp: tên Tỉnh và tên Phường/Xã đúng như danh mục
+     * mới của GHN trả về (không có Quận/Huyện).
+     */
     public record CreateRequest(
             String clientOrderCode,
             String toName,
             String toPhone,
             String toAddress,
-            int toDistrictId,
-            String toWardCode,
+            String toProvinceName,
+            String toWardName,
             long codAmount,
             int weightG,
             String note,
@@ -52,24 +56,41 @@ public class GhnClient {
     /** Kết quả tạo vận đơn: mã vận đơn GHN và tổng phí GHN thu của shop. */
     public record Created(String orderCode, long totalFee, String expectedDeliveryTime) {}
 
-    /** Một mục trong danh mục địa chỉ (tỉnh, quận/huyện hoặc phường/xã); aliases là các tên gọi khác. */
+    /** Một mục trong danh mục địa chỉ mới (tỉnh hoặc phường/xã); aliases là các tên gọi khác. */
     public record Area(String id, String name, @JsonIgnore List<String> aliases) {
         boolean matches(String text) {
             String t = norm(text);
             if (t.isEmpty()) return false;
-            if (norm(name).equals(t)) return true;
-            return aliases.stream().anyMatch(a -> norm(a).equals(t));
+            if (sameName(name, t)) return true;
+            return aliases.stream().anyMatch(a -> sameName(a, t));
         }
     }
 
-    /** Gợi ý Tỉnh / Quận-Huyện / Phường-Xã theo GHN cho một địa chỉ dạng chữ; các trường có thể null. */
-    public record Suggestion(String provinceId, String districtId, String wardCode, List<Candidate> candidates) {}
+    /** Gợi ý Tỉnh / Phường-Xã theo danh mục mới của GHN cho một địa chỉ dạng chữ; các trường có thể null. */
+    public record Suggestion(String provinceId, String wardId) {}
 
-    /** Một cặp Quận-Huyện + Phường-Xã khớp tên. */
-    public record Candidate(String districtId, String districtName, String wardCode, String wardName) {}
+    /** Chữ thường, bỏ dấu, gộp khoảng trắng: "Thành phố  Hồ Chí Minh" -> "thanh pho ho chi minh". */
+    static String norm(String s) {
+        String noMarks =
+                java.text.Normalizer.normalize(s == null ? "" : s, java.text.Normalizer.Form.NFD)
+                        .replaceAll("\\p{M}", "")
+                        .replace('đ', 'd')
+                        .replace('Đ', 'D');
+        return noMarks.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9]+", " ").trim();
+    }
 
-    private static String norm(String s) {
-        return s == null ? "" : s.trim().replaceAll("\\s+", " ").toLowerCase(java.util.Locale.ROOT);
+    /** Tiền tố loại đơn vị hành chính, bỏ đi khi so tên ("Thành phố Hồ Chí Minh" = "Hồ Chí Minh"). */
+    private static final java.util.regex.Pattern ADMIN_PREFIX =
+            java.util.regex.Pattern.compile("^(thanh pho|tp|tinh|phuong|xa|dac khu|thi tran) ");
+
+    /** Hai tên (đã norm phần text) có cùng chỉ một đơn vị không: bằng nhau, hoặc bằng nhau sau khi bỏ tiền tố. */
+    static boolean sameName(String name, String normalizedText) {
+        String n = norm(name);
+        if (n.equals(normalizedText)) return true;
+        String a = ADMIN_PREFIX.matcher(n).replaceFirst("");
+        String b = ADMIN_PREFIX.matcher(normalizedText).replaceFirst("");
+        // Chỉ bỏ tiền tố khi phần còn lại không phải toàn số ("Phường 1" khác "Xã 1")
+        return !a.isEmpty() && !a.matches("\\d+") && a.equals(b);
     }
 
     private final RestTemplate http;
@@ -117,57 +138,72 @@ public class GhnClient {
         return serviceTypeId;
     }
 
-    // ------------------------------------------------------------------ Danh mục địa chỉ
+    // ------------------------------------------------------------------ Danh mục địa chỉ (địa giới mới 2 cấp)
 
+    /** Số mục tối đa GHN trả về mỗi lần gọi danh mục mới. */
+    private static final int PAGE = 200;
+
+    /** 34 tỉnh/thành theo địa giới mới (GHN: GET /v3/master-data/province/all). */
     public List<Area> provinces() {
         return areaCache.computeIfAbsent(
                 "p",
-                k -> areas(call(HttpMethod.GET, "/master-data/province", null, false), "ProvinceID", "ProvinceName"));
-    }
-
-    public List<Area> districts(int provinceId) {
-        return areaCache.computeIfAbsent(
-                "d" + provinceId,
                 k ->
-                        areas(
-                                call(HttpMethod.POST, "/master-data/district", Map.of("province_id", provinceId), false),
-                                "DistrictID",
-                                "DistrictName"));
+                        allPages("/v3/master-data/province/all?").stream()
+                                .filter(p -> !isTestProvince(p.name()))
+                                .toList());
     }
 
-    public List<Area> wards(int districtId) {
+    /** Phường/Xã/Đặc khu của một tỉnh theo địa giới mới (GHN: GET /v3/master-data/ward/all-by-province-id). */
+    public List<Area> wards(int provinceId) {
         return areaCache.computeIfAbsent(
-                "w" + districtId,
-                k ->
-                        areas(
-                                call(HttpMethod.POST, "/master-data/ward", Map.of("district_id", districtId), false),
-                                "WardCode",
-                                "WardName"));
+                "w" + provinceId,
+                k -> allPages("/v3/master-data/ward/all-by-province-id?province_id=" + provinceId + "&"));
     }
 
-    private static List<Area> areas(JsonNode data, String idField, String nameField) {
+    /** Gọi danh mục mới theo từng trang (tối đa 200 mục/trang) cho tới khi hết. */
+    private List<Area> allPages(String pathWithQuery) {
+        List<Area> out = new ArrayList<>();
+        for (int offset = 0; ; offset += PAGE) {
+            JsonNode data = call(HttpMethod.GET, pathWithQuery + "offset=" + offset + "&limit=" + PAGE, null, true);
+            int size = data != null && data.isArray() ? data.size() : 0;
+            out.addAll(areas(data));
+            if (size < PAGE) return out;
+        }
+    }
+
+    /**
+     * Tỉnh giả của môi trường thử nghiệm GHN: có chữ "test", hoặc tên kết thúc bằng số ("Hà Nội 02").
+     * Tên tỉnh thật không bao giờ kết thúc bằng số; quận/phường thì có ("Quận 1") nên không áp dụng cho chúng.
+     */
+    static boolean isTestProvince(String name) {
+        String n = name == null ? "" : name.trim();
+        return n.toLowerCase(java.util.Locale.ROOT).contains("test") || n.matches(".*\\d$");
+    }
+
+    /** Đọc danh mục mới: {_id, name, extension_names, status}; chỉ lấy mục đang hoạt động (status = 1). */
+    static List<Area> areas(JsonNode data) {
         List<Area> out = new ArrayList<>();
         if (data == null || !data.isArray()) return out;
         for (JsonNode n : data) {
-            // GHN để lại một số mục thử nghiệm / ngừng hoạt động (Status = 2), bỏ qua
-            if (n.path("Status").asInt(1) != 1) continue;
+            if (n.path("status").asInt(1) != 1) continue;
+            String name = n.path("name").asText("");
+            // Môi trường thử nghiệm GHN còn mục giả vẫn đang hoạt động ("Test - Alert - Tỉnh - 001"...)
+            if (name.isBlank() || name.toLowerCase(java.util.Locale.ROOT).contains("test")) continue;
             List<String> aliases = new ArrayList<>();
-            for (JsonNode a : n.path("NameExtension")) aliases.add(a.asText());
-            out.add(new Area(n.path(idField).asText(), n.path(nameField).asText(), aliases));
+            for (JsonNode a : n.path("extension_names")) aliases.add(a.asText());
+            out.add(new Area(n.path("_id").asText(), name, aliases));
         }
         return out;
     }
 
     /**
-     * Đoán Tỉnh / Quận-Huyện / Phường-Xã theo GHN từ địa chỉ dạng "chi tiết, Phường/Xã, Tỉnh" (cách
-     * checkout ghép địa chỉ). Địa chỉ mới sau sáp nhập chỉ có 2 cấp, nên tìm phường/xã cùng tên trong mọi
-     * quận/huyện của tỉnh. Chỉ là gợi ý: Owner vẫn phải kiểm tra trước khi gửi.
+     * Đoán Tỉnh / Phường-Xã theo danh mục mới của GHN từ địa chỉ dạng "chi tiết, Phường/Xã, Tỉnh" (cách
+     * checkout ghép địa chỉ, cùng địa giới 2 cấp). Chỉ là gợi ý: Owner vẫn kiểm tra trước khi gửi.
      */
     public Suggestion suggest(String address) {
-        if (address == null || address.isBlank()) return new Suggestion(null, null, null, List.of());
+        if (address == null || address.isBlank()) return new Suggestion(null, null);
         List<String> parts =
                 java.util.Arrays.stream(address.split(",")).map(String::trim).filter(s -> !s.isEmpty()).toList();
-        if (parts.isEmpty()) return new Suggestion(null, null, null, List.of());
 
         Area province = null;
         int provinceIndex = -1;
@@ -176,51 +212,21 @@ public class GhnClient {
             province = provinces().stream().filter(p -> p.matches(part)).findFirst().orElse(null);
             if (province != null) provinceIndex = i;
         }
-        if (province == null) return new Suggestion(null, null, null, List.of());
+        if (province == null) return new Suggestion(null, null);
 
-        // Các phần đứng trước tên tỉnh, gần tỉnh nhất trước (thường là phường/xã)
-        List<String> before = new ArrayList<>(parts.subList(0, provinceIndex));
-        java.util.Collections.reverse(before);
-        int provinceId = Integer.parseInt(province.id());
-        List<Candidate> found = new ArrayList<>();
-        for (String part : before) {
-            for (Area d : districts(provinceId)) {
-                for (Area w : wards(Integer.parseInt(d.id())))
-                    if (w.matches(part)) found.add(new Candidate(d.id(), d.name(), w.id(), w.name()));
-            }
-            if (!found.isEmpty()) break;
+        // Phường/Xã thường đứng ngay trước tên tỉnh: thử từ phần gần tỉnh nhất
+        List<Area> wards = wards(Integer.parseInt(province.id()));
+        for (int i = provinceIndex - 1; i >= 0; i--) {
+            String part = parts.get(i);
+            Area ward = wards.stream().filter(w -> w.matches(part)).findFirst().orElse(null);
+            if (ward != null) return new Suggestion(province.id(), ward.id());
         }
-        // Trùng tên ở nhiều quận/huyện: nếu địa chỉ có ghi tên quận/huyện cũ thì chỉ giữ quận/huyện đó
-        if (found.size() > 1) {
-            List<Candidate> narrowed =
-                    found.stream()
-                            .filter(c -> districts(provinceId).stream()
-                                    .filter(d -> d.id().equals(c.districtId()))
-                                    .anyMatch(d -> before.stream().anyMatch(d::matches)))
-                            .toList();
-            if (!narrowed.isEmpty()) found = narrowed;
-        }
-        Candidate only = found.size() == 1 ? found.get(0) : null;
-        return new Suggestion(
-                province.id(), only == null ? null : only.districtId(), only == null ? null : only.wardCode(), found);
+        return new Suggestion(province.id(), null);
     }
 
-    // ------------------------------------------------------------------ Phí, tạo và hủy vận đơn
+    // ------------------------------------------------------------------ Tạo và hủy vận đơn
 
-    /** Phí GHN dự kiến (VNĐ) cho một kiện hàng tới quận/phường đã chọn. */
-    public long fee(int toDistrictId, String toWardCode, int weightG, long codAmount) {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("service_type_id", serviceTypeId);
-        body.put("to_district_id", toDistrictId);
-        body.put("to_ward_code", toWardCode);
-        body.put("weight", weightG);
-        body.put("length", lengthCm);
-        body.put("width", widthCm);
-        body.put("height", heightCm);
-        body.put("cod_value", codAmount);
-        return call(HttpMethod.POST, "/v2/shipping-order/fee", body, true).path("total").asLong();
-    }
-
+    /** Tạo vận đơn với địa chỉ nhận theo địa giới mới (is_new_to_address = true, không có Quận/Huyện). */
     public Created create(CreateRequest r) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("payment_type_id", 1); // shop trả phí GHN; phí khách trả đã nằm trong tổng tiền đơn
@@ -230,8 +236,9 @@ public class GhnClient {
         body.put("to_name", r.toName());
         body.put("to_phone", r.toPhone());
         body.put("to_address", r.toAddress());
-        body.put("to_district_id", r.toDistrictId());
-        body.put("to_ward_code", r.toWardCode());
+        body.put("is_new_to_address", true);
+        body.put("to_province_name", r.toProvinceName());
+        body.put("to_ward_name", r.toWardName());
         body.put("cod_amount", r.codAmount());
         body.put("weight", r.weightG());
         body.put("length", lengthCm);

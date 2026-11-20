@@ -53,7 +53,8 @@ public class ReturnRepository {
                 tracking_number,
                 shipment_status,
                 order_date,
-                total_amount
+                total_amount,
+                shipment_delivered_at
             FROM orders
             WHERE order_number = ?
             """;
@@ -78,6 +79,8 @@ public class ReturnRepository {
                     Timestamp ts = rs.getTimestamp("order_date");
                     res.setOrderDate(ts != null ? ts.toLocalDateTime() : null);
                     res.setTotalAmount(rs.getBigDecimal("total_amount"));
+                    Timestamp delivered = rs.getTimestamp("shipment_delivered_at");
+                    res.setDeliveredAt(delivered != null ? delivered.toLocalDateTime() : null);
                     return res;
                 },
                 orderNumber

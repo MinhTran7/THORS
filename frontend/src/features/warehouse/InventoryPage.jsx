@@ -6,6 +6,7 @@ import useSWR from 'swr';
 import MainCard from 'components/MainCard';
 import { api } from 'services/http';
 import { useWarehouse } from './WarehouseContext';
+import { FilterResetButton } from 'features/account/components/Blocks';
 import { ActionDialog, DataTable, Metrics, Title } from './components';
 import { money, number, stockStateColor, stockStateLabel, tierName, variantLabel } from './model';
 import { exportSheet } from './excelWorkbook';
@@ -320,15 +321,14 @@ export default function InventoryPage() {
             <MenuItem value="stock_asc">Tồn tăng dần</MenuItem>
             <MenuItem value="stock_desc">Tồn giảm dần</MenuItem>
           </TextField>
-          <Button
+          <FilterResetButton
+            height={40}
             disabled={!filtered && !value('sort')}
             onClick={() => {
               setQuery('');
               setParams(new URLSearchParams(), { replace: true });
             }}
-          >
-            Xóa bộ lọc
-          </Button>
+          />
         </Stack>
         <Stack direction="row" spacing={1} sx={{ mb: 1, alignItems: 'center' }}>
           <Typography color="text.secondary">

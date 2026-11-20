@@ -4,7 +4,6 @@ import com.thors.common.ApiException;
 import com.thors.module.account.entity.Account;
 import com.thors.module.notification.service.NotificationPublisher;
 import com.thors.module.notification.service.NotificationTypes;
-import com.thors.module.order.delivery.DeliveryService;
 import com.thors.module.order.delivery.GhnShippingService;
 import com.thors.module.order.dto.OrderViews;
 import com.thors.module.order.dto.OrderViews.Detail;
@@ -74,19 +73,19 @@ public class OrderService {
     private final OrderRepository orders;
     private final NotificationPublisher notifications;
     private final GhnShippingService ghnShipping;
-    private final DeliveryService delivery;
     private final WarehouseStore warehouse;
+    private final OrderMailService orderMail;
 
     public OrderService(
             OrderRepository orders,
             NotificationPublisher notifications,
             GhnShippingService ghnShipping,
-            DeliveryService delivery,
-            WarehouseStore warehouse) {
+            WarehouseStore warehouse,
+            OrderMailService orderMail) {
         this.orders = orders;
         this.notifications = notifications;
         this.ghnShipping = ghnShipping;
-        this.delivery = delivery;
+        this.orderMail = orderMail;
         this.warehouse = warehouse;
     }
 
@@ -119,7 +118,9 @@ public class OrderService {
             int page,
             int size) {
         requireOrderAccess(actor);
-        List<String> statuses = parseStatuses(status);
+        // status=RETURNS: tab "Trả hàng" của khách (đơn còn trong hạn trả hàng + đơn đã có yêu cầu trả hàng)
+        boolean returnsTab = RETURNS_TAB.equalsIgnoreCase(String.valueOf(blankToNull(status)));
+        List<String> statuses = returnsTab ? List.of() : parseStatuses(status);
         String safeQuery = blankToNull(q);
         if (safeQuery != null && safeQuery.length() > 100)
             throw new ApiException(400, "QUERY", "Từ khóa tìm kiếm quá dài.");
@@ -156,6 +157,7 @@ public class OrderService {
                         dateTo,
                         safePayment,
                         safeSource,
+                        returnsTab ? OrderRepository.RETURN_DAYS : null,
                         safePage,
                         safeSize);
         int totalPages = (int) Math.ceil(slice.total() / (double) safeSize);
@@ -307,8 +309,8 @@ public class OrderService {
      * thì không xác nhận được.
      *
      * <p>Chọn GHN khi chuyển sang SHIPPING thì tạo vận đơn thật trên GHN; weightG là cân nặng Owner
-     * nhập (null = cân nặng mặc định), ghnDistrictId / ghnWardCode là Quận-Huyện / Phường-Xã theo GHN
-     * Owner chọn (null = dùng mã đã lưu ở đơn).
+     * nhập (null = cân nặng mặc định), ghnProvinceId / ghnWardId là Tỉnh / Phường-Xã theo danh mục mới
+     * (2 cấp) của GHN Owner chọn.
      */
     @Transactional
     public Detail changeStatus(
@@ -318,9 +320,9 @@ public class OrderService {
             String reason,
             String carrier,
             Integer weightG,
-            Integer ghnDistrictId,
-            String ghnWardCode) {
-        return changeStatus(actor, orderId, target, reason, carrier, weightG, ghnDistrictId, ghnWardCode, null);
+            Integer ghnProvinceId,
+            Integer ghnWardId) {
+        return changeStatus(actor, orderId, target, reason, carrier, weightG, ghnProvinceId, ghnWardId, null);
     }
 
     /**
@@ -335,8 +337,8 @@ public class OrderService {
             String reason,
             String carrier,
             Integer weightG,
-            Integer ghnDistrictId,
-            String ghnWardCode,
+            Integer ghnProvinceId,
+            Integer ghnWardId,
             OrderViews.BankAccount refundAccount) {
         requireOrderAccess(actor);
         if (!isCustomer(actor) && !isStore(actor))
@@ -382,13 +384,6 @@ public class OrderService {
                     "CARRIER_MANAGED",
                     "Đơn đã gửi GHN sẽ tự chuyển trạng thái khi GHN lấy hàng và giao thành công.");
 
-        // Không tìm thấy địa chỉ giao trên bản đồ: chặn ngay từ bước xác nhận đơn (lúc này chủ shop vẫn từ
-        // chối được), và chặn cả lúc bàn giao (bất kể hình thức giao) cho các đơn đã xác nhận từ trước
-        if (OrderStatus.AWAITING_PICKUP.equals(target))
-            delivery.requireDeliverableAddress(orderId, DeliveryService.NOT_FOUND_ON_CONFIRM);
-        else if (OrderStatus.SHIPPING.equals(target))
-            delivery.requireDeliverableAddress(orderId, DeliveryService.NOT_FOUND_ON_SHIP);
-
         // Khách hủy đơn đã thanh toán online: phải có tài khoản nhận tiền hoàn hợp lệ
         boolean paidOnline =
                 "ONLINE".equals(found.detail().paymentMethod()) && "PAID".equals(found.detail().paymentStatus());
@@ -405,7 +400,7 @@ public class OrderService {
         if (confirm) warehouse.lock();
         if (OrderStatus.SHIPPING.equals(target) && GhnShippingService.CARRIER.equals(safeCarrier)) {
             // Tạo vận đơn GHN và lưu vào đơn; tự kiểm tra trạng thái đơn và báo lỗi nếu không được
-            ghnShipping.ship(orderId, current, weightG, ghnDistrictId, ghnWardCode);
+            ghnShipping.ship(orderId, current, weightG, ghnProvinceId, ghnWardId);
         } else if (!orders.transition(orderId, current, target, actor.id(), finalReason, safeCarrier))
             throw new ApiException(
                     409, "ORDER_STATE", "Trạng thái đơn vừa thay đổi, vui lòng tải lại trang.");
@@ -451,9 +446,13 @@ public class OrderService {
         }
 
         switch (target) {
-            case OrderStatus.AWAITING_PICKUP ->
-                    notifyCustomer(customerId, orderId, "Đơn hàng đã được xác nhận",
-                            "Đơn " + number + " đã được xác nhận và đang chờ lấy hàng.");
+            case OrderStatus.AWAITING_PICKUP -> {
+                notifyCustomer(customerId, orderId, "Đơn hàng đã được xác nhận",
+                        "Đơn " + number + " đã được xác nhận và đang chờ lấy hàng.");
+                // Email cho khách (gửi ngầm sau khi xác nhận đã lưu xong; lỗi email không ảnh hưởng xác nhận đơn)
+                orders.customerRecipient(orderId)
+                        .ifPresent(to -> orderMail.sendConfirmedAfterCommit(to, found.detail()));
+            }
             case OrderStatus.REJECTED ->
                     notifyCustomer(customerId, orderId, "Đơn hàng bị từ chối",
                             "Đơn " + number + " bị từ chối: " + finalReason);
@@ -632,6 +631,9 @@ public class OrderService {
     }
 
     /** status là một trạng thái hoặc nhiều trạng thái ngăn cách bằng dấu phẩy (ví dụ tab "Đã hủy"). */
+    /** Giá trị đặc biệt của tham số status cho tab "Trả hàng". */
+    static final String RETURNS_TAB = "RETURNS";
+
     private static List<String> parseStatuses(String status) {
         String safe = blankToNull(status);
         if (safe == null) return List.of();

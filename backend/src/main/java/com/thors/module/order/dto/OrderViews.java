@@ -12,7 +12,9 @@ public class OrderViews {
             String color,
             int quantity,
             long unitPrice,
-            String imageUrl) {}
+            String imageUrl,
+            // Biến thể đã mua, dùng cho nút "Mua lại" (thêm lại vào giỏ)
+            int detailId) {}
 
     /** Một dòng trong danh sách đơn hàng. */
     public record ListItem(
@@ -30,25 +32,24 @@ public class OrderViews {
             long itemCount,
             String firstItemName,
             String shippingCarrier,
-            List<Preview> lines) {
+            List<Preview> lines,
+            // Chỉ có khi khách xem đơn của mình: hạn cuối được yêu cầu trả hàng (giao thành công + 7 ngày,
+            // null = đơn chưa giao / không còn trả được) và trạng thái yêu cầu trả hàng mới nhất (null = chưa có)
+            LocalDateTime returnDeadline,
+            String returnStatus) {
 
         public ListItem withLines(List<Preview> newLines) {
             return new ListItem(
-                    id,
-                    orderNumber,
-                    orderDate,
-                    orderStatus,
-                    preparationStatus,
-                    paymentMethod,
-                    paymentStatus,
-                    totalAmount,
-                    deliveryName,
-                    deliveryPhone,
-                    deliveryAddress,
-                    itemCount,
-                    firstItemName,
-                    shippingCarrier,
-                    newLines);
+                    id, orderNumber, orderDate, orderStatus, preparationStatus, paymentMethod, paymentStatus,
+                    totalAmount, deliveryName, deliveryPhone, deliveryAddress, itemCount, firstItemName,
+                    shippingCarrier, newLines, returnDeadline, returnStatus);
+        }
+
+        public ListItem withReturn(LocalDateTime deadline, String status) {
+            return new ListItem(
+                    id, orderNumber, orderDate, orderStatus, preparationStatus, paymentMethod, paymentStatus,
+                    totalAmount, deliveryName, deliveryPhone, deliveryAddress, itemCount, firstItemName,
+                    shippingCarrier, lines, deadline, status);
         }
     }
 
@@ -110,5 +111,7 @@ public class OrderViews {
             // Tài khoản nhận tiền hoàn (đơn đã thanh toán online bị hủy / từ chối); null = chưa có
             BankAccount refundAccount,
             // Tài khoản khách đã dùng để chuyển khoản (PayOS gửi kèm); dùng điền sẵn khi hoàn tiền
-            BankAccount payerAccount) {}
+            BankAccount payerAccount,
+            // Trạng thái yêu cầu trả hàng mới nhất của đơn (PENDING / APPROVED / RECEIVED / COMPLETED / REJECTED); null = chưa có
+            String returnStatus) {}
 }

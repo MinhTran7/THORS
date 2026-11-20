@@ -24,7 +24,7 @@ import {
   SearchOutlined,
   ShoppingCartOutlined
 } from '@ant-design/icons';
-import { FilterResetButton, Pager } from 'features/account/components/Blocks';
+import { DateRangeFilter, FilterResetButton, Pager } from 'features/account/components/Blocks';
 import { api } from '../../services/http';
 import { useCrumbs } from '../../layouts/crumbs';
 import { useDebounced } from '../account/hooks';
@@ -76,13 +76,6 @@ export default function InStoreSalesHistoryPage() {
 
   const navigate = useNavigate();
 
-  // Ngày hôm nay theo giờ địa phương (YYYY-MM-DD) để vô hiệu hóa hoàn toàn ngày trong tương lai
-  const today = (() => {
-    const d = new Date();
-    const pad = (n) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  })();
-
   const [q, setQ] = useState('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
@@ -126,20 +119,6 @@ export default function InStoreSalesHistoryPage() {
 
   function handleSearchChange(val) {
     setQ(val);
-    setPage(0);
-  }
-
-  function handleFromDateChange(val) {
-    // Chặn ngày tương lai
-    if (val && val > today) val = today;
-    setFromDate(val);
-    setPage(0);
-  }
-
-  function handleToDateChange(val) {
-    // Chặn ngày tương lai
-    if (val && val > today) val = today;
-    setToDate(val);
     setPage(0);
   }
 
@@ -281,71 +260,17 @@ export default function InStoreSalesHistoryPage() {
           </Select>
         </Box>
 
-        {/* Từ ngày - Chặn tuyệt đối ngày tương lai */}
-        <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>
-            Từ ngày
-          </Typography>
-          <TextField
-            fullWidth
-            size="small"
-            type="date"
-            value={fromDate}
-            onChange={(e) => handleFromDateChange(e.target.value)}
-            inputProps={{
-              max: toDate && toDate < today ? toDate : today
-            }}
-            slotProps={{
-              htmlInput: {
-                max: toDate && toDate < today ? toDate : today
-              }
-            }}
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                bgcolor: C.surface,
-                borderRadius: 2.5,
-                height: 44,
-                '& fieldset': { borderColor: C.border },
-                '&:hover fieldset': { borderColor: C.cyan },
-                '&.Mui-focused fieldset': { borderColor: C.cyan }
-              }
-            }}
-          />
-        </Box>
-
-        {/* Đến ngày - Chặn tuyệt đối ngày tương lai */}
-        <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>
-            Đến ngày
-          </Typography>
-          <TextField
-            fullWidth
-            size="small"
-            type="date"
-            value={toDate}
-            onChange={(e) => handleToDateChange(e.target.value)}
-            inputProps={{
-              min: fromDate || undefined,
-              max: today
-            }}
-            slotProps={{
-              htmlInput: {
-                min: fromDate || undefined,
-                max: today
-              }
-            }}
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                bgcolor: C.surface,
-                borderRadius: 2.5,
-                height: 44,
-                '& fieldset': { borderColor: C.border },
-                '&:hover fieldset': { borderColor: C.cyan },
-                '&.Mui-focused fieldset': { borderColor: C.cyan }
-              }
-            }}
-          />
-        </Box>
+        {/* Từ ngày / Đến ngày: ô lọc ngày dùng chung (chặn ngày tương lai, Từ không sau Đến) */}
+        <DateRangeFilter
+          from={fromDate}
+          to={toDate}
+          width="100%"
+          onChange={({ from, to }) => {
+            setFromDate(from);
+            setToDate(to);
+            setPage(0);
+          }}
+        />
 
         <FilterResetButton onClick={handleResetFilters} />
       </Box>

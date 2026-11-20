@@ -269,6 +269,8 @@ export default function CategoryPage() {
   const [productsLoaded, setProductsLoaded] = useState(false);
 
   const [error, setError] = useState('');
+  // Lỗi đổi trạng thái danh mục: chỉ hiện trong hộp thoại xác nhận, đóng hộp thoại là xoá
+  const [statusError, setStatusError] = useState('');
   const [success, setSuccess] = useState('');
 
   const [search, setSearch] = useState('');
@@ -659,7 +661,14 @@ export default function CategoryPage() {
 
   function openStatusDialog(category) {
     setSuccess('');
+    setStatusError('');
     setStatusDialog(category);
+  }
+
+  function closeStatusDialog() {
+    if (changingStatus) return;
+    setStatusDialog(null);
+    setStatusError('');
   }
 
   async function handleChangeStatus() {
@@ -669,7 +678,7 @@ export default function CategoryPage() {
     const newStatus = category.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
 
     setChangingStatus(true);
-    setError('');
+    setStatusError('');
     setSuccess('');
 
     try {
@@ -682,8 +691,8 @@ export default function CategoryPage() {
       );
       await loadCategories();
     } catch (e) {
-      setError(e?.message || 'Không thể thay đổi trạng thái danh mục.');
-      setStatusDialog(null);
+      // Giữ hộp thoại mở và báo lỗi trong đó, không đẩy lên đầu trang
+      setStatusError(e?.message || 'Không thể thay đổi trạng thái danh mục.');
     } finally {
       setChangingStatus(false);
     }
@@ -1668,11 +1677,7 @@ export default function CategoryPage() {
       {/* CHANGE STATUS CONFIRMATION */}
       <Dialog
         open={Boolean(statusDialog)}
-        onClose={() => {
-          if (!changingStatus) {
-            setStatusDialog(null);
-          }
-        }}
+        onClose={closeStatusDialog}
         fullWidth
         maxWidth="xs"
         PaperProps={{ sx: { borderRadius: 3.5, p: 1 } }}
@@ -1708,12 +1713,17 @@ export default function CategoryPage() {
               </Typography>
             </Box>
           )}
+          {statusError && (
+            <Alert severity="error" sx={{ mt: 2, borderRadius: 2.5, fontSize: 13 }}>
+              {statusError}
+            </Alert>
+          )}
         </DialogContent>
 
         <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
           <Button
             disabled={changingStatus}
-            onClick={() => setStatusDialog(null)}
+            onClick={closeStatusDialog}
             sx={outlineButtonSx}
           >
             Hủy

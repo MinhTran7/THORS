@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import useSWR from 'swr';
-import { Alert, Box, CircularProgress, InputAdornment, MenuItem, TextField, Typography } from '@mui/material';
+import { Alert, Autocomplete, Box, CircularProgress, InputAdornment, MenuItem, TextField, Typography } from '@mui/material';
 import { Stack } from 'features/account/components/Flex';
 import { brand } from 'features/account/tokens';
 import { ghnApi } from './api';
@@ -10,19 +10,28 @@ export const DEFAULT_WEIGHT_G = 500;
 const swrOnce = { revalidateOnFocus: false, revalidateIfStale: false };
 const fieldSx = { select: { sx: { borderRadius: '10px' } } };
 
+/** So tên không phân biệt dấu / hoa thường, để gõ "vung tau" vẫn ra "Phường Vũng Tàu". */
+const plain = (s) =>
+  String(s ?? '')
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase();
+
 /**
- * Chọn Tỉnh / Quận-Huyện / Phường-Xã theo danh mục GHN và cân nặng kiện hàng khi gửi đơn qua GHN.
- * GHN vẫn dùng địa giới 3 cấp cũ, còn khách nhập địa chỉ 2 cấp mới, nên hệ thống tự gợi ý theo tên
- * và chủ shop kiểm tra lại. value = { provinceId, districtId, wardCode, weightG }.
+ * Chọn Tỉnh / Phường-Xã theo danh mục GHN (địa giới mới 2 cấp, không còn Quận/Huyện) và cân nặng kiện
+ * hàng khi gửi đơn qua GHN. Hệ thống tự điền theo địa chỉ của khách, chủ shop kiểm tra lại.
+ * value = { provinceId, wardId, weightG }.
  */
 export default function GhnAddressFields({ orderId, value, onChange }) {
   const v = value ?? {};
   const set = (patch) => onChange({ ...v, ...patch });
 
-  const suggestion = useSWR(['ghn-suggest', orderId], () => ghnApi.suggest(orderId), swrOnce);
-  const provinces = useSWR(['ghn-provinces'], () => ghnApi.provinces(), swrOnce);
-  const districts = useSWR(v.provinceId ? ['ghn-districts', v.provinceId] : null, () => ghnApi.districts(v.provinceId), swrOnce);
-  const wards = useSWR(v.districtId ? ['ghn-wards', v.districtId] : null, () => ghnApi.wards(v.districtId), swrOnce);
+  // Khoá "-2cap": không dùng lại danh mục 3 cấp cũ còn trong bộ nhớ đệm của trang (mã tỉnh cũ khác mã mới)
+  const suggestion = useSWR(['ghn-suggest-2cap', orderId], () => ghnApi.suggest(orderId), swrOnce);
+  const provinces = useSWR(['ghn-provinces-2cap'], () => ghnApi.provinces(), swrOnce);
+  const wards = useSWR(v.provinceId ? ['ghn-wards-2cap', v.provinceId] : null, () => ghnApi.wards(v.provinceId), swrOnce);
 
   // Điền sẵn theo gợi ý một lần, khi chủ shop chưa tự chọn
   const filled = useRef(false);
@@ -32,15 +41,15 @@ export default function GhnAddressFields({ orderId, value, onChange }) {
     filled.current = true;
     onChange({
       provinceId: s.provinceId ?? '',
-      districtId: s.districtId ?? '',
-      wardCode: s.wardCode ?? '',
+      wardId: s.wardId ?? '',
       weightG: v.weightG ?? DEFAULT_WEIGHT_G
     });
   }, [suggestion.data, onChange, v.weightG]);
 
-  const candidates = suggestion.data?.candidates ?? [];
-  const loadError = provinces.error || districts.error || wards.error;
+  const loadError = provinces.error || wards.error;
   const weightInvalid = !(Number(v.weightG) > 0);
+  const wardOptions = wards.data ?? [];
+  const selectedWard = wardOptions.find((w) => String(w.id) === String(v.wardId)) ?? null;
 
   return (
     <Box sx={{ mt: 1.5, p: 1.5, border: `1px solid ${brand.line}`, borderRadius: '10px' }}>
@@ -48,7 +57,7 @@ export default function GhnAddressFields({ orderId, value, onChange }) {
         Địa chỉ theo GHN
       </Typography>
       <Typography variant="caption" sx={{ color: brand.muted, display: 'block', mb: 1 }}>
-        GHN vẫn dùng Quận/Huyện cũ. Hệ thống đã gợi ý theo địa chỉ của khách, vui lòng kiểm tra trước khi gửi.
+        Theo địa giới mới (Tỉnh/Thành và Phường/Xã). Hệ thống đã điền theo địa chỉ của khách, vui lòng kiểm tra trước khi gửi.
       </Typography>
 
       {suggestion.isLoading && (
@@ -58,15 +67,9 @@ export default function GhnAddressFields({ orderId, value, onChange }) {
         </Stack>
       )}
 
-      {suggestion.data && !suggestion.data.wardCode && candidates.length > 1 && (
-        <Alert severity="info" sx={{ mb: 1, borderRadius: '8px' }}>
-          Có {candidates.length} xã/phường trùng tên: {candidates.map((c) => `${c.wardName} (${c.districtName})`).join(', ')}. Vui lòng chọn đúng
-          Quận/Huyện.
-        </Alert>
-      )}
-      {suggestion.data && !suggestion.data.wardCode && candidates.length <= 1 && (
+      {suggestion.data && !suggestion.data.wardId && (
         <Alert severity="warning" sx={{ mb: 1, borderRadius: '8px' }}>
-          Không tự tìm được Phường/Xã trên GHN, vui lòng chọn tay.
+          Không tự tìm được {suggestion.data.provinceId ? 'Phường/Xã' : 'Tỉnh/Thành và Phường/Xã'} trên GHN, vui lòng chọn tay.
         </Alert>
       )}
       {(suggestion.error || loadError) && (
@@ -82,7 +85,7 @@ export default function GhnAddressFields({ orderId, value, onChange }) {
         size="small"
         label="Tỉnh / Thành phố"
         value={provinces.data ? String(v.provinceId ?? '') : ''}
-        onChange={(e) => set({ provinceId: e.target.value, districtId: '', wardCode: '' })}
+        onChange={(e) => set({ provinceId: e.target.value, wardId: '' })}
         disabled={!provinces.data}
         slotProps={fieldSx}
       >
@@ -93,41 +96,20 @@ export default function GhnAddressFields({ orderId, value, onChange }) {
         ))}
       </TextField>
 
-      <TextField
-        select
-        fullWidth
-        margin="dense"
+      <Autocomplete
         size="small"
-        label="Quận / Huyện"
-        value={districts.data ? String(v.districtId ?? '') : ''}
-        onChange={(e) => set({ districtId: e.target.value, wardCode: '' })}
-        disabled={!v.provinceId || !districts.data}
-        slotProps={fieldSx}
-      >
-        {(districts.data ?? []).map((d) => (
-          <MenuItem key={d.id} value={d.id}>
-            {d.name}
-          </MenuItem>
-        ))}
-      </TextField>
-
-      <TextField
-        select
-        fullWidth
-        margin="dense"
-        size="small"
-        label="Phường / Xã"
-        value={wards.data ? String(v.wardCode ?? '') : ''}
-        onChange={(e) => set({ wardCode: e.target.value })}
-        disabled={!v.districtId || !wards.data}
-        slotProps={fieldSx}
-      >
-        {(wards.data ?? []).map((w) => (
-          <MenuItem key={w.id} value={w.id}>
-            {w.name}
-          </MenuItem>
-        ))}
-      </TextField>
+        options={wardOptions}
+        value={selectedWard}
+        onChange={(_, next) => set({ wardId: next ? next.id : '' })}
+        getOptionLabel={(option) => option?.name ?? ''}
+        isOptionEqualToValue={(option, selected) => String(option.id) === String(selected.id)}
+        filterOptions={(options, state) => options.filter((o) => plain(o.name).includes(plain(state.inputValue.trim())))}
+        disabled={!v.provinceId || !wards.data}
+        loading={wards.isLoading}
+        noOptionsText="Không tìm thấy"
+        loadingText="Đang tải…"
+        renderInput={(params) => <TextField {...params} margin="dense" label="Phường / Xã" placeholder="Gõ để tìm…" />}
+      />
 
       <TextField
         fullWidth
@@ -146,4 +128,4 @@ export default function GhnAddressFields({ orderId, value, onChange }) {
 }
 
 /** Đã đủ thông tin để gửi GHN chưa. */
-export const ghnReady = (v) => Boolean(v?.districtId && v?.wardCode && Number(v?.weightG) > 0);
+export const ghnReady = (v) => Boolean(v?.provinceId && v?.wardId && Number(v?.weightG) > 0);

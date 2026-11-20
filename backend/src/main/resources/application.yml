@@ -60,9 +60,7 @@ thors:
     # (Google Plus Code 7PH7WP2X+2WJ)
     store-lat: ${SHOP_LAT:20.900063}
     store-lng: ${SHOP_LNG:105.749828}
-    self-radius-km: ${SELF_DELIVERY_RADIUS_KM:5}
     default-carrier: GHN
-    goong-api-key: ${GOONG_API_KEY:}
   ghn:
     # Mặc định là môi trường thử nghiệm; chạy thật đổi GHN_BASE_URL sang
     # https://online-gateway.ghn.vn/shiip/public-api và dùng Token/ShopId của khachhang.ghn.vn

@@ -19,6 +19,9 @@ import com.cloudinary.utils.ObjectUtils;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -29,6 +32,35 @@ import java.util.stream.Collectors;
 public class ReturnService {
 
     private static final Logger logger = LoggerFactory.getLogger(ReturnService.class);
+
+    /** Khách được tự gửi yêu cầu trả hàng online trong bấy nhiêu ngày kể từ lúc giao thành công. */
+    public static final int RETURN_DAYS = 7;
+
+    private static final DateTimeFormatter VN_TIME = DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy");
+
+    /**
+     * Lý do khách không được tự gửi yêu cầu trả hàng online cho đơn này; null = được gửi.
+     * now và deliveredAt cùng theo giờ UTC (như trong DB). Yêu cầu trước bị từ chối thì được gửi lại.
+     */
+    static String customerReturnBlock(ReturnableOrderResponse order, LocalDateTime now) {
+        String last = order.getActiveReturnStatus();
+        if (last != null && !"REJECTED".equalsIgnoreCase(last))
+            return "COMPLETED".equalsIgnoreCase(last)
+                    ? "Đơn hàng này đã trả hàng xong, không thể gửi thêm yêu cầu trả hàng."
+                    : "Đơn hàng này đang có một yêu cầu trả hàng đang được xử lý.";
+        LocalDateTime delivered = order.getDeliveredAt();
+        if (delivered == null)
+            return "Chưa ghi nhận thời điểm giao thành công của đơn này nên không gửi yêu cầu trả hàng online được."
+                    + " Vui lòng liên hệ cửa hàng.";
+        LocalDateTime deadline = delivered.plusDays(RETURN_DAYS);
+        if (!now.isBefore(deadline))
+            return "Đã quá hạn " + RETURN_DAYS + " ngày kể từ lúc giao hàng (hạn trả đến "
+                    + deadline.atOffset(ZoneOffset.UTC).atZoneSameInstant(VN).format(VN_TIME)
+                    + "). Vui lòng liên hệ cửa hàng nếu cần hỗ trợ.";
+        return null;
+    }
+
+    private static final ZoneId VN = ZoneId.of("Asia/Ho_Chi_Minh");
 
     private final ReturnRepository returnRepository;
     private final SessionAccess sessionAccess;
@@ -239,6 +271,13 @@ public class ReturnService {
         boolean isCustomer = currentUser != null && "CUSTOMER".equalsIgnoreCase(currentUser.role());
         if (isCustomer && order.getUserId() != null && !order.getUserId().equals(currentUser.id())) {
             throw new ApiException(403, "FORBIDDEN", "Bạn chỉ có thể yêu cầu hoàn hàng cho đơn hàng của chính mình.");
+        }
+
+        // Khách tự gửi yêu cầu online (tài khoản khách, hoặc trang tra cứu công khai khi chưa đăng nhập): chỉ
+        // trong RETURN_DAYS ngày kể từ lúc giao thành công, mỗi đơn một lần. Nhân viên tạo tại quầy thì không chặn.
+        if (isCustomer || currentUser == null) {
+            String blocked = customerReturnBlock(order, LocalDateTime.now(ZoneOffset.UTC));
+            if (blocked != null) throw new ApiException(400, "RETURN_NOT_ALLOWED", blocked);
         }
 
         boolean isInstant = currentUser != null && !isCustomer && request.isInstantComplete();

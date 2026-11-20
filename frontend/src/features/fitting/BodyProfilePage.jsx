@@ -102,6 +102,13 @@ export default function BodyProfilePage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // Lỗi xóa số đo: hiện trong hộp thoại xác nhận, đóng hộp thoại là xoá
+  const [deleteError, setDeleteError] = useState('');
+  const closeConfirm = () => {
+    if (saving) return;
+    setConfirmDelete(false);
+    setDeleteError('');
+  };
   // Áo 3D đang mặc thử trên hình xem trước (id trong garments.js, '' = không mặc)
   const [tryOnId, setTryOnId] = useState('');
   const tryOnChoices = garmentsFor(form.gender);
@@ -146,6 +153,7 @@ export default function BodyProfilePage() {
 
   const remove = async () => {
     setSaving(true);
+    setDeleteError('');
     try {
       await deleteBodyProfile();
       setSaved(null);
@@ -153,7 +161,7 @@ export default function BodyProfilePage() {
       setConfirmDelete(false);
       setMessage({ type: 'success', text: 'Đã xóa số đo.' });
     } catch (e) {
-      setMessage({ type: 'error', text: e.message || 'Không xóa được số đo.' });
+      setDeleteError(e.message || 'Không xóa được số đo.');
     } finally {
       setSaving(false);
     }
@@ -261,13 +269,14 @@ export default function BodyProfilePage() {
       {/* Hồ sơ phong cách cho phối đồ (module outfit) */}
       {!loading && <StyleProfileCard hasBodyProfile={Boolean(saved)} />}
 
-      <Dialog open={confirmDelete} onClose={() => !saving && setConfirmDelete(false)} maxWidth="xs" fullWidth>
+      <Dialog open={confirmDelete} onClose={closeConfirm} maxWidth="xs" fullWidth>
         <DialogTitle sx={{ fontWeight: 800 }}>Xóa số đo?</DialogTitle>
         <DialogContent>
           <Typography sx={{ color: C.muted, fontSize: 14 }}>Bạn sẽ không nhận được gợi ý size cho đến khi nhập lại.</Typography>
+          {deleteError && <Typography sx={{ mt: 1.5, fontSize: 13.5, fontWeight: 600, color: C.error }}>{deleteError}</Typography>}
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5 }}>
-          <Button onClick={() => setConfirmDelete(false)} disabled={saving} sx={outlineButtonSx}>
+          <Button onClick={closeConfirm} disabled={saving} sx={outlineButtonSx}>
             Quay lại
           </Button>
           <Button

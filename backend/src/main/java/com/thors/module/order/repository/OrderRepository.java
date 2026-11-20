@@ -129,7 +129,9 @@ public class OrderRepository {
                             rs.getLong("item_count"),
                             rs.getString("first_item"),
                             rs.getString("shipping_carrier"),
-                            List.of());
+                            List.of(),
+                            null,
+                            null);
 
     /**
      * Danh sách đơn online. customerId != null thì chỉ lấy đơn của khách đó (Customer xem đơn của mình);
@@ -153,12 +155,38 @@ public class OrderRepository {
             String sourceFilter,
             int page,
             int size) {
+        return search(customerId, orderType, statuses, q, dateFrom, dateTo, paymentFilter, sourceFilter, null, page, size);
+    }
+
+    /**
+     * Như trên; returnDays != null là tab "Trả hàng" của khách: chỉ lấy đơn đã giao / hoàn thành mà mốc giao
+     * thành công chưa quá returnDays ngày (còn được yêu cầu trả hàng), cùng các đơn đã có yêu cầu trả hàng.
+     */
+    public Slice search(
+            Integer customerId,
+            String orderType,
+            List<String> statuses,
+            String q,
+            LocalDate dateFrom,
+            LocalDate dateTo,
+            String paymentFilter,
+            String sourceFilter,
+            Integer returnDays,
+            int page,
+            int size) {
         var where = new StringBuilder(" WHERE o.order_type = ?");
         List<Object> args = new ArrayList<>();
         args.add(orderType);
         if (customerId != null) {
             where.append(" AND o.user_id = ?");
             args.add(customerId);
+        }
+        if (returnDays != null) {
+            where.append(
+                    " AND ((o.order_status IN ('DELIVERED', 'COMPLETED') AND o.shipment_delivered_at IS NOT NULL"
+                            + " AND o.shipment_delivered_at >= DATE_SUB(NOW(), INTERVAL ? DAY))"
+                            + " OR EXISTS (SELECT 1 FROM return_request rr WHERE rr.order_id = o.order_id))");
+            args.add(returnDays);
         }
         if (statuses != null && !statuses.isEmpty()) {
             where.append(" AND o.order_status IN (")
@@ -229,7 +257,48 @@ public class OrderRepository {
         Map<Integer, List<Preview>> previews = previews(items.stream().map(ListItem::id).toList());
         List<ListItem> withLines =
                 items.stream().map(it -> it.withLines(previews.getOrDefault(it.id(), List.of()))).toList();
+        // Khách xem đơn của mình: kèm hạn trả hàng và trạng thái yêu cầu trả hàng để hiện trên thẻ đơn
+        if (customerId != null) withLines = withReturnInfo(withLines, returnDays != null ? returnDays : RETURN_DAYS);
         return new Slice(withLines, total == null ? 0 : total);
+    }
+
+    /** Số ngày khách được yêu cầu trả hàng, tính từ lúc giao thành công (trùng mốc tự hoàn thành đơn). */
+    public static final int RETURN_DAYS = 7;
+
+    /**
+     * Gắn hạn trả hàng (mốc giao thành công + days, chỉ khi đơn đã giao / hoàn thành và chưa quá hạn) và
+     * trạng thái yêu cầu trả hàng mới nhất. Lỗi đọc (DB chưa có bảng return_request...) thì để trống,
+     * danh sách đơn vẫn hiện bình thường.
+     */
+    private List<ListItem> withReturnInfo(List<ListItem> items, int days) {
+        if (items.isEmpty()) return items;
+        String in = String.join(",", Collections.nCopies(items.size(), "?"));
+        Object[] ids = items.stream().map(ListItem::id).toArray();
+        Map<Integer, LocalDateTime> deadlines = new HashMap<>();
+        Map<Integer, String> statuses = new HashMap<>();
+        try {
+            db.query(
+                    "SELECT order_id, shipment_delivered_at FROM orders WHERE order_id IN (" + in + ")"
+                            + " AND order_status IN ('DELIVERED', 'COMPLETED') AND shipment_delivered_at IS NOT NULL",
+                    rs -> {
+                        LocalDateTime delivered = time(rs, "shipment_delivered_at");
+                        LocalDateTime deadline = delivered == null ? null : delivered.plusDays(days);
+                        if (deadline != null && deadline.isAfter(LocalDateTime.now(ZoneOffset.UTC)))
+                            deadlines.put(rs.getInt("order_id"), deadline);
+                    },
+                    ids);
+            db.query(
+                    "SELECT rr.order_id, rr.status FROM return_request rr WHERE rr.order_id IN (" + in + ")"
+                            + " ORDER BY rr.return_request_id",
+                    rs -> {
+                        statuses.put(rs.getInt("order_id"), rs.getString("status")); // dòng sau (mới hơn) ghi đè
+                    },
+                    ids);
+        } catch (org.springframework.dao.DataAccessException e) {
+            org.slf4j.LoggerFactory.getLogger(OrderRepository.class)
+                    .warn("Không đọc được thông tin trả hàng cho danh sách đơn: {}", e.getMessage());
+        }
+        return items.stream().map(it -> it.withReturn(deadlines.get(it.id()), statuses.get(it.id()))).toList();
     }
 
     /** includeStaffInfo = true thì kèm thông tin khách và người xác nhận (không trả cho Customer). */
@@ -294,6 +363,7 @@ public class OrderRepository {
                                             customer,
                                             List.of(),
                                             refundAccount(rs),
+                                            null,
                                             null);
                             return new Found(rs.getInt("user_id"), rs.getString("order_type"), detail);
                         },
@@ -330,8 +400,43 @@ public class OrderRepository {
                         d.customer(),
                         lines(orderId),
                         d.refundAccount(),
-                        "ONLINE".equals(d.paymentMethod()) ? payerAccount(orderId) : null);
+                        "ONLINE".equals(d.paymentMethod()) ? payerAccount(orderId) : null,
+                        latestReturnStatus(orderId));
         return Optional.of(new Found(found.userId(), found.orderType(), withLines));
+    }
+
+    /**
+     * Tên và email của khách đặt đơn, chỉ khi tài khoản gắn với đơn là Khách hàng (đơn Facebook do nhân viên tạo
+     * gắn tài khoản nhân viên nên không có). Dùng để gửi email báo trạng thái đơn.
+     */
+    public Optional<com.thors.module.order.service.OrderMailService.Recipient> customerRecipient(int orderId) {
+        List<com.thors.module.order.service.OrderMailService.Recipient> rows =
+                db.query(
+                        """
+                        SELECT u.full_name, u.email FROM orders o
+                        JOIN `user` u ON u.user_id = o.user_id
+                        JOIN `role` r ON r.role_id = u.role_id
+                        WHERE o.order_id = ? AND r.role_name = 'CUSTOMER' AND u.email IS NOT NULL AND u.email <> ''
+                        """,
+                        (rs, i) ->
+                                new com.thors.module.order.service.OrderMailService.Recipient(
+                                        rs.getString("full_name"), rs.getString("email")),
+                        orderId);
+        return rows.stream().findFirst();
+    }
+
+    /** Trạng thái yêu cầu trả hàng mới nhất của đơn; null nếu chưa có (hoặc DB chưa có bảng return_request). */
+    private String latestReturnStatus(int orderId) {
+        try {
+            List<String> rows =
+                    db.queryForList(
+                            "SELECT status FROM return_request WHERE order_id = ? ORDER BY return_request_id DESC LIMIT 1",
+                            String.class,
+                            orderId);
+            return rows.isEmpty() ? null : rows.get(0);
+        } catch (org.springframework.dao.DataAccessException e) {
+            return null;
+        }
     }
 
     private List<Line> lines(int orderId) {
@@ -450,8 +555,6 @@ public class OrderRepository {
             String name,
             String phone,
             String address,
-            Integer districtId,
-            String wardCode,
             String paymentMethod,
             String paymentStatus,
             long totalAmount,
@@ -465,8 +568,7 @@ public class OrderRepository {
                 db.query(
                         """
                         SELECT order_number, delivery_name, delivery_phone, delivery_address,
-                               delivery_district_id, delivery_ward_code, payment_method, payment_status,
-                               total_amount, package_weight_g
+                               payment_method, payment_status, total_amount, package_weight_g
                         FROM orders WHERE order_id = ?
                         """,
                         (rs, i) ->
@@ -475,8 +577,6 @@ public class OrderRepository {
                                         rs.getString("delivery_name"),
                                         rs.getString("delivery_phone"),
                                         rs.getString("delivery_address"),
-                                        rs.getObject("delivery_district_id", Integer.class),
-                                        rs.getString("delivery_ward_code"),
                                         rs.getString("payment_method"),
                                         rs.getString("payment_status"),
                                         rs.getLong("total_amount"),
@@ -511,6 +611,10 @@ public class OrderRepository {
      * Lưu vận đơn thật của đơn vị vận chuyển. Đơn vẫn giữ trạng thái {@code from} (Chờ lấy hàng) cho tới
      * khi bên vận chuyển báo đã lấy hàng. Điều kiện order_status = from và chưa có mã vận đơn chống hai
      * người cùng gửi một đơn. Trả về false nếu không lưu được.
+     *
+     * <p>provinceName / wardName: Tỉnh và Phường/Xã (địa giới mới) đã gửi cho GHN, lưu vào cột
+     * ghn_province_name / ghn_ward_name (migration 2026-11-19_order_ghn_new_address.sql). DB chưa có 2 cột
+     * này thì bỏ qua, vận đơn vẫn được lưu như bình thường.
      */
     public boolean shipWithCarrier(
             int orderId,
@@ -521,30 +625,48 @@ public class OrderRepository {
             long carrierFee,
             long codAmount,
             int weightG,
-            int districtId,
-            String wardCode) {
+            String provinceName,
+            String wardName) {
+        boolean names = hasGhnAddressColumns();
+        List<Object> args = new ArrayList<>(List.of(carrier, trackingNumber, trackingNumber, serviceCode, carrierFee, codAmount, weightG));
+        if (names) {
+            args.add(provinceName);
+            args.add(wardName);
+        }
+        args.add(orderId);
+        args.add(from);
         return db.update(
-                        """
-                        UPDATE orders SET shipping_carrier = ?,
-                               tracking_number = ?, provider_shipment_id = ?, shipping_service_code = ?,
-                               carrier_shipping_fee = ?, cod_amount = ?, package_weight_g = ?,
-                               delivery_district_id = ?, delivery_ward_code = ?,
-                               shipment_status = 'CREATED', shipment_created_at = NOW(),
-                               shipment_picked_up_at = NULL, shipment_updated_at = NOW()
-                        WHERE order_id = ? AND order_status = ? AND tracking_number IS NULL
-                        """,
-                        carrier,
-                        trackingNumber,
-                        trackingNumber,
-                        serviceCode,
-                        carrierFee,
-                        codAmount,
-                        weightG,
-                        districtId,
-                        wardCode,
-                        orderId,
-                        from)
+                        "UPDATE orders SET shipping_carrier = ?,"
+                                + " tracking_number = ?, provider_shipment_id = ?, shipping_service_code = ?,"
+                                + " carrier_shipping_fee = ?, cod_amount = ?, package_weight_g = ?,"
+                                + (names ? " ghn_province_name = ?, ghn_ward_name = ?," : "")
+                                + " shipment_status = 'CREATED', shipment_created_at = NOW(),"
+                                + " shipment_picked_up_at = NULL, shipment_updated_at = NOW()"
+                                + " WHERE order_id = ? AND order_status = ? AND tracking_number IS NULL",
+                        args.toArray())
                 > 0;
+    }
+
+    /** Đã có cột ghn_ward_name chưa: có rồi thì nhớ luôn, chưa có thì hỏi lại sau mỗi phút. */
+    private volatile boolean ghnAddressColumns;
+    private volatile long ghnAddressCheckedAt;
+
+    boolean hasGhnAddressColumns() {
+        if (ghnAddressColumns) return true;
+        long now = System.currentTimeMillis();
+        if (now - ghnAddressCheckedAt < 60_000) return false;
+        ghnAddressCheckedAt = now;
+        try {
+            Integer n =
+                    db.queryForObject(
+                            "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE()"
+                                    + " AND LOWER(table_name) = 'orders' AND LOWER(column_name) = 'ghn_ward_name'",
+                            Integer.class);
+            ghnAddressColumns = n != null && n > 0;
+        } catch (RuntimeException e) {
+            ghnAddressColumns = false;
+        }
+        return ghnAddressColumns;
     }
 
     /** Đơn đã gửi đơn vị vận chuyển, dùng khi nhận cập nhật trạng thái giao từ bên đó. */
@@ -776,7 +898,7 @@ public class OrderRepository {
         String marks = String.join(",", Collections.nCopies(orderIds.size(), "?"));
         List<PreviewRow> rows =
                 db.query(
-                        "SELECT oi.order_id, oi.product_name_snapshot, oi.size_snapshot, oi.color_snapshot,"
+                        "SELECT oi.order_id, oi.detail_id, oi.product_name_snapshot, oi.size_snapshot, oi.color_snapshot,"
                                 + " oi.quantity, oi.unit_price,"
                                 + " (SELECT pi.image_url FROM product_image pi"
                                 + "   WHERE pi.product_id = pd.product_id AND pi.deleted_at IS NULL"
@@ -793,7 +915,8 @@ public class OrderRepository {
                                                 rs.getString("color_snapshot"),
                                                 rs.getInt("quantity"),
                                                 rs.getLong("unit_price"),
-                                                rs.getString("image_url"))),
+                                                rs.getString("image_url"),
+                                                rs.getInt("detail_id"))),
                         orderIds.toArray());
         for (PreviewRow r : rows) byOrder.computeIfAbsent(r.orderId(), k -> new ArrayList<>()).add(r.preview());
         return byOrder;

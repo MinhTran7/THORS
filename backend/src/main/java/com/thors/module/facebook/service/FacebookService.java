@@ -52,7 +52,7 @@ public class FacebookService {
     private final RestTemplate restTemplate = new RestTemplate();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    // Dịch vụ bản đồ (Goong / OpenStreetMap) dùng chung với luồng xác nhận đơn online
+    // Dịch vụ bản đồ (OpenStreetMap) dùng chung với luồng xác nhận đơn online
     private final GeoClient geo;
 
     public FacebookService(

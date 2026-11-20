@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
-import { Alert, Box, Button, ButtonBase, Switch, Typography } from '@mui/material';
+import { Alert, Box, Button, ButtonBase, Switch, Tooltip, Typography } from '@mui/material';
 import { StoreAccountShell, storePanelSx, useIsCustomer } from 'features/account/components/StoreAccount';
 import { C, SERIF } from 'features/shop/storeTheme';
 import { Stack } from 'features/account/components/Flex';
@@ -97,41 +97,9 @@ export default function NotificationPage() {
           </Button>
         }
       >
-        {/* Bật / tắt thông báo khuyến mãi; ẩn khi DB chưa chạy migration notification_mute */}
-        {prefs.data?.available && (
-          <Box
-            component="label"
-            sx={{
-              ...storePanelSx,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 2,
-              px: { xs: 2.5, sm: 3.5 },
-              py: 2,
-              mb: 3,
-              cursor: 'pointer'
-            }}
-          >
-            <Box component="span" sx={{ display: 'block', minWidth: 0 }}>
-              <Box component="span" sx={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink }}>
-                Nhận thông báo khuyến mãi
-              </Box>
-              <Box component="span" sx={{ display: 'block', mt: 0.5, fontSize: 13, color: C.muted, lineHeight: 1.5 }}>
-                Báo khi cửa hàng có chương trình khuyến mãi mới. Thông báo đơn hàng và tài khoản vẫn luôn được gửi.
-              </Box>
-            </Box>
-            <Switch
-              checked={prefs.data.promotion}
-              disabled={savingPrefs}
-              onChange={(event) => togglePromotion(event.target.checked)}
-              inputProps={{ 'aria-label': 'Nhận thông báo khuyến mãi' }}
-            />
-          </Box>
-        )}
-
-        {/* Lọc: Tất cả / Chưa đọc, kiểu tab gạch chân như trang đơn hàng */}
-        <Box role="tablist" aria-label="Lọc thông báo" sx={{ display: 'flex', gap: 3, borderBottom: `1px solid ${C.line}`, mb: 3 }}>
+        {/* Lọc: Tất cả / Chưa đọc (bên trái) và công tắc nhỏ "Thông báo khuyến mãi" (bên phải) cùng một hàng */}
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, borderBottom: `1px solid ${C.line}`, mb: 3 }}>
+        <Box role="tablist" aria-label="Lọc thông báo" sx={{ display: 'flex', gap: 3 }}>
           {FILTER_OPTIONS.map((option) => {
             const selected = filter === option.value;
             return (
@@ -164,6 +132,25 @@ export default function NotificationPage() {
               </Box>
             );
           })}
+        </Box>
+
+          {/* Bật / tắt thông báo khuyến mãi; ẩn khi DB chưa chạy migration notification_mute */}
+          {prefs.data?.available && (
+            <Tooltip title="Báo khi cửa hàng có chương trình khuyến mãi mới. Thông báo đơn hàng và tài khoản vẫn luôn được gửi.">
+              <Box component="label" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, cursor: 'pointer', flexShrink: 0 }}>
+                <Box component="span" sx={{ fontSize: 13, color: C.muted, whiteSpace: 'nowrap' }}>
+                  Thông báo khuyến mãi
+                </Box>
+                <Switch
+                  size="small"
+                  checked={prefs.data.promotion}
+                  disabled={savingPrefs}
+                  onChange={(event) => togglePromotion(event.target.checked)}
+                  inputProps={{ 'aria-label': 'Nhận thông báo khuyến mãi' }}
+                />
+              </Box>
+            </Tooltip>
+          )}
         </Box>
 
         {list.error && (

@@ -2,10 +2,8 @@ package com.thors.module.order.delivery;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.thors.module.order.delivery.GeoClient.Precision;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -97,13 +95,5 @@ class GeoClientMatchTest {
         // Không phải đường đánh số
         assertTrue(GeoClient.roadNumber("Số 1, Phố Xốm").isEmpty());
         assertTrue(GeoClient.roadNumber("12 Đường Trần Hưng Đạo").isEmpty());
-    }
-
-    @Test
-    @DisplayName("Goong: khớp tên đường là STREET, chỉ khớp phường là AREA, chỉ khớp tỉnh là null")
-    void goongPrecision() {
-        assertEquals(Precision.STREET, GeoClient.goongPrecision("1091 Trần Hưng Đạo, An Đông, Hồ Chí Minh", OSM_AN_DONG));
-        assertEquals(Precision.AREA, GeoClient.goongPrecision("5 Đường Bịa Đặt, An Đông, Hồ Chí Minh", OSM_AN_DONG));
-        assertNull(GeoClient.goongPrecision("123 Đường Test, Hồ Chí Minh", OSM_AN_DONG));
     }
 }

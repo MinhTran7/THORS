@@ -5,7 +5,6 @@ import static org.mockito.Mockito.*;
 
 import com.thors.module.notification.service.NotificationPublisher;
 import com.thors.module.notification.service.NotificationTypes;
-import com.thors.module.order.delivery.DeliveryService;
 import com.thors.module.order.delivery.GhnShippingService;
 import com.thors.module.order.repository.OrderRepository;
 import com.thors.module.order.repository.OrderRepository.Payable;
@@ -30,8 +29,8 @@ class OrderPaymentNotificationTest {
                         orders,
                         notifications,
                         mock(GhnShippingService.class),
-                        mock(DeliveryService.class),
-                        mock(WarehouseStore.class));
+                        mock(WarehouseStore.class),
+                        mock(com.thors.module.order.service.OrderMailService.class));
     }
 
     private void order(String status, String payment) {
