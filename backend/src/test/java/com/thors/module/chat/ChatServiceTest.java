@@ -42,7 +42,7 @@ class ChatServiceTest {
         repo = mock(ChatRepository.class);
         auto = mock(ChatAutoReply.class);
         when(auto.greeting()).thenReturn("");
-        service = new ChatService(repo, null, auto);
+        service = new ChatService(repo, null, auto, null);
         when(repo.ready()).thenReturn(true);
         when(repo.findOrCreate(5)).thenReturn(new Conversation(9, 5, 0, 0));
         when(repo.find(9)).thenReturn(Optional.of(new Conversation(9, 5, 0, 0)));

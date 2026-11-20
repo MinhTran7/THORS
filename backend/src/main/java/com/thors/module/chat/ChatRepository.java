@@ -7,7 +7,6 @@ import com.thors.module.chat.ChatViews.ProductCard;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -132,8 +131,8 @@ public class ChatRepository {
                 },
                 key);
         long id = key.getKey().longValue();
-        // Người gửi coi như đã đọc tới tin của chính mình; tin tự động thì không đổi mốc đọc của ai
-        if (ChatService.AUTO.equals(side)) {
+        // Người gửi coi như đã đọc tới tin của chính mình; tin tự động / trợ lý AI thì không đổi mốc đọc của ai
+        if (!ChatService.CUSTOMER.equals(side) && !ChatService.STORE.equals(side)) {
             db.update("UPDATE chat_conversation SET last_message_at = UTC_TIMESTAMP() WHERE conversation_id = ?", conversationId);
             return id;
         }
@@ -321,6 +320,54 @@ public class ChatRepository {
         return rows.isEmpty() ? null : rows.get(0);
     }
 
+    /** Thời điểm (UTC) tin gần nhất do phía side gửi trong cuộc trò chuyện; null nếu chưa có. */
+    public LocalDateTime lastSideAt(int conversationId, String side) {
+        List<LocalDateTime> rows =
+                db.query(
+                        "SELECT created_at FROM chat_message WHERE conversation_id = ? AND sender_side = ?"
+                                + " ORDER BY message_id DESC LIMIT 1",
+                        (rs, i) -> time(rs, "created_at"),
+                        conversationId,
+                        side);
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    /** Số tin do phía side gửi từ thời điểm sinceUtc; conversationId = null thì đếm mọi cuộc trò chuyện. */
+    public int countSideSince(String side, LocalDateTime sinceUtc, Integer conversationId) {
+        Integer n =
+                conversationId == null
+                        ? db.queryForObject(
+                                "SELECT COUNT(*) FROM chat_message WHERE sender_side = ? AND created_at >= ?",
+                                Integer.class, side, sinceUtc)
+                        : db.queryForObject(
+                                "SELECT COUNT(*) FROM chat_message WHERE sender_side = ? AND created_at >= ? AND conversation_id = ?",
+                                Integer.class, side, sinceUtc, conversationId);
+        return n == null ? 0 : n;
+    }
+
+    /** Cuộc chat có tin khách chưa được trả lời; firstMessageId là tin chưa trả lời đầu tiên. */
+    public record Waiting(int conversationId, long firstMessageId) {}
+
+    /**
+     * Các cuộc chat có tin khách chưa ai trả lời (nhân viên, trợ lý AI hay tin chuyển nhân viên; tin tự động AUTO
+     * không tính là trả lời). Chỉ xét tin khách gửi từ fromUtc, và tin chưa trả lời đầu tiên phải gửi trước toUtc.
+     */
+    public List<Waiting> unanswered(LocalDateTime fromUtc, LocalDateTime toUtc) {
+        return db.query(
+                """
+                SELECT m.conversation_id, MIN(m.message_id) AS first_id
+                FROM chat_message m
+                WHERE m.sender_side = 'CUSTOMER' AND m.created_at >= ?
+                  AND m.message_id > COALESCE((SELECT MAX(r.message_id) FROM chat_message r
+                       WHERE r.conversation_id = m.conversation_id AND r.sender_side IN ('STORE', 'BOT', 'HANDOFF')), 0)
+                GROUP BY m.conversation_id
+                HAVING MIN(m.created_at) <= ?
+                """,
+                (rs, i) -> new Waiting(rs.getInt("conversation_id"), rs.getLong("first_id")),
+                fromUtc,
+                toUtc);
+    }
+
     /** Tài khoản đứng tên tin tự động (chat_message.sender_id bắt buộc): chủ cửa hàng đầu tiên còn hoạt động. */
     public Optional<Integer> storeSenderId() {
         return db.queryForList(
@@ -333,6 +380,36 @@ public class ChatRepository {
 
     /** Một đơn online đang xử lý của khách (để trả lời "Đơn của tôi tới đâu rồi?"). */
     public record ActiveOrder(String orderNumber, String status, LocalDateTime orderDate, String carrier, String trackingNumber) {}
+
+    /** Một đơn gần đây của khách cho trợ lý AI: không có SĐT / địa chỉ / tên người nhận. */
+    public record RecentOrder(
+            int id, String orderNumber, String status, LocalDateTime orderDate, long totalAmount, String carrier,
+            String trackingNumber, LocalDateTime deliveredAt, String cancelReason, String items) {}
+
+    public List<RecentOrder> recentOrders(int customerId, int limit) {
+        return db.query(
+                "SELECT o.order_id, o.order_number, o.order_status, o.order_date, o.total_amount, o.shipping_carrier,"
+                        + " o.tracking_number, o.shipment_delivered_at, o.cancel_reason,"
+                        + " (SELECT GROUP_CONCAT(CONCAT(oi.product_name_snapshot, ' (', COALESCE(oi.size_snapshot, ''), ' ',"
+                        + "   COALESCE(oi.color_snapshot, ''), ') x', oi.quantity) ORDER BY oi.order_item_id SEPARATOR '; ')"
+                        + "   FROM order_item oi WHERE oi.order_id = o.order_id) AS items"
+                        + " FROM orders o WHERE o.user_id = ? AND o.order_type = 'Online'"
+                        + " ORDER BY o.order_date DESC LIMIT ?",
+                (rs, i) ->
+                        new RecentOrder(
+                                rs.getInt("order_id"),
+                                rs.getString("order_number"),
+                                rs.getString("order_status"),
+                                time(rs, "order_date"),
+                                rs.getLong("total_amount"),
+                                rs.getString("shipping_carrier"),
+                                rs.getString("tracking_number"),
+                                time(rs, "shipment_delivered_at"),
+                                rs.getString("cancel_reason"),
+                                rs.getString("items")),
+                customerId,
+                limit);
+    }
 
     public List<ActiveOrder> activeOrders(int customerId, int limit) {
         return db.query(
@@ -418,9 +495,12 @@ public class ChatRepository {
         return out;
     }
 
+    /**
+     * Đọc cột thời gian nguyên giá trị UTC trong DB (như OrderRepository). Không dùng getTimestamp().toLocalDateTime():
+     * cách đó đổi sang múi giờ của máy chạy backend (giờ VN) nên lệch 7 tiếng.
+     */
     private static LocalDateTime time(ResultSet rs, String column) throws SQLException {
-        Timestamp ts = rs.getTimestamp(column);
-        return ts == null ? null : ts.toLocalDateTime();
+        return rs.getObject(column, LocalDateTime.class);
     }
 
     private static <T> List<T> reversed(List<T> list) {

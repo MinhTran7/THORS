@@ -158,7 +158,7 @@ export default function StoreChatPage() {
                     </Box>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, alignItems: 'center' }}>
                       <Typography noWrap sx={{ fontSize: 12.5, color: c.unread ? brand.ink : brand.muted, fontWeight: c.unread ? 600 : 400 }}>
-                        {c.lastSide === 'STORE' ? 'Bạn: ' : c.lastSide === 'AUTO' ? 'Tự động: ' : ''}
+                        {c.lastSide === 'STORE' ? 'Bạn: ' : c.lastSide === 'AUTO' ? 'Tự động: ' : c.lastSide === 'BOT' || c.lastSide === 'HANDOFF' ? 'Trợ lý AI: ' : ''}
                         {c.lastText}
                       </Typography>
                       {c.unread > 0 && (

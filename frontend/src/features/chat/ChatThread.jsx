@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { Box, CircularProgress, Dialog, IconButton, InputBase, Menu, MenuItem, Tooltip } from '@mui/material';
-import { CloseOutlined, PictureOutlined, SendOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import { CloseOutlined, PictureOutlined, RobotOutlined, SendOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { parseUtc } from 'features/account/format';
 import { formatVnd, orderStatusMeta } from 'features/order/constants';
 import { chatApi } from './api';
@@ -79,6 +79,18 @@ function AttachmentCard({ to, image, title, lines, palette }) {
   );
 }
 
+// Tin do trợ lý AI gửi: cả hai phía đều được ghi rõ là AI trả lời
+const AI_SIDES = new Set(['BOT', 'HANDOFF']);
+
+// Ai đã gửi tin của cửa hàng. Phía cửa hàng (mine): người, tin tự động hay trợ lý AI; phía khách: chỉ ghi khi là AI
+const senderLabel = (message, mine) => {
+  if (!mine) return AI_SIDES.has(message.side) ? 'Trợ lý AI của cửa hàng · ' : '';
+  if (message.side === 'AUTO') return 'Trả lời tự động · ';
+  if (message.side === 'BOT') return 'Trợ lý AI · ';
+  if (message.side === 'HANDOFF') return 'Trợ lý AI đã chuyển cho nhân viên · ';
+  return message.senderName ? `${message.senderName} · ` : '';
+};
+
 function MessageBubble({ message, mine, seen, showName, palette, onPreview }) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: mine ? 'flex-end' : 'flex-start', mb: 1 }}>
@@ -136,8 +148,9 @@ function MessageBubble({ message, mine, seen, showName, palette, onPreview }) {
           lines={[message.product.minPrice != null ? `Từ ${formatVnd(message.product.minPrice)}` : null]}
         />
       )}
-      <Box sx={{ fontSize: 11, color: palette.muted, mt: 0.25, px: 0.5 }}>
-        {showName && message.side === 'AUTO' ? 'Trả lời tự động · ' : showName && message.senderName ? `${message.senderName} · ` : ''}
+      <Box sx={{ fontSize: 11, color: palette.muted, mt: 0.25, px: 0.5, display: 'flex', alignItems: 'center', gap: 0.5 }}>
+        {showName && AI_SIDES.has(message.side) && <RobotOutlined style={{ fontSize: 12 }} />}
+        {showName ? senderLabel(message, mine) : ''}
         {timeOf(message.createdAt)}
         {mine && seen ? ' · Đã xem' : ''}
       </Box>
@@ -313,11 +326,12 @@ export default function ChatThread({
     }
   };
 
-  const doSend = async (extra) => {
+  const doSend = async () => {
+    if (pendingImage?.uploading) return; // chờ ảnh tải lên xong
     const body = text.trim();
     const payload = {
-      body: extra?.imageUrl ? null : body || null,
-      imageUrl: extra?.imageUrl ?? null,
+      body: body || null,
+      imageUrl: pendingImage?.url ?? null,
       orderId: context?.orderId ?? null,
       productId: context?.productId ?? null
     };
@@ -328,7 +342,8 @@ export default function ChatThread({
       const message = await send(payload);
       stickRef.current = true;
       merge([message]);
-      if (!extra?.imageUrl) setText('');
+      setText('');
+      clearPendingImage();
       onClearContext?.();
       fetchNewSoon();
       onActivity?.();
@@ -339,26 +354,37 @@ export default function ChatThread({
     }
   };
 
+  // Ảnh đang chờ gửi: { preview (ảnh trên máy để xem trước), url (sau khi tải lên), uploading }
+  const [pendingImage, setPendingImage] = useState(null);
+  const clearPendingImage = () =>
+    setPendingImage((prev) => {
+      if (prev?.preview) URL.revokeObjectURL(prev.preview);
+      return null;
+    });
+
+  // Chọn ảnh: tải lên ngay để gửi nhanh, nhưng chỉ GỬI khi bấm nút gửi (viết thêm chữ kèm được)
   const onPickImage = async (event) => {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
     if (!file.type.startsWith('image/')) return setError('Chỉ gửi được tệp ảnh.');
     if (file.size > 5 * 1024 * 1024) return setError('Ảnh tối đa 5MB.');
-    setSending(true);
     setError('');
+    clearPendingImage();
+    const preview = URL.createObjectURL(file);
+    setPendingImage({ preview, url: null, uploading: true });
     try {
       const { url } = await chatApi.upload(file);
-      setSending(false);
-      await doSend({ imageUrl: url });
+      setPendingImage((prev) => (prev?.preview === preview ? { ...prev, url, uploading: false } : prev));
     } catch (e) {
       setError(e.message || 'Không tải được ảnh lên.');
-      setSending(false);
+      setPendingImage((prev) => (prev?.preview === preview ? null : prev));
+      URL.revokeObjectURL(preview);
     }
   };
 
   // Tin tự động (AUTO) là tin của cửa hàng: phía cửa hàng coi là của mình, phía khách coi là của cửa hàng
-  const isMine = (m) => m.side === mySide || (mySide === 'STORE' && m.side === 'AUTO');
+  const isMine = (m) => m.side === mySide || (mySide === 'STORE' && m.side !== 'CUSTOMER');
   const lastMine = [...messages].reverse().find(isMine);
   let lastDay = '';
 
@@ -431,8 +457,8 @@ export default function ChatThread({
                 message={m}
                 mine={isMine(m)}
                 seen={lastMine?.id === m.id && otherRead >= m.id}
-                // Chỉ phía cửa hàng: ghi tên người nhà / chủ shop đã trả lời; khách chỉ thấy "cửa hàng"
-                showName={mySide === 'STORE' && m.side !== 'CUSTOMER'}
+                // Phía cửa hàng: ghi ai đã trả lời. Phía khách: không lộ tên nhân viên, nhưng ghi rõ tin do trợ lý AI trả lời
+                showName={mySide === 'STORE' ? m.side !== 'CUSTOMER' : AI_SIDES.has(m.side)}
                 onPreview={setPreview}
                 palette={palette}
               />
@@ -516,6 +542,32 @@ export default function ChatThread({
         </Box>
       )}
 
+      {/* Ảnh đang chờ gửi: xem trước, bấm X để bỏ; gửi cùng chữ khi bấm nút gửi */}
+      {pendingImage && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, pt: 1, borderTop: `1px solid ${palette.line}`, bgcolor: '#FFFFFF' }}>
+          <Box sx={{ position: 'relative', width: 64, height: 64, flexShrink: 0 }}>
+            <Box
+              component="img"
+              src={pendingImage.preview}
+              alt="Ảnh sắp gửi"
+              sx={{ width: 64, height: 64, objectFit: 'cover', borderRadius: '8px', border: `1px solid ${palette.line}`, opacity: pendingImage.uploading ? 0.5 : 1 }}
+            />
+            {pendingImage.uploading && <CircularProgress size={20} sx={{ position: 'absolute', top: 22, left: 22 }} />}
+            <IconButton
+              size="small"
+              aria-label="Bỏ ảnh"
+              onClick={clearPendingImage}
+              sx={{ position: 'absolute', top: -8, right: -8, width: 22, height: 22, bgcolor: '#FFFFFF', border: `1px solid ${palette.line}`, '&:hover': { bgcolor: palette.bg } }}
+            >
+              <CloseOutlined style={{ fontSize: 10 }} />
+            </IconButton>
+          </Box>
+          <Box sx={{ fontSize: 12, color: palette.muted }}>
+            {pendingImage.uploading ? 'Đang tải ảnh lên…' : 'Ảnh sẽ gửi kèm tin nhắn. Bấm gửi khi sẵn sàng.'}
+          </Box>
+        </Box>
+      )}
+
       {/* Ô soạn tin: Enter để gửi, Shift + Enter xuống dòng */}
       <Box
         component="form"
@@ -587,7 +639,7 @@ export default function ChatThread({
               type="submit"
               size="small"
               aria-label="Gửi tin nhắn"
-              disabled={sending || (!text.trim() && !context?.orderId && !context?.productId)}
+              disabled={sending || pendingImage?.uploading || (!text.trim() && !pendingImage?.url && !context?.orderId && !context?.productId)}
               sx={{ color: palette.accent }}
             >
               {sending ? <CircularProgress size={16} /> : <SendOutlined />}

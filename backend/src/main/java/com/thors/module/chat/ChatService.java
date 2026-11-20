@@ -22,6 +22,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
@@ -49,11 +51,15 @@ public class ChatService {
     private final ChatRepository chats;
     private final Cloudinary cloudinary;
     private final ChatAutoReply auto;
+    private final ChatBot bot;
 
-    public ChatService(ChatRepository chats, @Autowired(required = false) Cloudinary cloudinary, ChatAutoReply auto) {
+    public ChatService(
+            ChatRepository chats, @Autowired(required = false) Cloudinary cloudinary, ChatAutoReply auto,
+            @Autowired(required = false) ChatBot bot) {
         this.chats = chats;
         this.cloudinary = cloudinary;
         this.auto = auto;
+        this.bot = bot;
     }
 
     private static boolean isCustomer(Account a) {
@@ -114,7 +120,22 @@ public class ChatService {
         requireCustomer(actor);
         Conversation c = chats.findOrCreate(actor.id());
         Message sent = send(c, actor, CUSTOMER, req);
-        autoReply(c, sent.id(), ZonedDateTime.now(ChatAutoReply.VN));
+        ZonedDateTime now = ZonedDateTime.now(ChatAutoReply.VN);
+        if (bot != null && bot.shouldHandle(c, now)) {
+            // Trợ lý AI trả lời ngầm sau khi tin của khách đã lưu; lỗi thì quay về tin tự động thường
+            Runnable start = () -> bot.replyAsync(c, () -> autoReply(c, sent.id(), now));
+            if (TransactionSynchronizationManager.isSynchronizationActive())
+                TransactionSynchronizationManager.registerSynchronization(
+                        new TransactionSynchronization() {
+                            @Override
+                            public void afterCommit() {
+                                start.run();
+                            }
+                        });
+            else start.run();
+        } else {
+            autoReply(c, sent.id(), now);
+        }
         return hideStaffName(sent);
     }
 
@@ -205,12 +226,20 @@ public class ChatService {
     /** Cài đặt tin nhắn tự động: chỉ chủ cửa hàng xem và sửa. */
     public Map<String, String> autoSettings(Account actor) {
         requireOwner(actor);
-        return auto.settings();
+        return withBotStatus(auto.settings());
     }
 
     public Map<String, String> saveAutoSettings(Account actor, Map<String, Object> values) {
         requireOwner(actor);
-        return auto.save(values);
+        return withBotStatus(auto.save(values));
+    }
+
+    /** Kèm trạng thái trợ lý AI (đã có Gemini API key chưa) để trang cài đặt báo cho chủ shop. */
+    private Map<String, String> withBotStatus(Map<String, String> settings) {
+        Map<String, String> out = new java.util.LinkedHashMap<>(settings);
+        out.put("botConfigured", String.valueOf(bot != null && bot.configured()));
+        out.put("botLastEvent", bot == null || bot.lastEvent() == null ? "" : bot.lastEvent());
+        return out;
     }
 
     private static void requireOwner(Account a) {

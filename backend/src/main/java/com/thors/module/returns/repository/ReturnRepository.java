@@ -79,8 +79,8 @@ public class ReturnRepository {
                     Timestamp ts = rs.getTimestamp("order_date");
                     res.setOrderDate(ts != null ? ts.toLocalDateTime() : null);
                     res.setTotalAmount(rs.getBigDecimal("total_amount"));
-                    Timestamp delivered = rs.getTimestamp("shipment_delivered_at");
-                    res.setDeliveredAt(delivered != null ? delivered.toLocalDateTime() : null);
+                    // Giữ nguyên giờ UTC trong DB (getTimestamp().toLocalDateTime() đổi sang giờ máy, lệch 7 tiếng)
+                    res.setDeliveredAt(rs.getObject("shipment_delivered_at", java.time.LocalDateTime.class));
                     return res;
                 },
                 orderNumber

@@ -24,26 +24,38 @@ public class ChatAutoReply {
     /** Id của câu hỏi có sẵn "Đơn của tôi tới đâu rồi?": trả lời bằng trạng thái các đơn đang xử lý của khách. */
     public static final String ORDER_STATUS_FAQ = "orders";
 
+    /** Trợ lý AI: tắt / chỉ ngoài giờ làm việc / luôn trả lời. */
+    public static final String BOT_OFF = "OFF";
+    public static final String BOT_AWAY = "AWAY";
+    public static final String BOT_ALWAYS = "ALWAYS";
+
     static final Map<String, String> DEFAULTS =
-            Map.of(
-                    "chatGreeting",
-                    "Cảm ơn bạn đã nhắn tin cho THORS! Cửa hàng đã nhận được tin nhắn và sẽ trả lời bạn sớm nhất có thể.",
-                    "chatOpenTime", "08:00",
-                    "chatCloseTime", "22:00",
-                    "chatAwayMessage",
-                    "Hiện cửa hàng đang ngoài giờ làm việc ({open} – {close}). Chúng tôi sẽ trả lời bạn ngay khi mở cửa nhé!",
-                    "chatQuickReplies",
-                    String.join("\n",
-                            "Dạ cửa hàng chào bạn, bạn cần hỗ trợ gì ạ?",
-                            "Dạ sản phẩm này hiện vẫn còn hàng ạ.",
-                            "Dạ đơn hàng sẽ được giao trong 2–4 ngày làm việc ạ.",
-                            "Dạ bạn được đổi trả trong 7 ngày kể từ khi nhận hàng ạ.",
-                            "Cảm ơn bạn đã ủng hộ cửa hàng ạ!"),
-                    "chatFaq",
-                    String.join("\n",
-                            "Phí giao hàng bao nhiêu? | Phí giao hàng được tính theo địa chỉ và hiện ngay ở bước đặt hàng trước khi bạn xác nhận.",
-                            "Bao lâu thì nhận được hàng? | Thường từ 2–4 ngày làm việc tùy khu vực. Bạn theo dõi đơn trong mục Đơn hàng nhé.",
-                            "Đổi trả thế nào? | Bạn được yêu cầu trả hàng trong 7 ngày kể từ khi nhận hàng: vào Đơn hàng > Trả hàng, chọn sản phẩm, lý do và gửi kèm ảnh/video."));
+            Map.ofEntries(
+                    Map.entry("chatBotMode", BOT_AWAY),
+                    Map.entry("chatBotDailyLimit", "200"),
+                    Map.entry("chatBotWaitMinutes", "10"),
+                    Map.entry(
+                            "chatGreeting",
+                            "Cảm ơn bạn đã nhắn tin cho THORS! Cửa hàng đã nhận được tin nhắn và sẽ trả lời bạn sớm nhất có thể."),
+                    Map.entry("chatOpenTime", "08:00"),
+                    Map.entry("chatCloseTime", "22:00"),
+                    Map.entry(
+                            "chatAwayMessage",
+                            "Hiện cửa hàng đang ngoài giờ làm việc ({open} – {close}). Chúng tôi sẽ trả lời bạn ngay khi mở cửa nhé!"),
+                    Map.entry(
+                            "chatQuickReplies",
+                            String.join("\n",
+                                    "Dạ cửa hàng chào bạn, bạn cần hỗ trợ gì ạ?",
+                                    "Dạ sản phẩm này hiện vẫn còn hàng ạ.",
+                                    "Dạ đơn hàng sẽ được giao trong 2–4 ngày làm việc ạ.",
+                                    "Dạ bạn được đổi trả trong 7 ngày kể từ khi nhận hàng ạ.",
+                                    "Cảm ơn bạn đã ủng hộ cửa hàng ạ!")),
+                    Map.entry(
+                            "chatFaq",
+                            String.join("\n",
+                                    "Phí giao hàng bao nhiêu? | Phí giao hàng được tính theo địa chỉ và hiện ngay ở bước đặt hàng trước khi bạn xác nhận.",
+                                    "Bao lâu thì nhận được hàng? | Thường từ 2–4 ngày làm việc tùy khu vực. Bạn theo dõi đơn trong mục Đơn hàng nhé.",
+                                    "Đổi trả thế nào? | Bạn được yêu cầu trả hàng trong 7 ngày kể từ khi nhận hàng: vào Đơn hàng > Trả hàng, chọn sản phẩm, lý do và gửi kèm ảnh/video.")));
 
     /** Một câu hỏi thường gặp; answer = null với câu hỏi trạng thái đơn (trả lời theo dữ liệu thật). */
     public record Faq(String id, String question, String answer) {}
@@ -64,6 +76,55 @@ public class ChatAutoReply {
         LIMITS.put("chatAwayMessage", 500);
         LIMITS.put("chatQuickReplies", 2000);
         LIMITS.put("chatFaq", 3000);
+        LIMITS.put("chatBotMode", 10);
+        LIMITS.put("chatBotDailyLimit", 5);
+        LIMITS.put("chatBotWaitMinutes", 3);
+    }
+
+    /**
+     * Khách nhắn mà sau bấy nhiêu phút chưa có nhân viên trả lời thì trợ lý AI trả lời thay (kể cả trong giờ làm
+     * việc); 0 = không đỡ lời, chỉ trả lời theo chế độ.
+     */
+    public int botWaitMinutes() {
+        try {
+            return Math.max(0, Integer.parseInt(value(all(), "chatBotWaitMinutes")));
+        } catch (NumberFormatException e) {
+            return 10;
+        }
+    }
+
+    /** Chế độ trợ lý AI: OFF / AWAY / ALWAYS (giá trị lạ coi như OFF). */
+    public String botMode() {
+        String mode = value(all(), "chatBotMode").toUpperCase();
+        return switch (mode) {
+            case BOT_AWAY, BOT_ALWAYS -> mode;
+            default -> BOT_OFF;
+        };
+    }
+
+    /** Số tin trợ lý AI được gửi tối đa mỗi ngày (cả cửa hàng). */
+    public int botDailyLimit() {
+        try {
+            return Math.max(0, Integer.parseInt(value(all(), "chatBotDailyLimit")));
+        } catch (NumberFormatException e) {
+            return 200;
+        }
+    }
+
+    /** Lúc nowVn có nằm trong giờ làm việc không (thiếu hoặc sai giờ thì coi như luôn trong giờ). */
+    public boolean withinWorkingHours(ZonedDateTime nowVn) {
+        Map<String, String> s = all();
+        try {
+            return withinHours(nowVn.toLocalTime(), LocalTime.parse(value(s, "chatOpenTime")), LocalTime.parse(value(s, "chatCloseTime")));
+        } catch (RuntimeException e) {
+            return true;
+        }
+    }
+
+    /** Giờ làm việc dạng "08:00 – 22:00" để trợ lý AI nói cho khách. */
+    public String workingHoursText() {
+        Map<String, String> s = all();
+        return value(s, "chatOpenTime") + " – " + value(s, "chatCloseTime");
     }
 
     /** Cài đặt hiện tại (đã gộp mặc định) cho trang cài đặt. */
@@ -86,6 +147,12 @@ public class ChatAutoReply {
                 throw new com.thors.common.ApiException(400, "VALIDATION", "Nội dung quá dài (tối đa " + field.getValue() + " ký tự).");
             if (field.getKey().endsWith("Time") && !value.isEmpty() && !value.matches("([01]\\d|2[0-3]):[0-5]\\d"))
                 throw new com.thors.common.ApiException(400, "VALIDATION", "Giờ làm việc phải có dạng HH:mm (ví dụ 08:00).");
+            if ("chatBotMode".equals(field.getKey()) && !java.util.Set.of(BOT_OFF, BOT_AWAY, BOT_ALWAYS).contains(value))
+                throw new com.thors.common.ApiException(400, "VALIDATION", "Chế độ trợ lý AI không hợp lệ.");
+            if ("chatBotDailyLimit".equals(field.getKey()) && !value.matches("\\d{1,4}"))
+                throw new com.thors.common.ApiException(400, "VALIDATION", "Giới hạn tin mỗi ngày phải là số từ 0 đến 9999.");
+            if ("chatBotWaitMinutes".equals(field.getKey()) && !(value.matches("\\d{1,3}") && Integer.parseInt(value) <= 120))
+                throw new com.thors.common.ApiException(400, "VALIDATION", "Thời gian chờ nhân viên phải từ 0 đến 120 phút.");
             clean.put(field.getKey(), value);
         }
         if (!clean.isEmpty()) settings.saveAll(clean);

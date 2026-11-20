@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Box, CircularProgress, Typography } from '@mui/material';
+import { Alert, Box, CircularProgress, MenuItem, Typography } from '@mui/material';
 import { useSWRConfig } from 'swr';
 import { useCrumbs } from 'layouts/crumbs';
 import { brand, cardSx, fs } from 'features/account/tokens';
@@ -10,9 +10,53 @@ import { useToast } from 'features/account/components/Toast';
 import { chatApi } from './api';
 
 // Độ dài tối đa — khớp ChatAutoReply.LIMITS ở backend
-const LIMITS = { chatGreeting: 500, chatOpenTime: 5, chatCloseTime: 5, chatAwayMessage: 500, chatQuickReplies: 2000, chatFaq: 3000 };
+const LIMITS = {
+  chatBotMode: 10,
+  chatBotDailyLimit: 5,
+  chatBotWaitMinutes: 3,
+  chatGreeting: 500,
+  chatOpenTime: 5,
+  chatCloseTime: 5,
+  chatAwayMessage: 500,
+  chatQuickReplies: 2000,
+  chatFaq: 3000
+};
+
+const BOT_MODES = [
+  { value: 'OFF', label: 'Tắt' },
+  { value: 'AWAY', label: 'Chỉ ngoài giờ làm việc' },
+  { value: 'ALWAYS', label: 'Luôn bật' }
+];
 
 const SECTIONS = [
+  {
+    title: 'Trợ lý AI (Gemini)',
+    desc:
+      'Tự trả lời khách bằng AI: tìm sản phẩm, báo giá và còn hàng theo màu/size, tình trạng đơn của khách, chính sách cửa hàng. ' +
+      'Trợ lý chỉ đọc dữ liệu (không sửa đơn, không hoàn tiền, không giảm giá), tự chuyển cho nhân viên khi khách khiếu nại hoặc muốn gặp người thật, ' +
+      'và tự im lặng khi nhân viên vừa trả lời cuộc chat đó trong 30 phút — nhưng nếu khách nhắn mà quá số phút chờ bên dưới chưa ai trả lời thì trợ lý trả lời thay. ' +
+      'Khi trợ lý trả lời thì không gửi tin chào / tin ngoài giờ.',
+    bot: true,
+    fields: [
+      { key: 'chatBotMode', label: 'Chế độ', half: true, options: BOT_MODES, noCount: true },
+      {
+        key: 'chatBotDailyLimit',
+        label: 'Giới hạn tin trợ lý mỗi ngày',
+        half: true,
+        type: 'number',
+        noCount: true,
+        helper: 'Cả cửa hàng; hết lượt thì quay về tin tự động thường. Mỗi cuộc chat tối đa 30 tin/ngày.'
+      },
+      {
+        key: 'chatBotWaitMinutes',
+        label: 'Trả lời thay khi chưa ai trả lời sau (phút)',
+        half: true,
+        type: 'number',
+        noCount: true,
+        helper: 'Kể cả trong giờ làm việc: khách nhắn quá số phút này mà nhân viên chưa trả lời thì trợ lý trả lời thay. 0 = không.'
+      }
+    ]
+  },
   {
     title: 'Tin chào tự động',
     desc: 'Gửi khi khách nhắn lần đầu, hoặc nhắn lại sau 12 giờ không nhắn. Để trống thì tắt.',
@@ -75,6 +119,19 @@ export default function ChatSettingsPage() {
       .catch((e) => setLoadError(e.message || 'Không tải được cài đặt.'));
   }, []);
 
+  // Trạng thái gần nhất của trợ lý AI (đã trả lời / bỏ qua vì sao / lỗi gì), cập nhật mỗi 10 giây
+  const [botEvent, setBotEvent] = useState('');
+  useEffect(() => {
+    const load = () =>
+      chatApi
+        .settings()
+        .then((d) => setBotEvent(d.botLastEvent || ''))
+        .catch(() => {});
+    load();
+    const timer = setInterval(load, 10000);
+    return () => clearInterval(timer);
+  }, []);
+
   const errors = useMemo(() => {
     const result = {};
     Object.entries(LIMITS).forEach(([key, max]) => {
@@ -83,6 +140,9 @@ export default function ChatSettingsPage() {
     ['chatOpenTime', 'chatCloseTime'].forEach((key) => {
       if (values[key] && !TIME_RE.test(values[key])) result[key] = 'Giờ dạng HH:mm.';
     });
+    if (!/^\d{1,4}$/.test(String(values.chatBotDailyLimit ?? ''))) result.chatBotDailyLimit = 'Nhập số từ 0 đến 9999.';
+    const wait = String(values.chatBotWaitMinutes ?? '');
+    if (!/^\d{1,3}$/.test(wait) || Number(wait) > 120) result.chatBotWaitMinutes = 'Nhập số từ 0 đến 120.';
     return result;
   }, [values]);
 
@@ -139,6 +199,17 @@ export default function ChatSettingsPage() {
                   {section.title}
                 </Typography>
                 <Typography sx={{ color: brand.muted, fontSize: fs.caption, mt: 0.25, mb: 2 }}>{section.desc}</Typography>
+                {section.bot && saved.botConfigured === 'false' && (
+                  <Alert severity="warning" sx={{ mb: 2, borderRadius: '10px' }}>
+                    Máy chủ chưa có Gemini API key nên trợ lý AI chưa chạy được (khách vẫn nhận tin tự động thường). Lấy key miễn phí ở Google AI
+                    Studio rồi thêm dòng <b>thors.ai.gemini-api-key=…</b> vào backend/local.properties và khởi động lại backend.
+                  </Alert>
+                )}
+                {section.bot && saved.botConfigured !== 'false' && (
+                  <Alert severity={/lỗi/i.test(botEvent) ? 'error' : 'info'} sx={{ mb: 2, borderRadius: '10px' }}>
+                    <b>Trạng thái gần nhất:</b> {botEvent || 'Trợ lý chưa xử lý tin nào từ lúc khởi động backend.'}
+                  </Alert>
+                )}
                 <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2.5 }}>
                   {section.fields.map((f) => {
                     const length = (values[f.key] || '').length;
@@ -153,12 +224,19 @@ export default function ChatSettingsPage() {
                             label={f.label}
                             name={f.key}
                             type={f.type}
+                            select={Boolean(f.options)}
                             multiline={f.multiline}
                             minRows={f.rows}
                             value={values[f.key] || ''}
                             onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
                             error={Boolean(errors[f.key])}
-                          />
+                          >
+                            {f.options?.map((o) => (
+                              <MenuItem key={o.value} value={o.value}>
+                                {o.label}
+                              </MenuItem>
+                            ))}
+                          </TextInput>
                         </FormField>
                       </Box>
                     );
