@@ -119,11 +119,12 @@ export default function ShopCategoryPage({ collection }) {
   const chipTo = (id) => (coll ? (id ? `${coll.path}?category=${id}` : coll.path) : `/shop/category/${id || 'all'}${sortSuffix}`);
 
   return (
-    <Box sx={{ ...container, py: { xs: 3, md: 5 } }}>
+    <Box sx={{ ...container, pt: { xs: 2.5, md: 3 }, pb: { xs: 3, md: 5 } }}>
+      {/* Khoảng cách trên (tới header) = khoảng cách dưới (tới tiêu đề) */}
       <Box
         component="nav"
         aria-label="Breadcrumb"
-        sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', fontSize: 13, color: C.muted, mb: { xs: 3, md: 4 } }}
+        sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', fontSize: 13, color: C.muted, mb: { xs: 2.5, md: 3 } }}
       >
         <Box component={RouterLink} to="/" sx={{ ...linkSx, color: C.muted }}>
           Trang chủ

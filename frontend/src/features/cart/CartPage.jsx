@@ -17,8 +17,7 @@ const toUi = (r) => ({
   id: r.cartItemId,
   name: r.productName,
   variant: `Size ${r.size} · ${r.color}`,
-  originalPrice: Number(r.price),
-  price: Number(r.salePrice ?? r.price),
+  price: Number(r.price),
   qty: Number(r.quantity),
   stock: Number(r.stock),
   imageUrl: r.imageUrl,
@@ -141,7 +140,10 @@ export default function CartPage({ onCheckout }) {
                 <input type="checkbox" checked={allChecked} onChange={toggleAll} aria-label="Chọn tất cả" />
                 <span />
               </label>
-              <span>Sản phẩm</span>
+              {/* Ô chọn tất cả ở đầu bảng: chưa chọn hết thì ghi "Sản phẩm", chọn hết thì ghi "Chọn tất cả (N)" */}
+              <span className={allChecked ? 'thc-all-on' : undefined}>
+                {allChecked ? `Chọn tất cả (${buyable.length})` : 'Sản phẩm'}
+              </span>
               <span className="thc-c">Đơn giá</span>
               <span className="thc-c">Số lượng</span>
               <span className="thc-c">Thành tiền</span>
@@ -179,10 +181,7 @@ export default function CartPage({ onCheckout }) {
                     </div>
                   </div>
 
-                  <div className="thc-c thc-price" data-label="Đơn giá">
-                    {item.price < item.originalPrice && <s className="thc-old">{money(item.originalPrice)}</s>}
-                    {money(item.price)}
-                  </div>
+                  <div className="thc-c thc-price" data-label="Đơn giá">{money(item.price)}</div>
 
                   <div className="thc-c" data-label="Số lượng">
                     <div className="thc-qty">
@@ -217,11 +216,6 @@ export default function CartPage({ onCheckout }) {
             })}
 
             <div className="thc-listfoot">
-              <label className="thc-check">
-                <input type="checkbox" checked={allChecked} onChange={toggleAll} aria-label="Chọn tất cả" />
-                <span />
-              </label>
-              <span>Chọn tất cả ({buyable.length})</span>
               <button
                 className="thc-link-danger"
                 disabled={picked.length === 0}
@@ -297,6 +291,7 @@ background:var(--bg);padding:8px 0 28px;min-height:100%;box-sizing:border-box}
 padding:16px 20px;border-bottom:1px solid var(--line)}
 .thc-row-head{font-size:13px;color:var(--mute);padding:12px 20px;background:#FAF8F5}
 .thc-c{text-align:center}
+.thc-all-on{color:var(--ink);font-weight:600}
 .thc-prod{display:flex;gap:14px;align-items:center;min-width:0}
 .thc-thumb{flex:none;position:relative;width:64px;height:80px;overflow:hidden;background:var(--sand);
 display:grid;place-items:center;font-size:24px;font-weight:700;color:#B5AFA6}
@@ -305,7 +300,6 @@ display:grid;place-items:center;font-size:24px;font-weight:700;color:#B5AFA6}
 .thc-low{display:inline-block;margin-top:6px;font-size:12px;background:var(--warn);border:1px solid var(--warn-l);
 padding:2px 8px}
 .thc-price{font-size:14px;color:var(--mute)}
-.thc-old{display:block;font-size:12.5px;opacity:.7}
 .thc-sub{font-weight:700;color:var(--ink)}
 .thc-qty{display:inline-flex;border:1px solid var(--line);overflow:hidden;background:#fff}
 .thc-qty button{width:32px;height:34px;border:0;background:#fff;font-size:17px;color:var(--ink)}

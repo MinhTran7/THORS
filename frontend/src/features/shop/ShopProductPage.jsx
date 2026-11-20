@@ -201,8 +201,9 @@ export default function ShopProductPage() {
   return (
     // Header + footer do StorefrontLayout lo
     <Box>
-      <Box sx={{ maxWidth: 1320, mx: 'auto', boxSizing: 'border-box', px: { xs: '16px', sm: '40px' }, py: { xs: 3, md: 5 } }}>
-        <Box component="nav" aria-label="Breadcrumb" sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', fontSize: 13, color: C.muted, mb: 2 }}>
+      <Box sx={{ maxWidth: 1320, mx: 'auto', boxSizing: 'border-box', px: { xs: '16px', sm: '40px' }, pt: { xs: 2.5, md: 3 }, pb: { xs: 3, md: 5 } }}>
+        {/* Khoảng cách trên (tới header) = khoảng cách dưới (tới nội dung) */}
+        <Box component="nav" aria-label="Breadcrumb" sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', fontSize: 13, color: C.muted, mb: { xs: 2.5, md: 3 } }}>
           <Box component={RouterLink} to="/" sx={{ color: C.muted, textDecoration: 'none', '&:hover': { color: C.ink } }}>
             Trang chủ
           </Box>
