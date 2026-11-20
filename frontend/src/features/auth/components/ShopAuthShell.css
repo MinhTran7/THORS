@@ -143,7 +143,7 @@
 .shop-auth__panel {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   min-height: 0;
   padding: 2.5vh clamp(24px, 6vw, 96px);
   /* phòng khi màn hình quá thấp: chỉ cuộn trong khung form, không cuộn cả trang */
@@ -166,6 +166,7 @@
   padding: clamp(20px, 4.4vh, 44px) 40px clamp(18px, 3.6vh, 36px);
   background: #fff;
   border: 1px solid var(--line);
+  border-radius: 16px;
 }
 
 .shop-auth__card h1 {
@@ -245,7 +246,7 @@
   height: clamp(40px, 5.6vh, 48px);
   padding: 0 14px;
   border: 1px solid #cfcac3;
-  border-radius: 0;
+  border-radius: 10px;
   background: #fff;
   color: #8f8881;
   font-size: 16px;
@@ -306,10 +307,10 @@
   color: #b3261e;
 }
 
-/* Nút MUI trong form: vuông, chữ in hoa như nút "Thêm vào giỏ" */
+/* Nút MUI trong form: bo góc, chữ in hoa */
 .shop-auth__card .MuiButton-root {
   height: clamp(40px, 5.6vh, 48px);
-  border-radius: 0;
+  border-radius: 10px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   font-family: inherit;
@@ -373,7 +374,7 @@
 }
 
 .shop-auth__card .MuiAlert-root {
-  border-radius: 0;
+  border-radius: 10px;
 }
 
 .shop-auth__card form > .MuiStack-root > * + * {
