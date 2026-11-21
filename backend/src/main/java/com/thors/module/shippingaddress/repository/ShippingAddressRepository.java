@@ -26,8 +26,6 @@ public class ShippingAddressRepository {
             rs.getString("ward_code"),
             rs.getString("ward_name"),
             rs.getString("address_detail"),
-            rs.getBigDecimal("latitude"),
-            rs.getBigDecimal("longitude"),
             rs.getBoolean("is_default"),
             rs.getTimestamp("created_at").toLocalDateTime(),
             rs.getTimestamp("updated_at").toLocalDateTime());
@@ -62,13 +60,13 @@ public class ShippingAddressRepository {
 
     public int insert(int userId, ShippingAddressRequest a, boolean isDefault) {
         Object[] values = {userId, a.recipientName(), a.phone(), a.provinceCode(), a.provinceName(),
-                a.wardCode(), a.wardName(), a.addressDetail(), a.latitude(), a.longitude(), isDefault};
+                a.wardCode(), a.wardName(), a.addressDetail(), isDefault};
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbc.update(con -> {
             PreparedStatement ps = con.prepareStatement("""
                     INSERT INTO shipping_address (user_id, recipient_name, phone, province_code, province_name,
-                        ward_code, ward_name, address_detail, latitude, longitude, is_default)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ward_code, ward_name, address_detail, is_default)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, Statement.RETURN_GENERATED_KEYS);
             for (int i = 0; i < values.length; i++) ps.setObject(i + 1, values[i]);
             return ps;
@@ -80,10 +78,10 @@ public class ShippingAddressRepository {
         jdbc.update("""
                 UPDATE shipping_address
                 SET recipient_name = ?, phone = ?, province_code = ?, province_name = ?,
-                    ward_code = ?, ward_name = ?, address_detail = ?, latitude = ?, longitude = ?
+                    ward_code = ?, ward_name = ?, address_detail = ?
                 WHERE user_id = ? AND address_id = ? AND is_deleted = 0
                 """, a.recipientName(), a.phone(), a.provinceCode(), a.provinceName(),
-                a.wardCode(), a.wardName(), a.addressDetail(), a.latitude(), a.longitude(),
+                a.wardCode(), a.wardName(), a.addressDetail(),
                 userId, addressId);
     }
 

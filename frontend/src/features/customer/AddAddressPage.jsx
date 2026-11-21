@@ -8,7 +8,6 @@ export default function AddAddressPage() {
   return (
     <AddressForm
       title="Thêm địa chỉ giao hàng"
-      subtitle="Lưu một điểm nhận hàng mới cho những lần mua sắm tiếp theo."
       submitLabel="Thêm địa chỉ"
       onSubmit={createShippingAddress}
     />

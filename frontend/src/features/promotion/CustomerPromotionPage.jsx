@@ -258,12 +258,14 @@ export default function CustomerPromotionPage() {
           placeholder="Tìm theo tên ưu đãi..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchOutlined style={{ color: '#9CA3AF', fontSize: 16 }} />
-              </InputAdornment>
-            )
+          slotProps={{
+            input: {
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchOutlined style={{ color: '#9CA3AF', fontSize: 16 }} />
+                </InputAdornment>
+              )
+            }
           }}
           size="small"
           sx={{

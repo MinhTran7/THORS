@@ -133,6 +133,22 @@ public class PromotionRepository {
         ).stream().findFirst();
     }
 
+    // Mọi khuyến mãi sản phẩm đang chạy, mới nhất trước (cùng thứ tự với findRunningProductPromotion)
+    public List<Promotion> findRunningProductPromotions(LocalDateTime now) {
+        return jdbc.query(
+                SELECT_COLUMNS + """
+                         WHERE status = 'ACTIVE'
+                           AND COALESCE(min_order_value, 0) = 0
+                           AND start_date <= ?
+                           AND end_date > ?
+                         ORDER BY promotion_id DESC
+                        """,
+                mapper,
+                Timestamp.valueOf(now),
+                Timestamp.valueOf(now)
+        );
+    }
+
     public int create(
             String name,
             String description,
@@ -336,4 +352,4 @@ public class PromotionRepository {
         );
     }
 
-}
+}

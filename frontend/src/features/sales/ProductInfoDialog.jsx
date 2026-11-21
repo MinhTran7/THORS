@@ -74,6 +74,7 @@ export default function ProductInfoDialog({ line, onClose }) {
 
   return (
     <Dialog
+      className="pos-no-effects"
       open={Boolean(line)}
       onClose={onClose}
       fullWidth

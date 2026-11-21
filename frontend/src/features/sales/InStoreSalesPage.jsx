@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Box, Button, CircularProgress, ClickAwayListener, Dialog, IconButton, InputAdornment, Snackbar, TextField, Typography, useMediaQuery } from '@mui/material';
+import { Alert, Box, Button, CircularProgress, ClickAwayListener, Dialog, GlobalStyles, IconButton, InputAdornment, Snackbar, TextField, Typography, useMediaQuery } from '@mui/material';
 import {
   SearchOutlined,
   ScanOutlined,
@@ -40,6 +40,15 @@ const getStock = (v) => Number(v?.stockQuantity ?? v?.stock ?? 0);
 const getPrice = (v) => Number(v?.price ?? v?.salePrice ?? v?.sale_price ?? 0);
 const getList = (data) => (Array.isArray(data) ? data : (data?.content ?? data?.data ?? []));
 const getProductStock = (p) => Number(p?.stockQuantity ?? p?.totalStock ?? p?.stock ?? p?.quantity ?? 0);
+// transfer: đơn đang chờ khách chuyển khoản { sale, link }
+// Trang bán hàng không dùng hiệu ứng hover/bấm nút (cả trong các popup có class này)
+const NO_EFFECTS = 'pos-no-effects';
+const noEffectStyles = {
+  [`.${NO_EFFECTS} .MuiButtonBase-root, .${NO_EFFECTS} .MuiButtonBase-root::after`]: { transition: 'none !important' },
+  [`.${NO_EFFECTS} .MuiButton-root:active::after`]: { opacity: '0 !important' },
+  [`.${NO_EFFECTS} .MuiIconButton-root:hover, .${NO_EFFECTS} .MuiButton-text:hover`]: { backgroundColor: 'transparent !important' }
+};
+const blankOrder = (id, label) => ({ id, label, cart: [], payment: 'Cash', discount: '', discountType: 'amount', customerPaid: '', transfer: null });
 
 export default function InStoreSalesPage() {
   const { account } = useAuth();
@@ -66,36 +75,46 @@ export default function InStoreSalesPage() {
   const [infoLine, setInfoLine] = useState(null);
 
   // Quản lý nhiều tab hóa đơn chờ kiểu Sapo
-  const [orders, setOrders] = useState([
-    {
-      id: 1,
-      label: 'Hóa đơn 1',
-      cart: [],
-      payment: 'Cash',
-      discount: '',
-      discountType: 'amount',
-      customerPaid: ''
-    }
-  ]);
+  const [orders, setOrders] = useState([blankOrder(1, 'Hóa đơn 1')]);
   const [activeOrderId, setActiveOrderId] = useState(1);
+  const ordersRef = useRef(orders);
+  ordersRef.current = orders;
 
   const activeOrder = useMemo(() => {
     return orders.find((o) => o.id === activeOrderId) || orders[0] || {};
   }, [orders, activeOrderId]);
 
-  // Số lượng cùng biến thể đang nằm ở các hóa đơn chờ khác
+  // Hóa đơn đang chờ chuyển khoản: khóa giỏ hàng
+  const locked = Boolean(activeOrder.transfer);
+
+  // Số lượng cùng biến thể đang nằm ở các hóa đơn chờ khác (đơn chờ chuyển khoản đã trừ kho trên server)
   const otherTabsQty = (key) =>
-    orders.reduce((sum, o) => (o.id === activeOrder.id ? sum : sum + (o.cart.find((line) => line.key === key)?.quantity ?? 0)), 0);
+    orders.reduce((sum, o) => (o.id === activeOrder.id || o.transfer ? sum : sum + (o.cart.find((line) => line.key === key)?.quantity ?? 0)), 0);
 
   // Cập nhật tồn kho mới nhất của biến thể cho mọi hóa đơn chờ
   function syncStock(key, stock) {
     setOrders((prev) => prev.map((o) => ({ ...o, cart: o.cart.map((line) => (line.key === key ? { ...line, stock } : line)) })));
   }
 
+  function updateOrder(id, patch) {
+    setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, ...patch } : o)));
+  }
+
+  // Đóng một hóa đơn; hết hóa đơn thì mở hóa đơn trống mới
+  function removeTab(id) {
+    const fresh = blankOrder(Date.now(), 'Hóa đơn 1');
+    const rest = ordersRef.current.filter((o) => o.id !== id);
+    setOrders((prev) => {
+      const left = prev.filter((o) => o.id !== id);
+      return left.length ? left : [fresh];
+    });
+    setActiveOrderId((cur) => (cur !== id ? cur : (rest[rest.length - 1]?.id ?? fresh.id)));
+  }
+
   function updateActiveOrder(patchOrFn) {
     setOrders((prev) =>
       prev.map((ord) => {
-        if (ord.id !== activeOrderId) return ord;
+        if (ord.id !== activeOrder.id) return ord;
         return typeof patchOrFn === 'function' ? patchOrFn(ord) : { ...ord, ...patchOrFn };
       })
     );
@@ -151,16 +170,7 @@ export default function InStoreSalesPage() {
     let nextNum = 1;
     while (existingNums.includes(nextNum)) nextNum++;
 
-    const newOrder = {
-      id: newId,
-      label: `Hóa đơn ${nextNum}`,
-      cart: [],
-      payment: 'Cash',
-      discount: '',
-      discountType: 'amount',
-      customerPaid: ''
-    };
-    setOrders((prev) => [...prev, newOrder]);
+    setOrders((prev) => [...prev, blankOrder(newId, `Hóa đơn ${nextNum}`)]);
     setActiveOrderId(newId);
     setError('');
   }
@@ -172,13 +182,15 @@ export default function InStoreSalesPage() {
 
   function closeOrderTab(id, e) {
     e?.stopPropagation();
+    if (orders.find((o) => o.id === id)?.transfer) {
+      setError('Hóa đơn đang chờ thanh toán. Bấm "Hủy chuyển khoản" trước khi đóng.');
+      return;
+    }
     if (orders.length <= 1) {
       cancelInvoice();
       return;
     }
-    const next = orders.filter((o) => o.id !== id);
-    setOrders((prev) => prev.filter((o) => o.id !== id));
-    if (activeOrder.id === id) setActiveOrderId(next[next.length - 1].id);
+    removeTab(id);
   }
 
   // Modal chọn biến thể sản phẩm
@@ -202,8 +214,51 @@ export default function InStoreSalesPage() {
   const [completedAt, setCompletedAt] = useState(null);
   const [completedPayment, setCompletedPayment] = useState({ received: 0, change: 0 });
 
-  // Đơn đang giữ hàng chờ chuyển khoản (popup QR)
-  const [transferSale, setTransferSale] = useState(null);
+  // Hóa đơn đang hiện mã QR
+  const [qrTabId, setQrTabId] = useState(null);
+  const qrTransfer = orders.find((o) => o.id === qrTabId)?.transfer ?? null;
+
+  // Mở lại các hóa đơn đang chờ chuyển khoản khi tải lại trang
+  useEffect(() => {
+    api('/sales/in-store/pending')
+      .then((list) =>
+        setOrders((prev) => {
+          const fresh = prev.length === 1 && !prev[0].cart.length;
+          const used = new Set(fresh ? [] : prev.map((o) => o.label));
+          let n = 0;
+          const nextLabel = () => {
+            do n++;
+            while (used.has(`Hóa đơn ${n}`));
+            return `Hóa đơn ${n}`;
+          };
+          const restored = (list ?? [])
+            .filter(({ sale }) => !prev.some((o) => o.transfer?.sale.orderId === sale.orderId))
+            .map(({ sale, items }) => ({
+              ...blankOrder(`pending-${sale.orderId}`, nextLabel()),
+              payment: 'Bank transfer',
+              discount: String(sale.discountAmount ?? ''),
+              transfer: { sale, link: null },
+              cart: items.map((item) => ({
+                key: `${item.productId}-${item.detailId}`,
+                productId: item.productId,
+                variantId: item.detailId,
+                name: item.productName,
+                image: item.imageUrl || '',
+                size: item.size ?? '',
+                color: item.color ?? '',
+                price: Number(item.unitPrice),
+                originalPrice: Number(item.originalPrice),
+                stock: item.available,
+                quantity: item.quantity
+              }))
+            }));
+          // Chưa bán gì: chỉ hiện các hóa đơn đang chờ (hóa đơn đầu tiên được mở)
+          if (!restored.length) return prev;
+          return fresh ? restored : [...restored, ...prev];
+        })
+      )
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     loadPriceRanges();
@@ -263,7 +318,7 @@ export default function InStoreSalesPage() {
     setVariantDialogOpen(true);
 
     try {
-      const [res, salePrices] = await Promise.all([
+      const [res, sales] = await Promise.all([
         getProductById(id),
         api(`/sales/in-store/prices/${id}`).catch(() => ({}))
       ]);
@@ -289,9 +344,14 @@ export default function InStoreSalesPage() {
         product.mainImageUrl ||
         '';
 
-      // Giá sau khuyến mãi sản phẩm, giữ giá gốc để gạch ngang
       setVariantProduct({ ...product, ...item, productId: id, image });
-      setVariants(activeVariants.map((v) => ({ ...v, originalPrice: getPrice(v), price: salePrices[getVariantId(v)] ?? getPrice(v) })));
+      // Số lượng còn bán được đã trừ hàng giữ cho đơn khác
+      setVariants(
+        activeVariants.map((v) => {
+          const sale = sales[getVariantId(v)];
+          return { ...v, originalPrice: getPrice(v), price: sale?.price ?? getPrice(v), stockQuantity: sale?.available ?? getStock(v) };
+        })
+      );
       setSelectedSize(line ? String(line.size ?? '') : '');
       setSelectedColor(line ? String(line.color ?? '') : '');
       setVariantQuantity(line ? line.quantity : 1);
@@ -407,9 +467,10 @@ export default function InStoreSalesPage() {
     setSuccess('');
     try {
       const line = await scanToCartLine(code);
-      const salePrices = await api(`/sales/in-store/prices/${line.productId}`).catch(() => ({}));
+      const sale = (await api(`/sales/in-store/prices/${line.productId}`).catch(() => ({})))[line.variantId];
       line.originalPrice = line.price;
-      line.price = Number(salePrices[line.variantId] ?? line.price);
+      line.price = Number(sale?.price ?? line.price);
+      line.stock = sale?.available ?? line.stock;
       syncStock(line.key, line.stock);
       const inThis = cartRef.current.find((item) => item.key === line.key)?.quantity ?? 0;
       const others = otherTabsQty(line.key);
@@ -436,7 +497,7 @@ export default function InStoreSalesPage() {
   }
 
   // Máy quét cắm vào là dùng: bóp cò ở bất kỳ đâu trên trang (trừ khi đang mở hộp thoại khác).
-  useBarcodeScanner(addScanned, !variantDialogOpen && !receiptOpen && !discountOpen && !cameraOpen && !transferSale);
+  useBarcodeScanner(addScanned, !variantDialogOpen && !receiptOpen && !discountOpen && !cameraOpen && !qrTabId && !locked);
 
   function updateQuantity(key, delta) {
     setCart((current) =>
@@ -501,6 +562,7 @@ export default function InStoreSalesPage() {
     submittingRef.current = true;
     setSubmitting(true);
 
+    const tabId = activeOrder.id;
     try {
       const result = await api('/sales/in-store', {
         method: 'POST',
@@ -510,18 +572,29 @@ export default function InStoreSalesPage() {
             quantity: line.quantity
           })),
           discountAmount: discountValue,
-          paymentMethod: method === 'Cash' ? 'CASH' : 'BANK_TRANSFER'
+          paymentMethod: method === 'Cash' ? 'CASH' : 'BANK_TRANSFER',
+          expectedSubtotal: subtotal
         }
       });
 
-      if (result.orderStatus === 'AWAITING_PAYMENT') {
-        setPayment('Bank transfer');
-        setTransferSale(result);
+      if (result.orderStatus !== 'AWAITING_PAYMENT') {
+        const received = method === 'Cash' && rawPaidNumber > 0 ? rawPaidNumber : Number(result.totalAmount ?? total);
+        await finishSale(result, tabId, received, method === 'Cash' ? changeAmount : 0);
         return;
       }
 
-      await finishSale(result, method);
+      // Chuyển khoản: tạo mã PayOS, gắn đơn vào hóa đơn này rồi hiện QR
+      try {
+        const link = await api('/payment/payos/create-link', { method: 'POST', body: { orderId: result.orderId } });
+        updateOrder(tabId, { payment: 'Bank transfer', transfer: { sale: result, link } });
+        setQrTabId(tabId);
+        reloadProducts();
+      } catch (err) {
+        await api(`/sales/in-store/${result.orderId}/cancel`, { method: 'POST' }).catch(() => {});
+        throw new Error(`Không tạo được mã thanh toán: ${err.message || 'lỗi kết nối'}`);
+      }
     } catch (err) {
+      if (err.code === 'PRICE_CHANGED') await refreshCartPrices(tabId);
       setError(err.message || 'Không thể tạo đơn hàng. Vui lòng thử lại.');
     } finally {
       submittingRef.current = false;
@@ -529,8 +602,8 @@ export default function InStoreSalesPage() {
     }
   }
 
-  // Hiện hóa đơn, đóng tab vừa bán và tải lại tồn kho
-  async function finishSale(result, method) {
+  // Hiện hóa đơn, đóng hóa đơn vừa bán và tải lại tồn kho
+  async function finishSale(result, tabId, received = Number(result.totalAmount), change = 0) {
     const detail = await api(`/sales/in-store/${result.orderId}`).catch(() => null);
     const soldItems = detail?.items?.map((item) => ({
       key: item.orderItemId,
@@ -542,21 +615,54 @@ export default function InStoreSalesPage() {
     }));
 
     setCompletedSale(result);
-    setCompletedCart(soldItems?.length ? soldItems : [...cart]);
+    setCompletedCart(soldItems?.length ? soldItems : (ordersRef.current.find((o) => o.id === tabId)?.cart ?? []));
     setCompletedAt(new Date());
-    setCompletedPayment({
-      received: method === 'Cash' && rawPaidNumber > 0 ? rawPaidNumber : Number(result.totalAmount ?? total),
-      change: method === 'Cash' ? changeAmount : 0
-    });
+    setCompletedPayment({ received, change });
     setReceiptOpen(true);
-
-    const soldId = activeOrder.id;
-    const remaining = orders.filter((o) => o.id !== soldId);
-    const fresh = { id: Date.now(), label: 'Hóa đơn 1', cart: [], payment: 'Cash', discount: '', discountType: 'amount', customerPaid: '' };
-    setOrders((prev) => (remaining.length ? prev.filter((o) => o.id !== soldId) : [fresh]));
-    setActiveOrderId(remaining.length ? remaining[0].id : fresh.id);
-
+    setQrTabId((cur) => (cur === tabId ? null : cur));
+    removeTab(tabId);
     reloadProducts();
+  }
+
+  // Lấy lại giá sau khuyến mãi và số lượng còn bán được cho các sản phẩm trong hóa đơn
+  async function refreshCartPrices(tabId) {
+    const ids = [...new Set((ordersRef.current.find((o) => o.id === tabId)?.cart ?? []).map((line) => line.productId))];
+    const sales = Object.assign({}, ...(await Promise.all(ids.map((id) => api(`/sales/in-store/prices/${id}`).catch(() => ({}))))));
+    setOrders((prev) =>
+      prev.map((o) =>
+        o.id !== tabId
+          ? o
+          : {
+              ...o,
+              cart: o.cart.map((line) => {
+                const sale = sales[line.variantId];
+                return sale ? { ...line, price: Number(sale.price), stock: sale.available } : line;
+              })
+            }
+      )
+    );
+  }
+
+  // Hiện mã QR; hóa đơn mở lại sau khi tải trang chưa có mã thì tạo mã mới (mã cũ bị hủy)
+  async function showQr() {
+    const tab = activeOrder;
+    if (!tab.transfer.link) {
+      if (submittingRef.current) return;
+      submittingRef.current = true;
+      setSubmitting(true);
+      setError('');
+      try {
+        const link = await api(`/sales/in-store/${tab.transfer.sale.orderId}/payment-link`, { method: 'POST' });
+        updateOrder(tab.id, { transfer: { ...tab.transfer, link } });
+      } catch (err) {
+        setError(err.message || 'Không tạo được mã thanh toán.');
+        return;
+      } finally {
+        submittingRef.current = false;
+        setSubmitting(false);
+      }
+    }
+    setQrTabId(tab.id);
   }
 
   function reloadProducts() {
@@ -568,17 +674,69 @@ export default function InStoreSalesPage() {
       .catch(() => {});
   }
 
-  function handleTransferPaid(result) {
-    setTransferSale(null);
-    finishSale(result, 'Bank transfer');
+  function dropTransfer(tabId) {
+    updateOrder(tabId, { transfer: null, payment: 'Cash' });
+    setQrTabId((cur) => (cur === tabId ? null : cur));
   }
 
-  // Bỏ giữ hàng: quay về tiền mặt, giỏ hàng vẫn sửa được
-  function handleTransferCancelled(message) {
-    setTransferSale(null);
-    setPayment('Cash');
-    if (message) setError(message);
-    reloadProducts();
+  // Kiểm tra tiền về mỗi 3 giây cho mọi hóa đơn chờ chuyển khoản, kể cả khi đã tắt QR
+  const checkingRef = useRef(new Set());
+  const pendingKey = orders
+    .filter((o) => o.transfer)
+    .map((o) => o.transfer.sale.orderId)
+    .join(',');
+
+  useEffect(() => {
+    if (!pendingKey) return undefined;
+    const check = () =>
+      ordersRef.current
+        .filter((o) => o.transfer)
+        .forEach(async (o) => {
+          const { orderId } = o.transfer.sale;
+          if (checkingRef.current.has(orderId)) return;
+          checkingRef.current.add(orderId);
+          try {
+            const res = await api(`/payment/payos/status/${orderId}`);
+            if (res?.paid) await finishSale(await api(`/sales/in-store/${orderId}/complete`, { method: 'POST' }), o.id);
+          } catch (err) {
+            // Quá hạn giữ hàng: đơn đã bị hệ thống hủy
+            if (err.status === 404) {
+              dropTransfer(o.id);
+              setError(`${o.label}: mã chuyển khoản đã hết hạn, hàng đã trả về kho.`);
+            }
+          } finally {
+            checkingRef.current.delete(orderId);
+          }
+        });
+    check();
+    const timer = setInterval(check, 3000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingKey]);
+
+  // Hủy chuyển khoản: hủy mã PayOS, trả hàng về kho, mở khóa giỏ; khách đã chuyển thì hoàn tất luôn
+  async function cancelTransfer() {
+    const tab = activeOrder;
+    if (!tab.transfer || submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitting(true);
+    setError('');
+    try {
+      const result = await api(`/sales/in-store/${tab.transfer.sale.orderId}/cancel`, { method: 'POST' });
+      if (result?.orderId) {
+        setSuccess('Khách đã chuyển khoản xong, đã hoàn tất hóa đơn.');
+        await finishSale(result, tab.id);
+      } else {
+        dropTransfer(tab.id);
+        setSuccess('Đã hủy chuyển khoản.');
+        reloadProducts();
+      }
+    } catch (err) {
+      setError(err.message || 'Không hủy được chuyển khoản.');
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
+    }
   }
 
   function cancelInvoice() {
@@ -606,6 +764,7 @@ export default function InStoreSalesPage() {
 
   return (
     <Box
+      className={NO_EFFECTS}
       sx={{
         maxWidth: 1600,
         mx: 'auto',
@@ -635,6 +794,7 @@ export default function InStoreSalesPage() {
                   fullWidth
                   size="small"
                   placeholder="Tìm theo tên sản phẩm hoặc mã SKU"
+                  disabled={locked}
                   inputRef={searchInputRef}
                   value={search}
                   onFocus={() => setSearchOpen(true)}
@@ -665,6 +825,7 @@ export default function InStoreSalesPage() {
                         <IconButton
                           size="small"
                           aria-label="Quét mã bằng camera"
+                          disabled={locked}
                           title="Có máy quét: cứ bóp cò là thêm vào hóa đơn. Không có máy quét: bấm để quét bằng camera."
                           onClick={() => setCameraOpen(true)}
                         >
@@ -679,8 +840,7 @@ export default function InStoreSalesPage() {
                     '& .MuiOutlinedInput-root': {
                       borderRadius: 2.5,
                       height: 42,
-                      '& fieldset': { borderColor: '#E2E8F0' },
-                      '&:hover fieldset': { borderColor: '#8EECF5' },
+                      '& fieldset, &:hover fieldset': { borderColor: '#E2E8F0' },
                       '&.Mui-focused fieldset': { borderColor: '#8EECF5' }
                     }
                   }}
@@ -741,8 +901,7 @@ export default function InStoreSalesPage() {
                               px: 1.5,
                               py: 1,
                               cursor: 'pointer',
-                              opacity: isOut ? 0.55 : 1,
-                              '&:hover': { bgcolor: '#F0FDFF' }
+                              opacity: isOut ? 0.55 : 1
                             }}
                           >
                             <Box
@@ -843,13 +1002,23 @@ export default function InStoreSalesPage() {
               </Box>
             ) : (
               cart.map((line, index) => (
-                <Box key={line.key} sx={{ py: 1.25, borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', gap: 1.25 }}>
+                <Box
+                  key={line.key}
+                  sx={{
+                    py: 1.25,
+                    borderBottom: '1px solid #F1F5F9',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1.25,
+                    ...(locked && { pointerEvents: 'none', opacity: 0.6 })
+                  }}
+                >
                   <Typography sx={{ width: 22, fontSize: 12.5, fontWeight: 700, color: '#94A3B8', textAlign: 'center', flexShrink: 0 }}>
                     {index + 1}
                   </Typography>
                   <Box
                     component="img"
-                    src={line.image || ''}
+                    src={line.image || undefined}
                     alt={line.name}
                     onClick={() => setInfoLine(line)}
                     sx={{
@@ -860,9 +1029,7 @@ export default function InStoreSalesPage() {
                       objectFit: 'cover',
                       bgcolor: '#F8FAFC',
                       flexShrink: 0,
-                      border: '1px solid #E2E8F0',
-                      transition: 'border-color .15s',
-                      '&:hover': { borderColor: '#8EECF5' }
+                      border: '1px solid #E2E8F0'
                     }}
                   />
                   <Box
@@ -944,7 +1111,7 @@ export default function InStoreSalesPage() {
                   <IconButton
                     size="small"
                     onClick={() => setCart((prev) => prev.filter((item) => item.key !== line.key))}
-                    sx={{ p: 0.5, color: '#94A3B8', flexShrink: 0, '&:hover': { color: '#EF4444' } }}
+                    sx={{ p: 0.5, color: '#94A3B8', flexShrink: 0 }}
                   >
                     <CloseOutlined style={{ fontSize: 11 }} />
                   </IconButton>
@@ -973,7 +1140,7 @@ export default function InStoreSalesPage() {
           {/* Thanh danh sách tab hóa đơn chờ kiểu Sapo */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5, overflowX: 'auto', pb: 0.25 }}>
             {orders.map((ord) => {
-              const isActiveTab = ord.id === activeOrderId;
+              const isActiveTab = ord.id === activeOrder.id;
 
               return (
                 <Box
@@ -995,15 +1162,15 @@ export default function InStoreSalesPage() {
                     fontSize: 12,
                     whiteSpace: 'nowrap',
                     userSelect: 'none',
-                    boxSizing: 'border-box',
-                    transition: 'background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease',
-                    '&:hover': {
-                      bgcolor: isActiveTab ? '#FEF9C3' : '#E2E8F0',
-                      color: '#0F172A'
-                    }
+                    boxSizing: 'border-box'
                   }}
                 >
                   <span>{ord.label}</span>
+                  {ord.transfer && (
+                    <Box component="span" sx={{ fontSize: 10.5, fontWeight: 700, color: '#B45309' }}>
+                      · Chờ thanh toán
+                    </Box>
+                  )}
                   {orders.length > 1 && (
                     <Box
                       component="span"
@@ -1017,8 +1184,7 @@ export default function InStoreSalesPage() {
                         borderRadius: 99,
                         fontSize: 11,
                         color: '#94A3B8',
-                        ml: 0.25,
-                        '&:hover': { bgcolor: '#FEE2E2', color: '#EF4444' }
+                        ml: 0.25
                       }}
                       title="Đóng hóa đơn này"
                     >
@@ -1049,13 +1215,7 @@ export default function InStoreSalesPage() {
                 fontSize: 15,
                 fontWeight: 700,
                 flexShrink: 0,
-                outline: 'none',
-                transition: 'all 0.15s ease',
-                '&:hover': {
-                  borderColor: '#0F172A',
-                  color: '#0F172A',
-                  bgcolor: '#F8FAFC'
-                }
+                outline: 'none'
               }}
             >
               +
@@ -1080,7 +1240,7 @@ export default function InStoreSalesPage() {
                 fontWeight: 700
               }}
             >
-              Đang tạo
+              {locked ? 'Chờ thanh toán' : 'Đang tạo'}
             </Box>
           </Box>
 
@@ -1104,8 +1264,9 @@ export default function InStoreSalesPage() {
                 </Typography>
                 <IconButton
                   size="small"
+                  disabled={locked}
                   onClick={openDiscount}
-                  sx={{ p: 0.25, color: '#64748B', '&:hover': { color: '#0F172A' } }}
+                  sx={{ p: 0.25, color: '#64748B' }}
                 >
                   <EditOutlined style={{ fontSize: 12 }} />
                 </IconButton>
@@ -1139,6 +1300,7 @@ export default function InStoreSalesPage() {
                 component="button"
                 type="button"
                 onClick={() => setPayment('Cash')}
+                disabled={locked}
                 sx={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -1155,12 +1317,9 @@ export default function InStoreSalesPage() {
                   cursor: 'pointer',
                   boxShadow: 'none',
                   outline: 'none',
-                  transition: 'none',
                   WebkitTapHighlightColor: 'transparent',
                   userSelect: 'none',
-                  '&:hover': {
-                    bgcolor: payment === 'Cash' ? '#FEF9C3' : '#F8FAFC'
-                  }
+                  '&:disabled': { opacity: 0.5, cursor: 'not-allowed' }
                 }}
               >
                 <DollarOutlined />
@@ -1170,8 +1329,8 @@ export default function InStoreSalesPage() {
               <Box
                 component="button"
                 type="button"
-                onClick={() => completeSale('Bank transfer')}
-                disabled={submitting || Boolean(transferSale)}
+                onClick={() => (locked ? showQr() : completeSale('Bank transfer'))}
+                disabled={submitting}
                 sx={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -1188,12 +1347,8 @@ export default function InStoreSalesPage() {
                   cursor: 'pointer',
                   boxShadow: 'none',
                   outline: 'none',
-                  transition: 'none',
                   WebkitTapHighlightColor: 'transparent',
-                  userSelect: 'none',
-                  '&:hover': {
-                    bgcolor: payment === 'Bank transfer' ? '#FEF9C3' : '#F8FAFC'
-                  }
+                  userSelect: 'none'
                 }}
               >
                 <BankOutlined />
@@ -1206,12 +1361,12 @@ export default function InStoreSalesPage() {
                   <Typography sx={{ fontSize: 13, color: '#64748B', fontWeight: 600 }}>Tiền khách trả</Typography>
                   <TextField
                     size="small"
-                    inputMode="numeric"
                     placeholder={total > 0 ? Number(total).toLocaleString('vi-VN') : '0'}
                     value={customerPaid}
                     onChange={(e) => setCustomerPaid(formatNumberInput(e.target.value))}
-                    InputProps={{
-                      endAdornment: <InputAdornment position="end">đ</InputAdornment>
+                    slotProps={{
+                      input: { endAdornment: <InputAdornment position="end">đ</InputAdornment> },
+                      htmlInput: { inputMode: 'numeric' }
                     }}
                     sx={{
                       width: 140,
@@ -1242,10 +1397,11 @@ export default function InStoreSalesPage() {
               fullWidth
               variant="contained"
               onClick={() => completeSale('Cash')}
-              disabled={submitting}
+              disabled={submitting || locked}
               startIcon={!submitting && <CheckOutlined />}
               sx={{
                 bgcolor: '#8EECF5',
+                '&:hover': { bgcolor: '#8EECF5' },
                 color: '#0F172A',
                 fontWeight: 800,
                 fontSize: 13.5,
@@ -1253,33 +1409,29 @@ export default function InStoreSalesPage() {
                 borderRadius: 2.5,
                 textTransform: 'none',
                 boxShadow: 'none',
-                '&:hover': {
-                  bgcolor: '#76DCED',
-                  boxShadow: '0 2px 10px rgba(142, 236, 245, 0.45)'
-                },
                 '&.Mui-disabled': {
                   bgcolor: '#E2E8F0',
                   color: '#94A3B8'
                 }
               }}
             >
-              {submitting ? 'Đang xử lý...' : 'Hoàn tất thanh toán'}
+              {submitting ? 'Đang xử lý...' : locked ? 'Đang chờ khách chuyển khoản' : 'Hoàn tất thanh toán'}
             </Button>
 
             <Box sx={{ textAlign: 'center', mt: 0.75 }}>
               <Button
                 size="small"
-                onClick={cancelInvoice}
+                onClick={locked ? cancelTransfer : cancelInvoice}
+                disabled={submitting}
                 startIcon={<DeleteOutlined style={{ fontSize: 12 }} />}
                 sx={{
                   color: '#64748B',
                   fontSize: 12,
                   fontWeight: 600,
-                  textTransform: 'none',
-                  '&:hover': { color: '#EF4444', bgcolor: 'transparent' }
+                  textTransform: 'none'
                 }}
               >
-                Hủy hóa đơn
+                {locked ? 'Hủy chuyển khoản' : 'Hủy hóa đơn'}
               </Button>
             </Box>
           </Box>
@@ -1287,13 +1439,15 @@ export default function InStoreSalesPage() {
       </Box>
 
       {/* ─── MODAL CHỌN BIẾN THỂ SẢN PHẨM (ẢNH 2) ─── */}
+      <GlobalStyles styles={noEffectStyles} />
       <Dialog
+        className={NO_EFFECTS}
         open={variantDialogOpen}
         onClose={closeDialog}
-        TransitionProps={{ onExited: resetDialog }}
         fullWidth
         maxWidth="sm"
         slotProps={{
+          transition: { onExited: resetDialog },
           paper: {
             sx: {
               maxWidth: 500,
@@ -1333,7 +1487,7 @@ export default function InStoreSalesPage() {
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                   <Box
                     component="img"
-                    src={variantProduct?.image || ''}
+                    src={variantProduct?.image || undefined}
                     alt={variantProduct?.productName}
                     sx={{
                       width: 58,
@@ -1402,13 +1556,7 @@ export default function InStoreSalesPage() {
                           border: isSelected ? '1.5px solid #64748B' : '1.5px solid #E2E8F0',
                           cursor: hasStock ? 'pointer' : 'not-allowed',
                           opacity: hasStock ? 1 : 0.4,
-                          outline: 'none',
-                          transition: 'none',
-                          '&:hover': hasStock
-                            ? {
-                                borderColor: isSelected ? '#64748B' : '#94A3B8'
-                              }
-                            : {}
+                          outline: 'none'
                         }}
                       >
                         {size}
@@ -1449,13 +1597,7 @@ export default function InStoreSalesPage() {
                           border: isSelected ? '1.5px solid #64748B' : '1.5px solid #E2E8F0',
                           cursor: inStock ? 'pointer' : 'not-allowed',
                           opacity: inStock ? 1 : 0.4,
-                          outline: 'none',
-                          transition: 'none',
-                          '&:hover': inStock
-                            ? {
-                                borderColor: isSelected ? '#64748B' : '#94A3B8'
-                              }
-                            : {}
+                          outline: 'none'
                         }}
                       >
                         {color}
@@ -1556,8 +1698,7 @@ export default function InStoreSalesPage() {
                       height: 30,
                       px: 1.5,
                       borderRadius: 1.5,
-                      textTransform: 'none',
-                      '&:hover': { bgcolor: '#F8FAFC' }
+                      textTransform: 'none'
                     }}
                   >
                     Hủy
@@ -1571,6 +1712,7 @@ export default function InStoreSalesPage() {
                     startIcon={<PlusOutlined style={{ fontSize: 10 }} />}
                     sx={{
                       bgcolor: '#8EECF5',
+                      '&:hover': { bgcolor: '#8EECF5' },
                       color: '#0F172A',
                       fontWeight: 700,
                       fontSize: 11.5,
@@ -1579,10 +1721,6 @@ export default function InStoreSalesPage() {
                       borderRadius: 1.5,
                       textTransform: 'none',
                       boxShadow: 'none',
-                      '&:hover': {
-                        bgcolor: '#76DCED',
-                        boxShadow: '0 2px 8px rgba(142, 236, 245, 0.4)'
-                      },
                       '&.Mui-disabled': {
                         bgcolor: '#E2E8F0',
                         color: '#94A3B8'
@@ -1600,6 +1738,7 @@ export default function InStoreSalesPage() {
 
       {/* ─── POPUP GIẢM GIÁ ─── */}
       <Dialog
+        className={NO_EFFECTS}
         open={discountOpen}
         onClose={() => setDiscountOpen(false)}
         fullWidth
@@ -1661,8 +1800,10 @@ export default function InStoreSalesPage() {
                 ? `= ${money(Math.round((subtotal * Math.min(100, Number(draftValue))) / 100))}`
                 : `Tổng tiền hàng: ${money(subtotal)}`)
             }
-            inputProps={{ inputMode: 'numeric' }}
-            InputProps={{ endAdornment: <InputAdornment position="end">{draftType === 'percent' ? '%' : 'đ'}</InputAdornment> }}
+            slotProps={{
+              input: { endAdornment: <InputAdornment position="end">{draftType === 'percent' ? '%' : 'đ'}</InputAdornment> },
+              htmlInput: { inputMode: 'numeric' }
+            }}
             sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, height: 40 } }}
           />
 
@@ -1678,8 +1819,7 @@ export default function InStoreSalesPage() {
                 height: 34,
                 px: 2,
                 borderRadius: 1.5,
-                textTransform: 'none',
-                '&:hover': { bgcolor: '#F8FAFC' }
+                textTransform: 'none'
               }}
             >
               Hủy
@@ -1690,6 +1830,7 @@ export default function InStoreSalesPage() {
               onClick={applyDiscount}
               sx={{
                 bgcolor: '#8EECF5',
+                '&:hover': { bgcolor: '#8EECF5' },
                 color: '#0F172A',
                 fontWeight: 700,
                 fontSize: 12.5,
@@ -1697,8 +1838,7 @@ export default function InStoreSalesPage() {
                 px: 2,
                 borderRadius: 1.5,
                 textTransform: 'none',
-                boxShadow: 'none',
-                '&:hover': { bgcolor: '#76DCED', boxShadow: 'none' }
+                boxShadow: 'none'
               }}
             >
               Áp dụng
@@ -1712,7 +1852,7 @@ export default function InStoreSalesPage() {
       <Snackbar
         open={Boolean(error || success)}
         autoHideDuration={5000}
-        onClose={(e, reason) => {
+        onClose={(_, reason) => {
           if (reason === 'clickaway') return;
           setError('');
           setSuccess('');
@@ -1747,7 +1887,7 @@ export default function InStoreSalesPage() {
 
       <ProductInfoDialog line={infoLine} onClose={() => setInfoLine(null)} />
 
-      <TransferQrDialog sale={transferSale} onPaid={handleTransferPaid} onCancelled={handleTransferCancelled} />
+      <TransferQrDialog transfer={qrTransfer} onClose={() => setQrTabId(null)} />
     </Box>
   );
 }

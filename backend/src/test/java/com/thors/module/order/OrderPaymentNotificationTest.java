@@ -36,7 +36,7 @@ class OrderPaymentNotificationTest {
 
     private void order(String status, String payment) {
         when(orders.findPayableForUpdate(10))
-                .thenReturn(Optional.of(new Payable(10, 5, "ORD-10", status, payment)));
+                .thenReturn(Optional.of(new Payable(10, 5, "ORD-10", "Online", status, payment)));
     }
 
     @Test

@@ -83,7 +83,7 @@ export const lockMessage = (p) => {
 
 export function NoticeDialog({ message, onClose }) {
   return (
-    <Dialog open={Boolean(message)} onClose={onClose} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 3.5, border: `1px solid ${C.border}`, p: 1 } }}>
+    <Dialog open={Boolean(message)} onClose={onClose} maxWidth="xs" fullWidth slotProps={{ paper: { sx: { borderRadius: 3.5, border: `1px solid ${C.border}`, p: 1 } } }}>
       <DialogTitle sx={{ color: C.text, fontWeight: 700, fontSize: 17, pb: 1 }}>Không thể thực hiện</DialogTitle>
       <DialogContent>
         <Typography sx={{ fontSize: 13.5, color: C.muted, lineHeight: 1.6 }}>{message}</Typography>

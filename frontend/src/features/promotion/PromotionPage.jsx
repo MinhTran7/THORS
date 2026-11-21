@@ -94,7 +94,7 @@ function PromotionSwitch({ promotion, onToggle, disabled }) {
   const active = !isEnded && promotion.status === 'ACTIVE';
 
   return (
-    <Stack direction="row" alignItems="center" spacing={1.25} sx={{ pt: 0.5 }}>
+    <Stack direction="row" spacing={1.25} sx={{ pt: 0.5, alignItems: 'center' }}>
       <Switch
         checked={active}
         disabled={disabled}
@@ -408,12 +408,14 @@ function OwnerPromotionView({ kind }) {
               setSearch(e.target.value);
               setPage(1);
             }}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchOutlined style={{ color: '#94A3B8', fontSize: 16 }} />
-                </InputAdornment>
-              )
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchOutlined style={{ color: '#94A3B8', fontSize: 16 }} />
+                  </InputAdornment>
+                )
+              }
             }}
             sx={{
               '& .MuiOutlinedInput-root': {
@@ -617,7 +619,7 @@ function OwnerPromotionView({ kind }) {
 
                           {/* Thao tác - Icon phẳng đơn giản */}
                           <TableCell align="center" sx={{ pr: 3 }}>
-                            <Stack direction="row" justifyContent="center" alignItems="center" spacing={0.5}>
+                            <Stack direction="row" spacing={0.5} sx={{ justifyContent: 'center', alignItems: 'center' }}>
                               <Tooltip title="Xem chi tiết">
                                 <IconButton
                                   size="small"
@@ -680,8 +682,8 @@ function OwnerPromotionView({ kind }) {
         onClose={() => !changingStatus && setStatusTarget(null)}
         maxWidth="xs"
         fullWidth
-        PaperProps={{
-          sx: { borderRadius: 3.5, border: `1px solid ${C.border}`, p: 1 }
+        slotProps={{
+          paper: { sx: { borderRadius: 3.5, border: `1px solid ${C.border}`, p: 1 } }
         }}
       >
         <DialogTitle sx={{ color: C.text, fontWeight: 700, fontSize: 17, pb: 1 }}>

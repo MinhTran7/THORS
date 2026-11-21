@@ -17,6 +17,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.function.BiFunction;
 
 @Service
 public class PromotionService {
@@ -83,6 +84,22 @@ public class PromotionService {
                 .orElse(price);
     }
 
+    /**
+     * Tính giá sau khuyến mãi cho nhiều sản phẩm: chỉ đọc các khuyến mãi đang chạy một lần.
+     * Kết quả giống salePrice cho từng sản phẩm.
+     */
+    public BiFunction<Integer, BigDecimal, BigDecimal> salePricer() {
+        List<Promotion> running = repository.findRunningProductPromotions(LocalDateTime.now()).stream()
+                .map(this::withProductIds)
+                .toList();
+
+        return (productId, price) -> running.stream()
+                .filter(p -> "ALL".equals(p.applyScope()) || p.productIds().contains(productId))
+                .findFirst()
+                .map(p -> price.subtract(p.discountOf(price)))
+                .orElse(price);
+    }
+
     @Transactional
     public Promotion create(CreatePromotionRequest request) {
         requireOwner();
@@ -113,7 +130,7 @@ public class PromotionService {
         validateName(name);
         validateDescription(description);
         validateDiscount(type, value);
-        validateMinimum(minimum);
+        validateMinimum(type, value, minimum);
         validateCreateDates(startDate, endDate);
         validateUsageLimit(minimum, usageLimit);
 
@@ -188,7 +205,7 @@ public class PromotionService {
         validateName(name);
         validateDescription(description);
         validateDiscount(type, value);
-        validateMinimum(minimum);
+        validateMinimum(type, value, minimum);
         validateCreateDates(startDate, endDate);
         validateUsageLimit(minimum, usageLimit);
 
@@ -458,11 +475,18 @@ public class PromotionService {
         }
     }
 
-    private void validateMinimum(BigDecimal minimum) {
+    private void validateMinimum(String type, BigDecimal value, BigDecimal minimum) {
         if (minimum == null || minimum.compareTo(ZERO) < 0) {
             throw badRequest(
                     "PROMOTION_MINIMUM_INVALID",
                     "Giá trị đơn hàng tối thiểu phải lớn hơn hoặc bằng 0."
+            );
+        }
+
+        if ("FIXED".equals(type) && isPositive(minimum) && value.compareTo(minimum) >= 0) {
+            throw badRequest(
+                    "PROMOTION_VALUE_INVALID",
+                    "Số tiền giảm phải nhỏ hơn giá trị đơn tối thiểu."
             );
         }
     }
@@ -526,4 +550,4 @@ public class PromotionService {
     private ApiException badRequest(String code, String message) {
         return new ApiException(400, code, message);
     }
-}
+}

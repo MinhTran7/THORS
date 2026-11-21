@@ -1,7 +1,5 @@
 package com.thors.module.shippingaddress.dto;
 
-import java.math.BigDecimal;
-
 public record ShippingAddressRequest(
         String recipientName,
         String phone,
@@ -10,7 +8,5 @@ public record ShippingAddressRequest(
         String wardCode,
         String wardName,
         String addressDetail,
-        BigDecimal latitude,
-        BigDecimal longitude,
         Boolean isDefault) {
 }

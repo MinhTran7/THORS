@@ -315,7 +315,7 @@ export default function InStoreSaleDetailPage() {
                   >
                     {/* Sản phẩm */}
                     <TableCell sx={{ pl: 3 }}>
-                      <Stack direction="row" spacing={2} alignItems="center">
+                      <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
                         <Box
                           sx={{
                             width: 48,

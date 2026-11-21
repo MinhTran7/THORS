@@ -278,47 +278,92 @@ public class PayOSService {
         }
 
         // Nếu PayOS đang bật, gọi trực tiếp PayOS API để đồng bộ trạng thái
-        if (properties.isEnabled() && properties.getApiKey() != null && !properties.getApiKey().isBlank()) {
-            try {
-                HttpRequest request = HttpRequest.newBuilder()
-                        .uri(URI.create(properties.getEndpoint() + "/v2/payment-requests/" + p.transactionRef()))
-                        .header("x-client-id", properties.getClientId())
-                        .header("x-api-key", properties.getApiKey())
-                        .GET()
-                        .timeout(Duration.ofSeconds(10))
-                        .build();
-
-                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-                if (response.statusCode() == 200) {
-                    PayOSApiResponse apiResponse = objectMapper.readValue(response.body(), PayOSApiResponse.class);
-                    if (apiResponse.isSuccess() && apiResponse.getData() != null) {
-                        String status = (String) apiResponse.getData().get("status");
-                        if ("PAID".equalsIgnoreCase(status)) {
-                            paymentRepository.markPaymentSuccess(p.transactionRef());
-                            // Giao dịch đầu tiên có tài khoản người chuyển (counterAccount*)
-                            Object txs = apiResponse.getData().get("transactions");
-                            if (txs instanceof List<?> list) {
-                                for (Object tx : list) {
-                                    if (tx instanceof Map<?, ?> m && m.get("counterAccountNumber") != null) {
-                                        @SuppressWarnings("unchecked")
-                                        Map<String, Object> txMap = (Map<String, Object>) m;
-                                        paymentRepository.savePayerAccount(p.transactionRef(), txMap);
-                                        break;
-                                    }
-                                }
-                            }
-                            orderService.onOnlinePaymentPaid(orderId);
-                            log.info("PayOS CheckStatus: Đã đồng bộ thành công trạng thái PAID cho orderId={}", orderId);
-                            return Map.of("paid", true, "orderId", orderId, "paymentStatus", "PAID");
-                        }
+        Map<String, Object> data = fetchPaymentRequest(p.transactionRef());
+        if (data != null && "PAID".equalsIgnoreCase((String) data.get("status"))) {
+            paymentRepository.markPaymentSuccess(p.transactionRef());
+            // Giao dịch đầu tiên có tài khoản người chuyển (counterAccount*)
+            if (data.get("transactions") instanceof List<?> list) {
+                for (Object tx : list) {
+                    if (tx instanceof Map<?, ?> m && m.get("counterAccountNumber") != null) {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> txMap = (Map<String, Object>) m;
+                        paymentRepository.savePayerAccount(p.transactionRef(), txMap);
+                        break;
                     }
                 }
-            } catch (Exception e) {
-                log.warn("Không thể kiểm tra trạng thái từ PayOS: {}", e.getMessage());
             }
+            orderService.onOnlinePaymentPaid(orderId);
+            log.info("PayOS CheckStatus: Đã đồng bộ thành công trạng thái PAID cho orderId={}", orderId);
+            return Map.of("paid", true, "orderId", orderId, "paymentStatus", "PAID");
         }
 
         return Map.of("paid", false, "orderId", orderId, "paymentStatus", order.paymentStatus());
     }
-}
 
+    /**
+     * Hủy link PayOS mới nhất của đơn để khách không chuyển được nữa.
+     * Trả về true nếu khách đã thanh toán (không hủy, đơn đã được đánh dấu PAID).
+     */
+    @Transactional
+    public boolean cancelPaymentLink(Account actor, int orderId) {
+        var latest = paymentRepository.findLatestByOrderId(orderId).orElse(null);
+        if (latest == null || latest.transactionRef() == null || !properties.isEnabled()) {
+            return false;
+        }
+
+        String ref = latest.transactionRef();
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(properties.getEndpoint() + "/v2/payment-requests/" + ref + "/cancel"))
+                    .header("Content-Type", "application/json")
+                    .header("x-client-id", properties.getClientId())
+                    .header("x-api-key", properties.getApiKey())
+                    .POST(HttpRequest.BodyPublishers.ofString(
+                            "{\"cancellationReason\":\"Khách hủy chuyển khoản\"}", StandardCharsets.UTF_8))
+                    .timeout(Duration.ofSeconds(10))
+                    .build();
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            if (objectMapper.readValue(response.body(), PayOSApiResponse.class).isSuccess()) {
+                return false;
+            }
+        } catch (Exception e) {
+            log.warn("Không hủy được link PayOS {}: {}", ref, e.getMessage());
+        }
+
+        // Hủy không được: link đã đóng thì coi như hủy xong, vừa được trả thì báo đã thanh toán
+        Map<String, Object> data = fetchPaymentRequest(ref);
+        String status = data == null ? null : (String) data.get("status");
+        if ("CANCELLED".equalsIgnoreCase(status) || "EXPIRED".equalsIgnoreCase(status)) {
+            return false;
+        }
+        if ("PAID".equalsIgnoreCase(status)) {
+            return Boolean.TRUE.equals(checkPaymentStatus(actor, orderId).get("paid"));
+        }
+        throw new ApiException(502, "PAYOS_CANCEL_ERROR", "Không hủy được mã thanh toán, vui lòng thử lại.");
+    }
+
+    // Thông tin link thanh toán trên PayOS; null nếu PayOS tắt hoặc không gọi được
+    private Map<String, Object> fetchPaymentRequest(String ref) {
+        if (!properties.isEnabled() || properties.getApiKey() == null || properties.getApiKey().isBlank()) {
+            return null;
+        }
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(properties.getEndpoint() + "/v2/payment-requests/" + ref))
+                    .header("x-client-id", properties.getClientId())
+                    .header("x-api-key", properties.getApiKey())
+                    .GET()
+                    .timeout(Duration.ofSeconds(10))
+                    .build();
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            if (response.statusCode() != 200) {
+                return null;
+            }
+            PayOSApiResponse apiResponse = objectMapper.readValue(response.body(), PayOSApiResponse.class);
+            return apiResponse.isSuccess() ? apiResponse.getData() : null;
+        } catch (Exception e) {
+            log.warn("Không thể kiểm tra trạng thái từ PayOS: {}", e.getMessage());
+            return null;
+        }
+    }
+}

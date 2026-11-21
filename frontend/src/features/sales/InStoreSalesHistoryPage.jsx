@@ -187,12 +187,14 @@ export default function InStoreSalesHistoryPage() {
             placeholder="Tìm theo mã hóa đơn..."
             value={q}
             onChange={(e) => handleSearchChange(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchOutlined style={{ color: '#94A3B8', fontSize: 16 }} />
-                </InputAdornment>
-              )
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchOutlined style={{ color: '#94A3B8', fontSize: 16 }} />
+                  </InputAdornment>
+                )
+              }
             }}
             sx={{
               '& .MuiOutlinedInput-root': {
@@ -292,9 +294,6 @@ export default function InStoreSalesHistoryPage() {
             type="date"
             value={fromDate}
             onChange={(e) => handleFromDateChange(e.target.value)}
-            inputProps={{
-              max: toDate && toDate < today ? toDate : today
-            }}
             slotProps={{
               htmlInput: {
                 max: toDate && toDate < today ? toDate : today
@@ -324,10 +323,6 @@ export default function InStoreSalesHistoryPage() {
             type="date"
             value={toDate}
             onChange={(e) => handleToDateChange(e.target.value)}
-            inputProps={{
-              min: fromDate || undefined,
-              max: today
-            }}
             slotProps={{
               htmlInput: {
                 min: fromDate || undefined,

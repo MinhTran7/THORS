@@ -855,18 +855,19 @@ public class OrderRepository {
     // ------------------------------------------------------------------
 
     /** Đơn đang chờ ghi nhận thanh toán: trạng thái trước khi ghi nhận để biết cần báo gì. */
-    public record Payable(int orderId, int userId, String orderNumber, String orderStatus, String paymentStatus) {}
+    public record Payable(int orderId, int userId, String orderNumber, String orderType, String orderStatus, String paymentStatus) {}
 
     /** Khóa dòng (FOR UPDATE) để webhook và lần kiểm tra trạng thái chạy cùng lúc không báo trùng. */
     public Optional<Payable> findPayableForUpdate(int orderId) {
         return db.query(
-                        "SELECT order_id, user_id, order_number, order_status, payment_status"
+                        "SELECT order_id, user_id, order_number, order_type, order_status, payment_status"
                                 + " FROM orders WHERE order_id = ? FOR UPDATE",
                         (rs, i) ->
                                 new Payable(
                                         rs.getInt("order_id"),
                                         rs.getInt("user_id"),
                                         rs.getString("order_number"),
+                                        rs.getString("order_type"),
                                         rs.getString("order_status"),
                                         rs.getString("payment_status")),
                         orderId)
@@ -903,4 +904,4 @@ public class OrderRepository {
         }
         return out;
     }
-}
+}

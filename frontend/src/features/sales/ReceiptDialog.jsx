@@ -104,17 +104,20 @@ export default function ReceiptDialog({
       `}</style>
 
       <Dialog
+        className="pos-no-effects"
         open={open}
         onClose={onClose}
         fullWidth
         maxWidth="xs"
-        PaperProps={{
-          sx: {
-            width: '100%',
-            maxWidth: 420,
-            m: 1.5,
-            borderRadius: 3,
-            boxShadow: '0 8px 32px rgba(32,45,66,0.14)'
+        slotProps={{
+          paper: {
+            sx: {
+              width: '100%',
+              maxWidth: 420,
+              m: 1.5,
+              borderRadius: 3,
+              boxShadow: '0 8px 32px rgba(32,45,66,0.14)'
+            }
           }
         }}
       >
@@ -236,7 +239,7 @@ export default function ReceiptDialog({
               py: 1,
               bgcolor: C.text,
               color: '#fff',
-              '&:hover': { bgcolor: '#2C3E55' }
+              '&:hover': { bgcolor: C.text }
             }}
           >
             In hóa đơn
@@ -252,7 +255,7 @@ export default function ReceiptDialog({
               py: 1,
               bgcolor: C.main,
               color: C.text,
-              '&:hover': { bgcolor: '#6BDCE7' }
+              '&:hover': { bgcolor: C.main }
             }}
           >
             {closeText}
