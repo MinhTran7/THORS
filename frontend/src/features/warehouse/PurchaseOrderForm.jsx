@@ -22,7 +22,7 @@ import { CloseOutlined } from '@ant-design/icons';
 import { api } from 'services/http';
 import { getCategories } from 'services/categoryService';
 import { useWarehouse } from './WarehouseContext';
-import { Field } from './components';
+import { Field, DialogClose } from './components';
 import { docCode, money, number, supplierKey, variantLabel } from './model';
 import VariantPicker from './VariantPicker';
 import QuickCreateDialog from './QuickCreateDialog';
@@ -58,7 +58,6 @@ export default function PurchaseOrderForm({ document, onClose }) {
       ? document.items.map((i) => ({ detailId: i.detail_id, quantity: i.quantity, unitPrice: Number(i.unit_price), info: i }))
       : []
   );
-  const [selected, setSelected] = useState(new Map());
   const [created, setCreated] = useState([]);
   const [quick, setQuick] = useState(null);
   const [excelOpen, setExcelOpen] = useState(false);
@@ -85,11 +84,6 @@ export default function PurchaseOrderForm({ document, onClose }) {
     return [...known.values()];
   }, [data.variants, created]);
   const variantById = useMemo(() => new Map(variants.map((v) => [v.detail_id, v])), [variants]);
-  const products = useMemo(() => {
-    const map = new Map();
-    variants.forEach((v) => map.set(v.product_id, { product_id: v.product_id, product_name: v.product_name }));
-    return [...map.values()].sort((a, b) => a.product_name.localeCompare(b.product_name, 'vi'));
-  }, [variants]);
   const existingIds = useMemo(() => new Set(items.map((i) => i.detailId)), [items]);
 
   // Returns an error message, or '' when the rows were added.
@@ -105,16 +99,25 @@ export default function PurchaseOrderForm({ document, onClose }) {
     const name = String(value || '').trim();
     if (!name || supplierKey(name) === supplierKey(supplier)) return;
     if (items.length) setPendingSupplier(name);
-    else {
-      setSupplier(name);
-      setSelected(new Map());
+    else setSupplier(name);
+  };
+
+  // Ticking a row in the picker puts it straight on the order; unticking takes it off.
+  const toggleLines = (rows, add) => {
+    if (add) {
+      const problem = addLines(rows);
+      if (problem) setError(problem);
+      return;
     }
+    const ids = new Set(rows.map((r) => r.detail_id));
+    setItems((old) => old.filter((i) => !ids.has(i.detailId)));
   };
 
   const update = (idx, patch) => setItems(items.map((x, i) => (i === idx ? { ...x, ...patch } : x)));
   const amount = items.reduce((n, i) => n + Number(i.quantity || 0) * Number(i.unitPrice || 0), 0);
 
-  const save = async () => {
+  // confirmNow: chủ cửa hàng lưu rồi xác nhận đặt hàng luôn (không cần mở lại phiếu nháp).
+  const save = async (confirmNow = false) => {
     if (savingRef.current) return; // double-click guard
     setError('');
     if (!supplier.trim()) return setError('Chọn nhà cung cấp trước.');
@@ -133,9 +136,10 @@ export default function PurchaseOrderForm({ document, onClose }) {
     savingRef.current = true;
     setSaving(true);
     try {
+      let saved = null;
       await run(
-        () =>
-          api(`/warehouse/documents${document ? `/${document.receipt_id}` : ''}`, {
+        async () => {
+          saved = await api(`/warehouse/documents${document ? `/${document.receipt_id}` : ''}`, {
             method: document ? 'PUT' : 'POST',
             body: {
               type: 'PURCHASE_ORDER',
@@ -144,11 +148,29 @@ export default function PurchaseOrderForm({ document, onClose }) {
               note: note.trim(),
               items: items.map((i) => ({ detailId: i.detailId, sourceItemId: null, quantity: Number(i.quantity), unitPrice: Number(i.unitPrice) }))
             }
-          }),
-        reviewing ? 'Đã lưu thay đổi. Phiếu vẫn chờ xác nhận.' : 'Đã lưu phiếu đặt nháp.'
+          });
+          if (confirmNow) {
+            try {
+              await api(`/warehouse/documents/${saved?.receipt_id ?? document.receipt_id}/confirm`, { method: 'POST' });
+            } catch (e) {
+              // Phiếu đã lưu: lần bấm sau phải sửa đúng phiếu đó, không tạo phiếu mới
+              throw new Error(`Đã lưu phiếu nháp nhưng chưa xác nhận được: ${e.message} Mở phiếu trong danh sách để xác nhận lại.`);
+            }
+          }
+          return saved;
+        },
+        confirmNow
+          ? 'Đã lưu và xác nhận phiếu đặt hàng. Khi hàng về, lập phiếu nhập từ phiếu đặt này.'
+          : reviewing
+            ? 'Đã lưu thay đổi. Phiếu vẫn chờ xác nhận.'
+            : 'Đã lưu phiếu đặt nháp.'
       );
       onClose();
     } catch (e) {
+      if (e.message.startsWith('Đã lưu phiếu nháp nhưng')) {
+        onClose();
+        return;
+      }
       setError(
         `${e.message}${created.length ? ' Hàng vừa tạo nhanh vẫn được giữ trên phiếu; bấm lưu lại sẽ không tạo lại sản phẩm.' : ''}`
       );
@@ -193,56 +215,48 @@ export default function PurchaseOrderForm({ document, onClose }) {
     <>
       <Dialog open onClose={tryClose} fullWidth maxWidth="xl">
         <DialogTitle>{document ? `Sửa ${docCode(document)}` : 'Tạo phiếu đặt hàng nhập'}</DialogTitle>
+        <DialogClose onClick={tryClose} disabled={saving} />
         <DialogContent>
           <Stack spacing={2.5} sx={{ pt: 1 }}>
-            <Alert severity="info">
-              Chọn nhà cung cấp trước, sau đó thêm hàng theo từng màu/size. Lưu hoặc xác nhận phiếu đặt chưa làm tăng tồn kho.
-            </Alert>
-            <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ alignItems: { md: 'flex-end' } }}>
-              <Box sx={{ flex: 1 }}>
-                <Typography component="label" variant="subtitle2" htmlFor="po-supplier">
-                  1. Nhà cung cấp
-                </Typography>
-                <Autocomplete
-                  freeSolo
-                  options={suppliers}
-                  getOptionLabel={(o) => (typeof o === 'string' ? o : o.name)}
-                  renderOption={(props, o) => (
-                    <li {...props} key={o.name}>
-                      {o.name}
-                      <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
-                        {o.confirmed_orders ? `${o.confirmed_orders} phiếu đặt đã xác nhận` : 'chưa có phiếu đã xác nhận'}
-                      </Typography>
-                    </li>
-                  )}
-                  inputValue={supplierInput}
-                  onInputChange={(_, v) => setSupplierInput(v)}
-                  onChange={(_, v) => {
-                    const name = typeof v === 'string' ? v : v?.name;
-                    if (name) {
-                      setSupplierInput(name);
-                      chooseSupplier(name);
-                    }
-                  }}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      id="po-supplier"
-                      size="small"
-                      placeholder="Chọn hoặc nhập tên nhà cung cấp"
-                      slotProps={{ ...params.slotProps, htmlInput: { ...params.slotProps?.htmlInput, maxLength: 200 } }}
-                    />
-                  )}
-                />
-              </Box>
-              <Button
-                variant="outlined"
-                disabled={!supplierInput.trim() || supplierKey(supplierInput) === supplierKey(supplier)}
-                onClick={() => chooseSupplier(supplierInput)}
-              >
-                {supplier ? 'Đổi nhà cung cấp' : 'Dùng nhà cung cấp này'}
-              </Button>
-            </Stack>
+            
+            <Box>
+              <Typography component="label" variant="subtitle2" htmlFor="po-supplier">
+                1. Nhà cung cấp
+              </Typography>
+              <Autocomplete
+                freeSolo
+                options={suppliers}
+                getOptionLabel={(o) => (typeof o === 'string' ? o : o.name)}
+                renderOption={(props, o) => (
+                  <li {...props} key={o.name}>
+                    {o.name}
+                    <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                      {o.confirmed_orders ? `${o.confirmed_orders} phiếu đặt đã xác nhận` : 'chưa có phiếu đã xác nhận'}
+                    </Typography>
+                  </li>
+                )}
+                inputValue={supplierInput}
+                onInputChange={(_, v) => setSupplierInput(v)}
+                // Typed a new name and clicked away: use it, no extra button needed.
+                onBlur={() => chooseSupplier(supplierInput)}
+                onChange={(_, v) => {
+                  const name = typeof v === 'string' ? v : v?.name;
+                  if (name) {
+                    setSupplierInput(name);
+                    chooseSupplier(name);
+                  }
+                }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    id="po-supplier"
+                    size="small"
+                    placeholder="Gõ tên để chọn nhà cung cấp đã có, hoặc nhập tên mới"
+                    slotProps={{ ...params.slotProps, htmlInput: { ...params.slotProps?.htmlInput, maxLength: 200 } }}
+                  />
+                )}
+              />
+            </Box>
             {supplier && (
               <Typography>
                 Nhà cung cấp trên phiếu: <b>{supplier}</b>
@@ -257,22 +271,8 @@ export default function PurchaseOrderForm({ document, onClose }) {
                   supplier={supplier}
                   excludeOrderId={document?.receipt_id}
                   categories={categories}
-                  selected={selected}
                   existingIds={existingIds}
-                  onToggle={(r) =>
-                    // Functional update: "select whole page" toggles many rows in one event.
-                    setSelected((old) => {
-                      const next = new Map(old);
-                      if (next.has(r.detail_id)) next.delete(r.detail_id);
-                      else next.set(r.detail_id, r);
-                      return next;
-                    })
-                  }
-                  onAdd={() => {
-                    const problem = addLines([...selected.values()]);
-                    if (problem) setError(problem);
-                    else setSelected(new Map());
-                  }}
+                  onToggle={toggleLines}
                   // Only the owner creates new products; a family member asks in the note.
                   onQuickCreate={owner ? () => setQuick({}) : undefined}
                 />
@@ -295,9 +295,7 @@ export default function PurchaseOrderForm({ document, onClose }) {
                   >
                     {excelBusy ? 'Đang tạo mẫu…' : 'Tải mẫu Excel'}
                   </Button>
-                  <Typography variant="body2" color="text.secondary">
-                    Có thể kết hợp Excel với chọn trực tiếp. Xem trước Excel không lưu phiếu và không tạo sản phẩm.
-                  </Typography>
+                  
                 </Stack>
               </>
             ) : (
@@ -371,8 +369,8 @@ export default function PurchaseOrderForm({ document, onClose }) {
                     <TableRow>
                       <TableCell colSpan={7} sx={{ py: 3, color: 'text.secondary' }}>
                         {owner
-                          ? 'Chưa có hàng. Chọn ở bảng trên, nhập Excel hoặc tạo nhanh hàng mới.'
-                          : 'Chưa có hàng. Chọn ở bảng trên hoặc nhập Excel. Hàng chưa có trong hệ thống: ghi vào ghi chú.'}
+                          ? 'Chưa có hàng. Tích chọn ở bảng trên, nhập Excel hoặc tạo nhanh hàng mới.'
+                          : 'Chưa có hàng. Tích chọn ở bảng trên hoặc nhập Excel. Hàng chưa có trong hệ thống: ghi vào ghi chú.'}
                       </TableCell>
                     </TableRow>
                   )}
@@ -396,12 +394,18 @@ export default function PurchaseOrderForm({ document, onClose }) {
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={tryClose} disabled={saving}>
-            Quay lại
-          </Button>
-          <Button variant="contained" onClick={save} disabled={saving || !supplier || !items.length}>
+          <Button
+            variant={owner ? 'outlined' : 'contained'}
+            onClick={() => save(false)}
+            disabled={saving || !supplier || !items.length}
+          >
             {saving ? 'Đang lưu…' : reviewing ? 'Lưu thay đổi' : 'Lưu phiếu nháp'}
           </Button>
+          {owner && (
+            <Button variant="contained" onClick={() => save(true)} disabled={saving || !supplier || !items.length}>
+              {saving ? 'Đang lưu…' : 'Lưu và xác nhận đặt hàng'}
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
 
@@ -428,7 +432,6 @@ export default function PurchaseOrderForm({ document, onClose }) {
               onClick={() => {
                 setSupplier(pendingSupplier);
                 setItems([]);
-                setSelected(new Map());
                 setPendingSupplier(null);
               }}
             >
@@ -439,7 +442,6 @@ export default function PurchaseOrderForm({ document, onClose }) {
               onClick={() => {
                 setSupplier(pendingSupplier);
                 setItems(items.map((i) => ({ ...i, info: { ...i.info, on_order_supplier: undefined } })));
-                setSelected(new Map());
                 setPendingSupplier(null);
               }}
             >
@@ -476,7 +478,6 @@ export default function PurchaseOrderForm({ document, onClose }) {
       {quick && (
         <QuickCreateDialog
           initial={quick.initial}
-          products={products}
           variants={variants}
           withOrderFields={!quick.assign}
           onClose={() => setQuick(null)}

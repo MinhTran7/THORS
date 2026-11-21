@@ -269,9 +269,24 @@ try {
   const mapLink = scanner.getByRole('link', { name: 'Xem vị trí trên sơ đồ', exact: true });
   await mapLink.click();
   await page.waitForURL('**/warehouse/locations?variant=101');
+  // Bố cục kho: không còn mục menu riêng, chủ cửa hàng sửa ngay trong trang Vị trí kho.
+  assert.equal(await page.locator('a[href="/warehouse/layout"]').count(), 0, 'menu không còn Bố cục kho');
+  assert.equal(await page.getByRole('button', { name: 'Thêm kệ', exact: true }).count(), 0);
+  await page.getByRole('button', { name: 'Sửa bố cục kho', exact: true }).click();
+  await page.getByRole('button', { name: 'Thêm kệ', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Xếp gọn theo hàng', exact: true }).waitFor();
+  await page.screenshot({ path: path.join(temporary, 'layout-edit.png') });
+  await page.getByRole('button', { name: 'Xong', exact: true }).click();
+  await page.getByRole('button', { name: 'Sửa bố cục kho', exact: true }).waitFor();
+  await page.goto(`${baseURL}/warehouse/layout`);
+  await page.waitForURL('**/warehouse/locations');
   await context.close();
 
   const mobile = await open('FAMILY_MEMBER', { width: 390, height: 844 });
+  await mobile.page.goto(`${baseURL}/warehouse/locations`);
+  await mobile.page.getByText('Vị trí lưu kho', { exact: true }).first().waitFor();
+  assert.equal(await mobile.page.getByRole('button', { name: 'Sửa bố cục kho', exact: true }).count(), 0, 'chỉ chủ cửa hàng sửa bố cục');
+  await mobile.page.goto(`${baseURL}/warehouse/inventory`);
   assert.equal(await mobile.page.getByRole('button', { name: /^Tạo mã còn thiếu/ }).count(), 0);
   await mobile.page.getByRole('button', { name: 'Quét mã tìm hàng', exact: true }).click();
   const mobileScanner = mobile.page.getByRole('dialog', { name: 'Quét mã tìm hàng', exact: true });

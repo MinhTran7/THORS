@@ -6,6 +6,11 @@ import java.io.IOException;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+/**
+ * Giới hạn số lần gọi POST /api/auth/** theo IP trong 15 phút (login: 30 lần, còn lại: 60 lần).
+ * LƯU Ý: hiện KHÔNG có nơi nào đăng ký filter này (không có @Component, SecurityConfig không addFilter),
+ * nên giới hạn này CHƯA có tác dụng. Chống dò mật khẩu hiện chỉ dựa vào khóa 15 phút sau 5 lần sai.
+ */
 public class RequestLimitFilter extends OncePerRequestFilter {
   private record Window(long start, int count) {}
 

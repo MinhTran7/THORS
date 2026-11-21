@@ -35,7 +35,9 @@ function requirementsFor(value) {
 
 export default function ChangePasswordPage() {
   useCrumbs(['Hồ sơ', 'Đổi mật khẩu']);
-  const { account, setAccount } = useAuth();
+  const { account, setAccount, logout } = useAuth();
+  // Tài khoản do Admin / Owner tạo: bắt buộc đổi mật khẩu trước khi dùng hệ thống
+  const forced = Boolean(account.passwordChangeRequired);
   const navigate = useNavigate();
   const [error, setError] = useState('');
   // Shop Owner có thêm lựa chọn nhờ Admin đặt lại mật khẩu
@@ -94,6 +96,12 @@ export default function ChangePasswordPage() {
   return (
     <Shell {...(isCustomer ? fullHeader : {})}>
       {!isCustomer && <PageHeader {...fullHeader} />}
+      {forced && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Đây là lần đăng nhập đầu tiên. Mật khẩu hiện tại do người tạo tài khoản đặt, bạn cần đổi sang mật khẩu của riêng mình
+          trước khi sử dụng hệ thống.
+        </Alert>
+      )}
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
           {error}
@@ -162,9 +170,21 @@ export default function ChangePasswordPage() {
               Đổi mật khẩu sẽ đăng xuất bạn khỏi các thiết bị khác. Hãy dùng mật khẩu mới ở lần đăng nhập tiếp theo.
             </NoticeBox>
             <Stack direction="row" spacing={1.5} justifyContent="flex-end">
-              <OutlineButton component={RouterLink} to="/profile" sx={{ fontSize: fs.body }}>
-                Hủy
-              </OutlineButton>
+              {forced ? (
+                <OutlineButton
+                  onClick={async () => {
+                    await logout().catch(() => {});
+                    navigate('/login', { replace: true });
+                  }}
+                  sx={{ fontSize: fs.body }}
+                >
+                  Đăng xuất
+                </OutlineButton>
+              ) : (
+                <OutlineButton component={RouterLink} to="/profile" sx={{ fontSize: fs.body }}>
+                  Hủy
+                </OutlineButton>
+              )}
               <BrandButton type="submit" disabled={form.isSubmitting} sx={{ fontSize: fs.body }}>
                 {form.isSubmitting ? 'Đang cập nhật…' : 'Cập nhật'}
               </BrandButton>
@@ -192,7 +212,7 @@ export default function ChangePasswordPage() {
               Chỉ quy tắc đầu tiên là bắt buộc; các quy tắc còn lại giúp mật khẩu mạnh hơn.
             </Typography>
           </Box>
-          {account.role === 'OWNER' && (
+          {account.role === 'OWNER' && !forced && (
             <Box sx={{ ...cardSx, p: 3 }}>
               <Typography variant="subtitle2" sx={{ color: brand.ink, fontSize: fs.strong }}>
                 Nhờ quản trị viên đặt lại mật khẩu

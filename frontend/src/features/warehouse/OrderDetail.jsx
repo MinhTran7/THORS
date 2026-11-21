@@ -9,6 +9,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  IconButton,
   Link as MuiLink,
   Stack,
   Table,
@@ -18,6 +19,7 @@ import {
   TableRow,
   Typography
 } from '@mui/material';
+import { CloseOutlined } from '@ant-design/icons';
 import { api } from 'services/http';
 import { useWarehouse } from './WarehouseContext';
 import { Status } from './components';
@@ -65,8 +67,11 @@ export default function OrderDetail({ id, onClose, onEdit, onAction, onOpenDocum
 
   return (
     <Dialog open onClose={onClose} fullWidth maxWidth="xl">
-      <DialogTitle>
+      <DialogTitle sx={{ pr: 7 }}>
         {orderCode(d.receipt_id)} · Phiếu đặt hàng nhập <Status value={d.status} /> <Progress value={d.progress} />
+        <IconButton aria-label="Đóng" onClick={onClose} sx={{ position: 'absolute', right: 12, top: 12 }}>
+          <CloseOutlined />
+        </IconButton>
       </DialogTitle>
       <DialogContent>
         <Stack spacing={2}>
@@ -85,10 +90,7 @@ export default function OrderDetail({ id, onClose, onEdit, onAction, onOpenDocum
               Đóng phần còn thiếu ({number(d.closed_short_quantity)} sản phẩm): {d.close_reason} · {when(d.closed_at)}
             </Alert>
           )}
-          <Typography variant="body2" color="text.secondary">
-            Trạng thái chứng từ và tiến độ nhận hiển thị riêng. Tiến độ tính từ các phiếu nhập đã xác nhận; số lượng đặt ban đầu không bị
-            sửa theo số thực nhập.
-          </Typography>
+          
           <Box sx={{ overflowX: 'auto' }}>
             <Table size="small">
               <TableHead>
@@ -128,12 +130,7 @@ export default function OrderDetail({ id, onClose, onEdit, onAction, onOpenDocum
             {d.status === 'CLOSED' ? `đóng thiếu ${shortfall(d, d)}` : `còn thiếu ${shortfall(d, d)}`} · Tổng
             tiền đặt {money(d.total_amount)}
           </Typography>
-          {hasReturn && (
-            <Alert severity="info">
-              Số đã trả nhà cung cấp được hiển thị để đối chiếu. Hiện tại việc trả hàng không mở lại phần còn thiếu của đơn đặt
-              (chưa có chỗ lưu lựa chọn “chờ giao bù”).
-            </Alert>
-          )}
+          
           <Typography variant="subtitle2">Phiếu nhập và phiếu trả liên quan (chỉ xem; lập phiếu nhập tại trang Nhập hàng)</Typography>
           {!d.related.length && <Typography color="text.secondary">Chưa có phiếu nhập nào.</Typography>}
           {d.related.map((r) => (
@@ -148,7 +145,6 @@ export default function OrderDetail({ id, onClose, onEdit, onAction, onOpenDocum
         </Stack>
       </DialogContent>
       <DialogActions sx={{ flexWrap: 'wrap', gap: 1 }}>
-        <Button onClick={onClose}>Đóng</Button>
         {(owner || mine) && d.status === 'DRAFT' && raw && (
           <Button disabled={busy} onClick={() => onEdit(raw)}>
             Sửa nháp
@@ -177,10 +173,11 @@ export default function OrderDetail({ id, onClose, onEdit, onAction, onOpenDocum
         )}
         {owner && (['DRAFT', 'PENDING_CONFIRMATION'].includes(d.status) || d.can_cancel_confirmed) && (
           <Button color="error" disabled={busy} onClick={() => act('cancel')}>
-            Hủy phiếu
+            {d.status === 'CONFIRMED' ? 'Hủy đơn' : 'Hủy phiếu'}
           </Button>
         )}
-        {owner && d.status === 'CONFIRMED' && d.remaining_quantity > 0 && (
+        {/* Chưa nhận được gì thì là hủy đơn; đã nhận một phần mới đóng phần còn thiếu. */}
+        {owner && d.status === 'CONFIRMED' && d.remaining_quantity > 0 && !d.can_cancel_confirmed && (
           <Button color="warning" disabled={busy} onClick={() => act('close')}>
             Đóng phần còn thiếu
           </Button>

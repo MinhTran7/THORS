@@ -29,8 +29,7 @@ import {
   EyeOutlined,
   InboxOutlined,
   PhoneOutlined,
-  PlusOutlined,
-  ShoppingOutlined
+  PlusOutlined
 } from '@ant-design/icons';
 import { useCrumbs } from 'layouts/crumbs';
 import { useAuth } from 'features/auth/AuthProvider';
@@ -42,7 +41,8 @@ import { BrandButton, OutlineButton } from 'features/account/components/Brand';
 import { StatusPill } from 'features/account/components/Chips';
 import { bodyCellSx, EmptyRow, headCellSx, PageHeader, Pager, SearchField, Toolbar } from 'features/account/components/Blocks';
 import { LIVE_SWR, ordersApi, refreshAllOrders } from './api';
-import { CUSTOMER_ACTIONS, OWNER_ACTIONS, ownerActionsFor } from './orderActions';
+import { CUSTOMER_ACTIONS, OWNER_ACTIONS, ownerActionSlots } from './orderActions';
+import { DeliveryProofDialog, useDeliveryProofRequired } from './components/DeliveryProof';
 import AddressNotFoundDialog, { ADDRESS_NOT_FOUND, INVALID_ADDRESS_REASON } from './AddressNotFoundDialog';
 import DeliveryChoice from './DeliveryChoice';
 import { ghnReady } from './GhnAddressFields';
@@ -74,6 +74,9 @@ const CUSTOMER_TABS = [
   { value: 'CANCELLED,REJECTED,EXPIRED', label: 'Đã hủy' }
 ];
 
+// Chủ shop không có việc gì với đơn đang chờ khách thanh toán nên bỏ tab đó (đơn vẫn nằm trong "Tất cả")
+const OWNER_TABS = CUSTOMER_TABS.filter((tab) => tab.value !== 'AWAITING_PAYMENT');
+
 // Bộ lọc ngày đặt hàng
 const DATE_PRESETS = [
   { value: 'all', label: 'Tất cả thời gian' },
@@ -92,7 +95,14 @@ const PAYMENT_FILTERS = [
 ];
 
 // Chiều rộng cố định cho các ô lọc để thanh lọc không bị nhảy khi đổi lựa chọn
-const FILTER_WIDTH = { date: 200, payment: 270, customDate: 160 };
+const FILTER_WIDTH = { date: 200, payment: 270, source: 170, customDate: 160 };
+
+// Bộ lọc nguồn đơn (chỉ chủ shop): web là khách tự đặt, Facebook là nhân viên tạo từ Social POS
+const SOURCE_FILTERS = [
+  { value: 'all', label: 'Mọi nguồn đơn' },
+  { value: 'WEB', label: 'Đơn trên web' },
+  { value: 'FACEBOOK', label: 'Đơn Facebook' }
+];
 
 // Lý do có sẵn để chọn; chỉ khi chọn "Lý do khác" mới phải tự nhập
 const OTHER_REASON = '__OTHER__';
@@ -198,6 +208,10 @@ function CustomerOrderCard({ order, onOpen, actions, onAction, busy }) {
   const meta = orderStatusMeta(order.orderStatus);
   const pay = paymentStatusMeta(order.paymentStatus);
   const lines = order.lines ?? [];
+  // Mặc định chỉ hiện sản phẩm đầu tiên; bấm "Xem thêm" để mở hết (đơn nhiều sản phẩm không bị dài)
+  const [expanded, setExpanded] = useState(false);
+  const shownLines = expanded ? lines : lines.slice(0, 1);
+  const hiddenCount = lines.length - shownLines.length;
 
   return (
     <Box component="article" sx={{ ...panelSx, mb: 3, transition: 'border-color .2s', '&:hover': { borderColor: '#CFCAC2' } }}>
@@ -234,10 +248,10 @@ function CustomerOrderCard({ order, onOpen, actions, onAction, busy }) {
         onKeyDown={(e) => (e.key === 'Enter' ? onOpen() : undefined)}
         sx={{ cursor: 'pointer', px: { xs: 2, sm: 3 }, '&:hover .name': { color: C.accent }, '&:focus-visible': { outline: `2px solid ${C.accent}`, outlineOffset: '-2px' } }}
       >
-        {lines.map((line, index) => (
+        {shownLines.map((line, index) => (
           <Box
             key={`${order.id}-${index}`}
-            sx={{ display: 'flex', gap: { xs: 1.5, sm: 2.5 }, py: 2.5, borderBottom: index < lines.length - 1 ? `1px solid ${C.line}` : 'none' }}
+            sx={{ display: 'flex', gap: { xs: 1.5, sm: 2.5 }, py: 2.5, borderBottom: index < shownLines.length - 1 ? `1px solid ${C.line}` : 'none' }}
           >
             <StoreThumb src={line.imageUrl} name={line.productName} width={80} />
             <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -261,6 +275,40 @@ function CustomerOrderCard({ order, onOpen, actions, onAction, busy }) {
           </Box>
         )}
       </Box>
+
+      {/* Xem thêm / Thu gọn các sản phẩm còn lại */}
+      {lines.length > 1 && (
+        <Box
+          component="button"
+          type="button"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((v) => !v)}
+          sx={{
+            width: '100%',
+            py: 1.5,
+            border: 0,
+            borderTop: `1px solid ${C.line}`,
+            bgcolor: 'transparent',
+            font: 'inherit',
+            fontSize: 14,
+            color: C.muted,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 0.75,
+            '&:hover': { color: C.accent },
+            '&:focus-visible': { outline: `2px solid ${C.accent}`, outlineOffset: '-2px' }
+          }}
+        >
+          {expanded ? 'Thu gọn' : `Xem thêm ${hiddenCount} sản phẩm`}
+          <Box component="span" aria-hidden="true" sx={{ display: 'inline-flex', transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </Box>
+        </Box>
+      )}
 
       {/* Chân thẻ: thanh toán, thành tiền và nút thao tác */}
       <Box sx={{ px: { xs: 2, sm: 3 }, py: 2.5, bgcolor: C.sand }}>
@@ -317,6 +365,7 @@ export default function OrderListPage() {
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
   const [paymentFilter, setPaymentFilter] = useState('all');
+  const [sourceFilter, setSourceFilter] = useState('all');
   const [page, setPage] = useState(0);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
@@ -329,7 +378,10 @@ export default function OrderListPage() {
   const [ghn, setGhn] = useState(null); // { provinceId, districtId, wardCode, weightG } khi gửi GHN
   const [addressBlocked, setAddressBlocked] = useState(false); // không tìm thấy địa chỉ giao -> không bàn giao
   const [addressAlert, setAddressAlert] = useState(null); // { order, message } khi backend báo không tìm thấy địa chỉ
-  const isOwner = account.role === 'OWNER';
+  // Người nhà xử lý đơn như chủ shop nên dùng chung màn hình
+  const isOwner = ['OWNER', 'FAMILY_MEMBER'].includes(account.role);
+  const [proofOrder, setProofOrder] = useState(null); // đơn đang chờ chụp ảnh minh chứng giao hàng
+  const proofRequired = useDeliveryProofRequired(isOwner);
   const search = useDebounced(q.trim());
 
   const filter = (setter) => (value) => {
@@ -344,6 +396,7 @@ export default function OrderListPage() {
     dateFrom,
     dateTo,
     paymentMethod: paymentFilter === 'all' ? undefined : paymentFilter,
+    source: sourceFilter === 'all' ? undefined : sourceFilter,
     page,
     size: PAGE_SIZE
   };
@@ -355,7 +408,7 @@ export default function OrderListPage() {
   // Làm mới mọi dữ liệu đơn hàng (danh sách, số đếm, cả trang chi tiết đang mở trong cache)
   const refresh = () => refreshAllOrders(globalMutate);
 
-  const hasFilter = Boolean(search) || status !== 'all' || datePreset !== 'all' || paymentFilter !== 'all';
+  const hasFilter = Boolean(search) || status !== 'all' || datePreset !== 'all' || paymentFilter !== 'all' || sourceFilter !== 'all';
 
   // Chỉ dành cho chủ shop, để test thông báo: tạo đơn online mẫu rồi tải lại danh sách
   const createSample = async () => {
@@ -407,7 +460,9 @@ export default function OrderListPage() {
 
   const startAction = (order, action) => {
     setRowError('');
-    if (action.askReason || action.askCarrier) {
+    if (action.askProof && proofRequired) {
+      setProofOrder(order);
+    } else if (action.askReason || action.askCarrier) {
       setReasonChoice('');
       setCustomReason('');
       setCarrier('SELF');
@@ -546,6 +601,7 @@ export default function OrderListPage() {
       onClose={() => setAddressAlert(null)}
       onReject={addressAlert?.order.orderStatus === 'PENDING_CONFIRMATION' ? rejectForInvalidAddress : undefined}
     />
+    <DeliveryProofDialog order={proofOrder} onClose={() => setProofOrder(null)} onDone={refresh} />
     </>
   );
 
@@ -608,6 +664,23 @@ export default function OrderListPage() {
           </MenuItem>
         ))}
       </TextField>
+      {!isCustomer && (
+        <TextField
+          select
+          size="small"
+          label="Nguồn đơn"
+          value={sourceFilter}
+          onChange={(e) => filter(setSourceFilter)(e.target.value)}
+          sx={{ width: FILTER_WIDTH.source, flexShrink: 0 }}
+          slotProps={{ select: { sx: { borderRadius: '10px' } } }}
+        >
+          {SOURCE_FILTERS.map((item) => (
+            <MenuItem key={item.value} value={item.value}>
+              {item.label}
+            </MenuItem>
+          ))}
+        </TextField>
+      )}
     </Box>
   );
 
@@ -714,7 +787,7 @@ export default function OrderListPage() {
   }
 
   // ---------------------------------------------------------------- Chủ shop / người xử lý đơn (bảng)
-  const columns = ['Đơn hàng', 'Người nhận', 'Sản phẩm', 'Tổng tiền', 'Thanh toán', 'Trạng thái', 'Thao tác'];
+  const columns = ['Đơn hàng', 'Người nhận', 'Tổng tiền', 'Thanh toán', 'Trạng thái', 'Thao tác'];
 
   return (
     <Box>
@@ -773,12 +846,13 @@ export default function OrderListPage() {
             }
           }}
         >
-          {CUSTOMER_TABS.map((tab) => (
+          {OWNER_TABS.map((tab) => (
             <Tab
               key={tab.value}
               value={tab.value}
               label={<TabLabel label={tab.label} count={statusCount(countData, tab.value)} alert={tab.value === 'PENDING_CONFIRMATION'} />}
-              sx={{ minWidth: { xs: 100, sm: 120 } }}
+              // flex: 1 cho các tab giãn đều hết thanh; màn hẹp vẫn cuộn ngang nhờ minWidth
+              sx={{ flex: 1, minWidth: { xs: 100, sm: 120 } }}
             />
           ))}
         </Tabs>
@@ -795,7 +869,7 @@ export default function OrderListPage() {
           </Alert>
         )}
         <Box sx={{ overflowX: 'auto' }}>
-          <Table size="small" sx={{ minWidth: 1020 }}>
+          <Table size="small" sx={{ minWidth: 860 }}>
             <TableHead>
               <TableRow sx={{ bgcolor: '#FBFBF8' }}>
                 {columns.map((label, index) => (
@@ -856,42 +930,12 @@ export default function OrderListPage() {
                       </Stack>
                     </TableCell>
 
-                    {/* Cột 3: Sản phẩm */}
-                    <TableCell sx={{ ...bodyCellSx, py: 1.75, maxWidth: 240 }}>
-                      <Typography
-                        variant="body2"
-                        sx={{ fontWeight: 500, color: brand.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                        title={order.firstItemName}
-                      >
-                        {order.firstItemName || '—'}
-                      </Typography>
-                      <Box
-                        component="span"
-                        sx={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 0.5,
-                          bgcolor: '#F3F4EE',
-                          color: brand.muted,
-                          px: 0.8,
-                          py: 0.2,
-                          borderRadius: '6px',
-                          fontSize: 11.5,
-                          fontWeight: 600,
-                          mt: 0.35
-                        }}
-                      >
-                        <ShoppingOutlined style={{ fontSize: 10 }} />
-                        {order.itemCount} sản phẩm
-                      </Box>
-                    </TableCell>
-
-                    {/* Cột 4: Tổng tiền */}
+                    {/* Cột 3: Tổng tiền */}
                     <TableCell sx={{ ...bodyCellSx, py: 1.75, whiteSpace: 'nowrap', fontWeight: 700, fontSize: 15, color: brand.ink }}>
                       {formatVnd(order.totalAmount)}
                     </TableCell>
 
-                    {/* Cột 5: Thanh toán */}
+                    {/* Cột 4: Thanh toán */}
                     <TableCell sx={{ ...bodyCellSx, py: 1.75 }}>
                       <Stack spacing={0.5} alignItems="flex-start">
                         <StatusPill tone={payMeta.tone} label={payMeta.label} />
@@ -901,7 +945,7 @@ export default function OrderListPage() {
                       </Stack>
                     </TableCell>
 
-                    {/* Cột 6: Trạng thái đơn */}
+                    {/* Cột 5: Trạng thái đơn */}
                     <TableCell sx={{ ...bodyCellSx, py: 1.75 }}>
                       <Stack spacing={0.5} alignItems="flex-start">
                         <StatusPill tone={statusMeta.tone} label={statusMeta.label} />
@@ -923,7 +967,7 @@ export default function OrderListPage() {
                       </Stack>
                     </TableCell>
 
-                    {/* Cột 7: Thao tác */}
+                    {/* Cột 6: Thao tác */}
                     <TableCell sx={{ ...bodyCellSx, py: 1.75 }}>
                       <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: 'wrap', rowGap: 0.75 }}>
                         <OutlineButton
@@ -935,15 +979,21 @@ export default function OrderListPage() {
                         >
                           Xem
                         </OutlineButton>
-                        {(isOwner ? ownerActionsFor(order) : []).map((action) =>
+                        {/* Luôn hiện đủ nút; nút không áp dụng cho trạng thái hiện tại chỉ bị làm mờ */}
+                        {(isOwner ? ownerActionSlots(order) : []).map((action) =>
                           action.primary ? (
                             <BrandButton
                               key={action.to}
                               size="small"
                               disableElevation
-                              disabled={busyId === order.id}
+                              disabled={!action.enabled || busyId === order.id}
                               onClick={() => startAction(order, action)}
-                              sx={{ fontSize: 12.5, py: 0.4, px: 1.5 }}
+                              sx={{
+                                fontSize: 12.5,
+                                py: 0.4,
+                                px: 1.5,
+                                '&.Mui-disabled': { bgcolor: brand.cyan, color: brand.inkOnCyan, opacity: 0.35 }
+                              }}
                             >
                               {action.label}
                             </BrandButton>
@@ -951,7 +1001,7 @@ export default function OrderListPage() {
                             <OutlineButton
                               key={action.to}
                               size="small"
-                              disabled={busyId === order.id}
+                              disabled={!action.enabled || busyId === order.id}
                               onClick={() => startAction(order, action)}
                               sx={{
                                 fontSize: 12.5,
@@ -959,7 +1009,12 @@ export default function OrderListPage() {
                                 px: 1.25,
                                 color: action.askReason ? brand.dangerInk : brand.ink,
                                 borderColor: action.askReason ? '#FCA5A5' : brand.line,
-                                '&:hover': { bgcolor: action.askReason ? brand.dangerBg : undefined }
+                                '&:hover': { bgcolor: action.askReason ? brand.dangerBg : undefined },
+                                '&.Mui-disabled': {
+                                  color: action.askReason ? brand.dangerInk : brand.ink,
+                                  borderColor: action.askReason ? '#FCA5A5' : brand.line,
+                                  opacity: 0.35
+                                }
                               }}
                             >
                               {action.label}

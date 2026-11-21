@@ -14,27 +14,28 @@ import {
   InputAdornment,
   MenuItem,
   Stack,
-  Tab,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableRow,
-  Tabs,
   TextField,
   Typography
 } from '@mui/material';
 import { CloseOutlined, MinusOutlined, PlusOutlined } from '@ant-design/icons';
 import { api } from 'services/http';
 import { createCategory, getCategories } from 'services/categoryService';
-import { Choice, Field } from './components';
+import { Choice, Field, DialogClose } from './components';
 import { money, number } from './model';
 
 const MAX_MONEY = 999999999999;
 const PRICE_STEP = 1000;
 const emptyRow = (v = {}) => ({ color: v.color || '', size: v.size || '', quantity: '1', unitPrice: '', salePrice: '' });
 // Whitespace is normalised; case is ignored only for duplicate checks; accents/wording are kept.
-const clean = (v) => String(v ?? '').trim().replace(/\s+/g, ' ');
+const clean = (v) =>
+  String(v ?? '')
+    .trim()
+    .replace(/\s+/g, ' ');
 const key = (color, size) => `${clean(color).toLocaleLowerCase('vi')}\u0000${clean(size).toLocaleLowerCase('vi')}`;
 
 /**
@@ -197,15 +198,15 @@ function SuggestField({ value, onChange, options, label, error, disabled, maxLen
  * onCreated(rows) adds the rows to the order and returns an error message ('' when done). After a
  * successful create the result is kept, so retrying never calls the catalogue API twice.
  */
-export default function QuickCreateDialog({ initial = {}, products, variants = [], withOrderFields = true, onCreated, onClose }) {
-  const [mode, setMode] = useState(initial.productId ? 'variant' : 'product');
+export default function QuickCreateDialog({ initial = {}, variants = [], withOrderFields = true, onCreated, onClose }) {
   const [categories, setCategories] = useState([]);
-  const [categoryId, setCategoryId] = useState('');
+  // Danh mục nhiều cấp: chọn danh mục lớn, còn danh mục con thì chọn tiếp cho tới danh mục cuối cùng.
+  // path = các danh mục đã chọn từ trên xuống; sản phẩm gắn vào danh mục cuối (không còn danh mục con).
+  const [path, setPath] = useState([]);
   const [newCategory, setNewCategory] = useState(null);
   const [categoryError, setCategoryError] = useState('');
   const [categoryBusy, setCategoryBusy] = useState(false);
   const [name, setName] = useState(initial.productName || '');
-  const [productId, setProductId] = useState(initial.productId || '');
   const [rows, setRows] = useState([emptyRow(initial)]);
   const [similar, setSimilar] = useState([]);
   const [allowSimilar, setAllowSimilar] = useState(false);
@@ -227,7 +228,7 @@ export default function QuickCreateDialog({ initial = {}, products, variants = [
   }, []);
 
   useEffect(() => {
-    if (mode !== 'product' || name.trim().length < 2) {
+    if (name.trim().length < 2) {
       setSimilar([]);
       return undefined;
     }
@@ -237,29 +238,37 @@ export default function QuickCreateDialog({ initial = {}, products, variants = [
         .catch(() => setSimilar([]));
     }, 350);
     return () => clearTimeout(timer);
-  }, [name, mode]);
+  }, [name]);
 
   // Suggestions come from existing variants; no colour/size table is added.
   const suggestions = useMemo(() => {
-    const pick = (field) => [...new Map(variants.map((v) => [clean(v[field]).toLocaleLowerCase('vi'), clean(v[field])])).values()].filter(Boolean);
+    const pick = (field) =>
+      [...new Map(variants.map((v) => [clean(v[field]).toLocaleLowerCase('vi'), clean(v[field])])).values()].filter(Boolean);
     return { color: pick('color').sort((a, b) => a.localeCompare(b, 'vi')), size: pick('size') };
   }, [variants]);
 
-  const existingKeys = new Set(
-    mode === 'variant' && productId ? variants.filter((v) => v.product_id === Number(productId)).map((v) => key(v.color, v.size)) : []
-  );
-  const errors = rowErrors(rows, withOrderFields, existingKeys);
-  const headerError =
-    mode === 'product'
-      ? !name.trim()
-        ? 'Nhập tên sản phẩm.'
-        : name.trim().length > 200
-          ? 'Tên tối đa 200 ký tự.'
-          : !categoryId
-            ? 'Chọn danh mục.'
-            : ''
-      : !productId
-        ? 'Chọn sản phẩm có sẵn.'
+  const byName = (a, b) => (a.categoryName || '').localeCompare(b.categoryName || '', 'vi');
+  const activeIds = new Set(categories.map((c) => c.categoryId));
+  const roots = categories.filter((c) => !c.parentId || !activeIds.has(c.parentId)).sort(byName);
+  const childrenOf = (id) => categories.filter((c) => c.parentId === id).sort(byName);
+  const nameOf = (id) => categories.find((c) => c.categoryId === id)?.categoryName || '';
+  const last = path[path.length - 1];
+  const categoryId = last != null && childrenOf(last).length === 0 ? last : '';
+  // Các ô chọn: cấp 1 là danh mục lớn; mỗi cấp đã chọn còn danh mục con thì thêm một ô.
+  const levels = [roots, ...path.map(childrenOf)].filter((options, i) => i === 0 || options.length > 0);
+  const choose = (level, id) => setPath((old) => [...old.slice(0, level), ...(id === '' ? [] : [id])]);
+  // Danh mục mới tạo nằm trong danh mục sâu nhất đang chọn mà còn danh mục con (cùng cấp với các lựa chọn đang hiện).
+  const underIndex = path.reduce((found, id, i) => (childrenOf(id).length ? i : found), -1);
+
+  const errors = rowErrors(rows, withOrderFields, new Set());
+  const headerError = !name.trim()
+    ? 'Nhập tên sản phẩm.'
+    : name.trim().length > 200
+      ? 'Tên tối đa 200 ký tự.'
+      : !categoryId
+        ? path.length
+          ? 'Chọn danh mục con.'
+          : 'Chọn danh mục.'
         : '';
   const exact = similar.filter((p) => p.exact);
   const lineAmount = (r) => {
@@ -282,10 +291,11 @@ export default function QuickCreateDialog({ initial = {}, products, variants = [
     if (categoryBusy) return undefined;
     setCategoryBusy(true);
     try {
-      await createCategory({ categoryName });
+      const under = underIndex >= 0 ? path[underIndex] : null;
+      await createCategory({ categoryName, parentId: under });
       const list = await loadCategories();
       const createdCategory = list.find((c) => clean(c.categoryName).toLocaleLowerCase('vi') === categoryName.toLocaleLowerCase('vi'));
-      if (createdCategory) setCategoryId(createdCategory.categoryId);
+      if (createdCategory) setPath([...path.slice(0, underIndex + 1), createdCategory.categoryId]);
       setNewCategory(null);
     } catch (e) {
       setCategoryError(e.code === 'CATEGORY_NAME_EXISTS' ? 'Tên danh mục đã tồn tại (có thể đang ngừng hoạt động).' : e.message);
@@ -322,13 +332,10 @@ export default function QuickCreateDialog({ initial = {}, products, variants = [
     sending.current = true;
     setBusy(true);
     try {
-      const result =
-        mode === 'product'
-          ? await api('/warehouse/catalog/products', {
-              method: 'POST',
-              body: { categoryId: Number(categoryId), productName: clean(name), variants: payload, allowSimilar }
-            })
-          : await api(`/warehouse/catalog/products/${productId}/variants`, { method: 'POST', body: { variants: payload } });
+      const result = await api('/warehouse/catalog/products', {
+        method: 'POST',
+        body: { categoryId: Number(categoryId), productName: clean(name), variants: payload, allowSimilar }
+      });
       created.current = result;
       finish(result);
     } catch (e) {
@@ -344,123 +351,100 @@ export default function QuickCreateDialog({ initial = {}, products, variants = [
   return (
     <Dialog open onClose={() => !busy && onClose()} fullWidth maxWidth="xl">
       <DialogTitle>Tạo nhanh hàng mới</DialogTitle>
+      <DialogClose onClick={onClose} disabled={busy} />
       <DialogContent dividers>
         <Stack spacing={2}>
-          <Tabs value={mode} onChange={(_, v) => !locked && setMode(v)}>
-            <Tab value="product" label="Sản phẩm mới" />
-            <Tab value="variant" label="Thêm màu/size cho sản phẩm có sẵn" />
-          </Tabs>
           <Alert severity="info">
-            {withOrderFields
-              ? 'Nhập thông tin hàng mới, số lượng đặt và giá nhập để thêm vào phiếu. Hàng mới chưa có tồn kho và chưa bật bán online.'
-              : 'Tạo hàng mới cho dòng Excel; số lượng và giá nhập lấy từ file. Hàng mới chưa có tồn kho và chưa bật bán online.'}
+            Hàng mới tạo chưa có tồn kho và chưa bán online.
           </Alert>
-          {mode === 'product' ? (
-            <>
-              <Field
-                id="quick-name"
-                label="Tên sản phẩm"
-                value={name}
-                disabled={locked}
-                onChange={(e) => setName(e.target.value)}
-                error={showErrors && headerError.startsWith('Nhập tên')}
-                slotProps={{ htmlInput: { maxLength: 200 } }}
-              />
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { sm: 'flex-end' } }}>
-                <Box sx={{ flex: 1 }}>
+          <>
+            <Field
+              id="quick-name"
+              label="Tên sản phẩm"
+              value={name}
+              disabled={locked}
+              onChange={(e) => setName(e.target.value)}
+              error={showErrors && headerError.startsWith('Nhập tên')}
+              slotProps={{ htmlInput: { maxLength: 200 } }}
+            />
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { sm: 'flex-end' } }}>
+              {levels.map((options, level) => (
+                <Box key={level} sx={{ flex: 1 }}>
                   <Choice
-                    label="Danh mục"
-                    value={categoryId}
+                    label={level === 0 ? 'Danh mục' : level === 1 ? 'Danh mục con' : `Danh mục con (cấp ${level + 1})`}
+                    value={path[level] ?? ''}
                     disabled={locked}
-                    error={showErrors && headerError === 'Chọn danh mục.'}
-                    onChange={(e) => setCategoryId(e.target.value)}
+                    error={showErrors && Boolean(headerError) && headerError.startsWith('Chọn danh mục') && level === levels.length - 1}
+                    onChange={(e) => choose(level, e.target.value)}
                   >
-                    <MenuItem value="">Chọn danh mục đang hoạt động</MenuItem>
-                    {categories.map((c) => (
+                    <MenuItem value="">{level === 0 ? 'Chọn danh mục lớn' : `Chọn trong “${nameOf(path[level - 1])}”`}</MenuItem>
+                    {options.map((c) => (
                       <MenuItem key={c.categoryId} value={c.categoryId}>
                         {c.categoryName}
+                        {childrenOf(c.categoryId).length ? ` (${childrenOf(c.categoryId).length} danh mục con)` : ''}
                       </MenuItem>
                     ))}
                   </Choice>
                 </Box>
-                <Button variant="outlined" disabled={locked || newCategory != null} onClick={() => setNewCategory('')}>
-                  + Thêm danh mục
+              ))}
+              <Button variant="outlined" disabled={locked || newCategory != null} onClick={() => setNewCategory('')}>
+                + Thêm danh mục
+              </Button>
+            </Stack>
+            {newCategory != null && (
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { sm: 'flex-start' } }}>
+                <TextField
+                  size="small"
+                  autoFocus
+                  sx={{ flex: 1 }}
+                  value={newCategory}
+                  onChange={(e) => setNewCategory(e.target.value)}
+                  error={Boolean(categoryError)}
+                  helperText={
+                    categoryError ||
+                    (underIndex >= 0
+                      ? `Tạo danh mục con trong “${nameOf(path[underIndex])}”. Chỉ tạo khi bấm “Lưu danh mục”.`
+                      : 'Tạo danh mục lớn mới. Chỉ tạo khi bấm “Lưu danh mục”.')
+                  }
+                  slotProps={{ htmlInput: { maxLength: 100, 'aria-label': 'Tên danh mục mới' } }}
+                />
+                <Button variant="contained" disabled={categoryBusy} onClick={saveCategory}>
+                  {categoryBusy ? 'Đang lưu…' : 'Lưu danh mục'}
+                </Button>
+                <Button
+                  disabled={categoryBusy}
+                  onClick={() => {
+                    setNewCategory(null);
+                    setCategoryError('');
+                  }}
+                >
+                  Hủy
                 </Button>
               </Stack>
-              {newCategory != null && (
-                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { sm: 'flex-start' } }}>
-                  <TextField
-                    size="small"
-                    autoFocus
-                    sx={{ flex: 1 }}
-                    value={newCategory}
-                    onChange={(e) => setNewCategory(e.target.value)}
-                    error={Boolean(categoryError)}
-                    helperText={categoryError || 'Danh mục chỉ được tạo khi bấm “Lưu danh mục”.'}
-                    slotProps={{ htmlInput: { maxLength: 100, 'aria-label': 'Tên danh mục mới' } }}
-                  />
-                  <Button variant="contained" disabled={categoryBusy} onClick={saveCategory}>
-                    {categoryBusy ? 'Đang lưu…' : 'Lưu danh mục'}
-                  </Button>
-                  <Button
-                    disabled={categoryBusy}
-                    onClick={() => {
-                      setNewCategory(null);
-                      setCategoryError('');
-                    }}
-                  >
-                    Hủy
-                  </Button>
-                </Stack>
-              )}
-              {similar.length > 0 && !locked && (
-                <Alert severity={exact.length ? 'warning' : 'info'}>
-                  <Typography variant="subtitle2">
-                    Có sản phẩm tên gần giống trong catalog. Tên giống nhau chưa chắc là cùng sản phẩm — hãy kiểm tra. Nếu là hàng có sẵn,
-                    chọn ở bảng chọn hàng hoặc thêm màu/size cho sản phẩm đó.
-                  </Typography>
-                  {similar.map((p) => (
-                    <Stack key={p.product_id} direction="row" spacing={1} sx={{ alignItems: 'center', mt: 0.5, flexWrap: 'wrap' }}>
-                      <Typography variant="body2">
-                        #{p.product_id} · {p.product_name} · {p.category_name || 'Không danh mục'}
-                        {p.variants.length ? ` (${p.variants.map((v) => `${v.color}/${v.size}`).join(', ')})` : ''}
-                      </Typography>
-                      <Button
-                        size="small"
-                        onClick={() => {
-                          setProductId(p.product_id);
-                          setMode('variant');
-                        }}
-                      >
-                        Thêm màu/size cho sản phẩm này
-                      </Button>
-                    </Stack>
-                  ))}
-                </Alert>
-              )}
-              {exact.length > 0 && !locked && (
-                <FormControlLabel
-                  control={<Checkbox checked={allowSimilar} onChange={(e) => setAllowSimilar(e.target.checked)} />}
-                  label="Tôi xác nhận đây là sản phẩm khác, vẫn tạo mới"
-                />
-              )}
-            </>
-          ) : (
-            <Choice
-              label="Sản phẩm có sẵn"
-              value={productId}
-              disabled={locked}
-              error={showErrors && Boolean(headerError)}
-              onChange={(e) => setProductId(e.target.value)}
-            >
-              <MenuItem value="">Chọn sản phẩm</MenuItem>
-              {(products || []).map((p) => (
-                <MenuItem key={p.product_id} value={p.product_id}>
-                  #{p.product_id} · {p.product_name}
-                </MenuItem>
-              ))}
-            </Choice>
-          )}
+            )}
+            {similar.length > 0 && !locked && (
+              <Alert severity={exact.length ? 'warning' : 'info'}>
+                <Typography variant="subtitle2">
+                  Có sản phẩm tên gần giống trong catalog. Tên giống nhau chưa chắc là cùng sản phẩm — hãy kiểm tra. Nếu là hàng có sẵn,
+                  chọn ở bảng chọn hàng; thiếu màu/size thì thêm ở trang Sửa sản phẩm.
+                </Typography>
+                {similar.map((p) => (
+                  <Stack key={p.product_id} direction="row" spacing={1} sx={{ alignItems: 'center', mt: 0.5, flexWrap: 'wrap' }}>
+                    <Typography variant="body2">
+                      #{p.product_id} · {p.product_name} · {p.category_name || 'Không danh mục'}
+                      {p.variants.length ? ` (${p.variants.map((v) => `${v.color}/${v.size}`).join(', ')})` : ''}
+                    </Typography>
+                  </Stack>
+                ))}
+              </Alert>
+            )}
+            {exact.length > 0 && !locked && (
+              <FormControlLabel
+                control={<Checkbox checked={allowSimilar} onChange={(e) => setAllowSimilar(e.target.checked)} />}
+                label="Tôi xác nhận đây là sản phẩm khác, vẫn tạo mới"
+              />
+            )}
+          </>
           {showErrors && headerError && <Alert severity="warning">{headerError}</Alert>}
 
           <Typography variant="subtitle2">Biến thể cần tạo</Typography>
@@ -512,7 +496,10 @@ export default function QuickCreateDialog({ initial = {}, products, variants = [
                           label={`Số lượng đặt dòng ${idx + 1}`}
                           value={r.quantity}
                           disabled={locked}
-                          error={err(idx, 'quantity') || (r.quantity !== '' && parseQty(r.quantity) == null ? 'Số nguyên dương (1–1.000.000).' : '')}
+                          error={
+                            err(idx, 'quantity') ||
+                            (r.quantity !== '' && parseQty(r.quantity) == null ? 'Số nguyên dương (1–1.000.000).' : '')
+                          }
                           onChange={(v) => setRow(idx, { quantity: v })}
                         />
                       </TableCell>
@@ -572,9 +559,6 @@ export default function QuickCreateDialog({ initial = {}, products, variants = [
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button disabled={busy} onClick={onClose}>
-          Quay lại
-        </Button>
         <Button variant="contained" disabled={busy} onClick={submit}>
           {busy ? 'Đang tạo…' : withOrderFields ? 'Tạo và thêm vào phiếu' : 'Tạo và dùng cho dòng Excel'}
         </Button>

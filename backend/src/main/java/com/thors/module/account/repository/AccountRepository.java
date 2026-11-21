@@ -67,6 +67,8 @@ public class AccountRepository {
         return db.query(SELECT + " WHERE u.user_id=?", mapper, id).stream().findFirst();
     }
 
+    // Khóa dòng user trong transaction hiện tại (SELECT ... FOR UPDATE) rồi đọc lại tài khoản mới nhất.
+    // AuthService.authenticate dùng để 2 lần đăng nhập cùng lúc không đếm sai số lần sai.
     public Account lock(int id) {
         // Lock user separately to preserve lock order.
         var rows = db.queryForList("SELECT user_id FROM `user` WHERE user_id=? FOR UPDATE", id);
@@ -84,6 +86,8 @@ public class AccountRepository {
         }
     }
 
+    // Tìm tài khoản theo email (có "@": SELECT ... WHERE LOWER(TRIM(email)) = ?) hoặc số điện thoại.
+    // Đăng nhập bằng email đi nhánh email. Không thấy → Optional rỗng.
     public Optional<Account> byIdentifier(String value) {
         value = ContactNormalizer.identifier(value);
         final String identity = value;
@@ -394,6 +398,8 @@ public class AccountRepository {
         return n != null && n > 0;
     }
 
+    // Ghi 1 dòng audit_log về user `target`. actor = người làm (null = hệ thống).
+    // Vd SessionAccess.login ghi action "LOGIN" kèm IP sau khi đăng nhập thành công.
     public void audit(Integer actor, String action, int target, String detail) {
         db.update(
                 "INSERT INTO audit_log"

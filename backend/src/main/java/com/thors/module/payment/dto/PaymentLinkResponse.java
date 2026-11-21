@@ -11,6 +11,11 @@ public class PaymentLinkResponse {
     private String accountName;
     private String bin;
     private String status;
+    // Số giây còn lại để thanh toán (null = đơn không có hạn giữ)
+    private Long expiresInSeconds;
+
+    public Long getExpiresInSeconds() { return expiresInSeconds; }
+    public void setExpiresInSeconds(Long expiresInSeconds) { this.expiresInSeconds = expiresInSeconds; }
 
     public PaymentLinkResponse() {}
 

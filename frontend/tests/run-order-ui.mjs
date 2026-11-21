@@ -101,6 +101,8 @@ const draftRow = { ...orderRow, receipt_id: 9, code: 'PD00009', status: 'DRAFT',
   received_quantity: 0, remaining_quantity: 0 };
 const draftDetail = { ...draftRow, items: [{ ...orderDetail.items[0], receipt_item_id: 90, received_exact: 0, fulfilled_quantity: 0,
   remaining_quantity: 0 }], related: [], can_cancel_confirmed: false };
+// When true the documents list leaves out the draft receipt PN00010 (its source is PD00007).
+let hideDraftReceipt = false;
 const draftReceipt = { ...receipt, receipt_id: 10, status: 'DRAFT', created_by: 2,
   items: [{ ...receipt.items[0], receipt_item_id: 100, receipt_id: 10, quantity: 20 }] };
 const pickerRow = (v, extra = {}) => ({
@@ -120,6 +122,7 @@ let browser;
 const calls = [];
 const pageErrors = [];
 let saveAttempts = 0;
+let lastConfirmBody;
 let quickCreates = 0;
 let quickSuccess = 0;
 let catalogBody;
@@ -160,7 +163,7 @@ try {
       if (endpoint === '/api/warehouse/snapshot') return json(snapshot);
       if (endpoint === '/api/warehouse/documents' && request.method() === 'GET')
         return json([po, { ...receipt, source_type: 'PURCHASE_ORDER', paid_amount: 0, offset_amount: 0, debt_amount: 3000000 }, draftPo,
-          draftReceipt, approvedReturn, familyReturn, dispatchedReturn, oldReceipt]);
+          ...(hideDraftReceipt ? [] : [draftReceipt]), approvedReturn, familyReturn, dispatchedReturn, oldReceipt]);
       if (endpoint === '/api/warehouse/documents/15/payment-basis') {
         basisBody = request.postDataJSON();
         return json(debtOf[15]);
@@ -178,7 +181,10 @@ try {
         dispatchBody = request.postDataJSON();
         return json({ receipt_id: 12 });
       }
-      if (/^\/api\/warehouse\/documents\/\d+\/(confirm|submit|approve)$/.test(endpoint)) return json({ receipt_id: 9 });
+      if (/^\/api\/warehouse\/documents\/\d+\/(confirm|submit|approve)$/.test(endpoint)) {
+        if (endpoint.endsWith('/confirm')) lastConfirmBody = request.postDataJSON();
+        return json({ receipt_id: 9 });
+      }
       if (/^\/api\/warehouse\/documents\/\d+\/history$/.test(endpoint))
         return json({ actions: [{ action_type: 'DOCUMENT_CREATE', performed_at: '2026-11-03T09:00:00', actor_name: 'Chủ' }], movements: [] });
       if (endpoint === '/api/warehouse/documents' && request.method() === 'POST') {
@@ -228,10 +234,11 @@ try {
     return { context, page };
   }
 
-  // Owner: list shows document status and receiving progress separately.
+  // Owner: list shows one combined state; a partly received confirmed order is "Chờ nhận hàng".
   const { context, page } = await open('OWNER');
   await page.getByText('PD00007', { exact: true }).waitFor();
-  await page.getByText('Nhận một phần', { exact: true }).first().waitFor();
+  await page.getByText('Chờ nhận hàng', { exact: true }).first().waitFor();
+  assert.equal(await page.getByText('CONFIRMED', { exact: true }).count(), 0, 'no raw status codes in the list');
   assert.ok(calls.some((c) => c.startsWith('GET /api/warehouse/orders?')), 'list is loaded from backend');
 
   // Detail: ordered / received / remaining per variant + related receipt.
@@ -245,7 +252,7 @@ try {
   await page.getByRole('button', { name: 'PN00008', exact: true }).click();
   const linked = page.getByRole('dialog').last();
   await linked.getByText('PN00008 · Phiếu nhập hàng', { exact: false }).waitFor();
-  for (const name of ['Lập phiếu trả', 'Trả hàng nhà cung cấp', 'Xác nhận nhập hàng', 'Sửa nháp', 'Hủy phiếu', 'Gửi xác nhận'])
+  for (const name of ['Lập phiếu trả', 'Trả hàng nhà cung cấp', 'Xác nhận phiếu nhập', 'Sửa nháp', 'Hủy phiếu', 'Gửi xác nhận'])
     assert.equal(await linked.getByRole('button', { name, exact: true }).count(), 0, `linked receipt is view-only: ${name}`);
   await linked.getByRole('button', { name: 'Đóng', exact: true }).click();
   await page.getByRole('button', { name: 'Đóng', exact: true }).click();
@@ -267,10 +274,10 @@ try {
   assert.ok(!calls.some((c) => c.includes('/9/submit')));
   await page.keyboard.press('Escape');
 
-  // Draft receipt from a family member: owner sees "Xác nhận nhập hàng", no "Gửi xác nhận".
+  // Draft receipt from a family member: owner sees "Xác nhận phiếu nhập", no "Gửi xác nhận".
   await page.goto(`${baseURL}/warehouse/receipts`);
   await page.getByText('PN00010', { exact: true }).click();
-  await page.getByRole('button', { name: 'Xác nhận nhập hàng', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Xác nhận phiếu nhập', exact: true }).waitFor();
   assert.equal(await page.getByRole('button', { name: 'Gửi xác nhận', exact: true }).count(), 0);
   await page.keyboard.press('Escape');
   await page.goto(`${baseURL}/warehouse/orders`);
@@ -279,8 +286,8 @@ try {
   // Create: supplier first.
   await page.getByRole('button', { name: 'Tạo phiếu đặt hàng', exact: true }).click();
   await page.getByText('Chọn nhà cung cấp để bắt đầu thêm hàng.').waitFor();
-  await page.getByPlaceholder('Chọn hoặc nhập tên nhà cung cấp').fill('Xưởng B');
-  await page.getByRole('button', { name: 'Dùng nhà cung cấp này', exact: true }).click();
+  await page.getByPlaceholder('Gõ tên để chọn nhà cung cấp đã có, hoặc nhập tên mới').fill('Xưởng B');
+  await page.keyboard.press('Tab'); // the supplier is chosen when leaving the field
   // History scope shows only the variant ordered from this supplier.
   await page.getByRole('checkbox', { name: 'Chọn Áo thun · Đen · M', exact: true }).waitFor();
   assert.equal(await page.getByRole('checkbox', { name: 'Chọn Quần jean · Xanh · 30', exact: true }).count(), 0);
@@ -397,11 +404,13 @@ try {
   await page.getByText(/Tổng số lượng: 26/).waitFor(); // 10 + 1 picked lines + 15 new
 
   // Changing supplier with lines asks instead of clearing silently.
-  await page.getByPlaceholder('Chọn hoặc nhập tên nhà cung cấp').fill('Công ty C');
+  await page.getByPlaceholder('Gõ tên để chọn nhà cung cấp đã có, hoặc nhập tên mới').fill('Công ty C');
   await page.getByRole('button', { name: 'Đổi nhà cung cấp', exact: true }).click();
   await page.getByText('Đổi nhà cung cấp?', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Giữ nhà cung cấp cũ', exact: true }).click();
 
+  // Owner: save as draft or save and confirm right away.
+  await page.getByRole('button', { name: 'Lưu và xác nhận đặt hàng', exact: true }).waitFor();
   // First save fails: quick-created item is kept; retry does not create it again.
   await page.getByRole('button', { name: 'Lưu phiếu nháp', exact: true }).click();
   await page.getByText(/Lỗi mạng giả lập\. Hàng vừa tạo nhanh vẫn được giữ/).waitFor();
@@ -420,16 +429,28 @@ try {
       [51, 5, 90000]
     ]
   );
-  // Full receipt flow from the "Nhập hàng" page: choose a confirmed order, outstanding quantity is prefilled.
+  // Full receipt flow from the "Nhập hàng" page: a confirmed order shows as "Chờ nhận hàng"; clicking it
+  // opens the receipt with the outstanding quantity prefilled. There is no separate "create receipt" button.
   await page.goto(`${baseURL}/warehouse/receipts`);
-  await page.getByRole('button', { name: 'Tạo phiếu nhập hàng', exact: true }).click();
-  await page.getByRole('combobox', { name: /Phiếu nguồn/ }).click();
-  await page.getByRole('option', { name: /PD00007/ }).click();
+  assert.equal(await page.getByRole('button', { name: 'Tạo phiếu nhập hàng', exact: true }).count(), 0);
+  await page.getByText('Chờ nhận hàng', { exact: true }).first().waitFor();
+  const waitingRow = (code) => page.getByRole('row').filter({ hasText: 'Chưa lập phiếu' }).filter({ hasText: `Từ ${code}` });
+  // PD00007 already has the draft receipt PN00010: that draft is the row to work on, no second waiting row.
+  await page.getByText('PN00010', { exact: true }).waitFor();
+  assert.equal(await waitingRow('PD00007').count(), 0, 'no waiting row while a draft receipt exists');
+  hideDraftReceipt = true;
+  await page.reload();
+  await waitingRow('PD00007').click();
   assert.equal(await page.getByLabel('Số lượng Áo thun · Đen · M', { exact: true }).inputValue(), '40');
   await page.getByLabel('Số lượng Áo thun · Đen · M', { exact: true }).fill('25');
-  await page.getByRole('button', { name: 'Lưu phiếu nháp', exact: true }).click();
-  await page.getByText('Đã lưu phiếu nháp.', { exact: true }).waitFor();
+  // No draft step: the owner's button saves and confirms the receipt in one go.
+  assert.equal(await page.getByRole('button', { name: 'Lưu phiếu nháp', exact: true }).count(), 0);
+  await page.getByRole('button', { name: 'Xác nhận phiếu nhập', exact: true }).click();
+  await page.getByText('Đã xác nhận phiếu nhập, chờ in tem và quét kiểm hàng.', { exact: true }).waitFor();
   assert.deepEqual([savedBody.type, savedBody.sourceId, savedBody.items[0].quantity, savedBody.items[0].sourceItemId], ['RECEIPT', 7, 25, 70]);
+  assert.ok(calls.includes('POST /api/warehouse/documents/11/confirm'), 'receipt confirmed right after saving');
+  assert.deepEqual(lastConfirmBody, { expectedRemaining: { 70: 40 } }, 'stale-check uses the remaining shown on the form');
+  hideDraftReceipt = false;
 
   // Supplier return started from the confirmed receipt's detail: source prefilled, only its lines.
   await page.getByText('PN00008', { exact: true }).click();
@@ -461,8 +482,8 @@ try {
   await page.getByText('Tổng số sản phẩm đã trả nhà cung cấp', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Tạo phiếu trả', exact: true }).click();
   await page.getByText('Chọn phiếu nhập để xem các sản phẩm có thể trả', { exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Quay lại', exact: true }).click();
-  await page.getByRole('textbox', { name: 'Tìm chứng từ' }).fill('PN00008');
+  await page.getByRole('button', { name: 'Đóng', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Tìm phiếu' }).fill('PN00008');
   await page.getByText('PT00012', { exact: true }).waitFor();
   await page.getByText('Chờ xuất trả', { exact: true }).first().waitFor();
 
@@ -486,16 +507,21 @@ try {
   await page.keyboard.press('Escape');
 
   // Dispatched return: money status is separate from the document status; refund in several steps, exchange.
-  await page.getByRole('textbox', { name: 'Tìm chứng từ' }).fill('PT00014');
+  await page.getByRole('textbox', { name: 'Tìm phiếu' }).fill('PT00014');
   await page.getByText('NCC trả một phần', { exact: true }).waitFor();
-  await page.getByText('Đã nhận 200.000 ₫ · Còn 50.000 ₫', { exact: true }).waitFor();
+  await page.getByText('Còn nợ 50.000 ₫', { exact: true }).waitFor();
   await page.getByText('PT00014', { exact: true }).click();
   const returned = page.getByRole('dialog', { name: /PT00014/ });
   await returned.getByText('Đã xuất trả', { exact: true }).waitFor();
   assert.equal(await returned.getByText(/chưa được theo dõi/).count(), 0, 'no "not tracked" notice once settlements work');
   await returned.getByText('Tiền mặt', { exact: true }).waitFor(); // earlier refund entry
-  await returned.getByRole('button', { name: 'Nhận hoàn tiền', exact: true }).click();
-  const refund = page.getByRole('dialog', { name: 'Nhận hoàn tiền · PT00014' });
+  // Only three figures and one action: what the supplier owes, has paid, still owes.
+  await returned.getByText('NCC phải trả:', { exact: false }).waitFor();
+  await returned.getByText('Còn nợ:', { exact: false }).waitFor();
+  for (const name of ['Giảm công nợ', 'Giữ tiền đối trừ', 'Đổi hàng'])
+    assert.equal(await returned.getByRole('button', { name, exact: true }).count(), 0, `${name} button removed`);
+  await returned.getByRole('button', { name: 'Ghi nhận NCC trả tiền', exact: true }).click();
+  const refund = page.getByRole('dialog', { name: 'Ghi nhận NCC trả tiền · PT00014' });
   const amount = refund.getByRole('spinbutton');
   assert.equal(await amount.inputValue(), '50000', 'defaults to the unsettled part');
   await amount.fill('200000');
@@ -504,7 +530,7 @@ try {
   await refund.getByRole('combobox', { name: 'Hình thức' }).click();
   await page.getByRole('option', { name: 'Chuyển khoản', exact: true }).click();
   await refund.getByRole('button', { name: 'Ghi nhận', exact: true }).click();
-  await page.getByText('Đã ghi nhận: nhận hoàn tiền.', { exact: true }).waitFor();
+  await page.getByText('Đã ghi nhận tiền NCC trả.', { exact: true }).waitFor();
   assert.deepEqual(
     [settlementPosts[0].type, settlementPosts[0].returnId, settlementPosts[0].amount, settlementPosts[0].method],
     ['REFUND', 14, 30000, 'BANK_TRANSFER']
@@ -512,27 +538,14 @@ try {
   assert.match(settlementPosts[0].date, /^\d{4}-\d{2}-\d{2}$/, 'transaction date is sent');
   assert.match(settlementPosts[0].requestKey, /^[a-f0-9-]{36}$/);
   await returned.getByText(/nhà cung cấp đổi 2, đã nhập kho 0/).waitFor();
-  await returned.getByRole('button', { name: 'Đổi hàng', exact: true }).click();
-  const exchange = page.getByRole('dialog', { name: 'Đổi hàng · PT00014' });
-  await exchange.getByText(/Tồn kho chưa thay đổi/).waitFor();
-  await exchange.getByLabel('Số lượng nhà cung cấp sẽ đổi', { exact: true }).fill('1');
-  await exchange.getByText('Giá trị hàng đổi: 50.000 ₫').waitFor();
-  await exchange.getByRole('button', { name: 'Ghi nhận', exact: true }).click();
-  await page.getByText('Đã ghi nhận: đổi hàng.', { exact: true }).waitFor();
-  assert.deepEqual(
-    [settlementPosts[1].type, settlementPosts[1].itemId, settlementPosts[1].quantity, settlementPosts[1].amount],
-    ['EXCHANGE', 140, 1, null]
-  );
   await page.keyboard.press('Escape');
 
   // Replacement goods come in only through a receipt whose source is the return.
   await page.goto(`${baseURL}/warehouse/receipts`);
-  await page.getByRole('button', { name: 'Tạo phiếu nhập hàng', exact: true }).click();
-  await page.getByRole('combobox', { name: /Phiếu nguồn/ }).click();
-  await page.getByRole('option', { name: /PT00014/ }).click();
+  await page.getByRole('row').filter({ hasText: 'Chưa lập phiếu' }).filter({ hasText: 'Từ PT00014' }).click();
   assert.equal(await page.getByLabel('Số lượng Áo thun · Đen · M', { exact: true }).inputValue(), '2', 'agreed exchange quantity is prefilled');
-  await page.getByRole('button', { name: 'Lưu phiếu nháp', exact: true }).click();
-  await page.getByText('Đã lưu phiếu nháp.', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Xác nhận phiếu nhập', exact: true }).click();
+  await page.getByText('Đã xác nhận phiếu nhập, chờ in tem và quét kiểm hàng.', { exact: true }).waitFor();
   assert.deepEqual([savedBody.type, savedBody.sourceId, savedBody.items[0].sourceItemId, savedBody.items[0].quantity], ['RECEIPT', 14, 140, 2]);
 
   // Held credit is used on a confirmed receipt of the same supplier.
@@ -544,14 +557,14 @@ try {
   await pay.getByRole('spinbutton').fill('1000000');
   await pay.getByRole('button', { name: 'Ghi nhận', exact: true }).click();
   await page.getByText('Đã ghi nhận: thanh toán.', { exact: true }).waitFor();
-  assert.deepEqual([settlementPosts[2].type, settlementPosts[2].targetReceiptId, settlementPosts[2].amount, settlementPosts[2].method],
+  assert.deepEqual([settlementPosts[1].type, settlementPosts[1].targetReceiptId, settlementPosts[1].amount, settlementPosts[1].method],
     ['PAYMENT', 8, 1000000, 'CASH']);
   await page.getByRole('button', { name: 'Dùng tiền đối trừ', exact: true }).click();
   const use = page.getByRole('dialog', { name: 'Dùng tiền đối trừ · PN00008' });
   assert.equal(await use.getByRole('spinbutton').inputValue(), '40000');
   await use.getByRole('button', { name: 'Ghi nhận', exact: true }).click();
   await page.getByText('Đã ghi nhận: dùng tiền đối trừ.', { exact: true }).waitFor();
-  assert.deepEqual([settlementPosts[3].type, settlementPosts[3].targetReceiptId, settlementPosts[3].returnId], ['CREDIT_USE', 8, null]);
+  assert.deepEqual([settlementPosts[2].type, settlementPosts[2].targetReceiptId, settlementPosts[2].returnId], ['CREDIT_USE', 8, null]);
   await page.screenshot({ path: path.join(artifacts, 'receipt-credit.png'), fullPage: true });
   await page.keyboard.press('Escape');
 
@@ -566,9 +579,10 @@ try {
   assert.deepEqual(basisBody, { paidBefore: 200000 });
   await page.keyboard.press('Escape');
   await page.goto(`${baseURL}/warehouse/suppliers`);
-  await page.getByRole('columnheader', { name: 'Tiền đối trừ đang giữ', exact: true }).waitFor();
-  await page.getByRole('cell', { name: '40.000 ₫', exact: true }).waitFor();
-  await page.getByText('+ 1 phiếu nhập chưa khai báo', { exact: true }).waitFor();
+  // Two tabs: purchases (what the shop owes) and returns (what the supplier owes back).
+  await page.getByRole('columnheader', { name: 'Còn nợ NCC', exact: true }).waitFor();
+  await page.getByRole('tab', { name: 'Trả hàng', exact: true }).click();
+  await page.getByRole('columnheader', { name: 'NCC còn nợ', exact: true }).waitFor();
   await context.close();
 
   // Family member: may view orders but not create them.
@@ -585,9 +599,9 @@ try {
   await family.page.goto(`${baseURL}/warehouse/receipts`);
   await family.page.getByText('PN00010', { exact: true }).click();
   await family.page.getByRole('button', { name: 'Gửi xác nhận', exact: true }).waitFor();
-  assert.equal(await family.page.getByRole('button', { name: 'Xác nhận nhập hàng', exact: true }).count(), 0);
+  assert.equal(await family.page.getByRole('button', { name: 'Xác nhận phiếu nhập', exact: true }).count(), 0);
   await family.page.keyboard.press('Escape');
-  await family.page.getByRole('button', { name: 'Tạo phiếu nhập hàng', exact: true }).waitFor(); // family may draft receipts
+  await family.page.getByText('Chờ nhận hàng', { exact: true }).first().waitFor(); // family may draft receipts from waiting orders
   // Family: may draft supplier returns and send their own draft for approval, never approve/dispatch.
   await family.page.goto(`${baseURL}/warehouse/returns`);
   await family.page.getByRole('heading', { name: 'Trả hàng nhà cung cấp', exact: true }).waitFor();
@@ -601,8 +615,8 @@ try {
   assert.equal(await family.page.getByRole('button', { name: 'Xác nhận xuất trả', exact: true }).count(), 0);
   await family.page.keyboard.press('Escape');
   await family.page.getByText('PT00014', { exact: true }).click();
-  await family.page.getByText('Còn chưa xử lý:', { exact: false }).waitFor(); // family sees the money status
-  for (const name of ['Nhận hoàn tiền', 'Giảm công nợ', 'Giữ tiền đối trừ', 'Đổi hàng', 'Hủy bút toán'])
+  await family.page.getByText('Còn nợ:', { exact: false }).waitFor(); // family sees the money status
+  for (const name of ['Ghi nhận NCC trả tiền', 'Hủy dòng này'])
     assert.equal(await family.page.getByRole('button', { name, exact: true }).count(), 0, name);
   await family.context.close();
 

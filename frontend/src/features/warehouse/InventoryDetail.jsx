@@ -21,7 +21,8 @@ import useSWR from 'swr';
 import { api } from 'services/http';
 import { useWarehouse } from './WarehouseContext';
 import { DataTable } from './components';
-import BarcodePrintDialog from './BarcodePrintDialog';
+import SerialPrintDialog from './SerialPrintDialog';
+import UnitList from './UnitList';
 import { docLink, money, movementLabel, number, orderCode, skuLabel, stockStateColor, stockStateLabel, when } from './model';
 
 function Figure({ label, value, hint }) {
@@ -146,8 +147,7 @@ function StockCard({ id, kind }) {
       </Typography>
       {data?.ledger_gap ? (
         <Alert severity="info">
-          Lịch sử của biến thể này chưa đầy đủ: trước biến động cũ nhất đã ghi còn {number(data.ledger_gap)} sản phẩm không có chứng từ. Hệ
-          thống không tạo lịch sử giả để bù.
+          Có {number(data.ledger_gap)} sản phẩm có từ trước khi hệ thống ghi lịch sử nên không có phiếu đi kèm.
         </Alert>
       ) : null}
       {error ? (
@@ -171,7 +171,7 @@ function StockCard({ id, kind }) {
               : [
                   { key: 'adjusted_at', label: 'Thời gian', render: (m) => when(m.adjusted_at) },
                   { key: 'movement_type', label: 'Nghiệp vụ', render: (m) => movementLabel[m.movement_type] || m.movement_type },
-                  { key: 'doc', label: 'Chứng từ', render: (m) => <DocLink row={m} /> },
+                  { key: 'doc', label: 'Phiếu', render: (m) => <DocLink row={m} /> },
                   {
                     key: 'quantity_change',
                     label: 'Tăng / giảm',
@@ -214,8 +214,8 @@ export default function InventoryDetail({ id, onClose, onChanged }) {
             <Button
               size="small"
               variant="outlined"
-              disabled={!v.barcode}
-              title={v.barcode ? undefined : 'Biến thể chưa có mã vạch. Owner bấm “Tạo mã còn thiếu” ở trang Tồn kho.'}
+              disabled={!(v.stock_quantity > 0)}
+              title={v.stock_quantity > 0 ? 'In tem serial cho các chiếc trong kho' : 'Đang hết hàng'}
               onClick={() => setPrinting(true)}
             >
               In tem
@@ -232,6 +232,7 @@ export default function InventoryDetail({ id, onClose, onChanged }) {
           <>
             <Tabs value={tab} onChange={(_, t) => setTab(t)} variant="scrollable" sx={{ mb: 2 }}>
               <Tab label="Tổng quan" />
+              <Tab label={`Mã từng chiếc (${number(v.stock_quantity)})`} />
               <Tab label={`Vị trí (${v.location_rows.filter((l) => l.quantity > 0).length})`} />
               <Tab label={`Đơn giữ & đang đặt (${v.holds.length + v.incoming.length})`} />
               <Tab label="Lịch sử biến động tồn kho" />
@@ -239,7 +240,7 @@ export default function InventoryDetail({ id, onClose, onChanged }) {
             </Tabs>
             {tab === 0 && (
               <Stack spacing={2}>
-                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(6,1fr)' }, gap: 1 }}>
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', sm: 'repeat(3, minmax(0, 1fr))', lg: 'repeat(6, minmax(0, 1fr))' }, gap: 1 }}>
                   <Figure label="Tổng tồn" value={number(v.stock_quantity)} />
                   <Figure label="Đã xếp vị trí" value={number(v.assigned_quantity)} />
                   <Figure label="Chưa xếp vị trí" value={number(v.unassigned_quantity)} />
@@ -283,10 +284,10 @@ export default function InventoryDetail({ id, onClose, onChanged }) {
                 {owner && (
                   <Alert severity={v.stock_value == null ? 'warning' : 'info'} icon={false}>
                     {v.stock_value == null ? (
-                      <>Chưa đủ cơ sở giá vốn: {v.cost_note}. Không tính giá trị tồn, không dùng giá bán hay giá nhập gần nhất thay thế.</>
+                      <>Chưa rõ giá nhập: {v.cost_note}. Chưa tính được giá trị tồn.</>
                     ) : (
                       <>
-                        Giá vốn bình quân gia quyền liên hoàn {v.unit_cost == null ? '—' : money(v.unit_cost)} · Giá trị tồn{' '}
+                        Giá nhập trung bình {v.unit_cost == null ? '—' : money(v.unit_cost)} · Giá trị tồn{' '}
                         {money(v.stock_value)}
                       </>
                     )}
@@ -307,7 +308,8 @@ export default function InventoryDetail({ id, onClose, onChanged }) {
                 </Stack>
               </Stack>
             )}
-            {tab === 1 && (
+            {tab === 1 && <UnitList variant={v} />}
+            {tab === 2 && (
               <DataTable
                 rows={[
                   ...v.location_rows.map((l) => ({ ...l, _key: l.product_location_id })),
@@ -336,7 +338,7 @@ export default function InventoryDetail({ id, onClose, onChanged }) {
                 ]}
               />
             )}
-            {tab === 2 && (
+            {tab === 3 && (
               <Stack spacing={2}>
                 <Typography variant="subtitle1">Đơn đang giữ hàng</Typography>
                 <DataTable
@@ -363,9 +365,7 @@ export default function InventoryDetail({ id, onClose, onChanged }) {
                 />
                 {v.unheld_pending.length > 0 && (
                   <Alert severity="info">
-                    {v.unheld_pending.length} đơn online đặt trước khi có giữ hàng đang chờ xác nhận (
-                    {v.unheld_pending.map((o) => o.order_number).join(', ')}): chưa giữ hàng, khi Owner xác nhận hệ thống vẫn kiểm tra số có
-                    thể bán.
+                    Đơn online chờ xác nhận nhưng chưa giữ hàng: {v.unheld_pending.map((o) => o.order_number).join(', ')}.
                   </Alert>
                 )}
                 <Typography variant="subtitle1">Đang đặt chưa nhận</Typography>
@@ -391,8 +391,8 @@ export default function InventoryDetail({ id, onClose, onChanged }) {
                 />
               </Stack>
             )}
-            {tab === 3 && <StockCard id={id} kind="stock" />}
-            {tab === 4 && <StockCard id={id} kind="move" />}
+            {tab === 4 && <StockCard id={id} kind="stock" />}
+            {tab === 5 && <StockCard id={id} kind="move" />}
           </>
         )}
       </DialogContent>
@@ -401,7 +401,7 @@ export default function InventoryDetail({ id, onClose, onChanged }) {
       </DialogActions>
     </Dialog>
     {/* Rendered after the detail dialog so it opens on top of it. */}
-    {printing && v && <BarcodePrintDialog variants={[v]} onClose={() => setPrinting(false)} />}
+    {printing && v && <SerialPrintDialog variants={[v]} onClose={() => setPrinting(false)} />}
     </>
   );
 }

@@ -1,6 +1,6 @@
 import { Link as RouterLink, useLocation } from 'react-router-dom';
 import { IconButton, Typography } from '@mui/material';
-import { MenuOutlined } from '@ant-design/icons';
+import { MenuOutlined, RightOutlined } from '@ant-design/icons';
 import { Stack } from 'features/account/components/Flex';
 import { brand } from 'features/account/tokens';
 import { useAuth } from 'features/auth/AuthProvider';
@@ -8,7 +8,7 @@ import NotificationBell from 'features/notification/NotificationBell';
 import CartButton from 'components/CartButton';
 import UserMenu from './UserMenu';
 import PendingCartHandler from 'features/shop/PendingCartHandler';
-import { crumbPath } from './routeCrumbs';
+import { buildCrumbs } from './routeCrumbs';
 
 // Ví dụ: "Chủ Nhật, 1 tháng 11, 2026"
 function formatTodayVi() {
@@ -42,33 +42,22 @@ export default function AppHeader({ crumbs, onOpenMenu, onSignOut }) {
       </IconButton>
 
       <Stack direction="row" spacing={0.75} alignItems="center" component="nav" aria-label="Đường dẫn trang" sx={{ flexGrow: 1, minWidth: 0 }}>
-        {crumbs.map((label, index) => {
-          const last = index === crumbs.length - 1;
-          // Mục trước mục cuối là link để quay lại trang cha (không còn nút "Quay lại" trên trang)
-          const to = last ? null : crumbPath(label, account?.role);
-          const linked = to && to !== pathname;
+        {buildCrumbs(crumbs, pathname, account?.role).map(({ label, to }, index, list) => {
+          const last = index === list.length - 1;
+          const linked = !last && to && to !== pathname;
           return (
             <Stack key={`${label}-${index}`} direction="row" spacing={0.75} alignItems="center" sx={{ minWidth: 0 }}>
-              {index > 0 && (
-                <Typography variant="caption" sx={{ color: brand.muted, fontSize: 14 }}>
-                  /
-                </Typography>
-              )}
+              {index > 0 && <RightOutlined style={{ fontSize: 10, color: brand.muted }} />}
               <Typography
                 variant="caption"
                 noWrap
                 {...(linked ? { component: RouterLink, to } : {})}
                 aria-current={last ? 'page' : undefined}
                 sx={{
-                  color: last ? brand.ink : linked ? brand.teal : brand.muted,
-                  fontWeight: last ? 700 : linked ? 600 : 400,
+                  color: last ? brand.ink : brand.muted,
+                  fontWeight: last ? 700 : 400,
                   fontSize: 14,
-                  textDecoration: 'none',
-                  ...(linked && {
-                    borderRadius: '6px',
-                    '&:hover': { color: '#158A98', textDecoration: 'underline' },
-                    '&:focus-visible': { outline: `2px solid ${brand.teal}`, outlineOffset: 2 }
-                  })
+                  textDecoration: 'none'
                 }}
               >
                 {label}

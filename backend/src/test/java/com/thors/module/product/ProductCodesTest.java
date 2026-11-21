@@ -35,20 +35,34 @@ class ProductCodesTest {
     }
 
     @Test
-    void suggestsNextSkuFromCategoryInitials() {
+    void assignsThCodeFromVariantIdLikeWarehouse() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
-        when(jdbc.queryForList(anyString(), eq(String.class), eq(6))).thenReturn(List.of("Giày nam"));
-        when(jdbc.queryForList(anyString(), eq(String.class), eq("GN-%"))).thenReturn(List.of("GN-0001", "GN-0007", "GN-ABC"));
+        when(jdbc.queryForList(anyString(), eq(Integer.class), eq(29))).thenReturn(List.of(58, 59));
+        // TH000059 đã bị biến thể khác dùng -> TH000059-1
+        when(jdbc.queryForObject(anyString(), eq(Integer.class), eq("TH000058"))).thenReturn(0);
+        when(jdbc.queryForObject(anyString(), eq(Integer.class), eq("TH000059"))).thenReturn(1);
+        when(jdbc.queryForObject(anyString(), eq(Integer.class), eq("TH000059-1"))).thenReturn(0);
+        when(jdbc.update(anyString(), anyString(), org.mockito.ArgumentMatchers.anyInt())).thenReturn(1);
 
-        assertEquals("GN-0008", new ProductCodes(jdbc).suggestSku(6));
+        assertEquals(2, new ProductCodes(jdbc).assignVariantCodes(29));
+        org.mockito.Mockito.verify(jdbc).update(anyString(), eq("TH000058"), eq(58));
+        org.mockito.Mockito.verify(jdbc).update(anyString(), eq("TH000059-1"), eq(59));
     }
 
     @Test
-    void singleWordCategoryUsesFirstThreeLetters() {
+    void suggestsNextThSku() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
-        when(jdbc.queryForList(anyString(), eq(String.class), eq(5))).thenReturn(List.of("Balo"));
+        when(jdbc.queryForList(anyString(), eq(String.class), eq("TH%")))
+                .thenReturn(List.of("TH000001", "TH000029", "THAO-01", "TH12"));
 
-        assertEquals("BAL-0001", new ProductCodes(jdbc).suggestSku(5));
+        assertEquals("TH000030", new ProductCodes(jdbc).suggestSku(6));
+    }
+
+    @Test
+    void firstThSkuWhenNoneUsed() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+
+        assertEquals("TH000001", new ProductCodes(jdbc).suggestSku(null));
     }
 
     @Test

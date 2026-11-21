@@ -64,8 +64,16 @@ public class ProductMapper implements RowMapper<Product> {
             product.setActiveVariantCount(rs.getInt("active_variant_count"));
             product.setSellableStock(rs.getInt("sellable_stock"));
             product.setOutOfStockVariantCount(rs.getInt("out_variant_count"));
+            // Biến thể tồn 0 và chưa từng có biến động kho (chưa nhập hàng)
+            if (columns.contains("never_stocked_variant_count")) {
+                product.setNeverStockedVariantCount(rs.getInt("never_stocked_variant_count"));
+            }
             product.setLowStockVariantCount(rs.getInt("low_variant_count"));
             product.setSearchText(rs.getString("search_text"));
+            // Mã các biến thể đang hoạt động, phân tách bằng dấu phẩy (vd "TH000051,TH000052")
+            if (columns.contains("variant_codes")) {
+                product.setVariantCodes(rs.getString("variant_codes"));
+            }
         }
 
         return product;

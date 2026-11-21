@@ -18,8 +18,8 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Purchase debt of a confirmed receipt from a purchase order:
  * {@code value − paid_before_tracking − Σ PAYMENT − Σ DEBT_OFFSET − Σ CREDIT_USE}. Each amount is
  * counted once and the debt never goes below zero. {@code paid_before_tracking} is NULL for receipts
- * confirmed before payment tracking: their debt is unknown (never assumed paid or unpaid) until the
- * Owner declares what had been paid; receipts confirmed later start at 0.
+ * confirmed before payment tracking (e.g. imported from Excel): they are treated as fully paid (debt 0)
+ * unless the Owner declares otherwise; receipts confirmed later start at 0 paid.
  *
  * <p>A dispatched return's value (Σ quantity × unit price) is settled by REFUND (several times
  * allowed), DEBT_OFFSET (on one receipt of the same supplier), CREDIT_HOLD (supplier keeps it; later
@@ -41,9 +41,9 @@ public class WarehouseSettlements {
         this.policy = policy;
     }
 
-    /** Debt of a purchase receipt; null while what was paid before tracking is not declared. */
+    /** Debt of a purchase receipt; an old receipt with nothing declared counts as fully paid. */
     static BigDecimal debt(BigDecimal value, Object paidBefore, BigDecimal reductions) {
-        return paidBefore == null ? null : value.subtract((BigDecimal) paidBefore).subtract(reductions);
+        return paidBefore == null ? BigDecimal.ZERO : value.subtract((BigDecimal) paidBefore).subtract(reductions);
     }
 
     private static String vnd(BigDecimal v) {

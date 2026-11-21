@@ -5,6 +5,11 @@ import {
   Button,
   Checkbox,
   Chip,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  IconButton,
+  Link,
   MenuItem,
   Stack,
   Table,
@@ -16,16 +21,86 @@ import {
   Tooltip,
   Typography
 } from '@mui/material';
+import { CloseOutlined } from '@ant-design/icons';
 import { Pager } from 'features/account/components/Blocks';
 import { api } from 'services/http';
 import { money, number, variantLabel, when } from './model';
 
+/** Hàng ngừng kinh doanh (sản phẩm hoặc biến thể đang tắt) không đặt được cho tới khi bật lại bên Sản phẩm. */
+const stopped = (r) => r.product_status !== 'ACTIVE' || r.variant_status !== 'ACTIVE';
+
+/**
+ * Sản phẩm tắt → Danh sách sản phẩm, mở sẵn tab "Đã ẩn" và tìm đúng mã #ID (chỉ còn 1 dòng, có công tắc Trạng thái);
+ * chỉ biến thể tắt → trang sửa đúng sản phẩm đó.
+ */
+const enableLink = (r) =>
+  r.product_status !== 'ACTIVE'
+    ? `/products?${new URLSearchParams({ tab: 'INACTIVE', q: `#${r.product_id}` })}`
+    : `/products/${r.product_id}/edit`;
+
+/** Open orders of other suppliers that make up a variant's "Đang đặt NCC khác" number. */
+function OtherOrdersDialog({ row, onClose }) {
+  const orders = row.other_orders || [];
+  return (
+    <Dialog open onClose={onClose} fullWidth maxWidth="md">
+      <DialogTitle sx={{ pr: 7 }}>
+        Đang đặt ở nhà cung cấp khác · {variantLabel(row)}
+        <IconButton aria-label="Đóng" onClick={onClose} sx={{ position: 'absolute', right: 12, top: 12 }}>
+          <CloseOutlined />
+        </IconButton>
+      </DialogTitle>
+      <DialogContent>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Mã phiếu</TableCell>
+              <TableCell>Nhà cung cấp</TableCell>
+              <TableCell>Ngày đặt</TableCell>
+              <TableCell align="right">Đơn giá đặt</TableCell>
+              <TableCell align="right">Đặt</TableCell>
+              <TableCell align="right">Đã nhập</TableCell>
+              <TableCell align="right">Còn chờ nhận</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {orders.map((o) => (
+              <TableRow key={o.order_id}>
+                <TableCell>
+                  <Link href={`/warehouse/orders?id=${o.order_id}`} target="_blank" rel="noopener" underline="hover">
+                    {o.code}
+                  </Link>
+                </TableCell>
+                <TableCell>{o.supplier}</TableCell>
+                <TableCell>{when(o.order_date)}</TableCell>
+                <TableCell align="right">{money(o.price)}</TableCell>
+                <TableCell align="right">{number(o.ordered_quantity)}</TableCell>
+                <TableCell align="right">{number(o.fulfilled_quantity)}</TableCell>
+                <TableCell align="right">{number(o.remaining_quantity)}</TableCell>
+              </TableRow>
+            ))}
+            {!orders.length && (
+              <TableRow>
+                <TableCell colSpan={7} sx={{ py: 3, textAlign: 'center', color: 'text.secondary' }}>
+                  Chưa có chi tiết phiếu. Khởi động lại backend để tải dữ liệu mới.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+        <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 1 }}>
+          Bấm mã phiếu để xem chi tiết.
+        </Typography>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /**
  * Multi-select of product variants for a purchase order. "Từng đặt" = variants on a CONFIRMED or
- * CLOSED order of this supplier (document history, not a formal supply catalogue). Selection lives
- * in the parent so it survives search, filter and page changes.
+ * CLOSED order of this supplier (document history, not a formal supply catalogue). A ticked row is a
+ * line on the order: onToggle(rows, add) adds or removes it right away, no separate "add" step.
  */
-export default function VariantPicker({ supplier, excludeOrderId, categories, selected, onToggle, onAdd, existingIds, onQuickCreate }) {
+export default function VariantPicker({ supplier, excludeOrderId, categories, onToggle, existingIds, onQuickCreate }) {
   const [scope, setScope] = useState('history');
   const [query, setQuery] = useState('');
   const [search, setSearch] = useState('');
@@ -35,7 +110,20 @@ export default function VariantPicker({ supplier, excludeOrderId, categories, se
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [othersOf, setOthersOf] = useState(null);
+  const [reload, setReload] = useState(0);
   const autoSwitched = useRef('');
+
+  // Quay lại tab này sau khi bật sản phẩm bên trang Sản phẩm thì tải lại để chọn được ngay.
+  useEffect(() => {
+    const refresh = () => document.visibilityState === 'visible' && setReload((n) => n + 1);
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, []);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -68,11 +156,11 @@ export default function VariantPicker({ supplier, excludeOrderId, categories, se
     return () => {
       alive = false;
     };
-  }, [supplier, scope, search, categoryId, page, size, excludeOrderId]);
+  }, [supplier, scope, search, categoryId, page, size, excludeOrderId, reload]);
 
   const rows = result?.items || [];
-  const pickable = rows.filter((r) => !existingIds.has(r.detail_id));
-  const allOnPage = pickable.length > 0 && pickable.every((r) => selected.has(r.detail_id));
+  const selectable = rows.filter((r) => !stopped(r));
+  const allOnPage = selectable.length > 0 && selectable.every((r) => existingIds.has(r.detail_id));
 
   return (
     <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 2 }}>
@@ -80,7 +168,7 @@ export default function VariantPicker({ supplier, excludeOrderId, categories, se
         <Stack direction="row" spacing={1}>
           {[
             ['history', 'Hàng từng đặt từ nhà cung cấp này'],
-            ['all', 'Thêm sản phẩm khác']
+            ['all', 'Tất cả sản phẩm (mọi nhà cung cấp)']
           ].map(([value, label]) => (
             <Button
               key={value}
@@ -100,15 +188,9 @@ export default function VariantPicker({ supplier, excludeOrderId, categories, se
           </Button>
         )}
       </Stack>
-      <Typography variant="caption" color="text.secondary" component="div" sx={{ mb: 1 }}>
-        {scope === 'history'
-          ? 'Theo lịch sử phiếu đặt đã xác nhận/đã đóng của nhà cung cấp này (không tính nháp, chờ duyệt, hủy). Đây không phải danh mục cung ứng chính thức.'
-          : 'Toàn bộ catalog. Dùng để đặt hàng lần đầu từ nhà cung cấp này.'}
-        {' '}Tồn hiện tại là tổng tồn toàn cửa hàng, không phải tồn theo nhà cung cấp.
-      </Typography>
       {scope === 'history' && result && !result.supplier_has_history && (
         <Alert severity="info" sx={{ mb: 1 }}>
-          Nhà cung cấp này chưa có phiếu đặt đã xác nhận. Chọn “Thêm sản phẩm khác” hoặc tạo nhanh hàng mới.
+          Chưa từng đặt hàng từ nhà cung cấp này. Bấm “Tất cả sản phẩm” để tìm hàng.
         </Alert>
       )}
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mb: 1 }}>
@@ -147,8 +229,9 @@ export default function VariantPicker({ supplier, excludeOrderId, categories, se
               <TableCell padding="checkbox">
                 <Checkbox
                   checked={allOnPage}
-                  disabled={!pickable.length}
-                  onChange={() => pickable.forEach((r) => (allOnPage ? selected.has(r.detail_id) : !selected.has(r.detail_id)) && onToggle(r))}
+                  indeterminate={!allOnPage && selectable.some((r) => existingIds.has(r.detail_id))}
+                  disabled={!selectable.length}
+                  onChange={() => onToggle(allOnPage ? selectable : selectable.filter((r) => !existingIds.has(r.detail_id)), !allOnPage)}
                   slotProps={{ input: { 'aria-label': 'Chọn cả trang' } }}
                 />
               </TableCell>
@@ -156,49 +239,71 @@ export default function VariantPicker({ supplier, excludeOrderId, categories, se
               <TableCell>Danh mục</TableCell>
               <TableCell align="right">Tồn hiện tại</TableCell>
               <TableCell align="right">Đang đặt từ NCC này</TableCell>
-              <TableCell align="right">Đang đặt NCC khác</TableCell>
               <TableCell align="right">Giá đặt gần nhất</TableCell>
+              <TableCell align="right">Đang đặt NCC khác</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {rows.map((r) => {
               const onForm = existingIds.has(r.detail_id);
+              const off = stopped(r);
               return (
-                <TableRow key={r.detail_id} hover selected={selected.has(r.detail_id)}>
+                <TableRow key={r.detail_id} hover={!off} selected={onForm} sx={off ? { '& > td': { color: 'text.disabled' } } : undefined}>
                   <TableCell padding="checkbox">
+                    {/* Hàng đã lỡ có trên phiếu vẫn bỏ tích được; chưa có thì không tích được. */}
                     <Checkbox
-                      checked={onForm || selected.has(r.detail_id)}
-                      disabled={onForm}
-                      onChange={() => onToggle(r)}
+                      checked={onForm}
+                      disabled={off && !onForm}
+                      onChange={() => onToggle([r], !onForm)}
                       slotProps={{ input: { 'aria-label': `Chọn ${variantLabel(r)}` } }}
                     />
                   </TableCell>
                   <TableCell>
-                    {variantLabel(r)}{' '}
-                    {onForm && <Chip size="small" label="Đã có trên phiếu" />}
-                    {(r.product_status !== 'ACTIVE' || r.variant_status !== 'ACTIVE') && (
-                      <Chip size="small" color="warning" variant="outlined" label="Ngừng kinh doanh" />
+                    {variantLabel(r)} {onForm && <Chip size="small" label="Đã có trên phiếu" />}
+                    {off && (
+                      <Tooltip
+                        title={
+                          r.product_status !== 'ACTIVE'
+                            ? 'Sản phẩm đang ẩn. Bấm để mở Danh sách sản phẩm, bật Trạng thái sang Hoạt động rồi quay lại đây để chọn.'
+                            : 'Biến thể này đang tắt. Bấm để mở trang sửa sản phẩm, bật lại biến thể rồi quay lại đây để chọn.'
+                        }
+                      >
+                        <Chip
+                          size="small"
+                          color="warning"
+                          variant="outlined"
+                          label="Ngừng kinh doanh · bật lại"
+                          component="a"
+                          href={enableLink(r)}
+                          target="_blank"
+                          rel="noopener"
+                          clickable
+                        />
+                      </Tooltip>
                     )}
                   </TableCell>
                   <TableCell>{r.category_name || '—'}</TableCell>
                   <TableCell align="right">{number(r.stock_quantity)}</TableCell>
                   <TableCell align="right">{number(r.on_order_supplier)}</TableCell>
+                  {/* Last price only from this supplier's own orders; blank when never ordered from them. */}
                   <TableCell align="right">
-                    {r.on_order_other > 0 ? (
-                      <Tooltip title={(r.other_suppliers || []).join(', ')}>
-                        <span>{number(r.on_order_other)}</span>
+                    {r.last_order_price != null && (
+                      <Tooltip
+                        title={`Phiếu ${r.last_order_id ? `PD${String(r.last_order_id).padStart(5, '0')}` : ''} · ${when(r.last_order_date)}`}
+                      >
+                        <span>{money(r.last_order_price)}</span>
                       </Tooltip>
-                    ) : (
-                      0
                     )}
                   </TableCell>
                   <TableCell align="right">
-                    {r.last_order_price != null ? (
-                      <Tooltip title={`Phiếu ${r.last_order_id ? `PD${String(r.last_order_id).padStart(5, '0')}` : ''} · ${when(r.last_order_date)}`}>
-                        <span>{money(r.last_order_price)}</span>
+                    {r.on_order_other > 0 ? (
+                      <Tooltip title={`${(r.other_suppliers || []).join(', ')} · bấm để xem các phiếu`}>
+                        <Link component="button" type="button" underline="always" onClick={() => setOthersOf(r)}>
+                          {number(r.on_order_other)}
+                        </Link>
                       </Tooltip>
                     ) : (
-                      '—'
+                      0
                     )}
                   </TableCell>
                 </TableRow>
@@ -215,9 +320,7 @@ export default function VariantPicker({ supplier, excludeOrderId, categories, se
         </Table>
       </Box>
       <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ justifyContent: 'space-between', alignItems: { sm: 'center' } }}>
-        <Button variant="contained" disabled={!selected.size} onClick={onAdd}>
-          Thêm {selected.size} biến thể đã chọn vào phiếu
-        </Button>
+        <span />
         <Pager
           page={Math.min(page, Math.max(0, Math.ceil((result?.total || 0) / size) - 1))}
           total={result?.total || 0}
@@ -231,6 +334,7 @@ export default function VariantPicker({ supplier, excludeOrderId, categories, se
           sizeOptions={[10, 20, 50]}
         />
       </Stack>
+      {othersOf && <OtherOrdersDialog row={othersOf} onClose={() => setOthersOf(null)} />}
     </Box>
   );
 }

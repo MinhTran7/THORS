@@ -5,6 +5,8 @@ import java.util.Locale;
 public final class ContactNormalizer {
   private ContactNormalizer() {}
 
+  // Kiểm tra + chuẩn hóa email (kiểm tra dữ liệu nhập lần 2 ở backend, sau Yup ở frontend):
+  // phải có dạng xxx@yyy.zzz, bỏ khoảng trắng đầu/cuối, đổi chữ thường, tối đa 100 ký tự. Sai → 400 EMAIL.
   public static String email(String value) {
     if (value == null || !value.trim().matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"))
       throw new ApiException(400, "EMAIL", "Email không hợp lệ.");

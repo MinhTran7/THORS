@@ -22,6 +22,21 @@ public class CategoryRepository {
         this.jdbcTemplate = jdbcTemplate;
     }
 
+    /** Như SELECT_WITH_HIERARCHY + cột icon (migration 2026-11-11_category_icon.sql). */
+    private static final String SELECT_WITH_ICON = """
+            SELECT c.category_id,
+                   c.category_name,
+                   c.description,
+                   c.status,
+                   c.parent_id,
+                   c.target_group,
+                   c.icon,
+                   p.category_name AS parent_name,
+                   (SELECT COUNT(*) FROM category ch WHERE ch.parent_id = c.category_id) AS child_count
+            FROM category c
+            LEFT JOIN category p ON p.category_id = c.parent_id
+            """;
+
     private static final String SELECT_WITH_HIERARCHY = """
             SELECT c.category_id,
                    c.category_name,
@@ -46,6 +61,13 @@ public class CategoryRepository {
     public List<Category> findAll() {
         try {
             return jdbcTemplate.query(
+                    SELECT_WITH_ICON + " ORDER BY c.category_id DESC",
+                    new CategoryMapper());
+        } catch (BadSqlGrammarException ignored) {
+            // DB chưa có cột icon -> đọc như trước
+        }
+        try {
+            return jdbcTemplate.query(
                     SELECT_WITH_HIERARCHY + " ORDER BY c.category_id DESC",
                     new CategoryMapper());
         } catch (BadSqlGrammarException e) {
@@ -65,6 +87,27 @@ public class CategoryRepository {
         }
     }
 
+
+    /** DB đã có cột icon chưa (đã chạy migration 2026-11-11_category_icon.sql chưa). */
+    public boolean supportsIcon() {
+        try {
+            jdbcTemplate.queryForList("SELECT icon FROM category WHERE 1 = 0");
+            return true;
+        } catch (BadSqlGrammarException e) {
+            return false;
+        }
+    }
+
+    /** Gán icon theo id (null = về icon mặc định). */
+    public int updateIcon(int categoryId, String icon) {
+        return jdbcTemplate.update("UPDATE category SET icon = ? WHERE category_id = ?", icon, categoryId);
+    }
+
+    /** Gán icon cho danh mục vừa tạo (tên danh mục là duy nhất, không phân biệt hoa/thường). */
+    public int updateIconByName(String categoryName, String icon) {
+        return jdbcTemplate.update(
+                "UPDATE category SET icon = ? WHERE LOWER(category_name) = LOWER(?)", icon, categoryName);
+    }
 
     public boolean existsByName(String categoryName) {
         String sql = """
@@ -116,6 +159,15 @@ public class CategoryRepository {
     }
 
     public Optional<Category> findById(int categoryId) {
+        try {
+            return jdbcTemplate.query(
+                    SELECT_WITH_ICON + " WHERE c.category_id = ?",
+                    new CategoryMapper(),
+                    categoryId
+            ).stream().findFirst();
+        } catch (BadSqlGrammarException ignored) {
+            // DB chưa có cột icon -> đọc như trước
+        }
         try {
             return jdbcTemplate.query(
                     SELECT_WITH_HIERARCHY + " WHERE c.category_id = ?",
