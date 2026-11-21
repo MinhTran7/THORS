@@ -6,6 +6,11 @@ export { password as newPassword, confirmation as confirmPassword } from 'featur
 
 export const fullName = Yup.string().trim().required('Nhập họ và tên.').max(100, 'Dùng tối đa 100 ký tự.');
 
+// Số điện thoại: đúng 10 chữ số, bắt đầu bằng 0 (cho phép gõ khoảng trắng, dấu chấm, gạch ngang). Cùng luật
+// với backend (ContactNormalizer.phoneInput).
 export const phone = Yup.string()
   .trim()
-  .matches(/^[+0-9][0-9 ()\-.]{7,19}$/, { message: 'Nhập số điện thoại hợp lệ.', excludeEmptyString: true });
+  .test('vn-phone', 'Số điện thoại gồm 10 chữ số, bắt đầu bằng 0.', (v) => !v || /^0\d{9}$/.test(v.replace(/[\s.-]/g, '')));
+
+// Số cũ có thể đang lưu dạng +84xxxxxxxxx: đổi về 0xxxxxxxxx khi đưa vào form để không bị báo sai.
+export const toLocalPhone = (v) => (v ? v.replace(/^\+84/, '0') : '');

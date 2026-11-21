@@ -531,7 +531,7 @@ class AuthIntegrationTest {
 
   @Test
   void oldPhoneFormatsRemainContactDataOnly() throws Exception {
-    var a = fixture("CUSTOMER", "legacy@example.com", "+84912345678", null);
+    var a = fixture("CUSTOMER", "legacy@example.com", "0912345678", null);
     db.update("UPDATE `user` SET phone='0912 345 678' WHERE user_id=?", a.id());
     var session = login(a);
     assertEquals(400, request("/api/auth/verify-contact",
@@ -541,7 +541,9 @@ class AuthIntegrationTest {
 
   @Test
   void existingDuplicatePhonesRequireEmailLoginRatherThanChoosingAnAccount() throws Exception {
-    var a = fixture("CUSTOMER", "one@example.com", "+84912345678", null);
+    // Dữ liệu cũ: một số lưu dạng +84, một số lưu dạng 0 (giờ không nhập được +84 nên ghi thẳng vào DB)
+    var a = fixture("CUSTOMER", "one@example.com", null, null);
+    db.update("UPDATE `user` SET phone='+84912345678' WHERE user_id=?", a.id());
     var b = fixture("CUSTOMER", "two@example.com", null, null);
     db.update("UPDATE `user` SET phone='0912345678' WHERE user_id=?", b.id());
     assertEquals(400, request("/api/auth/login", Map.of("identifier", "0912345678", "password", password), new MockHttpSession()).getResponse().getStatus());
@@ -564,7 +566,7 @@ class AuthIntegrationTest {
 
   boolean createPhoneWinner(String email) {
     try {
-      fixture("CUSTOMER", email, "+84912345678", null);
+      fixture("CUSTOMER", email, "0912345678", null);
       return true;
     } catch (ApiException e) {
       assertEquals("PHONE_IN_USE", e.code);
@@ -660,7 +662,9 @@ class AuthIntegrationTest {
 
   @Test
   void addingPhoneToGoogleAccountRespectsDuplicateAndHasNoSmsVerification() throws Exception {
-    fixture("CUSTOMER", "original@example.com", "+84912345678", null);
+    // Số cũ lưu dạng +84 vẫn phải bị coi là trùng với 0912345678
+    var original = fixture("CUSTOMER", "original@example.com", null, null);
+    db.update("UPDATE `user` SET phone='+84912345678' WHERE user_id=?", original.id());
     var googleUser = google.resolve("new-google", "google@example.com", "Google", true, null, null);
     var session = new MockHttpSession();
     var response = new org.springframework.mock.web.MockHttpServletResponse();

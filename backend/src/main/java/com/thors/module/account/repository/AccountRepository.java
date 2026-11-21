@@ -284,7 +284,8 @@ public class AccountRepository {
 
     /** Ghi đè các trường hồ sơ; người gọi truyền giá trị cuối cùng (đã chuẩn hóa) cho mọi trường. */
     public void updateProfile(int id, String name, String phone, String address) {
-        ensurePhoneAvailable(phone, id);
+        // So trùng theo dạng chuẩn +84 để khớp cả số cũ đã lưu dạng +84 lẫn dạng 0xxxxxxxxx
+        ensurePhoneAvailable(normalizedPhone(phone), id);
         db.update("UPDATE `user` SET full_name=?,phone=?,address=? WHERE user_id=?", name, phone, address, id);
     }
 

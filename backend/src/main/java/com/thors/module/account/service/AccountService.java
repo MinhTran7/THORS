@@ -64,7 +64,7 @@ public class AccountService {
     if (phoneChanges) users.lockIdentityRegistry(); // tuần tự hóa việc kiểm tra trùng số điện thoại
     var a = users.lock(actor.id());
     String name = ContactNormalizer.name(r.fullName());
-    String phone = phoneChanges ? ContactNormalizer.phone(r.phone()) : a.phone();
+    String phone = phoneChanges ? ContactNormalizer.phoneInput(r.phone()) : a.phone();
     String address = r.address() == null ? a.address() : emptyToNull(r.address());
     users.updateProfile(a.id(), name, phone, address);
     users.audit(a.id(), "PROFILE_UPDATE", a.id(), "Profile information updated");
@@ -166,7 +166,7 @@ public class AccountService {
             ContactNormalizer.name(r.fullName()),
             passwords.encode(r.password()),
             ContactNormalizer.email(r.email()),
-            ContactNormalizer.phone(r.phone()),
+            ContactNormalizer.phoneInput(r.phone()),
             "PENDING_VERIFICATION",
             actor.id(),
             null,
