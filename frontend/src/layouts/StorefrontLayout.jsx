@@ -296,6 +296,8 @@ function StoreHeader({ categories }) {
   useEffect(() => {
     if (!searchOpen) return undefined;
     const onDown = (e) => {
+      // Bấm trong hộp thoại mở từ thanh tìm kiếm (vd tìm bằng ảnh) thì không đóng, kẻo hộp thoại mất theo
+      if (e.target.closest?.('.MuiDialog-root')) return;
       if (!searchBoxRef.current?.contains(e.target)) setSearchOpen(false);
     };
     document.addEventListener('pointerdown', onDown);
