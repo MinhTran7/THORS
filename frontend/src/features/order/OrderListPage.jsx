@@ -207,6 +207,9 @@ function TabLabel({ label, count, alert }) {
 function CustomerOrderCard({ order, onOpen, actions, onAction, busy }) {
   const meta = orderStatusMeta(order.orderStatus);
   const pay = paymentStatusMeta(order.paymentStatus);
+  // Đơn hết hạn thanh toán: không hiện trạng thái ở góc phải, chân thẻ ghi "Hết hạn" thay cho "Chưa thanh toán"
+  const expired = order.orderStatus === 'EXPIRED';
+  const footStatus = expired ? meta : pay;
   const lines = order.lines ?? [];
   // Mặc định chỉ hiện sản phẩm đầu tiên; bấm "Xem thêm" để mở hết (đơn nhiều sản phẩm không bị dài)
   const [expanded, setExpanded] = useState(false);
@@ -236,7 +239,7 @@ function CustomerOrderCard({ order, onOpen, actions, onAction, busy }) {
             {formatDate(order.orderDate)} · {formatTime(order.orderDate)}
           </Box>
         </Box>
-        <StatusText tone={meta.tone} label={meta.label} />
+        {!expired && <StatusText tone={meta.tone} label={meta.label} />}
       </Box>
 
       {/* Các sản phẩm trong đơn: bấm vào để xem chi tiết */}
@@ -312,40 +315,44 @@ function CustomerOrderCard({ order, onOpen, actions, onAction, busy }) {
 
       {/* Chân thẻ: thanh toán, thành tiền và nút thao tác */}
       <Box sx={{ px: { xs: 2, sm: 3 }, py: 2.5, bgcolor: C.sand }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 1.5, mb: 2 }}>
-          <Box sx={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: 1, fontSize: 13, color: C.muted }}>
+        {/* Trái: hình thức + trạng thái thanh toán (chữ to, căn giữa theo chiều cao chân thẻ); phải: thành tiền và nút */}
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 1.25, rowGap: 0.5, fontSize: 16, color: C.muted }}>
             <span>{paymentMethodLabel(order.paymentMethod)}</span>
             <span aria-hidden="true">·</span>
-            <StatusText tone={pay.tone} label={pay.label} sx={{ fontSize: 11 }} />
+            <StatusText tone={footStatus.tone} label={footStatus.label} sx={{ fontSize: 14 }} />
           </Box>
-          <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1.25 }}>
-            <Box component="span" sx={{ fontSize: 13, color: C.muted }}>
-              Thành tiền
-            </Box>
-            <Box component="span" sx={{ fontFamily: SERIF, fontSize: 24 }}>
-              {formatVnd(order.totalAmount)}
-            </Box>
-          </Box>
-        </Box>
 
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', flexWrap: 'wrap', gap: 1.25 }}>
-          {actions
-            .filter((action) => !action.primary)
-            .map((action) => (
-              <Box key={action.to} component="button" type="button" disabled={busy} onClick={() => onAction(action)} sx={dangerBtnSx}>
-                {action.label.toUpperCase()}
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, ml: 'auto' }}>
+            <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1.25 }}>
+              <Box component="span" sx={{ fontSize: 13, color: C.muted }}>
+                Thành tiền
               </Box>
-            ))}
-          <Box component={RouterLink} to={`/orders/${order.id}`} sx={storeBtnSx('outline')}>
-            XEM CHI TIẾT
+              <Box component="span" sx={{ fontFamily: SERIF, fontSize: 24 }}>
+                {formatVnd(order.totalAmount)}
+              </Box>
+            </Box>
+
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', flexWrap: 'wrap', gap: 1.25 }}>
+              {actions
+                .filter((action) => !action.primary)
+                .map((action) => (
+                  <Box key={action.to} component="button" type="button" disabled={busy} onClick={() => onAction(action)} sx={dangerBtnSx}>
+                    {action.label.toUpperCase()}
+                  </Box>
+                ))}
+              <Box component={RouterLink} to={`/orders/${order.id}`} sx={storeBtnSx('outline')}>
+                XEM CHI TIẾT
+              </Box>
+              {actions
+                .filter((action) => action.primary)
+                .map((action) => (
+                  <Box key={action.to} component="button" type="button" disabled={busy} onClick={() => onAction(action)} sx={storeBtnSx('dark')}>
+                    {action.label.toUpperCase()}
+                  </Box>
+                ))}
+            </Box>
           </Box>
-          {actions
-            .filter((action) => action.primary)
-            .map((action) => (
-              <Box key={action.to} component="button" type="button" disabled={busy} onClick={() => onAction(action)} sx={storeBtnSx('dark')}>
-                {action.label.toUpperCase()}
-              </Box>
-            ))}
         </Box>
       </Box>
     </Box>

@@ -826,13 +826,17 @@ public class OrderRepository {
     /** Đơn cần xử lý nền: mã, chủ đơn và số đơn để gửi thông báo. */
     public record Due(int orderId, int userId, String orderNumber) {}
 
-    /** Đơn online chờ thanh toán đã quá payment_expires_at. */
+    /**
+     * Đơn chờ thanh toán đã quá hạn. Đơn cũ chưa được gán payment_expires_at (đặt trước khi có quy tắc
+     * giữ 10 phút, hoặc tạo từ bản backend cũ) thì tính hạn = lúc đặt + 10 phút, để không đơn nào bị
+     * kẹt ở "Chờ thanh toán" mãi.
+     */
     public List<Due> expiredUnpaid() {
         return db.query(
                 """
                 SELECT order_id, user_id, order_number FROM orders
-                WHERE order_type = 'Online' AND order_status = 'AWAITING_PAYMENT'
-                  AND payment_expires_at IS NOT NULL AND payment_expires_at < NOW()
+                WHERE order_status = 'AWAITING_PAYMENT'
+                  AND COALESCE(payment_expires_at, DATE_ADD(order_date, INTERVAL 10 MINUTE)) < NOW()
                 """,
                 (rs, i) -> new Due(rs.getInt("order_id"), rs.getInt("user_id"), rs.getString("order_number")));
     }
