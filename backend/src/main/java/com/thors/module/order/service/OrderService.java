@@ -14,16 +14,12 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ThreadLocalRandom;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class OrderService {
     private static final int MAX_SIZE = 50;
-
-    /** Tài khoản khách dùng để tạo đơn mẫu khi Owner bấm nút test. */
-    private static final String TEST_CUSTOMER_EMAIL = "customer@thors.shop";
 
     /** Các vai trò xử lý đơn online của cửa hàng. */
     private static final Set<String> STORE_ROLES = Set.of("OWNER", "FAMILY_MEMBER");
@@ -185,44 +181,12 @@ public class OrderService {
         return found.detail();
     }
 
-    /**
-     * Chỉ để test: tạo một đơn online mẫu cho tài khoản customer@thors.shop rồi gửi thông báo.
-     * Chỉ Owner và Family Member được dùng; Customer và các vai trò khác bị chặn.
-     */
-    @Transactional
-    public Detail createSample(Account actor) {
-        if (!isStore(actor))
-            throw new ApiException(403, "ROLE", "Chỉ cửa hàng được dùng chức năng tạo đơn mẫu.");
-        int customerId =
-                orders.findUserIdByEmail(TEST_CUSTOMER_EMAIL)
-                        .orElseThrow(
-                                () ->
-                                        new ApiException(
-                                                404,
-                                                "TEST_CUSTOMER",
-                                                "Không tìm thấy tài khoản " + TEST_CUSTOMER_EMAIL));
-
-        String orderNumber = "ORD-" + System.currentTimeMillis();
-        int quantity = ThreadLocalRandom.current().nextInt(1, 3);
-        int orderId =
-                orders.createSampleOrder(customerId, orderNumber, quantity)
-                        .orElseThrow(
-                                () ->
-                                        new ApiException(
-                                                400, "NO_PRODUCT", "Chưa có sản phẩm nào để tạo đơn mẫu."));
-
-        // Dùng chung thông báo với luồng đặt hàng thật
-        notifyOrderPlaced(customerId, orderId, orderNumber, OrderStatus.PENDING_CONFIRMATION);
-
-        return detail(actor, orderId);
-    }
-
     // ------------------------------------------------------------------
-    // Thông báo khi có đơn mới: gọi từ mọi nơi tạo đơn online (checkout thật, đơn mẫu, thanh toán xong)
+    // Thông báo khi có đơn mới: gọi từ mọi nơi tạo đơn online (checkout, thanh toán xong)
     // ------------------------------------------------------------------
 
     /**
-     * Gọi ngay sau khi một đơn online mới được tạo (checkout thật hoặc đơn mẫu). Đơn chờ thanh toán
+     * Gọi ngay sau khi một đơn online mới được tạo (checkout). Đơn chờ thanh toán
      * online thì chỉ báo khách; chủ shop chỉ được báo khi đơn đã sẵn sàng để xác nhận.
      */
     public void notifyOrderPlaced(int customerId, int orderId, String orderNumber, String orderStatus) {
@@ -250,11 +214,42 @@ public class OrderService {
         notifyStore(orderId, "Có đơn hàng online mới", "Đơn " + orderNumber + " đang chờ xác nhận.");
     }
 
+    /**
+     * Đơn Facebook vừa được nhân viên tạo từ Social POS: báo những người xử lý đơn còn lại của cửa hàng
+     * (người tạo đơn tự biết nên không báo lại). Đơn Facebook không có tài khoản khách nên không báo khách.
+     */
+    public void notifyFacebookOrderCreated(Account creator, int orderId, String orderNumber) {
+        notifyStoreExcept(
+                creator.id(),
+                orderId,
+                "Có đơn hàng Facebook mới",
+                "Đơn " + orderNumber + " vừa được " + actorName(creator) + " tạo từ Facebook và đang chờ xác nhận.");
+    }
+
     /** Báo cho mọi người xử lý đơn của cửa hàng (chủ shop và người nhà). */
     private void notifyStore(int orderId, String title, String message) {
         for (String role : STORE_NOTIFY_ROLES)
             notifications.toRole(
                     role, NotificationTypes.ORDER_STATUS, title, message, NotificationTypes.ENTITY_ORDER, orderId);
+    }
+
+    /** Báo những người xử lý đơn khác của cửa hàng, trừ người vừa thao tác. */
+    private void notifyStoreExcept(int actorId, int orderId, String title, String message) {
+        List<Integer> others = orders.storeUserIds().stream().filter(id -> id != actorId).toList();
+        notifications.toUsers(
+                others, NotificationTypes.ORDER_STATUS, title, message, NotificationTypes.ENTITY_ORDER, orderId);
+    }
+
+    /** Chỉ chủ shop: các việc chỉ Owner làm được (xác nhận đã hoàn tiền). */
+    private void notifyOwner(int orderId, String title, String message) {
+        notifications.toRole(
+                OWNER_ROLE, NotificationTypes.ORDER_STATUS, title, message, NotificationTypes.ENTITY_ORDER, orderId);
+    }
+
+    private static String actorName(Account actor) {
+        String name = actor.fullName();
+        if (name == null || name.isBlank()) return "OWNER".equals(actor.role()) ? "chủ shop" : "người nhà";
+        return name.trim();
     }
 
     /**
@@ -283,7 +278,8 @@ public class OrderService {
                 notifyCustomer(p.userId(), orderId, "Đã nhận thanh toán cho đơn đã đóng",
                         "Cửa hàng đã nhận tiền cho đơn " + number
                                 + " nhưng đơn đã đóng trước đó. Cửa hàng sẽ liên hệ để hoàn tiền cho bạn.");
-                notifyStore(
+                // Chỉ Owner bấm được "Đã hoàn tiền" nên chỉ báo Owner (giống khi khách hủy đơn đã trả tiền)
+                notifyOwner(
                         orderId,
                         "Cần hoàn tiền cho khách",
                         "Đơn " + number + " đã " + closedLabel(p.orderStatus())
@@ -428,15 +424,12 @@ public class OrderService {
             // Tài khoản nhận hoàn: khách vừa nhập, hoặc (cửa hàng từ chối) tài khoản khách đã chuyển khoản
             OrderViews.BankAccount account = safeRefund != null ? safeRefund : orders.payerAccount(orderId);
             if (account != null) orders.saveRefundAccount(orderId, account);
-            notifications.toRole(
-                    OWNER_ROLE,
-                    NotificationTypes.ORDER_STATUS,
+            notifyOwner(
+                    orderId,
                     "Cần hoàn tiền cho khách",
                     "Đơn " + number + " đã thanh toán " + refundAmount + " nhưng bị "
                             + (OrderStatus.CANCELLED.equals(target) ? "khách hủy" : "từ chối")
-                            + ". Hãy chuyển khoản trả lại khách rồi bấm \"Đã hoàn tiền\".",
-                    NotificationTypes.ENTITY_ORDER,
-                    orderId);
+                            + ". Hãy chuyển khoản trả lại khách rồi bấm \"Đã hoàn tiền\".");
             notifyCustomer(customerId, orderId, "Đơn hàng đang chờ hoàn tiền",
                     account != null
                             ? "Cửa hàng sẽ hoàn " + refundAmount + " cho đơn " + number + " vào tài khoản "
@@ -477,6 +470,24 @@ public class OrderService {
                     notifyStore(orderId, "Khách đã hủy đơn", "Đơn " + number + " đã bị khách hủy: " + finalReason);
             }
             default -> {}
+        }
+
+        // Chủ shop và người nhà cùng xử lý đơn: một người thao tác thì báo những người còn lại
+        if (isStore(actor)) {
+            String who = actorName(actor);
+            String done =
+                    switch (target) {
+                        case OrderStatus.AWAITING_PICKUP -> "đã được " + who + " xác nhận";
+                        case OrderStatus.REJECTED -> "đã bị " + who + " từ chối: " + finalReason;
+                        case OrderStatus.SHIPPING ->
+                                GhnShippingService.CARRIER.equals(safeCarrier)
+                                        ? "đã được " + who + " gửi GHN"
+                                        : "đã được " + who + " chuyển sang đang giao";
+                        case OrderStatus.DELIVERED -> "đã được " + who + " xác nhận giao thành công";
+                        default -> null;
+                    };
+            if (done != null)
+                notifyStoreExcept(actor.id(), orderId, "Đơn hàng đã được xử lý", "Đơn " + number + " " + done + ".");
         }
         return detail(actor, orderId);
     }
@@ -528,13 +539,10 @@ public class OrderService {
                     "Cửa hàng sẽ hoàn tiền đơn " + found.detail().orderNumber() + " vào tài khoản "
                             + account.accountNumber() + ".");
         else
-            notifications.toRole(
-                    OWNER_ROLE,
-                    NotificationTypes.ORDER_STATUS,
+            notifyOwner(
+                    orderId,
                     "Khách đã gửi tài khoản nhận hoàn tiền",
-                    "Đơn " + found.detail().orderNumber() + ": quét mã VietQR trong chi tiết đơn để hoàn tiền cho khách.",
-                    NotificationTypes.ENTITY_ORDER,
-                    orderId);
+                    "Đơn " + found.detail().orderNumber() + ": quét mã VietQR trong chi tiết đơn để hoàn tiền cho khách.");
         return detail(actor, orderId);
     }
 
@@ -620,7 +628,9 @@ public class OrderService {
         return count;
     }
 
+    /** Đơn Facebook gắn tài khoản nhân viên (khách không có tài khoản web) nên không gửi. */
     private void notifyCustomer(int userId, int orderId, String title, String message) {
+        if (!orders.isCustomerAccount(userId)) return;
         notifications.toUser(
                 userId,
                 NotificationTypes.ORDER_STATUS,

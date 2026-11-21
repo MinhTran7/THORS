@@ -27,7 +27,7 @@ import {
   Typography
 } from '@mui/material';
 import { Stack } from 'features/account/components/Flex';
-import { CarOutlined, EyeOutlined, InboxOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons';
+import { CarOutlined, EyeOutlined, InboxOutlined, SearchOutlined } from '@ant-design/icons';
 import { post } from 'services/http';
 import { openCustomerChat, useChatStatus } from 'features/chat/api';
 import { useCrumbs } from 'layouts/crumbs';
@@ -402,8 +402,6 @@ export default function OrderListPage() {
   const [dateTo, setDateTo] = useState('');
   const [sourceFilter, setSourceFilter] = useState('all');
   const [page, setPage] = useState(0);
-  const [creating, setCreating] = useState(false);
-  const [createError, setCreateError] = useState('');
   const [busyId, setBusyId] = useState(null);
   const [rebuyId, setRebuyId] = useState(null); // đơn đang được "Mua lại"
   // Nút "Liên hệ người bán" chỉ hiện khi chat đã bật (database đã chạy migration chat)
@@ -480,21 +478,6 @@ export default function OrderListPage() {
     setDateTo('');
     setSourceFilter('all');
     setPage(0);
-  };
-
-  // Chỉ dành cho chủ shop, để test thông báo: tạo đơn online mẫu rồi tải lại danh sách
-  const createSample = async () => {
-    setCreating(true);
-    setCreateError('');
-    try {
-      await ordersApi.createSample();
-      setPage(0);
-      await refresh();
-    } catch (e) {
-      setCreateError(e.message || 'Không tạo được đơn mẫu.');
-    } finally {
-      setCreating(false);
-    }
   };
 
   // Chủ shop xử lý đơn ngay trên danh sách, không cần vào trang chi tiết
@@ -878,22 +861,10 @@ export default function OrderListPage() {
   // ---------------------------------------------------------------- Chủ shop / người xử lý đơn (bảng)
   return (
     <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2, flexWrap: 'wrap', mb: 1 }}>
-        <Box sx={{ flex: 1, minWidth: 260 }}>
-          <PageHeader title="Đơn hàng online" subtitle="Xem và xử lý các đơn khách đặt trên website." />
-        </Box>
-        {isOwner && (
-          <OutlineButton onClick={createSample} disabled={creating} startIcon={<PlusOutlined />} sx={{ mt: 1, fontSize: 13, py: 0.8 }}>
-            {creating ? 'Đang tạo...' : 'Tạo đơn mẫu (Test)'}
-          </OutlineButton>
-        )}
+      <Box sx={{ mb: 1 }}>
+        <PageHeader title="Đơn hàng online" subtitle="Xem và xử lý các đơn khách đặt trên website." />
       </Box>
 
-      {createError && (
-        <Alert severity="error" sx={{ mb: 2, borderRadius: '10px' }}>
-          {createError}
-        </Alert>
-      )}
       {rowError && !dialog && (
         <Alert severity="error" onClose={() => setRowError('')} sx={{ mb: 2, borderRadius: '10px' }}>
           {rowError}

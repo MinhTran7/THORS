@@ -50,12 +50,6 @@ public class OrderController {
         return service.detail(sessions.current(), id);
     }
 
-    /** POST /api/orders/test-sample (chỉ dùng khi test: tạo đơn online mẫu và phát thông báo) */
-    @PostMapping("/test-sample")
-    Object createSample() {
-        return service.createSample(sessions.current());
-    }
-
     /**
      * POST /api/orders/{id}/status?status=SHIPPING&carrier=SELF|GHN&reason=&weightG=
      *     &ghnProvinceId=&ghnWardId=

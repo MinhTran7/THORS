@@ -14,8 +14,6 @@ export const ordersApi = {
   detail: (id) => api(`/orders/${id}`),
   // Số đơn theo từng trạng thái, để hiện số trên các tab
   counts: () => api('/orders/counts'),
-  // Chỉ dùng khi test: tạo một đơn online mẫu và phát thông báo
-  createSample: () => api('/orders/test-sample', { method: 'POST' }),
   // Owner: xác nhận / từ chối / giao / hoàn tất. Customer: hủy đơn.
   // carrier chỉ dùng khi chuyển sang SHIPPING: SELF (tự giao) hoặc mã đơn vị vận chuyển
   // ghn (chỉ khi carrier = GHN): { provinceId, wardId, weightG } theo danh mục mới (2 cấp) của GHN

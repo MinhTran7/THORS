@@ -3,7 +3,6 @@ package com.thors.module.order.repository;
 import com.thors.module.order.dto.OrderViews.*;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -16,8 +15,6 @@ import java.util.Map;
 import java.util.Optional;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
-import org.springframework.jdbc.support.GeneratedKeyHolder;
-import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
 /** Dùng các bảng orders, order_item, product_detail, product_image và user. */
@@ -425,6 +422,28 @@ public class OrderRepository {
         return rows.stream().findFirst();
     }
 
+    /**
+     * Tài khoản có phải Khách hàng không. Đơn Facebook (Social POS) gắn tài khoản nhân viên tạo đơn, khách
+     * Facebook không có tài khoản web, nên thông báo "gửi khách" của các đơn này phải bỏ qua.
+     */
+    public boolean isCustomerAccount(int userId) {
+        Integer n =
+                db.queryForObject(
+                        "SELECT COUNT(*) FROM `user` u JOIN `role` r ON r.role_id = u.role_id"
+                                + " WHERE u.user_id = ? AND r.role_name = 'CUSTOMER'",
+                        Integer.class,
+                        userId);
+        return n != null && n > 0;
+    }
+
+    /** Các tài khoản đang hoạt động xử lý đơn của cửa hàng (chủ shop và người nhà). */
+    public List<Integer> storeUserIds() {
+        return db.queryForList(
+                "SELECT u.user_id FROM `user` u JOIN `role` r ON r.role_id = u.role_id"
+                        + " WHERE r.role_name IN ('OWNER', 'FAMILY_MEMBER') AND u.account_status = 'ACTIVE'",
+                Integer.class);
+    }
+
     /** Trạng thái yêu cầu trả hàng mới nhất của đơn; null nếu chưa có (hoặc DB chưa có bảng return_request). */
     private String latestReturnStatus(int orderId) {
         try {
@@ -468,81 +487,6 @@ public class OrderRepository {
                             rs.getString("image_url"));
                 },
                 orderId);
-    }
-
-    // ------------------------------------------------------------------
-    // Phần dành cho đơn mẫu (chỉ dùng khi test)
-    // ------------------------------------------------------------------
-
-    /** Tìm user_id theo email (dùng cho đơn mẫu của tài khoản test). */
-    public Optional<Integer> findUserIdByEmail(String email) {
-        List<Integer> ids =
-                db.queryForList("SELECT user_id FROM `user` WHERE email = ?", Integer.class, email);
-        return ids.stream().findFirst();
-    }
-
-    /**
-     * Tạo một đơn Online mẫu (1 dòng sản phẩm lấy ngẫu nhiên). Trả về order_id, hoặc empty nếu
-     * chưa có product_detail nào để tạo đơn.
-     */
-    public Optional<Integer> createSampleOrder(int userId, String orderNumber, int quantity) {
-        // Ưu tiên biến thể đang bật bán online, nếu không có thì lấy biến thể bất kỳ
-        List<Map<String, Object>> picked =
-                db.queryForList(
-                        """
-                        SELECT pd.detail_id, p.product_name, pd.size, pd.color, pd.price
-                        FROM product_detail pd
-                        JOIN product p ON p.product_id = pd.product_id
-                        ORDER BY pd.online_sales_enabled DESC, RAND() LIMIT 1
-                        """);
-        if (picked.isEmpty()) return Optional.empty();
-        Map<String, Object> row = picked.get(0);
-        long unitPrice = ((Number) row.get("price")).longValue();
-        long items = unitPrice * quantity;
-        long shipping = 30000;
-        long total = items + shipping;
-
-        KeyHolder keys = new GeneratedKeyHolder();
-        db.update(
-                con -> {
-                    var ps =
-                            con.prepareStatement(
-                                    """
-                                    INSERT INTO orders (user_id, created_by, order_number, order_type, order_date,
-                                        order_status, preparation_status, payment_method, payment_status,
-                                        items_amount, promotion_discount_amount, coupon_discount_amount,
-                                        shipping_fee, total_amount,
-                                        delivery_name, delivery_phone, delivery_address)
-                                    VALUES (?, ?, ?, 'Online', NOW(), 'PENDING_CONFIRMATION', 'NOT_STARTED',
-                                        'COD', 'UNPAID', ?, 0, 0, ?, ?,
-                                        'Khách Mua Mẫu', '0987654321', '123 Đường Test, Hà Nội')
-                                    """,
-                                    Statement.RETURN_GENERATED_KEYS);
-                    ps.setInt(1, userId);
-                    ps.setInt(2, userId); // created_by: với đơn Online là chính khách đặt đơn
-                    ps.setString(3, orderNumber);
-                    ps.setLong(4, items);
-                    ps.setLong(5, shipping);
-                    ps.setLong(6, total);
-                    return ps;
-                },
-                keys);
-        int orderId = keys.getKey().intValue();
-
-        db.update(
-                """
-                INSERT INTO order_item (order_id, detail_id, product_name_snapshot, size_snapshot,
-                                        color_snapshot, quantity, unit_price)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                orderId,
-                row.get("detail_id"),
-                row.get("product_name"),
-                row.get("size"),
-                row.get("color"),
-                quantity,
-                unitPrice);
-        return Optional.of(orderId);
     }
 
     // ------------------------------------------------------------------
