@@ -424,7 +424,7 @@ export default function CartPage({ onCheckout }) {
                 disabled={picked.length === 0}
                 onClick={() => setConfirmIds(picked.map((i) => i.id))}
               >
-                Xóa các mục đã chọn
+                Xóa các sản phẩm đã chọn
               </button>
             </div>
           </section>
