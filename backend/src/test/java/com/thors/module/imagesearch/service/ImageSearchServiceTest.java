@@ -209,7 +209,8 @@ class ImageSearchServiceTest {
             ImageSearchResult r = service.search(jpeg());
             assertEquals("NOT_FOUND", r.status());
             assertNull(r.product());
-            assertEquals(List.of(53, 61), r.suggestions().stream().map(ImageSearchResult.Product::productId).toList());
+            // không khớp: thêm 1 gợi ý (2 + 1) để danh sách trên giao diện đủ số ô như khi khớp (sản phẩm khớp + 2 gợi ý)
+            assertEquals(List.of(53, 61, 63), r.suggestions().stream().map(ImageSearchResult.Product::productId).toList());
             verify(shop, never()).findVariants(anyInt());
         }
 

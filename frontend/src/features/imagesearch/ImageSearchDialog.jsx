@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { Box, CircularProgress, Dialog, IconButton } from '@mui/material';
-import { Photo, money, priceText } from 'features/shop/ShopCommon';
+import { Photo, priceText } from 'features/shop/ShopCommon';
 import { C, Icon, btnSx, focusRing, linkSx, SERIF } from 'features/shop/storeTheme';
 import { imageSearchApi, prepareImage } from './api';
 import WebcamCapture, { canUseWebcam } from './WebcamCapture';
@@ -11,7 +11,8 @@ const isTouchDevice = () => typeof window !== 'undefined' && !!window.matchMedia
 
 /**
  * Khách chụp / chọn ảnh một món đồ để hỏi shop có bán không.
- * Trả lời 1 trong 4 trạng thái (có hàng / hết hàng / không có màu này / chưa có mẫu này) và luôn kèm sản phẩm gần giống.
+ * Trả lời 1 trong 5 trạng thái (có hàng / hết hàng / không có màu này / khá giống / chưa có mẫu này), kèm một danh sách
+ * sản phẩm cùng danh mục xếp theo mức giống (sản phẩm khớp đứng đầu).
  * Ảnh chỉ gửi lên để tìm, backend không lưu lại.
  */
 
@@ -39,59 +40,6 @@ function ProductLink({ product, onNavigate, children, sx }) {
   );
 }
 
-function MatchedProduct({ product, detectedColor, onNavigate, label }) {
-  return (
-    <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', flexWrap: { xs: 'wrap', sm: 'nowrap' } }}>
-      <ProductLink product={product} onNavigate={onNavigate} sx={{ flex: '0 0 140px' }}>
-        <Photo src={product.imageUrl} name={product.productName} sx={{ width: 140, aspectRatio: '3 / 4', bgcolor: C.photo }} />
-      </ProductLink>
-      <Box sx={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
-        <Box sx={{ fontSize: 12, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-          {label ? `${label} · ${product.categoryName}` : product.categoryName}
-        </Box>
-        <ProductLink product={product} onNavigate={onNavigate} sx={{ fontWeight: 600, fontSize: 17 }}>
-          {product.productName}
-        </ProductLink>
-        {product.minPrice != null && <Box sx={{ fontSize: 15 }}>{priceText(product.minPrice, product.maxPrice)}</Box>}
-        {detectedColor?.confident && (
-          <Box sx={{ fontSize: 13, color: C.muted }}>
-            Màu trong ảnh của bạn: <b>{detectedColor.name}</b>
-          </Box>
-        )}
-        {product.colors?.length > 0 && (
-          <Box role="list" aria-label="Màu và tồn kho" sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-            {product.colors.map((c) => (
-              <Box
-                key={c.color}
-                role="listitem"
-                sx={{
-                  fontSize: 13,
-                  px: 1.25,
-                  py: 0.5,
-                  border: `1px solid ${c.matches ? C.ink : C.line}`,
-                  fontWeight: c.matches ? 600 : 400,
-                  color: c.stock > 0 ? C.ink : C.muted,
-                  textDecoration: c.stock > 0 ? 'none' : 'line-through'
-                }}
-              >
-                {c.color} · {c.stock > 0 ? `còn ${c.stock}` : 'hết hàng'}
-              </Box>
-            ))}
-          </Box>
-        )}
-        <Box
-          component={RouterLink}
-          to={`/shop/products/${product.productId}`}
-          onClick={onNavigate}
-          sx={{ ...btnSx('dark'), alignSelf: 'flex-start', mt: 0.5, py: '12px', px: '20px' }}
-        >
-          XEM SẢN PHẨM
-        </Box>
-      </Box>
-    </Box>
-  );
-}
-
 function Suggestions({ items, onNavigate, title }) {
   if (!items?.length) return null;
   return (
@@ -102,7 +50,7 @@ function Suggestions({ items, onNavigate, title }) {
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', sm: 'repeat(3, minmax(0, 1fr))', md: 'repeat(5, minmax(0, 1fr))' },
+          gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', sm: 'repeat(3, minmax(0, 1fr))', md: 'repeat(6, minmax(0, 1fr))' },
           gap: 1.5
         }}
       >
@@ -122,7 +70,7 @@ function Suggestions({ items, onNavigate, title }) {
             >
               {p.productName}
             </Box>
-            {p.minPrice != null && <Box sx={{ fontSize: 13, color: C.muted }}>{money(p.minPrice)}</Box>}
+            {p.minPrice != null && <Box sx={{ fontSize: 13, color: C.muted }}>{priceText(p.minPrice, p.maxPrice)}</Box>}
           </ProductLink>
         ))}
       </Box>
@@ -323,23 +271,11 @@ export default function ImageSearchDialog({ open, onClose }) {
               </Box>
             </Box>
 
-            {result.product && (
-              <MatchedProduct
-                product={result.product}
-                detectedColor={result.detectedColor}
-                onNavigate={onClose}
-                label={result.status === 'SIMILAR' ? 'Giống nhất' : ''}
-              />
-            )}
-
+            {/* Một danh sách xếp theo mức giống: sản phẩm khớp (nếu có) đứng đầu, rồi đến các sản phẩm cùng danh mục */}
             <Suggestions
-              items={result.suggestions}
+              items={result.product ? [result.product, ...(result.suggestions || [])] : result.suggestions}
               onNavigate={onClose}
-              title={
-                result.suggestionCategory
-                  ? `${result.product ? 'Sản phẩm khác' : 'Có thể bạn đang tìm'} trong danh mục ${result.suggestionCategory}`
-                  : result.product ? 'Sản phẩm khác gần giống' : 'Có thể bạn đang tìm'
-              }
+              title={result.suggestionCategory ? `Sản phẩm trong danh mục ${result.suggestionCategory}, giống nhất ở đầu` : 'Sản phẩm giống nhất ở đầu'}
             />
 
             <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
