@@ -10,20 +10,11 @@ import WebcamCapture, { canUseWebcam } from './WebcamCapture';
 const isTouchDevice = () => typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches;
 
 /**
- * Khách chụp / chọn ảnh một món đồ để hỏi shop có bán không.
- * Trả lời 1 trong 5 trạng thái (có hàng / hết hàng / không có màu này / khá giống / chưa có mẫu này), kèm một danh sách
- * sản phẩm cùng danh mục xếp theo mức giống (sản phẩm khớp đứng đầu).
+ * Khách chụp / chọn ảnh một món đồ để tìm sản phẩm giống trong shop.
+ * Chỉ hiện kết quả: danh sách sản phẩm cùng danh mục xếp theo mức giống (sản phẩm khớp, nếu có, đứng đầu).
+ * Không hiện câu trạng thái ("Shop có mẫu này", "hết hàng"...) dù backend vẫn trả về status / message.
  * Ảnh chỉ gửi lên để tìm, backend không lưu lại.
  */
-
-const STATUS = {
-  AVAILABLE: { title: 'Shop có mẫu này', bg: '#E8F3EA', fg: '#1E5B2A' },
-  OUT_OF_STOCK: { title: 'Có mẫu này nhưng đang hết hàng', bg: '#FBF1DF', fg: '#7A4B00' },
-  COLOR_UNAVAILABLE: { title: 'Có mẫu này nhưng khác màu', bg: '#FBF1DF', fg: '#7A4B00' },
-  // Giống nhưng AI chưa chắc là cùng mẫu (điểm 0,808 - 0,85): không khẳng định "shop có mẫu này"
-  SIMILAR: { title: 'Có sản phẩm khá giống', bg: '#EEF1F5', fg: '#2B3A4F' },
-  NOT_FOUND: { title: 'Shop chưa có mẫu này', bg: C.sand, fg: C.ink }
-};
 
 export const CameraIcon = ({ size = 20 }) => (
   <Icon size={size}>
@@ -40,13 +31,10 @@ function ProductLink({ product, onNavigate, children, sx }) {
   );
 }
 
-function Suggestions({ items, onNavigate, title }) {
+function Suggestions({ items, onNavigate }) {
   if (!items?.length) return null;
   return (
-    <Box component="section" aria-label={title} sx={{ mt: 3 }}>
-      <Box component="h3" sx={{ m: 0, mb: 1.5, fontSize: 15, fontWeight: 600 }}>
-        {title}
-      </Box>
+    <Box component="section" aria-label="Sản phẩm giống ảnh của bạn">
       <Box
         sx={{
           display: 'grid',
@@ -146,7 +134,7 @@ export default function ImageSearchDialog({ open, onClose }) {
     setPhase('pick');
   }, []);
 
-  const status = result && (STATUS[result.status] || STATUS.NOT_FOUND);
+  const items = result ? [...(result.product ? [result.product] : []), ...(result.suggestions || [])] : [];
 
   return (
     <Dialog
@@ -241,42 +229,31 @@ export default function ImageSearchDialog({ open, onClose }) {
 
         {phase === 'result' && result && (
           <Box aria-live="polite">
-            <Box sx={{ display: 'flex', gap: 2, alignItems: 'stretch', flexWrap: { xs: 'wrap', sm: 'nowrap' }, mb: 3 }}>
+            {/* Chỉ hiện kết quả: ảnh của khách + danh sách xếp theo mức giống (sản phẩm khớp, nếu có, đứng đầu) */}
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2 }}>
               {preview && (
-                <Box sx={{ flex: '0 0 auto', width: { xs: 96, sm: 120 } }}>
-                  <Box sx={{ fontSize: 12, color: C.muted, mb: 0.5 }}>Ảnh của bạn</Box>
-                  <Box
-                    component="img"
-                    src={preview}
-                    alt="Ảnh bạn đã gửi"
-                    sx={{ width: '100%', aspectRatio: '3 / 4', objectFit: 'cover', bgcolor: C.photo }}
-                  />
-                </Box>
+                <Box
+                  component="img"
+                  src={preview}
+                  alt="Ảnh bạn đã gửi"
+                  sx={{ flex: '0 0 auto', width: 72, aspectRatio: '3 / 4', objectFit: 'cover', bgcolor: C.photo }}
+                />
               )}
-              <Box
-                sx={{
-                  flex: 1,
-                  minWidth: 0,
-                  bgcolor: status.bg,
-                  color: status.fg,
-                  p: 2,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'center',
-                  gap: 0.75
-                }}
-              >
-                <Box sx={{ fontWeight: 700, fontSize: 18 }}>{status.title}</Box>
-                <Box sx={{ fontSize: 14, lineHeight: 1.6 }}>{result.message}</Box>
+              <Box sx={{ minWidth: 0 }}>
+                <Box component="h3" sx={{ m: 0, fontSize: 17, fontWeight: 600 }}>
+                  Sản phẩm giống ảnh của bạn
+                </Box>
+                <Box sx={{ fontSize: 13, color: C.muted, mt: 0.5 }}>
+                  {result.suggestionCategory ? `Danh mục ${result.suggestionCategory} · ` : ''}giống nhất ở đầu
+                </Box>
               </Box>
             </Box>
 
-            {/* Một danh sách xếp theo mức giống: sản phẩm khớp (nếu có) đứng đầu, rồi đến các sản phẩm cùng danh mục */}
-            <Suggestions
-              items={result.product ? [result.product, ...(result.suggestions || [])] : result.suggestions}
-              onNavigate={onClose}
-              title={result.suggestionCategory ? `Sản phẩm trong danh mục ${result.suggestionCategory}, giống nhất ở đầu` : 'Sản phẩm giống nhất ở đầu'}
-            />
+            {items.length > 0 ? (
+              <Suggestions items={items} onNavigate={onClose} />
+            ) : (
+              <Box sx={{ fontSize: 15, color: C.muted, py: 3, textAlign: 'center' }}>Chưa tìm thấy sản phẩm phù hợp.</Box>
+            )}
 
             <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
               <Box component="button" type="button" onClick={reset} sx={btnSx('outline')}>
