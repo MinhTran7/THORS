@@ -8,7 +8,6 @@ public record InStoreSaleListItem(
         String orderNumber,
         String invoiceNumber,
         LocalDateTime orderDate,
-        String customerName,
         String sellerName,
         BigDecimal totalAmount,
         String paymentMethod,

@@ -46,7 +46,7 @@ import {
   isAssignableCategory,
   sortCategoriesAsTree
 } from '../../services/categoryService';
-import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../customer/theme';
+import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../shippingaddress/theme';
 import { formatPriceInput, parsePriceInput } from './priceInput';
 import ProductDescriptionFields from './ProductDescriptionFields';
 import { getImageColors, sameColor, setImageColor } from './productDescription';

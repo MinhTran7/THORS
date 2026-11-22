@@ -31,7 +31,7 @@ import { getProductById, setVariantOnline } from '../../services/productService'
 import { useAuth } from 'features/auth/AuthProvider';
 import SizeChartEditor from 'features/fitting/SizeChartEditor';
 import ProductStyleEditor from 'features/outfit/ProductStyleEditor';
-import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../customer/theme';
+import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../shippingaddress/theme';
 import { descriptionToText } from './productDescription';
 
 // Switch thu nhỏ theo Design System

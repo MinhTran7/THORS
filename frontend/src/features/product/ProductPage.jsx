@@ -47,7 +47,7 @@ import {
 import { getProducts, changeProductStatus, setProductOnline } from '../../services/productService';
 
 import { categoryFullName, getCategories, sortCategoriesAsTree } from '../../services/categoryService';
-import { primaryButtonSx, outlineButtonSx } from '../customer/theme';
+import { primaryButtonSx, outlineButtonSx } from '../shippingaddress/theme';
 import ProductExcelDialog from './ProductExcelDialog';
 
 const C = {

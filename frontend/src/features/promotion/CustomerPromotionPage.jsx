@@ -6,6 +6,7 @@ import { kindOf } from './PromotionForm';
 import { useCrumbs } from '../../layouts/crumbs';
 import { StoreAccountShell } from 'features/account/components/StoreAccount';
 import { C, RADIUS, SANS } from 'features/shop/storeTheme';
+import { money } from './promotionFormat';
 
 const HOUR = 3600 * 1000;
 const DAY = 24 * HOUR;
@@ -20,8 +21,6 @@ const TABS = [
 ];
 
 const isPercent = (p) => p.discountType === 'PERCENT';
-
-const money = (val) => `${(Number(val) || 0).toLocaleString('vi-VN')} đ`;
 
 const pad = (n) => String(n).padStart(2, '0');
 
@@ -75,7 +74,13 @@ function VoucherTicket({ promotion, onViewCondition }) {
   const upcoming = isUpcoming(promotion);
 
   return (
-    <Box sx={{ display: 'flex', minHeight: 160, filter: 'drop-shadow(0 14px 18px rgba(31,41,55,.08)) drop-shadow(0 0 1px rgba(160,140,90,.55))' }}>
+    <Box
+      sx={{
+        display: 'flex',
+        minHeight: 160,
+        filter: 'drop-shadow(0 14px 18px rgba(31,41,55,.08)) drop-shadow(0 0 1px rgba(160,140,90,.55))'
+      }}
+    >
       <Box
         sx={{
           flex: 1,
@@ -97,7 +102,19 @@ function VoucherTicket({ promotion, onViewCondition }) {
           {upcoming ? `Bắt đầu ${formatDateTime(promotion.startDate)}` : left || `HSD ${formatDate(promotion.endDate)}`}
         </Box>
         <Box sx={{ mt: 'auto', pt: 1.5 }}>
-          <Button variant="text" disableRipple onClick={() => onViewCondition(promotion)} sx={{ ...noClickFx, fontSize: 12.5, minWidth: 0, px: 0, color: `${CYAN_HOVER} !important`, '&:hover': { bgcolor: 'transparent' } }}>
+          <Button
+            variant="text"
+            disableRipple
+            onClick={() => onViewCondition(promotion)}
+            sx={{
+              ...noClickFx,
+              fontSize: 12.5,
+              minWidth: 0,
+              px: 0,
+              color: `${CYAN_HOVER} !important`,
+              '&:hover': { bgcolor: 'transparent' }
+            }}
+          >
             Điều kiện
           </Button>
         </Box>
@@ -145,13 +162,29 @@ function ConditionDialog({ promotion, onClose }) {
       onClose={onClose}
       maxWidth="xs"
       fullWidth
-      slotProps={{ paper: { sx: { borderRadius: RADIUS.card, overflowY: 'auto', scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' }, color: C.ink, fontFamily: SANS } } }}
+      slotProps={{
+        paper: {
+          sx: {
+            borderRadius: RADIUS.card,
+            overflowY: 'auto',
+            scrollbarWidth: 'none',
+            '&::-webkit-scrollbar': { display: 'none' },
+            color: C.ink,
+            fontFamily: SANS
+          }
+        }
+      }}
     >
       <Box sx={{ position: 'relative', bgcolor: STUB_BG, textAlign: 'center', p: '32px 28px 24px' }}>
-        <IconButton onClick={onClose} sx={{ position: 'absolute', top: 14, right: 14, width: 34, height: 34, bgcolor: '#FFFFFF', '&:hover': { bgcolor: '#FFFFFF' } }}>
+        <IconButton
+          onClick={onClose}
+          sx={{ position: 'absolute', top: 14, right: 14, width: 34, height: 34, bgcolor: '#FFFFFF', '&:hover': { bgcolor: '#FFFFFF' } }}
+        >
           <CloseOutlined style={{ fontSize: 12, color: C.muted }} />
         </IconButton>
-        <Box sx={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.16em', color: C.muted }}>{isPercent(promotion) ? 'GIẢM GIÁ' : 'GIẢM TIỀN'}</Box>
+        <Box sx={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.16em', color: C.muted }}>
+          {isPercent(promotion) ? 'GIẢM GIÁ' : 'GIẢM TIỀN'}
+        </Box>
         <Box sx={{ fontSize: 56, fontWeight: 800, letterSpacing: '-2px', lineHeight: 1.1 }}>
           {value}
           {unit}
@@ -166,7 +199,17 @@ function ConditionDialog({ promotion, onClose }) {
 
       <Box sx={{ p: '8px 28px 28px' }}>
         {rows.map(([label, val], i) => (
-          <Box key={label} sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, py: 1.5, borderTop: i ? `1px solid ${C.line}` : 0, fontSize: 14 }}>
+          <Box
+            key={label}
+            sx={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              gap: 2,
+              py: 1.5,
+              borderTop: i ? `1px solid ${C.line}` : 0,
+              fontSize: 14
+            }}
+          >
             <Box component="span" sx={{ color: C.muted }}>
               {label}
             </Box>
@@ -214,7 +257,17 @@ export default function CustomerPromotionPage() {
 
   return (
     <StoreAccountShell title="Kho voucher" subtitle="Voucher giảm giá cho đơn hàng của bạn">
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 2, borderBottom: `1px solid ${C.line}`, mb: 3.5 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 2,
+          borderBottom: `1px solid ${C.line}`,
+          mb: 3.5
+        }}
+      >
         <Tabs
           value={tab}
           onChange={(_, value) => setTab(value)}
@@ -288,7 +341,9 @@ export default function CustomerPromotionPage() {
               {search ? 'Không tìm thấy ưu đãi nào' : 'Hiện chưa có ưu đãi nào'}
             </Box>
             <Box component="p" sx={{ m: 0, mt: 1.5, fontSize: 15, color: C.muted, maxWidth: 420, mx: 'auto', lineHeight: 1.6 }}>
-              {search ? 'Không có voucher nào khớp với từ khóa của bạn. Thử từ khóa khác hoặc chọn tab khác.' : 'Quay lại sau để nhận thêm ưu đãi mới nhé.'}
+              {search
+                ? 'Không có voucher nào khớp với từ khóa của bạn. Thử từ khóa khác hoặc chọn tab khác.'
+                : 'Quay lại sau để nhận thêm ưu đãi mới nhé.'}
             </Box>
             {search && (
               <Button variant="outlined" onClick={() => setSearch('')} sx={{ mt: 3.5, height: 44, px: 2.5 }}>

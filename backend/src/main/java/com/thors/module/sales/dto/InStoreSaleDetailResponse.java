@@ -9,7 +9,6 @@ public record InStoreSaleDetailResponse(
         String orderNumber,
         String invoiceNumber,
         LocalDateTime orderDate,
-        String customerName,
         String sellerName,
         BigDecimal subtotal,
         BigDecimal discountAmount,

@@ -19,6 +19,7 @@ import {
 import { DownOutlined, PictureOutlined, SaveOutlined, SearchOutlined } from '@ant-design/icons';
 import { categoryFullName, getCategories, sortCategoriesAsTree } from 'services/categoryService';
 import { getActiveProductPromotions, overlaps } from 'services/promotionService';
+import { money } from './promotionFormat';
 
 const C = {
   text: '#202D42',
@@ -42,9 +43,10 @@ const fieldSx = {
     borderRadius: 2.5,
     fontSize: 14,
     '&, &.Mui-focused, &.Mui-error.Mui-focused': { boxShadow: 'none' },
-    '& fieldset, &:hover fieldset, &.Mui-focused fieldset, &.Mui-error fieldset, &.Mui-error:hover fieldset, &.Mui-error.Mui-focused fieldset': {
-      border: `1px solid ${C.border}`
-    }
+    '& fieldset, &:hover fieldset, &.Mui-focused fieldset, &.Mui-error fieldset, &.Mui-error:hover fieldset, &.Mui-error.Mui-focused fieldset':
+      {
+        border: `1px solid ${C.border}`
+      }
   },
   '& .MuiFormHelperText-root': { mx: 0.5, fontSize: 12 },
   '& .MuiInputLabel-root': { fontSize: 13.5 },
@@ -83,7 +85,13 @@ export const lockMessage = (p) => {
 
 export function NoticeDialog({ message, onClose }) {
   return (
-    <Dialog open={Boolean(message)} onClose={onClose} maxWidth="xs" fullWidth slotProps={{ paper: { sx: { borderRadius: 3.5, border: `1px solid ${C.border}`, p: 1 } } }}>
+    <Dialog
+      open={Boolean(message)}
+      onClose={onClose}
+      maxWidth="xs"
+      fullWidth
+      slotProps={{ paper: { sx: { borderRadius: 3.5, border: `1px solid ${C.border}`, p: 1 } } }}
+    >
       <DialogTitle sx={{ color: C.text, fontWeight: 700, fontSize: 17, pb: 1 }}>Không thể thực hiện</DialogTitle>
       <DialogContent>
         <Typography sx={{ fontSize: 13.5, color: C.muted, lineHeight: 1.6 }}>{message}</Typography>
@@ -92,7 +100,15 @@ export function NoticeDialog({ message, onClose }) {
         <Button
           variant="contained"
           onClick={onClose}
-          sx={{ bgcolor: '#8EECF5', color: C.text, boxShadow: 'none', textTransform: 'none', fontWeight: 700, borderRadius: 2, '&:hover': { bgcolor: '#76E5EF', boxShadow: 'none' } }}
+          sx={{
+            bgcolor: '#8EECF5',
+            color: C.text,
+            boxShadow: 'none',
+            textTransform: 'none',
+            fontWeight: 700,
+            borderRadius: 2,
+            '&:hover': { bgcolor: '#76E5EF', boxShadow: 'none' }
+          }}
         >
           Đã hiểu
         </Button>
@@ -101,10 +117,9 @@ export function NoticeDialog({ message, onClose }) {
   );
 }
 
-export const productRows = (res) => (Array.isArray(res) ? res : res?.content ?? res?.data ?? []);
+export const productRows = (res) => (Array.isArray(res) ? res : (res?.content ?? res?.data ?? []));
 export const isActive = (p) => p.status === 'ACTIVE';
 
-const money = (value) => `${Number(value || 0).toLocaleString('vi-VN')} đ`;
 const getProductId = (product) => Number(product.productId ?? product.id);
 const getProductName = (product) => product.productName || product.name || 'Sản phẩm chưa có tên';
 const getProductImage = (product) => product.primaryImageUrl || product.imageUrl || product.thumbnailUrl || product.image || '';
@@ -116,7 +131,6 @@ const priceRange = ({ minPrice, maxPrice }) => {
 const columns = { xs: '28px 44px minmax(0, 1fr) 120px', md: '28px 44px minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 0.8fr) minmax(0, 1.2fr)' };
 const headSx = { fontSize: 11.5, fontWeight: 700, color: C.subtle, textTransform: 'uppercase', letterSpacing: 0.4 };
 const desktop = { display: { xs: 'none', md: 'block' } };
-
 
 const fromPromotion = (p) => ({
   name: p.name,
@@ -159,7 +173,8 @@ function validate(form, minStart, originalStart) {
     else if (form.discountType === 'FIXED' && value >= minOrder) errors.discountValue = 'Số tiền giảm phải nhỏ hơn giá trị đơn tối thiểu.';
     if (!form.usageLimit) errors.usageLimit = 'Vui lòng nhập giới hạn lượt dùng.';
     else if (Number(form.usageLimit) < Math.max(1, Number(form.usedCount || 0)))
-      errors.usageLimit = form.usedCount > 0 ? `Không được nhỏ hơn số lượt đã dùng (${form.usedCount}).` : 'Giới hạn lượt dùng phải từ 1 trở lên.';
+      errors.usageLimit =
+        form.usedCount > 0 ? `Không được nhỏ hơn số lượt đã dùng (${form.usedCount}).` : 'Giới hạn lượt dùng phải từ 1 trở lên.';
   }
   if (form.kind === 'PRODUCT' && !form.allProducts && !form.productIds.length) errors.productIds = 'Vui lòng chọn ít nhất một sản phẩm.';
   return errors;
@@ -170,9 +185,7 @@ function Section({ title, description, children }) {
     <Box sx={{ '& + &': { borderTop: `1px solid ${C.border}`, pt: 3, mt: 3 } }}>
       <Typography sx={{ fontSize: 16, fontWeight: 800, color: C.text }}>{title}</Typography>
       {description && <Typography sx={{ fontSize: 12.5, color: C.muted, mt: 0.25 }}>{description}</Typography>}
-      <Box sx={{ mt: 2, minWidth: 0 }}>
-        {children}
-      </Box>
+      <Box sx={{ mt: 2, minWidth: 0 }}>{children}</Box>
     </Box>
   );
 }
@@ -287,7 +300,17 @@ function ProductPicker({ products, loading, all, selected, busy, onChange }) {
         <ListSubheader key={`group-${id}`} sx={{ position: 'static', p: 0, '&:hover': { bgcolor: '#F8FAFC' } }}>
           <Box
             onClick={() => setExpanded(open ? '' : id)}
-            sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2, cursor: 'pointer', fontSize: 13.5, fontWeight: 600, color: C.text, lineHeight: '40px' }}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              px: 2,
+              cursor: 'pointer',
+              fontSize: 13.5,
+              fontWeight: 600,
+              color: C.text,
+              lineHeight: '40px'
+            }}
           >
             {root.categoryName}
             <DownOutlined style={{ fontSize: 10, color: C.subtle, transform: open ? 'rotate(180deg)' : 'none' }} />
@@ -313,7 +336,14 @@ function ProductPicker({ products, loading, all, selected, busy, onChange }) {
     return products.filter((p) => {
       const id = String(p.categoryId);
       const inCategory = category === 'ALL' || id === category || parentOf.get(id) === category;
-      return inCategory && [getProductName(p), p.sku].some((v) => String(v || '').toLocaleLowerCase('vi-VN').includes(keyword));
+      return (
+        inCategory &&
+        [getProductName(p), p.sku].some((v) =>
+          String(v || '')
+            .toLocaleLowerCase('vi-VN')
+            .includes(keyword)
+        )
+      );
     });
   }, [products, search, category, parentOf]);
   const current = all ? products.map(getProductId) : selected;
@@ -370,16 +400,38 @@ function ProductPicker({ products, loading, all, selected, busy, onChange }) {
 
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
         <Box onClick={toggleVisible} sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-          <Checkbox readOnly disableRipple size="small" checked={allVisibleChecked} sx={{ p: 0.5, '&:hover': { bgcolor: 'transparent' }, '&.Mui-checked': { color: C.check } }} />
+          <Checkbox
+            readOnly
+            disableRipple
+            size="small"
+            checked={allVisibleChecked}
+            sx={{ p: 0.5, '&:hover': { bgcolor: 'transparent' }, '&.Mui-checked': { color: C.check } }}
+          />
           <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: C.muted }}>Chọn tất cả</Typography>
         </Box>
         <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: current.length ? C.accent : C.subtle }}>
-          {products.length > 0 && current.length === products.length ? `Tất cả ${products.length} sản phẩm` : `Đã chọn ${current.length} sản phẩm`}
+          {products.length > 0 && current.length === products.length
+            ? `Tất cả ${products.length} sản phẩm`
+            : `Đã chọn ${current.length} sản phẩm`}
         </Typography>
       </Box>
 
       <Box sx={{ maxHeight: 420, overflowY: 'auto', border: `1px solid ${C.border}`, borderRadius: 2.5 }}>
-        <Box sx={{ display: 'grid', gridTemplateColumns: columns, gap: 1.5, alignItems: 'center', px: 1.25, py: 1, bgcolor: '#F8FAFC', borderBottom: `1px solid ${C.border}`, position: 'sticky', top: 0, zIndex: 1 }}>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: columns,
+            gap: 1.5,
+            alignItems: 'center',
+            px: 1.25,
+            py: 1,
+            bgcolor: '#F8FAFC',
+            borderBottom: `1px solid ${C.border}`,
+            position: 'sticky',
+            top: 0,
+            zIndex: 1
+          }}
+        >
           <Box />
           <Box />
           <Typography sx={headSx}>Sản phẩm</Typography>
@@ -417,7 +469,14 @@ function ProductPicker({ products, loading, all, selected, busy, onChange }) {
                   '&:last-of-type': { borderBottom: 0 }
                 }}
               >
-                <Checkbox readOnly disableRipple size="small" checked={checked} disabled={blocked} sx={{ p: 0.5, '&:hover': { bgcolor: 'transparent' }, '&.Mui-checked': { color: C.check } }} />
+                <Checkbox
+                  readOnly
+                  disableRipple
+                  size="small"
+                  checked={checked}
+                  disabled={blocked}
+                  sx={{ p: 0.5, '&:hover': { bgcolor: 'transparent' }, '&.Mui-checked': { color: C.check } }}
+                />
                 <Box
                   sx={{
                     width: 40,
@@ -442,13 +501,17 @@ function ProductPicker({ products, loading, all, selected, busy, onChange }) {
                     {getProductName(product)}
                   </Typography>
                   <Typography noWrap sx={{ fontSize: 12, color: busy[id] ? C.accent : C.muted }}>
-                    {busy[id] ? `Đang thuộc KM “${busy[id].name}” (${dateText(busy[id].startDate)} – ${dateText(busy[id].endDate)})` : product.sku || '—'}
+                    {busy[id]
+                      ? `Đang thuộc KM “${busy[id].name}” (${dateText(busy[id].startDate)} – ${dateText(busy[id].endDate)})`
+                      : product.sku || '—'}
                   </Typography>
                 </Box>
                 <Typography noWrap sx={{ ...desktop, fontSize: 13, color: C.muted }}>
                   {categoryName(product)}
                 </Typography>
-                <Typography sx={{ ...desktop, fontSize: 13, textAlign: 'center', color: Number(product.totalStock) > 0 ? C.text : C.error }}>
+                <Typography
+                  sx={{ ...desktop, fontSize: 13, textAlign: 'center', color: Number(product.totalStock) > 0 ? C.text : C.error }}
+                >
                   {Number(product.totalStock || 0).toLocaleString('vi-VN')}
                 </Typography>
                 <Typography sx={{ fontSize: 13, fontWeight: 700, color: C.text, textAlign: 'right' }}>{priceRange(product)}</Typography>
@@ -485,7 +548,7 @@ export default function PromotionForm({ kind, title, promotionId, initial, produ
   const busy = useMemo(() => {
     if (form.kind !== 'PRODUCT' || !form.startDate || !form.endDate) return {};
     return others
-      .filter((p) => overlaps(p, form))
+      .filter((p) => overlaps(p, { startDate: form.startDate, endDate: form.endDate }))
       .reduce((map, p) => {
         (p.applyScope === 'SELECTED' ? p.productIds.map(Number) : products.map(getProductId)).forEach((id) => {
           map[id] = map[id] || p;
@@ -498,7 +561,10 @@ export default function PromotionForm({ kind, title, promotionId, initial, produ
   const conflictError = conflicts.length
     ? `“${getProductName(products.find((p) => getProductId(p) === conflicts[0]) || {})}”${conflicts.length > 1 ? ` và ${conflicts.length - 1} sản phẩm khác` : ''} đang thuộc khuyến mãi “${busy[conflicts[0]].name}” (${dateText(busy[conflicts[0]].startDate)} – ${dateText(busy[conflicts[0]].endDate)}).`
     : '';
-  const check = () => ({ ...validate(form, minStart, initial.startDate), ...(form.kind === 'PRODUCT' && conflictError && { productIds: conflictError }) });
+  const check = () => ({
+    ...validate(form, minStart, initial.startDate),
+    ...(form.kind === 'PRODUCT' && conflictError && { productIds: conflictError })
+  });
   const errors = submitted ? check() : {};
 
   const formRef = useRef(null);
@@ -537,8 +603,18 @@ export default function PromotionForm({ kind, title, promotionId, initial, produ
     <Box component="form" ref={formRef} noValidate onSubmit={handleSubmit} sx={{ color: C.text, pb: 4 }}>
       <Typography sx={{ mb: 3, fontSize: { xs: 22, sm: 28 }, fontWeight: 800 }}>{title}</Typography>
 
-      <Snackbar open={Boolean(error)} autoHideDuration={5000} onClose={() => setError('')} anchorOrigin={{ vertical: 'top', horizontal: 'right' }} sx={{ mt: 7 }}>
-        <Alert severity="error" onClose={() => setError('')} sx={{ bgcolor: '#FFFFFF', border: `1px solid ${C.border}`, borderLeft: '5px solid #EF4444', fontWeight: 600, fontSize: 13 }}>
+      <Snackbar
+        open={Boolean(error)}
+        autoHideDuration={5000}
+        onClose={() => setError('')}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+        sx={{ mt: 7 }}
+      >
+        <Alert
+          severity="error"
+          onClose={() => setError('')}
+          sx={{ bgcolor: '#FFFFFF', border: `1px solid ${C.border}`, borderLeft: '5px solid #EF4444', fontWeight: 600, fontSize: 13 }}
+        >
           {error}
         </Alert>
       </Snackbar>
@@ -573,7 +649,10 @@ export default function PromotionForm({ kind, title, promotionId, initial, produ
               onChange={(e) => set({ startDate: e.target.value })}
               error={Boolean(errors.startDate)}
               helperText={errors.startDate}
-              slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: initial.startDate && initial.startDate < minStart ? undefined : minStart } }}
+              slotProps={{
+                inputLabel: { shrink: true },
+                htmlInput: { min: initial.startDate && initial.startDate < minStart ? undefined : minStart }
+              }}
               sx={fieldSx}
             />
             <TextField
@@ -618,7 +697,12 @@ export default function PromotionForm({ kind, title, promotionId, initial, produ
               )}
             </Box>
             {form.kind === 'ORDER' && (
-              <MoneyField label="Cho đơn hàng từ" value={form.minOrderValue} error={errors.minOrderValue} onChange={(minOrderValue) => set({ minOrderValue })} />
+              <MoneyField
+                label="Cho đơn hàng từ"
+                value={form.minOrderValue}
+                error={errors.minOrderValue}
+                onChange={(minOrderValue) => set({ minOrderValue })}
+              />
             )}
           </Box>
         </Section>
@@ -657,7 +741,12 @@ export default function PromotionForm({ kind, title, promotionId, initial, produ
         )}
 
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1.5, mt: 3, pt: 2.5, borderTop: `1px solid ${C.border}` }}>
-          <Button onClick={onCancel} disabled={saving} disableRipple sx={{ color: C.muted, borderRadius: 2.5, textTransform: 'none', px: 2.5, '&:hover': { bgcolor: 'transparent' } }}>
+          <Button
+            onClick={onCancel}
+            disabled={saving}
+            disableRipple
+            sx={{ color: C.muted, borderRadius: 2.5, textTransform: 'none', px: 2.5, '&:hover': { bgcolor: 'transparent' } }}
+          >
             Hủy
           </Button>
           <Button
@@ -665,7 +754,17 @@ export default function PromotionForm({ kind, title, promotionId, initial, produ
             variant="contained"
             disabled={saving}
             startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <SaveOutlined />}
-            sx={{ minWidth: 170, bgcolor: C.main, color: C.dark, fontWeight: 700, borderRadius: 2.5, py: 1.1, boxShadow: 'none', textTransform: 'none', '&:hover': { bgcolor: C.main, boxShadow: 'none' } }}
+            sx={{
+              minWidth: 170,
+              bgcolor: C.main,
+              color: C.dark,
+              fontWeight: 700,
+              borderRadius: 2.5,
+              py: 1.1,
+              boxShadow: 'none',
+              textTransform: 'none',
+              '&:hover': { bgcolor: C.main, boxShadow: 'none' }
+            }}
           >
             {saving ? 'Đang lưu...' : submitLabel}
           </Button>

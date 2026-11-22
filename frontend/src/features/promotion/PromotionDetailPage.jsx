@@ -14,16 +14,13 @@ import {
   TableRow,
   Typography
 } from '@mui/material';
-import {
-  ArrowLeftOutlined,
-  EditOutlined,
-  PictureOutlined
-} from '@ant-design/icons';
+import { ArrowLeftOutlined, EditOutlined, PictureOutlined } from '@ant-design/icons';
 import { getPromotionById } from 'services/promotionService';
 import { getProducts } from 'services/productService';
 import { categoryFullName, getCategories } from 'services/categoryService';
 import { useCrumbs } from '../../layouts/crumbs';
 import { KIND, kindOf, lockMessage, NoticeDialog } from './PromotionForm';
+import { SCHEDULE_LABEL, scheduleOf } from './promotionFormat';
 
 const C = {
   text: '#1E293B',
@@ -71,15 +68,6 @@ const dateText = (value) => {
 const discountText = (promotion) => {
   const isPercentage = promotion.discountType === 'PERCENT';
   return isPercentage ? `${promotion.discountValue}%` : money(promotion.discountValue);
-};
-
-const getScheduleStatus = (promotion) => {
-  const now = new Date();
-  const start = promotion.startDate ? new Date(promotion.startDate) : null;
-  const end = promotion.endDate ? new Date(promotion.endDate) : null;
-  if (start && now < start) return { label: 'Sắp diễn ra', code: 'UPCOMING' };
-  if (end && now > end) return { label: 'Đã kết thúc', code: 'ENDED' };
-  return { label: 'Đang diễn ra', code: 'ONGOING' };
 };
 
 const getProductId = (product) => product.productId ?? product.id;
@@ -192,9 +180,7 @@ export default function PromotionDetailPage({ kind = 'PRODUCT' }) {
     return (
       <Box sx={{ py: 10, textAlign: 'center' }}>
         <CircularProgress size={38} sx={{ color: C.cyan }} />
-        <Typography sx={{ mt: 2, color: C.muted, fontSize: 13.5 }}>
-          Đang tải thông tin chi tiết khuyến mãi...
-        </Typography>
+        <Typography sx={{ mt: 2, color: C.muted, fontSize: 13.5 }}>Đang tải thông tin chi tiết khuyến mãi...</Typography>
       </Box>
     );
   }
@@ -227,7 +213,8 @@ export default function PromotionDetailPage({ kind = 'PRODUCT' }) {
     );
   }
 
-  const schedule = getScheduleStatus(promotion);
+  const scheduleCode = scheduleOf(promotion);
+  const schedule = { code: scheduleCode, label: SCHEDULE_LABEL[scheduleCode] || '—' };
 
   // Đang diễn ra hoặc đã kết thúc thì báo, không cho sửa
   const openEdit = () => {
@@ -330,9 +317,7 @@ export default function PromotionDetailPage({ kind = 'PRODUCT' }) {
             <Typography sx={{ fontSize: 12, color: C.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
               Mức giảm giá
             </Typography>
-            <Typography sx={{ mt: 1, fontSize: 18, fontWeight: 800, color: C.text }}>
-              {discountText(promotion)}
-            </Typography>
+            <Typography sx={{ mt: 1, fontSize: 18, fontWeight: 800, color: C.text }}>{discountText(promotion)}</Typography>
           </Box>
 
           {/* Cột 3: Thời hạn áp dụng */}
@@ -341,12 +326,8 @@ export default function PromotionDetailPage({ kind = 'PRODUCT' }) {
               Thời hạn áp dụng
             </Typography>
             <Stack spacing={0.5} sx={{ mt: 1 }}>
-              <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: C.text }}>
-                Từ: {dateText(promotion.startDate)}
-              </Typography>
-              <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: C.text }}>
-                Đến: {dateText(promotion.endDate)}
-              </Typography>
+              <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: C.text }}>Từ: {dateText(promotion.startDate)}</Typography>
+              <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: C.text }}>Đến: {dateText(promotion.endDate)}</Typography>
             </Stack>
           </Box>
 
@@ -365,18 +346,8 @@ export default function PromotionDetailPage({ kind = 'PRODUCT' }) {
                   borderRadius: 1.75,
                   fontSize: 13,
                   fontWeight: 600,
-                  bgcolor:
-                    schedule.code === 'ONGOING'
-                      ? C.cream
-                      : schedule.code === 'UPCOMING'
-                      ? '#E0F2FE'
-                      : '#F1F5F9',
-                  color:
-                    schedule.code === 'ONGOING'
-                      ? C.creamText
-                      : schedule.code === 'UPCOMING'
-                      ? '#0369A1'
-                      : C.muted
+                  bgcolor: schedule.code === 'ONGOING' ? C.cream : schedule.code === 'UPCOMING' ? '#E0F2FE' : '#F1F5F9',
+                  color: schedule.code === 'ONGOING' ? C.creamText : schedule.code === 'UPCOMING' ? '#0369A1' : C.muted
                 }}
               >
                 {schedule.label}
@@ -388,9 +359,7 @@ export default function PromotionDetailPage({ kind = 'PRODUCT' }) {
 
       {/* ─── CARD 2: ĐIỀU KIỆN ÁP DỤNG ─── */}
       <Card sx={cardSx}>
-        <Typography sx={{ fontWeight: 800, fontSize: 16, color: C.text, mb: 2.5 }}>
-          Điều kiện áp dụng
-        </Typography>
+        <Typography sx={{ fontWeight: 800, fontSize: 16, color: C.text, mb: 2.5 }}>Điều kiện áp dụng</Typography>
 
         <Box
           sx={{
@@ -404,9 +373,7 @@ export default function PromotionDetailPage({ kind = 'PRODUCT' }) {
           <Box sx={{ minWidth: 0, flex: { sm: '0 0 auto' } }}>
             <Typography sx={{ fontSize: 12.5, color: C.muted, fontWeight: 600 }}>Loại giảm giá</Typography>
             <Typography sx={{ mt: 0.75, fontSize: 15, fontWeight: 700, color: C.text }}>
-              {promotion.discountType === 'PERCENT'
-                ? 'Theo phần trăm (%)'
-                : 'Số tiền cố định (VNĐ)'}
+              {promotion.discountType === 'PERCENT' ? 'Theo phần trăm (%)' : 'Số tiền cố định (VNĐ)'}
             </Typography>
           </Box>
 
@@ -431,9 +398,7 @@ export default function PromotionDetailPage({ kind = 'PRODUCT' }) {
       {/* ─── CARD 3: PHẠM VI ÁP DỤNG ─── */}
       {kind === 'PRODUCT' && (
         <Card sx={cardSx}>
-          <Typography sx={{ fontWeight: 800, fontSize: 16, color: C.text, mb: 2 }}>
-            Phạm vi áp dụng
-          </Typography>
+          <Typography sx={{ fontWeight: 800, fontSize: 16, color: C.text, mb: 2 }}>Phạm vi áp dụng</Typography>
 
           {promotion.applyScope === 'SELECTED' ? (
             <Box>
@@ -475,12 +440,18 @@ export default function PromotionDetailPage({ kind = 'PRODUCT' }) {
                   >
                     <TableHead>
                       <TableRow>
-                        <TableCell align="center" sx={{ width: 64, pl: 3 }}>STT</TableCell>
+                        <TableCell align="center" sx={{ width: 64, pl: 3 }}>
+                          STT
+                        </TableCell>
                         <TableCell sx={{ width: 72 }} />
                         <TableCell>Sản phẩm</TableCell>
                         <TableCell>Danh mục</TableCell>
-                        <TableCell align="center" sx={{ width: 120 }}>Tồn kho</TableCell>
-                        <TableCell align="right" sx={{ width: 200, pr: 3 }}>Giá bán</TableCell>
+                        <TableCell align="center" sx={{ width: 120 }}>
+                          Tồn kho
+                        </TableCell>
+                        <TableCell align="right" sx={{ width: 200, pr: 3 }}>
+                          Giá bán
+                        </TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -510,21 +481,14 @@ export default function PromotionDetailPage({ kind = 'PRODUCT' }) {
                                 }}
                               >
                                 {img ? (
-                                  <Box
-                                    component="img"
-                                    src={img}
-                                    alt={name}
-                                    sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                  />
+                                  <Box component="img" src={img} alt={name} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                 ) : (
                                   <PictureOutlined style={{ fontSize: 18, color: C.subtle }} />
                                 )}
                               </Box>
                             </TableCell>
                             <TableCell>
-                              <Typography sx={{ fontWeight: 600, color: C.text, fontSize: 14 }}>
-                                {name}
-                              </Typography>
+                              <Typography sx={{ fontWeight: 600, color: C.text, fontSize: 14 }}>{name}</Typography>
                               <Typography sx={{ fontSize: 12, color: C.muted }}>{product.sku || '—'}</Typography>
                             </TableCell>
                             <TableCell sx={{ color: `${C.muted} !important` }}>{categoryName(product)}</TableCell>
@@ -532,9 +496,7 @@ export default function PromotionDetailPage({ kind = 'PRODUCT' }) {
                               {Number(product.totalStock || 0).toLocaleString('vi-VN')}
                             </TableCell>
                             <TableCell align="right" sx={{ pr: 3 }}>
-                              <Typography sx={{ fontWeight: 700, color: C.text, fontSize: 14 }}>
-                                {price}
-                              </Typography>
+                              <Typography sx={{ fontWeight: 700, color: C.text, fontSize: 14 }}>{price}</Typography>
                             </TableCell>
                           </TableRow>
                         );
@@ -553,9 +515,7 @@ export default function PromotionDetailPage({ kind = 'PRODUCT' }) {
                 border: `1px solid ${C.borderLight}`
               }}
             >
-              <Typography sx={{ fontWeight: 700, fontSize: 14, color: C.text }}>
-                Toàn bộ sản phẩm trong cửa hàng
-              </Typography>
+              <Typography sx={{ fontWeight: 700, fontSize: 14, color: C.text }}>Toàn bộ sản phẩm trong cửa hàng</Typography>
               <Typography sx={{ mt: 0.5, fontSize: 13, color: C.muted }}>
                 Khuyến mãi được tự động áp dụng cho tất cả sản phẩm trong cửa hàng.
               </Typography>

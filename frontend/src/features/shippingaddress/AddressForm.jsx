@@ -24,6 +24,7 @@ function validate(form, province, ward) {
   const name = form.recipientName.trim();
   const detail = form.addressDetail.trim();
   if (name.length < 2 || name.length > 100) errors.recipientName = 'Họ và tên người nhận phải từ 2 đến 100 ký tự.';
+  else if (!/^[\p{L}\p{M} ]+$/u.test(name)) errors.recipientName = 'Họ và tên người nhận chỉ được gồm chữ cái và khoảng trắng.';
   if (!/^0\d{9}$/.test(form.phone)) errors.phone = 'Số điện thoại phải gồm 10 chữ số và bắt đầu bằng số 0.';
   if (!province) errors.provinceCode = 'Vui lòng chọn Tỉnh/Thành phố.';
   if (!ward) errors.wardCode = 'Vui lòng chọn Phường/Xã.';

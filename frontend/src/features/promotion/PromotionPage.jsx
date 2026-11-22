@@ -27,17 +27,13 @@ import {
   Typography
 } from '@mui/material';
 import { FilterResetButton, Pager } from 'features/account/components/Blocks';
-import {
-  EditOutlined,
-  EyeOutlined,
-  PlusOutlined,
-  SearchOutlined
-} from '@ant-design/icons';
+import { EditOutlined, EyeOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { changePromotionStatus, findProductConflict, getPromotions } from 'services/promotionService';
 import { useAuth } from 'features/auth/AuthProvider';
 import CustomerPromotionPage from './CustomerPromotionPage';
 import { KIND, kindOf, lockMessage, NoticeDialog } from './PromotionForm';
 import { useCrumbs } from '../../layouts/crumbs';
+import { money, scheduleOf } from './promotionFormat';
 
 const C = {
   text: '#1E293B',
@@ -53,8 +49,6 @@ const C = {
 
 const PAGE_SIZE = 8;
 
-const money = (value) => `${Number(value || 0).toLocaleString('vi-VN')} đ`;
-
 const toDate = (value) => {
   const date = value ? new Date(value) : null;
   return date && !Number.isNaN(date.getTime()) ? date : null;
@@ -67,30 +61,17 @@ const dateText = (value) => {
   return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 };
 
-// So sánh cả ngày lẫn giờ, khớp với cách backend kiểm tra hết hạn
-function getScheduleStatus(promotion) {
-  const now = new Date();
-  const startDate = toDate(promotion.startDate);
-  const endDate = toDate(promotion.endDate);
-  if (!startDate || !endDate) return 'UNKNOWN';
-  if (now < startDate) return 'UPCOMING';
-  if (now >= endDate) return 'ENDED';
-  return 'ONGOING';
-}
-
 function isPromotionActive(promotion) {
-  if (getScheduleStatus(promotion) === 'ENDED') return false;
+  if (scheduleOf(promotion) === 'ENDED') return false;
   return promotion.status === 'ACTIVE';
 }
 
 function getDiscountText(promotion) {
-  return promotion.discountType === 'PERCENT'
-    ? `${Number(promotion.discountValue)}%`
-    : money(promotion.discountValue);
+  return promotion.discountType === 'PERCENT' ? `${Number(promotion.discountValue)}%` : money(promotion.discountValue);
 }
 
 function PromotionSwitch({ promotion, onToggle, disabled }) {
-  const isEnded = getScheduleStatus(promotion) === 'ENDED';
+  const isEnded = scheduleOf(promotion) === 'ENDED';
   const active = !isEnded && promotion.status === 'ACTIVE';
 
   return (
@@ -195,7 +176,14 @@ function UsageBar({ promotion }) {
         {limit > 0 && <Typography sx={{ fontSize: 11.5, color: C.muted }}>{Math.round(percent)}%</Typography>}
       </Box>
       <Box sx={{ mt: 0.75, height: 6, borderRadius: 3, bgcolor: '#E2E8F0', overflow: 'hidden' }}>
-        <Box sx={{ width: `${percent}%`, height: '100%', borderRadius: 3, bgcolor: percent >= 100 ? '#EF4444' : percent >= 80 ? '#F59E0B' : '#67E8F9' }} />
+        <Box
+          sx={{
+            width: `${percent}%`,
+            height: '100%',
+            borderRadius: 3,
+            bgcolor: percent >= 100 ? '#EF4444' : percent >= 80 ? '#F59E0B' : '#67E8F9'
+          }}
+        />
       </Box>
       {!limit && <Typography sx={{ fontSize: 11.5, color: '#94A3B8', mt: 0.5 }}>Chưa đặt giới hạn</Typography>}
     </Box>
@@ -220,7 +208,7 @@ function OwnerPromotionView({ kind }) {
 
   // Đã kết thúc thì không bật lại, đang diễn ra thì không tắt
   const toggleStatus = (promotion) => {
-    const schedule = getScheduleStatus(promotion);
+    const schedule = scheduleOf(promotion);
     if (schedule === 'ENDED') setNotice(lockMessage(promotion));
     else if (schedule === 'ONGOING' && promotion.status === 'ACTIVE') setNotice('Khuyến mãi đang diễn ra nên không thể tắt.');
     else setStatusTarget(promotion);
@@ -253,12 +241,8 @@ function OwnerPromotionView({ kind }) {
   const filteredPromotions = useMemo(() => {
     const keyword = search.trim().toLocaleLowerCase('vi-VN');
     return promotions.filter((promotion) => {
-      const matchesSearch = (promotion.name || '')
-        .toLocaleLowerCase('vi-VN')
-        .includes(keyword);
-      const matchesSchedule =
-        scheduleFilter === 'ALL' ||
-        getScheduleStatus(promotion) === scheduleFilter;
+      const matchesSearch = (promotion.name || '').toLocaleLowerCase('vi-VN').includes(keyword);
+      const matchesSchedule = scheduleFilter === 'ALL' || scheduleOf(promotion) === scheduleFilter;
       const matchesEnable =
         enableFilter === 'ALL' ||
         (enableFilter === 'ACTIVE' && isPromotionActive(promotion)) ||
@@ -279,14 +263,12 @@ function OwnerPromotionView({ kind }) {
       const conflict = nextStatus === 'ACTIVE' && (await findProductConflict(statusTarget));
       if (conflict) {
         const date = (value) => new Date(value).toLocaleDateString('vi-VN');
-        throw new Error(`Không thể bật: trùng sản phẩm với khuyến mãi “${conflict.name}” (${date(conflict.startDate)} – ${date(conflict.endDate)}).`);
+        throw new Error(
+          `Không thể bật: trùng sản phẩm với khuyến mãi “${conflict.name}” (${date(conflict.startDate)} – ${date(conflict.endDate)}).`
+        );
       }
       await changePromotionStatus(statusTarget.promotionId, nextStatus);
-      setPromotions((prev) =>
-        prev.map((item) =>
-          item.promotionId === statusTarget.promotionId ? { ...item, status: nextStatus } : item
-        )
-      );
+      setPromotions((prev) => prev.map((item) => (item.promotionId === statusTarget.promotionId ? { ...item, status: nextStatus } : item)));
       setStatusTarget(null);
       setError('');
     } catch (err) {
@@ -396,9 +378,7 @@ function OwnerPromotionView({ kind }) {
         }}
       >
         <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>
-            Tìm kiếm khuyến mãi
-          </Typography>
+          <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>Tìm kiếm khuyến mãi</Typography>
           <TextField
             fullWidth
             size="small"
@@ -504,34 +484,32 @@ function OwnerPromotionView({ kind }) {
               >
                 <TableHead>
                   <TableRow>
-                    <TableCell align="center" sx={{ pl: 3, width: '5%' }}>STT</TableCell>
+                    <TableCell align="center" sx={{ pl: 3, width: '5%' }}>
+                      STT
+                    </TableCell>
                     <TableCell sx={{ width: '14%' }}>TÊN KHUYẾN MÃI</TableCell>
                     <TableCell sx={{ width: '10%' }}>MỨC GIẢM</TableCell>
                     <TableCell sx={{ width: '14%' }}>THỜI GIAN</TableCell>
                     {kind === 'ORDER' && <TableCell sx={{ width: '18%' }}>ÁP DỤNG</TableCell>}
                     {kind === 'ORDER' && <TableCell sx={{ width: '18%' }}>LƯỢT DÙNG</TableCell>}
                     <TableCell sx={{ width: '12%' }}>TRẠNG THÁI</TableCell>
-                    <TableCell align="center" sx={{ pr: 3, width: '9%' }}>THAO TÁC</TableCell>
+                    <TableCell align="center" sx={{ pr: 3, width: '9%' }}>
+                      THAO TÁC
+                    </TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {rows.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={kind === 'ORDER' ? 8 : 6} align="center" sx={{ py: 6 }}>
-                        <Typography sx={{ color: C.muted, fontSize: 14 }}>
-                          Không có chương trình khuyến mãi nào phù hợp.
-                        </Typography>
+                        <Typography sx={{ color: C.muted, fontSize: 14 }}>Không có chương trình khuyến mãi nào phù hợp.</Typography>
                       </TableCell>
                     </TableRow>
                   ) : (
                     rows.map((promotion, index) => {
-                      const schedule = getScheduleStatus(promotion);
+                      const schedule = scheduleOf(promotion);
                       return (
-                        <TableRow
-                          key={promotion.promotionId}
-                          hover
-                          sx={{ '&:hover': { bgcolor: '#FAFCFE' } }}
-                        >
+                        <TableRow key={promotion.promotionId} hover sx={{ '&:hover': { bgcolor: '#FAFCFE' } }}>
                           <TableCell align="center" sx={{ pl: 3, color: C.muted, fontWeight: 600 }}>
                             {(currentPage - 1) * PAGE_SIZE + index + 1}
                           </TableCell>
@@ -541,7 +519,17 @@ function OwnerPromotionView({ kind }) {
                               {promotion.name}
                             </Typography>
                             {promotion.description && (
-                              <Typography sx={{ fontSize: 12, color: '#94A3B8', mt: 0.25, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                              <Typography
+                                sx={{
+                                  fontSize: 12,
+                                  color: '#94A3B8',
+                                  mt: 0.25,
+                                  display: '-webkit-box',
+                                  WebkitLineClamp: 2,
+                                  WebkitBoxOrient: 'vertical',
+                                  overflow: 'hidden'
+                                }}
+                              >
                                 {promotion.description}
                               </Typography>
                             )}
@@ -553,12 +541,8 @@ function OwnerPromotionView({ kind }) {
 
                           {/* Thời gian */}
                           <TableCell>
-                            <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text }}>
-                              {dateText(promotion.startDate)}
-                            </Typography>
-                            <Typography sx={{ fontSize: 11.5, color: '#94A3B8' }}>
-                              đến {dateText(promotion.endDate)}
-                            </Typography>
+                            <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text }}>{dateText(promotion.startDate)}</Typography>
+                            <Typography sx={{ fontSize: 11.5, color: '#94A3B8' }}>đến {dateText(promotion.endDate)}</Typography>
                             <Box sx={{ pt: 0.35 }}>
                               <Box
                                 sx={{
@@ -568,25 +552,11 @@ function OwnerPromotionView({ kind }) {
                                   borderRadius: 1.5,
                                   px: 1,
                                   py: 0.2,
-                                  bgcolor:
-                                    schedule === 'ONGOING'
-                                      ? C.cream
-                                      : schedule === 'UPCOMING'
-                                      ? '#E0F2FE'
-                                      : '#F1F5F9',
-                                  color:
-                                    schedule === 'ONGOING'
-                                      ? C.creamText
-                                      : schedule === 'UPCOMING'
-                                      ? '#0369A1'
-                                      : C.muted
+                                  bgcolor: schedule === 'ONGOING' ? C.cream : schedule === 'UPCOMING' ? '#E0F2FE' : '#F1F5F9',
+                                  color: schedule === 'ONGOING' ? C.creamText : schedule === 'UPCOMING' ? '#0369A1' : C.muted
                                 }}
                               >
-                                {schedule === 'ONGOING'
-                                  ? 'Đang diễn ra'
-                                  : schedule === 'UPCOMING'
-                                  ? 'Sắp diễn ra'
-                                  : 'Đã kết thúc'}
+                                {schedule === 'ONGOING' ? 'Đang diễn ra' : schedule === 'UPCOMING' ? 'Sắp diễn ra' : 'Đã kết thúc'}
                               </Box>
                             </Box>
                           </TableCell>
@@ -694,7 +664,7 @@ function OwnerPromotionView({ kind }) {
             Bạn có chắc muốn {statusTarget && statusTarget.status === 'ACTIVE' ? 'tắt' : 'bật'} chương trình{' '}
             <strong style={{ color: C.text }}>{statusTarget?.name}</strong>?
           </Typography>
-          {statusTarget?.status === 'ACTIVE' && getScheduleStatus(statusTarget) === 'ONGOING' && (
+          {statusTarget?.status === 'ACTIVE' && scheduleOf(statusTarget) === 'ONGOING' && (
             <Alert severity="warning" sx={{ mt: 1.5, fontSize: 13, borderRadius: 2 }}>
               Khuyến mãi đang áp dụng. Sau khi tắt, khách sẽ không được giảm nữa; các đơn đã đặt vẫn giữ mức giảm cũ.
             </Alert>

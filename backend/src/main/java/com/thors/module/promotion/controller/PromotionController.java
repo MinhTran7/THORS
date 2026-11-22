@@ -1,12 +1,9 @@
-
 package com.thors.module.promotion.controller;
 
-import com.thors.module.promotion.dto.CreatePromotionRequest;
-import com.thors.module.promotion.dto.UpdatePromotionRequest;
+import com.thors.module.promotion.dto.PromotionRequest;
 import com.thors.module.promotion.entity.Promotion;
 import com.thors.module.promotion.service.PromotionService;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -31,34 +28,22 @@ public class PromotionController {
         return promotionService.getById(promotionId);
     }
 
-
     @PostMapping
-    public ResponseEntity<Promotion> create(
-            @RequestBody CreatePromotionRequest request
-    ) {
-        Promotion created = promotionService.create(request);
-
-        return ResponseEntity
-                .status(HttpStatus.CREATED)
-                .body(created);
+    @ResponseStatus(HttpStatus.CREATED)
+    public Promotion create(@RequestBody PromotionRequest request) {
+        return promotionService.create(request);
     }
 
     @PutMapping("/{promotionId}")
-    public ResponseEntity<Void> update(
-            @PathVariable int promotionId,
-            @RequestBody UpdatePromotionRequest request
-    ) {
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void update(@PathVariable int promotionId, @RequestBody PromotionRequest request) {
         promotionService.update(promotionId, request);
-        return ResponseEntity.noContent().build();
     }
 
     @PatchMapping("/{promotionId}/status")
-    public ResponseEntity<Void> changeStatus(
-            @PathVariable int promotionId,
-            @RequestBody StatusRequest request
-    ) {
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void changeStatus(@PathVariable int promotionId, @RequestBody StatusRequest request) {
         promotionService.changeStatus(promotionId, request.status());
-        return ResponseEntity.noContent().build();
     }
 
     public record StatusRequest(String status) {

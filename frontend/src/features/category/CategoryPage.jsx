@@ -68,7 +68,7 @@ import {
 import { getProducts } from 'services/productService';
 import CategoryIconPicker from './CategoryIconPicker';
 import { findCategoryIcon } from './categoryIcons';
-import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../customer/theme';
+import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../shippingaddress/theme';
 
 const PAGE_SIZE = 5;
 

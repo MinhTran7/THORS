@@ -14,7 +14,7 @@ import {
 } from '@mui/material';
 import { SearchOutlined, UndoOutlined } from '@ant-design/icons';
 
-import { C, outlineButtonSx, primaryButtonSx } from '../customer/theme';
+import { C, outlineButtonSx, primaryButtonSx } from '../shippingaddress/theme';
 import { CATEGORY_ICONS, ICON_GROUPS, findCategoryIcon } from './categoryIcons';
 
 const PAGE_SIZE = 24;

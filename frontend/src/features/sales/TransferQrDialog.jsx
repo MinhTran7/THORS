@@ -1,5 +1,6 @@
 import { Box, CircularProgress, Dialog, Stack, Typography } from '@mui/material';
 import { generateVietQrUrl, VIETNAMESE_BANKS } from '../../utils/vietqr';
+import { money } from './salesFormat';
 
 const C = {
   text: '#202D42',
@@ -8,13 +9,13 @@ const C = {
   main: '#8DE9F2'
 };
 
-const money = (value) => `${Number(value || 0).toLocaleString('vi-VN')} đ`;
-
 function Row({ label, value }) {
   return (
     <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
       <Typography sx={{ fontSize: 12.5, color: C.muted }}>{label}</Typography>
-      <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: C.text, textAlign: 'right', wordBreak: 'break-all' }}>{value || '—'}</Typography>
+      <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: C.text, textAlign: 'right', wordBreak: 'break-all' }}>
+        {value || '—'}
+      </Typography>
     </Box>
   );
 }
@@ -41,10 +42,17 @@ export default function TransferQrDialog({ transfer, onClose }) {
     >
       <Box sx={{ p: 3 }}>
         <Typography sx={{ fontSize: 16, fontWeight: 800, color: C.text, textAlign: 'center' }}>Chờ khách chuyển khoản</Typography>
-        <Typography sx={{ fontSize: 24, fontWeight: 800, color: C.text, textAlign: 'center', mt: 0.5 }}>{money(sale?.totalAmount)}</Typography>
+        <Typography sx={{ fontSize: 24, fontWeight: 800, color: C.text, textAlign: 'center', mt: 0.5 }}>
+          {money(sale?.totalAmount)}
+        </Typography>
 
         <Box sx={{ my: 2, minHeight: 240, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Box component="img" src={qrUrl} alt="Mã VietQR" sx={{ width: 240, maxWidth: '100%', borderRadius: 2, border: `1px solid ${C.border}` }} />
+          <Box
+            component="img"
+            src={qrUrl}
+            alt="Mã VietQR"
+            sx={{ width: 240, maxWidth: '100%', borderRadius: 2, border: `1px solid ${C.border}` }}
+          />
         </Box>
 
         {link && (
@@ -64,7 +72,6 @@ export default function TransferQrDialog({ transfer, onClose }) {
             </Typography>
           </>
         )}
-
       </Box>
     </Dialog>
   );

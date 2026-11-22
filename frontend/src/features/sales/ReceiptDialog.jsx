@@ -33,7 +33,6 @@ export default function ReceiptDialog({
   onClose,
   saleData,
   cartItems = [],
-  customerName = '',
   sellerName = '',
   completedAt,
   closeText = 'Bán đơn mới',
@@ -42,7 +41,6 @@ export default function ReceiptDialog({
 }) {
   if (!saleData) return null;
 
-  const displayCustomer = customerName.trim() || 'Khách mua tại quầy';
   const displaySeller = sellerName.trim() || '—';
   const received = receivedAmount ?? saleData.receivedAmount ?? (saleData.paymentMethod === 'CASH' ? saleData.totalAmount : 0);
   const change = changeAmount ?? saleData.changeAmount ?? 0;
@@ -145,7 +143,7 @@ export default function ReceiptDialog({
               <ReceiptRow label="Số hóa đơn" value={saleData.invoiceNumber} />
               <ReceiptRow label="Thời gian" value={formatDateTime(completedAt)} />
               <ReceiptRow label="Thu ngân" value={displaySeller} />
-              <ReceiptRow label="Khách hàng" value={displayCustomer} />
+              <ReceiptRow label="Khách hàng" value="Khách mua tại quầy" />
             </Stack>
 
             <Divider sx={{ borderStyle: 'dashed', borderColor: C.border, mb: 1.25 }} />
