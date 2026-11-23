@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { Box, Button, Chip, CircularProgress, InputAdornment, TextField, Typography } from '@mui/material';
 import { useAuth } from 'features/auth/AuthProvider';
@@ -8,12 +8,8 @@ import { money } from 'features/shop/ShopCommon';
 import { C, SERIF } from 'features/shop/storeTheme';
 import { getOutfitOptions, suggestOutfits } from './api';
 import { getBodyProfile } from 'features/fitting/api';
-import { colorHex } from 'features/fitting/avatar/colorNames';
-
-// Hình 3D chỉ tải khi có bộ đồ để xem (thư viện 3D khá nặng)
-const AvatarViewer = lazy(() => import('features/fitting/avatar/AvatarViewer'));
-// Chưa có số đo: dáng tham khảo theo giới tính
-const DEFAULT_BODY = { FEMALE: { heightCm: 160, weightKg: 52 }, MALE: { heightCm: 170, weightKg: 65 } };
+import TryOnDialog from 'features/tryon/TryOnDialog';
+import SwapDialog from './SwapDialog';
 
 const BUDGET_PRESETS = [500000, 1000000, 2000000, 3000000];
 const GENDERS = [
@@ -31,6 +27,23 @@ const chipSx = (on) => ({
 });
 
 const digits = (text) => String(text).replace(/\D/g, '').slice(0, 9);
+
+// Lưu tạm trạng thái trang trong phiên trình duyệt (tiện cho khách, không bắt buộc - lỗi lưu trữ thì bỏ qua)
+const SAVED_KEY = 'thors.outfit.page';
+const readSaved = () => {
+  try {
+    return JSON.parse(sessionStorage.getItem(SAVED_KEY) || 'null');
+  } catch {
+    return null;
+  }
+};
+const writeSaved = (state) => {
+  try {
+    sessionStorage.setItem(SAVED_KEY, JSON.stringify(state));
+  } catch {
+    /* trình duyệt chặn lưu trữ: bỏ qua */
+  }
+};
 const formatMoneyInput = (text) => (digits(text) ? Number(digits(text)).toLocaleString('vi-VN') : '');
 
 /**
@@ -42,28 +55,33 @@ export default function OutfitPage() {
   const account = useAuth()?.account;
   const isCustomer = account?.role === 'CUSTOMER';
 
-  const [options, setOptions] = useState(null);
-  const [bodyProfile, setBodyProfile] = useState(null); // số đo đã lưu (dáng 3D)
-  const [occasion, setOccasion] = useState('');
-  const [budgetText, setBudgetText] = useState('1.000.000');
-  const [styles, setStyles] = useState([]);
-  const [avoidText, setAvoidText] = useState('');
-  const [gender, setGender] = useState('');
+  // Lần phối trước trong phiên này (rời trang rồi quay lại vẫn còn) - chỉ của đúng tài khoản đang đăng nhập
+  const [saved] = useState(() => {
+    const s = readSaved();
+    return s && s.owner === (account?.id ?? null) ? s : {};
+  });
 
-  const [result, setResult] = useState(null); // { outfits, message, usedBodyProfile }
-  const [index, setIndex] = useState(0);
-  const [excluded, setExcluded] = useState([]); // sản phẩm khách đã bấm "Đổi món"
+  const [options, setOptions] = useState(null);
+  const [occasion, setOccasion] = useState(saved.occasion ?? '');
+  const [budgetText, setBudgetText] = useState(saved.budgetText ?? '1.000.000');
+  const [styles, setStyles] = useState(saved.styles ?? []);
+  const [avoidText, setAvoidText] = useState(saved.avoidText ?? '');
+  const [gender, setGender] = useState(saved.gender ?? '');
+
+  const [result, setResult] = useState(saved.result ?? null); // { outfits, message, usedBodyProfile }
+  const [index, setIndex] = useState(saved.index ?? 0);
+  const [excluded, setExcluded] = useState(saved.excluded ?? []); // sản phẩm khách đã bấm "Đổi món"
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [cartMessage, setCartMessage] = useState({ type: '', text: '' });
+  const [tryOnOpen, setTryOnOpen] = useState(false); // mặc thử cả bộ bằng AI (ảnh 2D)
+  const [swapItem, setSwapItem] = useState(null); // món đang chọn để đổi (mở danh sách món thay thế)
 
   useEffect(() => {
     if (isCustomer) {
       getBodyProfile()
-        .then((p) => {
-          setBodyProfile(p);
-          if (p?.gender) setGender((g) => g || p.gender);
-        })
+        // Có số đo đã lưu: chọn sẵn nam / nữ theo số đo
+        .then((p) => p?.gender && setGender((g) => g || p.gender))
         .catch(() => {});
     }
     getOutfitOptions()
@@ -71,23 +89,28 @@ export default function OutfitPage() {
       .catch(() => setOptions({ occasions: {}, styles: {}, failed: true }));
   }, [isCustomer]);
 
+  // Ghi nhớ lựa chọn + các bộ đã gợi ý trong phiên (đóng tab trình duyệt là quên)
+  useEffect(() => {
+    writeSaved({ owner: account?.id ?? null, occasion, budgetText, styles, avoidText, gender, result, index, excluded });
+  }, [account?.id, occasion, budgetText, styles, avoidText, gender, result, index, excluded]);
+
   const budget = Number(digits(budgetText)) || 0;
   const outfit = result?.outfits?.[index];
-  // Người mẫu 3D: theo số đo đã lưu (cùng giới tính), không có thì dáng tham khảo
-  const avatarProfile = useMemo(
-    () => (bodyProfile && bodyProfile.gender === gender ? bodyProfile : { gender, ...DEFAULT_BODY[gender] }),
-    [bodyProfile, gender]
-  );
-  // Cả bộ lên người mẫu: mỗi món tô đúng màu biến thể; quần short / chân váy chỉ tới gối
-  const avatarOutfit = useMemo(
-    () =>
-      outfit?.items.map((i) => ({
-        role: i.role,
-        color: colorHex(i.color),
-        short: /short|chân váy|ngắn/i.test(i.productName)
-      })),
-    [outfit]
-  );
+
+  // Điều kiện phối đồ đang chọn trên trang (dùng cho gợi ý và cho danh sách "Đổi món")
+  const requestBody = (overrides = {}) => ({
+    occasion,
+    budget,
+    gender: gender || null,
+    styles,
+    avoidColors: avoidText
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+    keepDetailIds: [],
+    excludeProductIds: excluded,
+    ...overrides
+  });
 
   // Gọi API phối đồ; overrides dùng cho "Đổi món" / "Rẻ hơn"
   const run = async (overrides = {}) => {
@@ -98,20 +121,7 @@ export default function OutfitPage() {
     setError('');
     setCartMessage({ type: '', text: '' });
     try {
-      const body = {
-        occasion,
-        budget,
-        gender: gender || null,
-        styles,
-        avoidColors: avoidText
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean),
-        keepDetailIds: [],
-        excludeProductIds: excluded,
-        ...overrides
-      };
-      const data = await suggestOutfits(body);
+      const data = await suggestOutfits(requestBody(overrides));
       setResult(data);
       setIndex(0);
     } catch (e) {
@@ -126,14 +136,20 @@ export default function OutfitPage() {
     run({ excludeProductIds: [] });
   };
 
-  // Đổi một món: giữ các món còn lại, bỏ sản phẩm này
+  const othersOf = (item) => outfit.items.filter((i) => i.detailId !== item.detailId).map((i) => i.detailId);
+
+  // Đổi một món, để hệ thống tự chọn: giữ các món còn lại, bỏ sản phẩm này
   const swap = (item) => {
     const nextExcluded = [...excluded, item.productId];
     setExcluded(nextExcluded);
-    run({
-      keepDetailIds: outfit.items.filter((i) => i.detailId !== item.detailId).map((i) => i.detailId),
-      excludeProductIds: nextExcluded
-    });
+    setSwapItem(null);
+    run({ keepDetailIds: othersOf(item), excludeProductIds: nextExcluded });
+  };
+
+  // Khách tự chọn món thay thế: giữ các món còn lại + đúng món vừa chọn
+  const swapTo = (item, chosen) => {
+    setSwapItem(null);
+    run({ keepDetailIds: [...othersOf(item), chosen.detailId] });
   };
 
   // Rẻ hơn: ngân sách = tổng bộ hiện tại - 1.000 ₫
@@ -278,61 +294,39 @@ export default function OutfitPage() {
                 <Typography sx={{ fontSize: 22, fontWeight: 700 }}>{money(outfit.total)}</Typography>
               </Box>
 
-              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '300px 1fr' }, gap: 3, alignItems: 'start' }}>
-                {/* Mặc thử cả bộ trên dáng 3D của khách */}
-                <Box>
-                  <Box
-                    sx={{
-                      height: { xs: 380, md: 440 },
-                      borderRadius: '14px',
-                      overflow: 'hidden',
-                      background: 'linear-gradient(180deg, #F7F5F2 0%, #ECE8E2 100%)'
-                    }}
-                  >
-                    <Suspense fallback={null}>
-                      <AvatarViewer profile={avatarProfile} outfit={avatarOutfit} />
-                    </Suspense>
-                  </Box>
-                  <Typography sx={{ fontSize: 12, color: C.muted, mt: 1, textAlign: 'center' }}>
-                    {bodyProfile && bodyProfile.gender === gender
-                      ? 'Mặc thử trên dáng theo số đo của bạn · kéo để xoay'
-                      : 'Dáng tham khảo · lưu số đo để xem trên dáng của bạn'}
-                  </Typography>
-                </Box>
-                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: `repeat(${outfit.items.length}, 1fr)` }, gap: 2 }}>
-                  {outfit.items.map((item) => (
-                    <Box key={item.detailId}>
-                      <Box
-                        component={RouterLink}
-                        to={`/shop/products/${item.productId}`}
-                        sx={{ display: 'block', aspectRatio: '3 / 4', borderRadius: '12px', overflow: 'hidden', bgcolor: C.photo }}
-                      >
-                        {item.imageUrl && (
-                          <Box
-                            component="img"
-                            src={item.imageUrl}
-                            alt={item.productName}
-                            sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          />
-                        )}
-                      </Box>
-                      <Typography sx={{ fontSize: 12, color: C.muted, mt: 1 }}>{item.roleLabel}</Typography>
-                      <Typography sx={{ fontWeight: 600, fontSize: 14, lineHeight: 1.3 }}>{item.productName}</Typography>
-                      <Typography sx={{ fontSize: 13, color: C.muted }}>
-                        {item.color} · {item.sizeNote}
-                      </Typography>
-                      <Typography sx={{ fontWeight: 700, fontSize: 14, mt: 0.5 }}>{money(item.price)}</Typography>
-                      <Button
-                        size="small"
-                        disabled={loading}
-                        onClick={() => swap(item)}
-                        sx={{ mt: 0.5, px: 0, textTransform: 'none', fontWeight: 700, color: C.accent }}
-                      >
-                        Đổi món này
-                      </Button>
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: `repeat(${outfit.items.length}, 1fr)` }, gap: 2 }}>
+                {outfit.items.map((item) => (
+                  <Box key={item.detailId}>
+                    <Box
+                      component={RouterLink}
+                      to={`/shop/products/${item.productId}`}
+                      sx={{ display: 'block', aspectRatio: '3 / 4', borderRadius: '12px', overflow: 'hidden', bgcolor: C.photo }}
+                    >
+                      {item.imageUrl && (
+                        <Box
+                          component="img"
+                          src={item.imageUrl}
+                          alt={item.productName}
+                          sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                      )}
                     </Box>
-                  ))}
-                </Box>
+                    <Typography sx={{ fontSize: 12, color: C.muted, mt: 1 }}>{item.roleLabel}</Typography>
+                    <Typography sx={{ fontWeight: 600, fontSize: 14, lineHeight: 1.3 }}>{item.productName}</Typography>
+                    <Typography sx={{ fontSize: 13, color: C.muted }}>
+                      {item.color} · {item.sizeNote}
+                    </Typography>
+                    <Typography sx={{ fontWeight: 700, fontSize: 14, mt: 0.5 }}>{money(item.price)}</Typography>
+                    <Button
+                      size="small"
+                      disabled={loading}
+                      onClick={() => setSwapItem(item)}
+                      sx={{ mt: 0.5, px: 0, textTransform: 'none', fontWeight: 700, color: C.accent }}
+                    >
+                      Đổi món này
+                    </Button>
+                  </Box>
+                ))}
               </Box>
               <Box component="ul" sx={{ m: 0, mt: 2, pl: 2.5, color: C.muted, fontSize: 13.5 }}>
                 {outfit.reasons.map((r) => (
@@ -347,7 +341,7 @@ export default function OutfitPage() {
               )}
 
               <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 2.5 }}>
-                {account ? (
+                {account && (
                   <Button
                     onClick={addAll}
                     disabled={loading}
@@ -363,7 +357,24 @@ export default function OutfitPage() {
                   >
                     Thêm cả bộ vào giỏ
                   </Button>
-                ) : (
+                )}
+                {isCustomer && (
+                  <Button
+                    onClick={() => setTryOnOpen(true)}
+                    disabled={loading}
+                    sx={{
+                      borderRadius: '12px',
+                      textTransform: 'none',
+                      fontWeight: 700,
+                      px: 2.5,
+                      border: `1.5px solid ${C.ink}`,
+                      color: C.ink
+                    }}
+                  >
+                    Mặc thử bộ này
+                  </Button>
+                )}
+                {!account && (
                   <Button
                     component={RouterLink}
                     to="/login"
@@ -391,6 +402,43 @@ export default function OutfitPage() {
           )}
         </Box>
       </Box>
+
+      {/* Đổi món: khách tự chọn món thay thế, hoặc để hệ thống tự chọn */}
+      {swapItem && outfit && (
+        <SwapDialog
+          item={swapItem}
+          request={requestBody({ keepDetailIds: othersOf(swapItem) })}
+          budget={budget}
+          onClose={() => setSwapItem(null)}
+          onChoose={(chosen) => swapTo(swapItem, chosen)}
+          onAuto={() => swap(swapItem)}
+        />
+      )}
+
+      {/* Mặc thử cả bộ đang xem (giày dép backend tự bỏ qua và báo lại) */}
+      {isCustomer && outfit && (
+        <TryOnDialog
+          open={tryOnOpen}
+          onClose={() => setTryOnOpen(false)}
+          items={outfit.items.map((i) => ({ productId: i.productId, productName: i.productName, imageUrl: i.imageUrl, role: i.role }))}
+          extraActions={
+            <Button
+              onClick={addAll}
+              sx={{
+                borderRadius: '12px',
+                textTransform: 'none',
+                fontWeight: 700,
+                px: 2.5,
+                bgcolor: C.ink,
+                color: '#fff',
+                '&:hover': { bgcolor: '#333' }
+              }}
+            >
+              Thêm cả bộ vào giỏ
+            </Button>
+          }
+        />
+      )}
     </Box>
   );
 }

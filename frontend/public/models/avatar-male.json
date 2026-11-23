@@ -1,53 +1,53 @@
 {
-  "heightCm": 172.9,
-  "minY": 0,
+  "heightCm": 181.6,
+  "minY": -0.0003,
   "measures": {
     "bust": {
-      "atHeightRatio": 0.736,
+      "atHeightRatio": 0.756,
       "section": {
         "cx": 0,
-        "cz": 0.0316,
-        "rx": 0.1877,
-        "rz": 0.1138
+        "cz": 0.0571,
+        "rx": 0.169,
+        "rz": 0.1113
       },
-      "baseCm": 100.1,
-      "incrCm": 119.5,
-      "decrCm": 84.2,
+      "baseCm": 94.5,
+      "incrCm": 109.2,
+      "decrCm": 82.6,
       "keys": {
-        "incr": "measure-bust-circ-incr",
-        "decr": "measure-bust-circ-decr"
+        "incr": "Bust_up",
+        "decr": "Bust_down"
       }
     },
     "waist": {
       "atHeightRatio": 0.626,
       "section": {
         "cx": 0,
-        "cz": 0.0383,
-        "rx": 0.1373,
-        "rz": 0.0919
+        "cz": 0.0513,
+        "rx": 0.1514,
+        "rz": 0.0933
       },
-      "baseCm": 75.3,
-      "incrCm": 85.8,
-      "decrCm": 65.2,
+      "baseCm": 79.5,
+      "incrCm": 89.6,
+      "decrCm": 69.6,
       "keys": {
-        "incr": "measure-waist-circ-incr",
-        "decr": "measure-waist-circ-decr"
+        "incr": "Waist_up",
+        "decr": "Waist_down"
       }
     },
     "hips": {
-      "atHeightRatio": 0.48,
+      "atHeightRatio": 0.484,
       "section": {
         "cx": 0,
-        "cz": 0.0236,
-        "rx": 0.1853,
-        "rz": 0.0906
+        "cz": 0.0314,
+        "rx": 0.1906,
+        "rz": 0.0944
       },
-      "baseCm": 95.1,
-      "incrCm": 107.4,
-      "decrCm": 89,
+      "baseCm": 99.1,
+      "incrCm": 114.8,
+      "decrCm": 91.7,
       "keys": {
-        "incr": "measure-hips-circ-incr",
-        "decr": "measure-hips-circ-decr"
+        "incr": "Hips_up",
+        "decr": "Hips_down"
       }
     }
   }

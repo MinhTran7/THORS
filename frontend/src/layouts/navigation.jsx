@@ -30,6 +30,7 @@ import {
   UnorderedListOutlined,
   UserOutlined,
   ColumnHeightOutlined,
+  CameraOutlined,
   WarningOutlined
 } from '@ant-design/icons';
 
@@ -46,7 +47,9 @@ const OWNER_MENU = [
     icon: <SkinOutlined />,
     children: [
       { to: '/products', label: 'Danh sách sản phẩm', icon: <UnorderedListOutlined /> },
-      { to: '/categories', label: 'Danh mục', icon: <AppstoreOutlined /> }
+      { to: '/categories', label: 'Danh mục', icon: <AppstoreOutlined /> },
+      // Người mẫu dựng sẵn cho "Mặc thử bằng AI" (module tryon)
+      { to: '/tryon-models', label: 'Người mẫu thử đồ', icon: <CameraOutlined /> }
     ]
   },
   {
@@ -92,7 +95,7 @@ const OWNER_MENU = [
 ];
 
 // Các trang chỉ OWNER được vào (khớp với RequireAuth roles={['OWNER']} trong routes/index.jsx).
-const OWNER_ONLY = new Set(['/products', '/categories', '/returns', '/family', '/website']);
+const OWNER_ONLY = new Set(['/products', '/categories', '/returns', '/family', '/website', '/tryon-models']);
 
 const without = (menu, hidden) =>
   menu
@@ -116,6 +119,7 @@ export const NAVIGATION = {
     { to: '/orders', label: 'Đơn hàng', icon: <ShoppingOutlined /> },
     { to: '/addresses', label: 'Địa chỉ của tôi', icon: <EnvironmentOutlined /> },
     { to: '/body-profile', label: 'Số đo của tôi', icon: <ColumnHeightOutlined /> },
+    { to: '/try-on-history', label: 'Ảnh mặc thử', icon: <CameraOutlined /> },
     profile
   ]
 };

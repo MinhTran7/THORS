@@ -2,6 +2,8 @@ package com.thors.module.outfit;
 
 import com.thors.common.ApiException;
 import com.thors.module.account.entity.Account;
+import com.thors.module.outfit.OutfitDtos.Alternative;
+import com.thors.module.outfit.OutfitDtos.AlternativesRequest;
 import com.thors.module.outfit.OutfitDtos.OutfitOptions;
 import com.thors.module.outfit.OutfitDtos.OutfitRequest;
 import com.thors.module.outfit.OutfitDtos.OutfitResponse;
@@ -9,6 +11,7 @@ import com.thors.module.outfit.OutfitDtos.ProductStyle;
 import com.thors.module.outfit.OutfitDtos.ProductStyleRequest;
 import com.thors.module.outfit.OutfitDtos.StyleProfile;
 import com.thors.security.SessionAccess;
+import java.util.List;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -46,6 +49,18 @@ public final class OutfitControllers {
                 actor = null;
             }
             return service.suggest(request, actor);
+        }
+
+        /** "Đổi món": danh sách món thay thế cho một vai trò để khách tự chọn. */
+        @PostMapping("/alternatives")
+        public List<Alternative> alternatives(@RequestBody AlternativesRequest request) {
+            Account actor;
+            try {
+                actor = sessions.current();
+            } catch (ApiException e) {
+                actor = null;
+            }
+            return service.alternatives(request.outfit(), request.role(), request.currentProductId(), actor);
         }
     }
 

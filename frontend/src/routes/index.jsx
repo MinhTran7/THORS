@@ -19,6 +19,7 @@ import ChangePasswordPage from 'features/account/pages/ChangePasswordPage';
 import FamilyListPage from 'features/account/pages/FamilyListPage';
 import FamilyFormPage from 'features/account/pages/FamilyFormPage';
 import WebsiteSettingsPage from 'features/website/WebsiteSettingsPage';
+import TryOnModelsPage from 'features/tryon/TryOnModelsPage';
 import FamilyDetailPage from 'features/account/pages/FamilyDetailPage';
 import AccountsPage from 'features/account/pages/AccountListPage';
 import SystemLogPage from 'features/account/pages/SystemLogPage';
@@ -61,6 +62,7 @@ import AddAddressPage from 'features/customer/AddAddressPage';
 import EditAddressPage from 'features/customer/EditAddressPage';
 // Số đo cơ thể (gợi ý size / thử đồ ảo)
 import BodyProfilePage from 'features/fitting/BodyProfilePage';
+import TryOnHistoryPage from 'features/tryon/TryOnHistoryPage';
 import OutfitPage from 'features/outfit/OutfitPage';
 
 // Shop management
@@ -140,7 +142,9 @@ export default createBrowserRouter([
               { path: '/addresses', element: <CustomerAddressPage /> },
               { path: '/addresses/new', element: <AddAddressPage /> },
               { path: '/addresses/:id/edit', element: <EditAddressPage /> },
-              { path: '/body-profile', element: <BodyProfilePage /> }
+              { path: '/body-profile', element: <BodyProfilePage /> },
+              // Ảnh mặc thử bằng AI đã tạo (module tryon)
+              { path: '/try-on-history', element: <TryOnHistoryPage /> }
             ]
           },
           {
@@ -186,6 +190,8 @@ export default createBrowserRouter([
               { path: '/returns', element: <ReturnsPage /> },
               // Kênh bán hàng > Website: thông tin chung của website (footer, thanh thông báo)
               { path: '/website', element: <WebsiteSettingsPage /> },
+              // Người mẫu dựng sẵn cho "Mặc thử bằng AI" (module tryon)
+              { path: '/tryon-models', element: <TryOnModelsPage /> },
               // Promotion (của phuoc)
               { path: '/promotions/add', element: <AddPromotionPage /> },
               { path: '/promotions/:promotionId', element: <PromotionDetailPage /> },

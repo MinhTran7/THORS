@@ -1,14 +1,15 @@
 import { Component, Suspense, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { ContactShadows, Html, OrbitControls, useGLTF } from '@react-three/drei';
-import { Color, DoubleSide, MeshStandardMaterial } from 'three';
+import { Color, MeshStandardMaterial } from 'three';
 import { bodyMorph } from './bodyMorph';
 
-// Người mẫu theo giới tính: file .glb + .json số đo (tạo bằng scripts/avatar-optimize: npm run female / male)
+// Người mẫu theo giới tính: file .glb + .json số đo.
+// Nữ: người mẫu tay buông (nguoimau.glb, núm Bust/Waist/Hips_up/down); nam: người mẫu MPFB cũ.
 const MODELS = { FEMALE: '/models/avatar-female', MALE: '/models/avatar-male' };
 
 // Màu do code quyết định (không phụ thuộc màu đặt trong Blender): ma-nơ-canh xám sứ;
-// đồ lót nữ xám than, boxer nam đen. Khóa = tên vật thể trong file .glb (Human / underwear).
+// đồ lót nữ xám than, boxer nam đen. Khóa = bộ phận "Human" (da) / "underwear" (đồ lót) - xem partOf.
 const SKIN = new MeshStandardMaterial({ color: '#E6E2DC', roughness: 0.62 });
 // Đồ lót nằm sát / trùng da: polygonOffset đẩy nó "lên trước" khi vẽ để không bị lỗi z-fighting
 // (da và vải vẽ xen kẽ thành mảng loang lổ) - không phụ thuộc việc đã đẩy vải ra khỏi da trong Blender hay chưa.
@@ -18,6 +19,15 @@ const MATERIALS_BY_GENDER = {
   FEMALE: { Human: SKIN, underwear: underwearMaterial('#2B2B2E', 0.85) },
   MALE: { Human: SKIN, underwear: underwearMaterial('#1A1A1A', 0.8) }
 };
+
+// Bộ phận của một mảnh trong .glb: theo tên vật thể (người mẫu MPFB: Human / underwear) hoặc theo tên
+// vật liệu gốc (người mẫu nữ mới: MannequinGray = da, UnderwearGray = đồ lót). Tóc, lông mày, mắt: giữ màu gốc.
+const PART_BY_NAME = { Human: 'Human', underwear: 'underwear', MannequinGray: 'Human', UnderwearGray: 'underwear' };
+function partOf(obj) {
+  // Ghi nhớ tên vật liệu gốc trước khi bị thay (lần vẽ sau vẫn nhận ra bộ phận)
+  if (obj.userData.originalMaterial === undefined) obj.userData.originalMaterial = obj.material?.name ?? '';
+  return PART_BY_NAME[obj.name] ?? PART_BY_NAME[obj.parent?.name] ?? PART_BY_NAME[obj.userData.originalMaterial] ?? null;
+}
 
 // Số vùng tô màu tối đa trong shader (độ vừa: 3 vùng; mặc cả bộ: áo 2 vùng + quần / đầm + giày)
 const MAX_ZONES = 6;
@@ -163,29 +173,7 @@ function FitLabels({ calibration, girths, fit }) {
   });
 }
 
-/**
- * Áo 3D mặc trên người mẫu (xem garments.js). Áo được đặt sẵn đúng chỗ trong Blender và có các núm co giãn
- * cùng tên với người mẫu -> vặn cùng giá trị thì áo phồng / thon theo đúng số đo của khách.
- */
-function Garment({ url, weights }) {
-  const { scene } = useGLTF(`${url}.glb`, false, true);
-  useLayoutEffect(() => {
-    scene.traverse((obj) => {
-      if (!obj.isMesh) return;
-      obj.castShadow = true;
-      // Áo khoác mở vạt: nhìn thấy cả mặt trong của vải
-      obj.material.side = DoubleSide;
-      if (!obj.morphTargetDictionary) return;
-      for (const [name, value] of Object.entries(weights)) {
-        const i = obj.morphTargetDictionary[name];
-        if (i !== undefined) obj.morphTargetInfluences[i] = value;
-      }
-    });
-  }, [scene, weights]);
-  return <primitive object={scene} />;
-}
-
-function Mannequin({ url, profile, calibration, fit, outfit, garment }) {
+function Mannequin({ url, profile, calibration, fit, outfit }) {
   const MATERIALS = MATERIALS_BY_GENDER[profile.gender] ?? MATERIALS_BY_GENDER.FEMALE;
   // useGLTF(đường dẫn, draco, meshopt): file được nén bằng meshopt (three.js giải nén sẵn, không cần CDN)
   const { scene } = useGLTF(`${url}.glb`, false, true);
@@ -223,7 +211,8 @@ function Mannequin({ url, profile, calibration, fit, outfit, garment }) {
     scene.traverse((obj) => {
       if (!obj.isMesh) return;
       obj.castShadow = true;
-      const material = materials[obj.name] ?? materials[obj.parent?.name];
+      const part = partOf(obj);
+      const material = part ? materials[part] : null;
       if (material) obj.material = material;
       if (!obj.morphTargetDictionary) return;
       for (const [name, value] of Object.entries(weights)) {
@@ -236,7 +225,6 @@ function Mannequin({ url, profile, calibration, fit, outfit, garment }) {
   return (
     <group scale={scale}>
       <primitive object={scene} />
-      {garment && <Garment url={garment.url} weights={weights} />}
       {fit && <FitLabels calibration={calibration} girths={girths} fit={fit} />}
     </group>
   );
@@ -271,9 +259,8 @@ function Notice({ text }) {
  * profile: { gender, heightCm, weightKg, chestCm, waistCm, hipCm } (lấy thẳng từ form, chưa cần lưu)
  * fit (không bắt buộc): tô màu vùng ngực / eo / hông theo size đang thử - xem zonesFor, FitLabels.
  * outfit (không bắt buộc): mặc thử cả bộ - tô màu áo / quần / đầm / giày lên người mẫu - xem zonesFor.
- * garment (không bắt buộc): áo 3D thật mặc lên người mẫu - một mục trong garments.js (đúng giới tính).
  */
-export default function AvatarViewer({ profile, fit, outfit, garment }) {
+export default function AvatarViewer({ profile, fit, outfit }) {
   const url = MODELS[profile.gender];
   const [calibration, setCalibration] = useState(null);
 
@@ -302,14 +289,7 @@ export default function AvatarViewer({ profile, fit, outfit, garment }) {
         <directionalLight position={[2, 4, 3]} intensity={1.6} castShadow shadow-mapSize={[1024, 1024]} />
         <directionalLight position={[-3, 2, -2]} intensity={0.5} />
         <Suspense fallback={null}>
-          <Mannequin
-            url={url}
-            profile={profile}
-            calibration={calibration}
-            fit={fit}
-            outfit={outfit}
-            garment={garment?.gender === profile.gender ? garment : null}
-          />
+          <Mannequin url={url} profile={profile} calibration={calibration} fit={fit} outfit={outfit} />
         </Suspense>
         <ContactShadows position={[0, 0, 0]} opacity={0.35} scale={3} blur={2.4} far={1} />
         <OrbitControls target={[0, h * 0.55, 0]} enablePan={false} minDistance={1.2} maxDistance={5} maxPolarAngle={Math.PI / 1.9} />

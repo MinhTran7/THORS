@@ -10,6 +10,7 @@ import { Photo, isNewProduct, money, priceText } from './ShopCommon';
 import PendingCartHandler from './PendingCartHandler';
 import SizeAdvisor from 'features/fitting/SizeAdvisor';
 import ShopProductDescription from './ShopProductDescription';
+import TryOnDialog from 'features/tryon/TryOnDialog';
 import { savePending } from './pendingCart';
 import { C, SERIF } from './storeTheme';
 import { ProductCard } from './ShopPage';
@@ -44,6 +45,7 @@ export default function ShopProductPage() {
   const [busy, setBusy] = useState(false);
   const [imageIndex, setImageIndex] = useState(0);
   const [size, setSize] = useState('');
+  const [tryOnOpen, setTryOnOpen] = useState(false); // hộp thoại mặc thử bằng AI
   const [color, setColor] = useState('');
   const [qty, setQty] = useState(1);
   const [needLogin, setNeedLogin] = useState(''); // '' | 'cart' | 'buy'
@@ -408,6 +410,12 @@ export default function ShopProductPage() {
                   <Button variant="contained" size="large" disabled={busy} onClick={() => submit(true)}>
                     Mua ngay
                   </Button>
+                  {/* Mặc thử 2D: ảnh của khách + ảnh sản phẩm -> AI vẽ ảnh khách mặc món này */}
+                  {isCustomer && data.images?.length > 0 && (
+                    <Button variant="outlined" size="large" onClick={() => setTryOnOpen(true)}>
+                      Mặc thử bằng AI
+                    </Button>
+                  )}
                 </Box>
               ) : (
                 <Typography variant="body2" sx={{ color: brand.muted }}>
@@ -461,6 +469,15 @@ export default function ShopProductPage() {
       </Box>
 
       {isCustomer && <PendingCartHandler />}
+      {isCustomer && data && (
+        <TryOnDialog
+          open={tryOnOpen}
+          onClose={() => setTryOnOpen(false)}
+          items={[
+            { productId: Number(data.product.productId || productId), productName: data.product.productName, imageUrl: data.images?.[0] }
+          ]}
+        />
+      )}
     </Box>
   );
 }
