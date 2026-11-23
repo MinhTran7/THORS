@@ -626,7 +626,7 @@ class AccountServiceUnitTest {
       assertEquals("OWNER", created.role());
       assertEquals("PENDING_VERIFICATION", created.status());
       verify(users).create("OWNER", "Nguyen Chu Shop", "bcrypt:Password123!", "owner2@shop.com",
-              "0909090909", "PENDING_VERIFICATION", 1, null, false);
+              "+84909090909", "PENDING_VERIFICATION", 1, null, false);
       verify(passwordChanges).require(50); // bắt đổi mật khẩu ở lần đăng nhập đầu
     }
 
@@ -655,7 +655,7 @@ class AccountServiceUnitTest {
       assertEquals("FAMILY_MEMBER", created.role());
       assertEquals("PENDING_VERIFICATION", created.status());
       verify(users).create("FAMILY_MEMBER", "Nguyen Gia Dinh", "bcrypt:Password123!", "family1@shop.com",
-              "0911223355", "PENDING_VERIFICATION", 2, null, false);
+              "+84911223355", "PENDING_VERIFICATION", 2, null, false);
     }
 
     @Test
@@ -694,28 +694,28 @@ class AccountServiceUnitTest {
       var r = new Create("FAMILY_MEMBER", "Le Thi Gia Dinh", "family@shop.com", "0911223344",
               "Password123!", "Different123!");
 
-      api(400, "PASSWORD_CONFIRM", "Mật khẩu xác nhận không khớp.", () -> service.create(owner, r));
+      api(400, "PASSWORD_MISMATCH", "Mật khẩu xác nhận không khớp.", () -> service.create(owner, r));
       verify(users, never()).create(any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean());
     }
 
     @Test
-    @DisplayName("UTC-ACC-047: mật khẩu ngắn hơn 10 ký tự ('Pass1234!')")
+    @DisplayName("UTC-ACC-047: mật khẩu ngắn hơn 8 ký tự ('Pass1!')")
     void acc047() {
       var r = new Create("FAMILY_MEMBER", "Le Thi Gia Dinh", "family@shop.com", "0911223344",
-              "Pass1234!", "Pass1234!");
+              "Pass1!", "Pass1!");
 
-      api(400, "PASSWORD", "Mật khẩu cần 10–64 ký tự và tối đa 72 byte.", () -> service.create(owner, r));
+      api(400, "PASSWORD", "Mật khẩu từ 8 ký tự trở lên.", () -> service.create(owner, r));
       verify(users, never()).create(any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean());
     }
 
     @Test
-    @DisplayName("UTC-ACC-048: mật khẩu đúng 10 ký tự (biên dưới hợp lệ)")
+    @DisplayName("UTC-ACC-048: mật khẩu đúng 8 ký tự (biên dưới hợp lệ)")
     void acc048() {
       var r = new Create("FAMILY_MEMBER", "Le Thi Gia Dinh", "family@shop.com", "0911223344",
-              "1234567890", "1234567890");
+              "12345678", "12345678");
 
       assertNotNull(service.create(owner, r));
-      verify(users).create(eq("FAMILY_MEMBER"), anyString(), eq("bcrypt:1234567890"), anyString(), any(),
+      verify(users).create(eq("FAMILY_MEMBER"), anyString(), eq("bcrypt:12345678"), anyString(), any(),
               eq("PENDING_VERIFICATION"), eq(2), isNull(), eq(false));
     }
 
@@ -986,11 +986,11 @@ class AccountServiceUnitTest {
     }
 
     @Test
-    @DisplayName("UTC-ACC-063: Owner đặt lại mật khẩu cho CUSTOMER (không do Owner tạo nên bị chặn từ bước kiểm tra quyền sở hữu)")
+    @DisplayName("UTC-ACC-063: Owner đặt lại mật khẩu cho CUSTOMER")
     void acc063() {
       stored(account(30, "CUSTOMER", "ACTIVE", null));
 
-      api(403, "OWNERSHIP", "Không được quản lý tài khoản này.",
+      api(403, "RESET_ROLE", "Vai trò này cần khôi phục mật khẩu theo luồng riêng.",
               () -> service.resetByManager(owner, 30, new Password("NewPass123!", "NewPass123!")));
       verify(users, never()).password(anyInt(), anyString(), anyBoolean());
       verifyNoInteractions(notices);
