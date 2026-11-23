@@ -5,7 +5,6 @@ export const warehouseMenu = [
   ['orders', 'Đặt hàng nhập'],
   ['receipts', 'Nhập hàng'],
   ['returns', 'Trả hàng nhà cung cấp'],
-  ['layout', 'Bố cục kho'],
   ['suppliers', 'Nhà cung cấp'],
   ['locations', 'Vị trí lưu kho']
 ];
@@ -101,10 +100,12 @@ export const textMatches = (text, input) => {
     .every((w) => hay.includes(w));
 };
 export const when = (v) => (v ? new Date(v).toLocaleString('vi-VN') : '—');
+/** Tên tầng chủ cửa hàng đặt; chưa đặt thì mã kệ + số tầng (vd A2). */
+export const tierName = (rack, tier) => tier?.level_name?.trim() || `${rack?.rack_code || '?'}${tier?.level_number ?? ''}`;
 export const locationLabel = (data, id) => {
   const t = data.tiers.find((x) => x.shelf_level_id === id);
   const r = data.racks.find((x) => x.rack_id === t?.rack_id);
-  return t && r ? `${r.rack_code}${t.level_number}` : 'Chưa xếp vị trí';
+  return t && r ? tierName(r, t) : 'Chưa xếp vị trí';
 };
 // Receiving progress of a purchase order, derived by the backend from confirmed receipts.
 export const progressLabel = {
@@ -174,7 +175,7 @@ export const countReasonLabel = {
   DAMAGED: 'Hàng hư hỏng',
   LOST: 'Thất lạc / mất',
   FOUND: 'Tìm thấy hàng',
-  MISSING_DOCUMENT: 'Thiếu chứng từ (nhập/bán/trả chưa ghi)'
+  MISSING_DOCUMENT: 'Quên lập phiếu (nhập/bán/trả)'
 };
 // Mã sản phẩm SP + 5 số mã sản phẩm, khớp WarehouseInventory.productCode ở backend.
 export const productCode = (id) => `SP${String(id).padStart(5, '0')}`;

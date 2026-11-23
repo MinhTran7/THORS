@@ -67,7 +67,7 @@ export default function ShopProductDescription({ description }) {
 
   return (
     <Box component="section" sx={{ mt: { xs: 4, md: 6 } }}>
-      <Box component="h2" sx={{ m: 0, mb: 1, fontFamily: SERIF, fontWeight: 400, fontSize: { xs: 26, md: 32 }, color: C.ink }}>
+      <Box component="h2" sx={{ m: 0, mb: 1, fontFamily: SERIF, fontWeight: 700, fontSize: { xs: 24, md: 28 }, color: C.ink }}>
         Mô tả sản phẩm
       </Box>
       <Box sx={{ borderTop: `1px solid ${C.line}`, maxWidth: 820 }}>
@@ -91,10 +91,10 @@ export default function ShopProductDescription({ description }) {
                         width: 56,
                         height: 56,
                         borderRadius: '14px',
-                        border: `2px solid ${C.ink}`,
+                        border: `2px solid ${C.primary}`,
                         display: 'grid',
                         placeItems: 'center',
-                        color: C.ink
+                        color: C.primary
                       }}
                     >
                       <HighlightIcon highlight={h} size={30} />

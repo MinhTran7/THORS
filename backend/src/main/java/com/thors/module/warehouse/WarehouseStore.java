@@ -25,6 +25,38 @@ public class WarehouseStore {
         return db;
     }
 
+    private volatile Boolean tierNames;
+    private volatile long tierNamesCheckedAt;
+
+    /** Cột shelf_level.level_name đã có chưa (migration 2026-11-18_shelf_level_name.sql). */
+    public boolean tierNamesReady() {
+        if (Boolean.TRUE.equals(tierNames)) return true;
+        long now = System.currentTimeMillis();
+        if (tierNames != null && now - tierNamesCheckedAt < 30_000) return false;
+        try {
+            db.queryForObject("SELECT COUNT(level_name) FROM shelf_level WHERE 1=0", Long.class);
+            tierNames = true;
+        } catch (org.springframework.dao.DataAccessException e) {
+            tierNames = false;
+        }
+        tierNamesCheckedAt = now;
+        return tierNames;
+    }
+
+    /**
+     * SQL nhãn của một tầng: tên tầng chủ cửa hàng đặt, nếu chưa đặt thì mã kệ + số tầng (vd A2).
+     * {@code rack}/{@code tier} là bí danh bảng rack / shelf_level trong câu SQL. NULL khi không có tầng.
+     */
+    public String tierLabel(String rack, String tier) {
+        String plain = "CONCAT(" + rack + ".rack_code," + tier + ".level_number)";
+        return tierNamesReady() ? "COALESCE(NULLIF(TRIM(" + tier + ".level_name),'')," + plain + ")" : plain;
+    }
+
+    /** Thay {@code TIER_LABEL} trong câu SQL bằng nhãn tầng của bí danh r (rack) / t (shelf_level). */
+    public String withTierLabel(String sql) {
+        return sql.replace("TIER_LABEL", tierLabel("r", "t"));
+    }
+
     public Map<String, Object> one(String sql, Object... args) {
         var rows = db.queryForList(sql, args);
         if (rows.isEmpty()) throw new ApiException(404, "NOT_FOUND", "Không tìm thấy dữ liệu kho.");
@@ -48,7 +80,6 @@ public class WarehouseStore {
                     Map.entry("supplier_settlement", "settlement_id"),
                     Map.entry("stock_count", "count_id"),
                     Map.entry("stock_count_item", "count_item_id"),
-                    Map.entry("location_move_request", "request_id"),
                     Map.entry("product_unit", "unit_id"));
 
     public int insert(String sql, Object... args) {
@@ -293,11 +324,11 @@ public class WarehouseStore {
                         503,
                         "MIGRATION_REQUIRED",
                         "Database chưa có bảng serial từng chiếc. Cần chạy database/migrations/2026-11-16_product_unit.sql.");
-            if (m.contains("location_move_request"))
+            if (m.contains("request_status") || m.contains("request_shelf_id"))
                 throw new ApiException(
                         503,
                         "MIGRATION_REQUIRED",
-                        "Database chưa có bảng yêu cầu xếp kệ. Cần chạy database/migrations/2026-11-10_location_move_request.sql.");
+                        "Database chưa có phần yêu cầu xếp kệ. Cần chạy database/migrations/2026-11-18_move_request_columns.sql.");
             if (m.contains("min_stock_quantity") || m.contains("stock_count"))
                 throw new ApiException(
                         503,

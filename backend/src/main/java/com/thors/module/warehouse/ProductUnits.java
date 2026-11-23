@@ -14,6 +14,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * trả) được đối chiếu ở lần sync kế tiếp. Không biết chiếc nào thì lấy chiếc nhập sớm nhất (FIFO).
  * Số thứ tự serial không bao giờ dùng lại; dòng không bao giờ bị xóa.
  *
+ * <p>Xác nhận tem: {@code scanned_at} có giá trị = tem dán trên chiếc đó đã được quét. Chiếc PENDING được
+ * quét khi kiểm hàng phiếu nhập; chiếc IN_STOCK chưa quét ("chưa xác nhận": hàng tồn từ trước khi có
+ * serial, hàng kiểm kê ra thừa, hàng quay lại từ ngoài kho) phải quét ở trang Xác nhận tem. Trả NCC và
+ * chuyển kệ chỉ lấy chiếc đã xác nhận; bán theo mã biến thể ưu tiên chiếc đã xác nhận.
+ *
  * <p>Database chưa chạy migration: mọi hàm ở đây không làm gì (kho vẫn chạy như cũ).
  */
 public final class ProductUnits {
@@ -129,12 +134,20 @@ public final class ProductUnits {
             current.computeIfAbsent(key, k -> new ArrayList<>()).add(((Number) row.get("unit_id")).intValue());
         }
 
-        // Thứ tự ưu tiên rời kho: trả NCC lấy chiếc lỗi trước; bán / mất lấy chiếc lành trước (chiếc lỗi ở lại
-        // để xử lý). Cùng loại thì chiếc nhập sớm nhất trước.
+        // Thứ tự ưu tiên rời kho / chuyển ô:
+        //  - trả NCC: chiếc đã xác nhận tem (bắt buộc, kiểm trước), trong đó chiếc lỗi trước;
+        //  - bán, chuyển kệ: chiếc lành trước (chiếc lỗi ở lại để xử lý), trong đó chiếc đã xác nhận trước;
+        //  - mất (kiểm kê thiếu): chiếc lành trước, trong đó chiếc chưa xác nhận trước (chưa ai thấy tận tay).
+        // Cùng loại thì chiếc nhập sớm nhất trước.
         var defective = openDefects(detail);
-        boolean defectsFirst = RETURNED_SUPPLIER.equals(out.status());
-        Comparator<Integer> leaveFirst = Comparator.<Integer, Boolean>comparing(
-                        id -> defective.contains(id) != defectsFirst)
+        var confirmed = confirmedUnits(detail);
+        Comparator<Integer> byDefect = Comparator.comparing(id -> !defective.contains(id));
+        Comparator<Integer> byConfirmed = Comparator.comparing(id -> !confirmed.contains(id));
+        Comparator<Integer> leaveFirst = (switch (out.status()) {
+                    case RETURNED_SUPPLIER -> byConfirmed.thenComparing(byDefect);
+                    case LOST -> byDefect.reversed().thenComparing(byConfirmed.reversed());
+                    default -> byDefect.reversed().thenComparing(byConfirmed);
+                })
                 .thenComparing(Comparator.naturalOrder());
 
         // Thừa → gom lại; ô đang thiếu lấy từ cuối (chiếc ít nên rời kho nhất), phần còn lại rời kho
@@ -183,7 +196,7 @@ public final class ProductUnits {
                 for (var ids : chunks(back))
                     db.update(
                             "UPDATE product_unit SET status='IN_STOCK',product_location_id=?,out_order_item_id=NULL,"
-                                    + "out_receipt_item_id=NULL,out_at=NULL,note=?,in_at=CURRENT_TIMESTAMP,"
+                                    + "out_receipt_item_id=NULL,out_at=NULL,note=?,in_at=CURRENT_TIMESTAMP,scanned_at=NULL,"
                                     + "updated_at=CURRENT_TIMESTAMP WHERE unit_id IN (" + marks(ids.size()) + ")",
                             concat(new Object[] {e.getKey() == 0 ? null : e.getKey(), in.note()}, ids));
                 revived += back.size();
@@ -195,6 +208,35 @@ public final class ProductUnits {
             }
         }
         return Map.of("moved", moved, "out", pool.size(), "revived", revived, "created", created);
+    }
+
+    /** Chiếc đang trong kho đã quét xác nhận tem. */
+    private Set<Integer> confirmedUnits(int detail) {
+        return new HashSet<>(db.queryForList(
+                "SELECT unit_id FROM product_unit WHERE detail_id=? AND status='IN_STOCK' AND scanned_at IS NOT NULL",
+                Integer.class,
+                detail));
+    }
+
+    /**
+     * Trả NCC / chuyển kệ chỉ lấy chiếc đã quét xác nhận tem. {@code location} null = hàng chưa xếp.
+     * Gọi sau {@link #sync} để serial đã khớp số lượng từng ô.
+     */
+    public void requireConfirmed(int detail, Integer location, int qty, String label, String where) {
+        if (!ready() || qty <= 0) return;
+        long have = db.queryForObject(
+                "SELECT COUNT(*) FROM product_unit WHERE detail_id=? AND status='IN_STOCK' AND scanned_at IS NOT NULL AND "
+                        + (location == null ? "product_location_id IS NULL" : "product_location_id=" + location.intValue()),
+                Long.class,
+                detail);
+        if (have < qty)
+            throw new com.thors.common.ApiException(
+                    409,
+                    "UNITS_UNCONFIRMED",
+                    String.format(Locale.ROOT,
+                            "%s: ở %s chỉ có %d chiếc đã quét xác nhận tem, không lấy được %d."
+                                    + " Dán tem và quét xác nhận các chiếc còn lại ở trang Xác nhận tem trước.",
+                            label, where, have, qty));
     }
 
     /** Lỗi đang mở của các chiếc vừa rời kho được đóng theo cách chúng rời kho. */

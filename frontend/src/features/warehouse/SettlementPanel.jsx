@@ -3,7 +3,7 @@ import useSWR from 'swr';
 import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Stack, Tooltip, Typography } from '@mui/material';
 import { api } from 'services/http';
 import { useWarehouse } from './WarehouseContext';
-import { ActionDialog, Choice, DataTable, Field } from './components';
+import { ActionDialog, Choice, DataTable, Field, DialogClose } from './components';
 import {
   docCode,
   money,
@@ -92,6 +92,7 @@ function SettlementDialog({ doc, type, info, onClose }) {
       <DialogTitle>
         {type === 'REFUND' ? 'Ghi nhận NCC trả tiền' : settlementTypeLabel[type]} · {docCode(doc)}
       </DialogTitle>
+      <DialogClose onClick={onClose} disabled={waiting} />
       <DialogContent>
         <Stack spacing={2} sx={{ pt: 1 }}>
           <Typography color="text.secondary">{intro[type]}</Typography>
@@ -154,7 +155,7 @@ function SettlementDialog({ doc, type, info, onClose }) {
           />
           <Field
             id="settlement-note"
-            label="Ghi chú (số chứng từ, người nhận…)"
+            label="Ghi chú (người nhận, số biên lai…)"
             value={note}
             onChange={(e) => setNote(e.target.value)}
             slotProps={{ htmlInput: { maxLength: 255 } }}
@@ -164,9 +165,6 @@ function SettlementDialog({ doc, type, info, onClose }) {
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button disabled={waiting} onClick={onClose}>
-          Quay lại
-        </Button>
         <Button
           variant="contained"
           disabled={waiting || Boolean(problem)}
@@ -218,11 +216,11 @@ function BasisDialog({ doc, debt, onClose }) {
   return (
     <Dialog open onClose={onClose} fullWidth maxWidth="sm">
       <DialogTitle>Khai báo số đã thanh toán trước · {docCode(doc)}</DialogTitle>
+      <DialogClose onClick={onClose} />
       <DialogContent>
         <Stack spacing={2} sx={{ pt: 1 }}>
           <Typography color="text.secondary">
-            Phiếu nhập này được xác nhận trước khi hệ thống theo dõi công nợ, nên chưa biết đã trả nhà cung cấp bao nhiêu. Nhập số tiền đã
-            trả trước đó theo sổ sách (0 nếu chưa trả). Hệ thống không tự giả định đã trả đủ hay chưa trả.
+            Phiếu này có từ trước khi theo dõi công nợ. Nhập số tiền đã trả nhà cung cấp (0 nếu chưa trả).
           </Typography>
           <Field
             id="paid-before"
@@ -237,7 +235,6 @@ function BasisDialog({ doc, debt, onClose }) {
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Quay lại</Button>
         <Button
           variant="contained"
           disabled={bad}
@@ -318,7 +315,7 @@ export default function SettlementPanel({ doc, readOnly = false }) {
         <Typography variant="subtitle2">{isReturn ? 'Tiền nhà cung cấp trả lại' : 'Công nợ nhà cung cấp'}</Typography>
         {isReturn && <SettlementStatus value={doc.settlement_status} />}
       </Stack>
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(3, 1fr)' }, gap: 1 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', md: 'repeat(3, minmax(0, 1fr))' }, gap: 1 }}>
         {figures.map(([label, v]) => (
           <Typography key={label} variant="body2">
             {label}: <b>{v}</b>

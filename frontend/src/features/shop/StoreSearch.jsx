@@ -179,7 +179,7 @@ export default function StoreSearch({ categories = [], initialQuery = '', autoFo
           borderRadius: 999,
           pl: { xs: 0.5, sm: 1 },
           pr: 0.5,
-          '&:focus-within': { boxShadow: `0 0 0 2px ${C.ink}` }
+          '&:focus-within': { boxShadow: `0 0 0 2px ${C.primary}` }
         }}
       >
         {/* Chọn danh mục để tìm trong đó */}
@@ -290,7 +290,7 @@ export default function StoreSearch({ categories = [], initialQuery = '', autoFo
             display: 'grid',
             placeItems: 'center',
             cursor: 'pointer',
-            '&:hover': { bgcolor: C.ink, color: '#FFFFFF' },
+            '&:hover': { bgcolor: C.primary, color: '#FFFFFF' },
             ...focusRing
           }}
         >

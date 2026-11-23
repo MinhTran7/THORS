@@ -40,6 +40,17 @@ export const ordersApi = {
     ),
   // Khách nhập / sửa tài khoản nhận tiền hoàn (đơn đang "Chờ hoàn tiền")
   saveRefundAccount: (id, account) => api(`/orders/${id}/refund-account`, { method: 'PUT', body: account }),
+  // Minh chứng giao hàng: có bắt buộc ảnh khi xác nhận đã giao không (database đã chạy migration chưa)
+  deliveryProofRequired: () => api('/orders/delivery-proof/required'),
+  // { required, proof: { imageUrls, note, createdAt, createdByName } | null }
+  deliveryProof: (id) => api(`/orders/${id}/delivery-proof`),
+  // Owner xác nhận đã giao kèm 1–3 ảnh lúc giao và ghi chú tùy chọn
+  confirmDelivered: (id, files, note) => {
+    const form = new FormData();
+    files.forEach((file) => form.append('images', file));
+    if (note) form.append('note', note);
+    return api(`/orders/${id}/delivered`, { method: 'POST', form });
+  },
   // Khoảng cách từ cửa hàng tới địa chỉ giao và hình thức giao gợi ý (chỉ cửa hàng)
   deliverySuggestion: (id) => api(`/orders/${id}/delivery-suggestion`),
   // Owner: đã chuyển khoản trả lại khách cho đơn "Chờ hoàn tiền" (đơn đã thanh toán online nhưng bị hủy / từ chối)
@@ -74,4 +85,4 @@ export const LIVE_SWR = {
 
 // Làm mới mọi dữ liệu đơn hàng trong cache SWR: danh sách, chi tiết, số đếm trên tab
 export const refreshAllOrders = (globalMutate) =>
-  globalMutate((key) => Array.isArray(key) && ['orders', 'order', 'order-counts'].includes(key[0]));
+  globalMutate((key) => Array.isArray(key) && ['orders', 'order', 'order-counts', 'order-proof'].includes(key[0]));

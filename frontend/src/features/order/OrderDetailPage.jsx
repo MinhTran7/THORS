@@ -189,6 +189,7 @@ function CustomerRefundBox({ order, onSave }) {
     </>
   );
 }
+import { DeliveryProofDialog, DeliveryProofView, useDeliveryProofRequired } from './components/DeliveryProof';
 import CustomerReturnDialog from '../returns/CustomerReturnDialog';
 import {
   C,
@@ -479,6 +480,9 @@ function CustomerView({ order, status, actions, busy, onAction, actionError, onP
             <Box sx={{ fontSize: 14, mt: 1.25, lineHeight: 1.6, whiteSpace: 'pre-line' }}>{order.deliveryAddress || '—'}</Box>
           </StorePanel>
 
+          {/* Ảnh người giao chụp lúc giao hàng */}
+          <DeliveryProofView order={order} render={(content) => <StorePanel title="Minh chứng giao hàng">{content}</StorePanel>} />
+
           {/* Thao tác của khách */}
           {(actions.length > 0 || canReturn) && (
             <Box>
@@ -672,6 +676,9 @@ function StaffView({ order, status, actions, busy, onAction, actionError, back, 
           )}
         </Box>
 
+        {/* Ảnh người giao chụp lúc giao hàng */}
+        <DeliveryProofView order={order} render={(content) => <Section title="Minh chứng giao hàng">{content}</Section>} />
+
         {/* Hàng dưới: bảng sản phẩm và tổng tiền */}
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 2fr) minmax(0, 1fr)' }, gap: 3, alignItems: 'start' }}>
           <Box sx={{ ...cardSx, overflow: 'hidden' }}>
@@ -766,6 +773,11 @@ export default function OrderDetailPage() {
   const [payLoading, setPayLoading] = useState(false);
   const [payError, setPayError] = useState('');
 
+  const [proofOpen, setProofOpen] = useState(false); // hộp thoại chụp ảnh minh chứng giao hàng
+  // Người nhà xử lý đơn như chủ shop
+  const isStore = ['OWNER', 'FAMILY_MEMBER'].includes(account.role);
+  const proofRequired = useDeliveryProofRequired(isStore);
+
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
   const [refundBusy, setRefundBusy] = useState(false);
   // Tài khoản nhận hoàn khi khách hủy đơn đã thanh toán (null = không cần)
@@ -822,7 +834,7 @@ export default function OrderDetailPage() {
   const status = orderStatusMeta(order.orderStatus);
   const actions = isCustomer
     ? (CUSTOMER_ACTIONS[order.orderStatus] ?? [])
-    : account.role === 'OWNER'
+    : isStore
       ? ownerActionsFor(order)
       : [];
 
@@ -873,7 +885,9 @@ export default function OrderDetailPage() {
         ? initialRefundAccount(order.payerAccount)
         : null
     );
-    if (action.askReason || action.askCarrier) {
+    if (action.askProof && proofRequired) {
+      setProofOpen(true);
+    } else if (action.askReason || action.askCarrier) {
       setReason('');
       setCarrier('SELF');
       setGhn(null);
@@ -1020,6 +1034,15 @@ export default function OrderDetailPage() {
         value={addressAlert}
         onClose={() => setAddressAlert(null)}
         onReject={order.orderStatus === 'PENDING_CONFIRMATION' ? rejectForInvalidAddress : undefined}
+      />
+
+      <DeliveryProofDialog
+        order={proofOpen ? order : null}
+        onClose={() => setProofOpen(false)}
+        onDone={async () => {
+          await mutate();
+          refreshAllOrders(globalMutate);
+        }}
       />
 
       {/* Modal thanh toán PayOS / VietQR */}

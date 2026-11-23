@@ -34,9 +34,10 @@ public class WarehouseUnits {
 
     /** Cột của một chiếc; có thêm lỗi đang mở (defect_*) khi database đã có bảng hàng lỗi. */
     private String columns() {
-        if (!s.units().defectsReady()) return COLUMNS;
+        String columns = s.withTierLabel(COLUMNS);
+        if (!s.units().defectsReady()) return columns;
         // Lỗi đang mở của chiếc (defect_id = unit_id khi đang lỗi, null khi không)
-        return COLUMNS
+        return columns
                 .replace("o.order_id,o.order_number", "o.order_id,o.order_number,"
                         + "CASE WHEN u.defect_status='OPEN' THEN u.unit_id END AS defect_id,u.defect_status,u.defect_types,"
                         + "u.defect_note AS defect_description,u.defect_source,u.defect_photos AS defect_photo_keys,"
@@ -50,7 +51,7 @@ public class WarehouseUnits {
             SELECT u.unit_id,u.serial_code,u.seq,u.status,u.detail_id,u.product_location_id,u.in_receipt_item_id,
               u.out_order_item_id,u.out_receipt_item_id,u.note,u.printed_at,u.scanned_at,u.created_at,u.in_at,u.out_at,
               d.color,d.size,d.price,d.barcode,d.product_id,p.product_name,
-              r.rack_code,t.level_number,ri.receipt_id AS in_receipt_id,ro.receipt_id AS out_receipt_id,
+              TIER_LABEL AS tier_label,ri.receipt_id AS in_receipt_id,ro.receipt_id AS out_receipt_id,
               o.order_id,o.order_number
             FROM product_unit u
             JOIN product_detail d ON d.detail_id=u.detail_id JOIN product p ON p.product_id=d.product_id
@@ -66,7 +67,7 @@ public class WarehouseUnits {
         var out = new ArrayList<Map<String, Object>>(rows.size());
         for (var row : rows) {
             var m = copy(row);
-            m.put("location", row.get("rack_code") == null ? null : "" + row.get("rack_code") + row.get("level_number"));
+            m.put("location", row.get("tier_label"));
             storeTime(m, offset, "printed_at", "scanned_at", "created_at", "in_at", "out_at", "defect_reported_at");
             out.add(m);
         }
@@ -83,6 +84,12 @@ public class WarehouseUnits {
 
     /** {@code defective} = chỉ chiếc đang báo lỗi. */
     public Map<String, Object> list(Account a, List<Integer> details, String status, boolean unprinted, boolean defective) {
+        return list(a, details, status, unprinted, defective, false);
+    }
+
+    /** {@code unconfirmed} = chỉ chiếc đang trong kho chưa quét xác nhận tem. */
+    public Map<String, Object> list(
+            Account a, List<Integer> details, String status, boolean unprinted, boolean defective, boolean unconfirmed) {
         policy.view(a);
         requireTable();
         if (details == null || details.isEmpty()) throw invalid("Chọn biến thể cần xem mã.");
@@ -94,6 +101,7 @@ public class WarehouseUnits {
         var args = new ArrayList<Object>(ids);
         boolean defects = s.units().defectsReady();
         if (defective && defects) where.append(" AND u.defect_status='OPEN'");
+        else if (unconfirmed) where.append(" AND u.status='IN_STOCK' AND u.scanned_at IS NULL");
         else if (unprinted) where.append(" AND u.status='IN_STOCK' AND u.printed_at IS NULL");
         else if (status != null && !status.isBlank()) {
             where.append(" AND u.status=?");
@@ -114,8 +122,13 @@ public class WarehouseUnits {
                 ? s.count("SELECT COUNT(*) FROM product_unit WHERE defect_status='OPEN' AND detail_id IN ("
                         + ProductUnits.marks(ids.size()) + ")", ids.toArray())
                 : 0;
+        long unconfirmedCount = s.count(
+                "SELECT COUNT(*) FROM product_unit WHERE status='IN_STOCK' AND scanned_at IS NULL AND detail_id IN ("
+                        + ProductUnits.marks(ids.size()) + ")",
+                ids.toArray());
         boolean more = rows.size() > LIMIT;
         return Map.of(
+                "unconfirmed", unconfirmedCount,
                 "defective", defectCount,
                 "units", shaped(more ? rows.subList(0, LIMIT) : rows),
                 "truncated", more,
@@ -139,7 +152,8 @@ public class WarehouseUnits {
 
     /**
      * Tem serial cho phiếu nhập đang chờ kiểm hàng: mỗi dòng có đủ tem chờ nhận bằng số trên phiếu (in lại
-     * không sinh mã mới). {@code extra} sinh thêm tem cho một dòng (hàng giao thừa, tem hỏng).
+     * không sinh mã mới). Chỉ trả tem chưa quét (in lại tem hỏng = đúng serial cũ). {@code extra} sinh thêm
+     * tem cho một dòng (hàng giao thừa).
      */
     public Map<String, Object> receiptLabels(Account a, int receiptId, Integer itemId, Integer extra) {
         policy.create(a, "RECEIPT");
@@ -162,7 +176,7 @@ public class WarehouseUnits {
             s.units().create(num(l, "detail_id"), add, ProductUnits.PENDING, null, item, "Tem in khi kiểm hàng phiếu nhập #" + receiptId);
         }
         var rows = s.jdbc().queryForList(
-                columns() + " WHERE u.status='PENDING' AND ri.receipt_id=?"
+                columns() + " WHERE u.status='PENDING' AND u.scanned_at IS NULL AND ri.receipt_id=?"
                         + (itemId != null ? " AND u.in_receipt_item_id=" + itemId : "")
                         + " ORDER BY u.in_receipt_item_id,u.seq",
                 receiptId);

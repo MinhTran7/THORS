@@ -21,7 +21,7 @@ import {
 } from '@mui/material';
 import { Pager } from 'features/account/components/Blocks';
 
-import { Choice } from './components';
+import { Choice, DialogClose } from './components';
 import { number, variantLabel } from './model';
 
 import {
@@ -162,6 +162,7 @@ export default function ExcelImportDialog({
       onClose={() => !loading && onClose()}
     >
       <DialogTitle>Nhập dữ liệu từ Excel</DialogTitle>
+      <DialogClose onClick={onClose} disabled={loading} />
 
       <DialogContent>
         <Stack spacing={2} sx={{ pt: 1 }}>
@@ -169,8 +170,7 @@ export default function ExcelImportDialog({
             {type === 'PURCHASE_ORDER'
               ? 'Đọc sản phẩm, màu/size, số lượng đặt và đơn giá từ file.'
               : 'Đối chiếu hàng thực nhận với phiếu đặt đã chọn. Đơn giá lấy từ phiếu đặt.'}
-            {' '}Kiểm tra bảng xem trước rồi áp dụng vào phiếu.
-            Tồn kho chưa thay đổi.
+            {' '}Kiểm tra bảng xem trước rồi bấm áp dụng.
           </Alert>
 
           <Stack
@@ -631,12 +631,7 @@ export default function ExcelImportDialog({
 
                   <Pager page={currentPage} total={listed.length} size={20} noun="dòng" onPage={setPage} />
 
-                  <Alert severity="info">
-                    Dòng mới trong file được thêm vào phiếu; các dòng đang
-                    nhập tay khác được giữ lại. Dòng trùng biến thể với phiếu
-                    được xử lý theo lựa chọn ở trên. Xem trước/áp dụng không
-                    lưu phiếu, không tạo sản phẩm. Bạn vẫn sửa được sau khi áp dụng.
-                  </Alert>
+                  
                 </>
               )}
             </>
@@ -649,9 +644,6 @@ export default function ExcelImportDialog({
       </DialogContent>
 
       <DialogActions>
-        <Button onClick={onClose} disabled={loading}>
-          Quay lại phiếu
-        </Button>
 
         <Button
           variant="contained"

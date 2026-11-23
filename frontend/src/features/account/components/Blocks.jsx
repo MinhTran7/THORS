@@ -1,9 +1,8 @@
 import { Link as RouterLink } from 'react-router-dom';
-import { Box, Button, InputAdornment, MenuItem, TableCell, TableRow, TextField, Typography } from '@mui/material';
+import { Box, Button, IconButton, InputAdornment, MenuItem, TableCell, TableRow, TextField, Typography } from '@mui/material';
 import { Stack } from './Flex';
-import { ArrowLeftOutlined, InfoCircleOutlined, SearchOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, InfoCircleOutlined, LeftOutlined, RightOutlined, SearchOutlined } from '@ant-design/icons';
 import { brand, cardSx, fs } from '../tokens';
-import { OutlineButton } from './Brand';
 
 export function PageHeader({ back, title, subtitle, action }) {
   return (
@@ -73,7 +72,7 @@ export function StatCard({ label, value, caption, icon, warning = false, loading
 }
 
 export function StatRow({ children }) {
-  return <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' }, gap: 2, mb: 2 }}>{children}</Box>;
+  return <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(220px, 100%), 1fr))', gap: 2, mb: 2 }}>{children}</Box>;
 }
 
 export function SearchField({ placeholder, value, onChange }) {
@@ -129,6 +128,34 @@ export function Toolbar({ children }) {
   );
 }
 
+export function FilterResetButton({ onClick, disabled }) {
+  return (
+    <Button
+      variant="outlined"
+      onClick={onClick}
+      disabled={disabled}
+      sx={{
+        justifySelf: 'start',
+        height: 44,
+        px: 1.75,
+        minWidth: 'unset',
+        borderRadius: '10px',
+        borderWidth: '1px',
+        borderColor: '#E2E8F0',
+        bgcolor: brand.surface,
+        color: brand.ink,
+        fontSize: 13,
+        fontWeight: 600,
+        whiteSpace: 'nowrap',
+        '&::after': { display: 'none' },
+        '&:hover': { borderWidth: '1px', borderColor: '#8EECF5', bgcolor: brand.surface, color: brand.ink }
+      }}
+    >
+      Bỏ lọc
+    </Button>
+  );
+}
+
 export const headCellSx = {
   color: brand.muted,
   fontSize: fs.caption,
@@ -160,6 +187,18 @@ function pageItems(page, totalPages) {
   return items;
 }
 
+const pagerActiveBg = '#F1F5F9';
+const pagerButtonSx = {
+  width: 32,
+  height: 32,
+  borderRadius: '8px',
+  fontSize: 13,
+  fontWeight: 500,
+  color: brand.muted,
+  '&:hover': { bgcolor: pagerActiveBg },
+  '&.Mui-disabled': { opacity: 0.3 }
+};
+
 /**
  * Thanh phân trang dùng chung cho MỌI trang danh sách (đồng bộ giao diện).
  * page bắt đầu từ 0. totalPages bỏ trống thì tự tính từ total / size.
@@ -190,37 +229,29 @@ export function Pager({ page, totalPages: pagesProp, total, size, noun = 'mục'
           </TextField>
         )}
       </Stack>
-      <Stack direction="row" spacing={1} alignItems="center">
-        <OutlineButton size="small" disabled={page <= 0} onClick={() => onPage(page - 1)}>
-          Trước
-        </OutlineButton>
+      <Stack direction="row" spacing={0.5} alignItems="center">
+        <IconButton aria-label="Trang trước" disabled={page <= 0} onClick={() => onPage(page - 1)} sx={pagerButtonSx}>
+          <LeftOutlined style={{ fontSize: 12 }} />
+        </IconButton>
         {pageItems(page, Math.max(totalPages, 1)).map((index) =>
           typeof index === 'string' ? (
             <Typography key={index} sx={{ color: brand.muted, px: 0.5 }}>
               …
             </Typography>
           ) : (
-          <Button
-            key={index}
-            size="small"
-            onClick={() => onPage(index)}
-            aria-current={index === page ? 'page' : undefined}
-            sx={{
-              minWidth: 36,
-              borderRadius: '10px',
-              fontWeight: 600,
-              fontSize: fs.caption,
-              color: index === page ? brand.inkOnCyan : brand.ink,
-              bgcolor: index === page ? brand.cyan : 'transparent'
-            }}
-          >
-            {index + 1}
-          </Button>
+            <IconButton
+              key={index}
+              aria-current={index === page ? 'page' : undefined}
+              onClick={() => onPage(index)}
+              sx={{ ...pagerButtonSx, ...(index === page && { bgcolor: pagerActiveBg, color: brand.ink, fontWeight: 700 }) }}
+            >
+              {index + 1}
+            </IconButton>
           )
         )}
-        <OutlineButton size="small" disabled={page + 1 >= totalPages} onClick={() => onPage(page + 1)}>
-          Sau
-        </OutlineButton>
+        <IconButton aria-label="Trang sau" disabled={page + 1 >= totalPages} onClick={() => onPage(page + 1)} sx={pagerButtonSx}>
+          <RightOutlined style={{ fontSize: 12 }} />
+        </IconButton>
       </Stack>
     </Stack>
   );

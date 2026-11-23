@@ -1,5 +1,14 @@
 import * as Yup from 'yup';
 
+/**
+ * LUẬT KIỂM TRA DỮ LIỆU NHẬP (Yup) dùng chung cho các màn hình xác thực,
+ * và các hàm chọn trang chuyển tới sau khi đăng nhập.
+ * Backend kiểm tra lại lần nữa (ContactNormalizer.java), nên luật ở đây chỉ để báo lỗi sớm cho người dùng.
+ */
+
+// Mật khẩu MỚI (đăng ký, đổi / đặt lại mật khẩu): 10–64 ký tự và tối đa 72 byte (giới hạn của BCrypt).
+// Màn hình ĐĂNG NHẬP không dùng luật này, chỉ yêu cầu không để trống.
+// features/account/validation.js dùng lại luật này (tên newPassword) cho đổi mật khẩu / tạo thành viên.
 export const password = Yup.string()
   .required('Nhập mật khẩu.')
   .min(10, 'Mật khẩu cần ít nhất 10 ký tự.')
@@ -10,15 +19,19 @@ export const password = Yup.string()
     (v) => !v || new TextEncoder().encode(v).length <= 72
   );
 
+// Ô "Xác nhận mật khẩu": không trống và phải trùng ô password
 export const confirmation = Yup.string()
   .required('Xác nhận mật khẩu.')
   .oneOf([Yup.ref('password')], 'Mật khẩu xác nhận không khớp.');
 
+// Ô email (tên trường là identifier): bỏ khoảng trắng đầu/cuối, đúng dạng email, không trống.
+// Dùng ở ĐĂNG NHẬP (LoginPage.jsx) và đăng ký.
 export const identity = Yup.string()
   .trim()
   .email('Email không hợp lệ.')
   .required('Nhập email.');
 
+// Bộ luật cho màn hình đăng ký
 export const registerSchema = Yup.object({
   fullName: Yup.string()
     .trim()
@@ -29,6 +42,9 @@ export const registerSchema = Yup.object({
   confirmPassword: confirmation
 });
 
+// Chỉ chấp nhận đường dẫn nội bộ an toàn để quay lại (bắt đầu bằng "/", không phải "//", không chứa "\",
+// không quay lại chính các trang đăng nhập / đăng ký / xác thực). Sai thì về /workspace.
+// Mục đích: chặn kẻ xấu gửi link ?returnTo=https://trang-gia-mao để đẩy người dùng sang web khác.
 export const safeReturn = (path) =>
   typeof path === 'string' &&
   path.startsWith('/') &&

@@ -212,8 +212,9 @@ public class WarehouseController {
             @RequestParam java.util.List<Integer> detail,
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "false") boolean unprinted,
-            @RequestParam(defaultValue = "false") boolean defective) {
-        return units.list(sessions.current(), detail, status, unprinted, defective);
+            @RequestParam(defaultValue = "false") boolean defective,
+            @RequestParam(defaultValue = "false") boolean unconfirmed) {
+        return units.list(sessions.current(), detail, status, unprinted, defective, unconfirmed);
     }
 
     @PostMapping("/units/printed")

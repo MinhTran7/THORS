@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link as RouterLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { Box, Menu, MenuItem } from '@mui/material';
+import { Box, GlobalStyles, Menu, MenuItem } from '@mui/material';
 import { keyframes } from '@emotion/react';
 import { ThemeProvider } from '@mui/material/styles';
 import { useAuth } from 'features/auth/AuthProvider';
@@ -11,7 +11,7 @@ import { aboutLines, useWebsiteSettings } from 'features/website/websiteSettings
 import StoreSearch from 'features/shop/StoreSearch';
 import StoreNotificationBell from 'features/notification/StoreNotificationBell';
 import { ThorsLogo } from 'features/auth/components/ShopAuthArt';
-import { C, FONT_URL, SANS, SERIF, Icon, container, iconBtnSx, linkSx } from 'features/shop/storeTheme';
+import { C, FONT_URL, LOGO_FONT, SANS, Icon, container, iconBtnSx, linkSx } from 'features/shop/storeTheme';
 
 /**
  * Khung giao diện cửa hàng cho khách: thanh thông báo + header + footer kiểu thời trang tối giản.
@@ -48,6 +48,50 @@ function storeTheme(outer) {
     typography: { ...typography, fontFamily: SANS }
   };
 }
+
+// Theme chung của app dùng biến CSS (--palette-primary-*) và nút chính màu xanh ngọc cố định (themes/overrides/Button.js).
+// Khi đang ở giao diện cửa hàng thì đổi sang tông cửa hàng: màu chủ đạo đỏ đô, nút vuông — áp cả cho hộp thoại (Dialog) vì nằm ngoài <main>.
+// Rời khỏi giao diện cửa hàng (vào trang quản lý) thì khối này bị gỡ, màu quay về như cũ.
+const STOREFRONT_GLOBALS = {
+  'html:root': {
+    '--palette-primary-main': C.primary,
+    '--palette-primary-mainChannel': '138 43 43',
+    '--palette-primary-dark': C.primaryDark,
+    '--palette-primary-darkChannel': '110 31 31',
+    '--palette-primary-light': '#A84A4A',
+    '--palette-primary-lightChannel': '168 74 74',
+    '--palette-primary-lighter': C.sand,
+    '--palette-primary-contrastText': '#FFFFFF'
+  },
+  // MUI mới không còn class .MuiButton-containedPrimary, nên chọn theo cặp class variant + color.
+  // Kiểu giống nút "MUA HÀNG" ở giỏ hàng: nền đỏ đô, chữ trắng in hoa, góc vuông.
+  'html body .MuiButton-contained.MuiButton-colorPrimary, html body .MuiButton-containedPrimary': {
+    backgroundColor: C.primary,
+    color: '#FFFFFF',
+    borderRadius: 0,
+    boxShadow: 'none',
+    fontWeight: 600,
+    letterSpacing: '0.04em',
+    textTransform: 'uppercase',
+    '&::after': { borderRadius: 0 },
+    '&:hover': { backgroundColor: C.primaryDark, boxShadow: 'none' },
+    '&.Mui-disabled': { backgroundColor: '#D9C3C0', color: '#FFFFFF' }
+  },
+  'html body .MuiButton-outlined.MuiButton-colorPrimary, html body .MuiButton-outlinedPrimary': {
+    borderColor: C.primary,
+    color: C.primary,
+    borderRadius: 0,
+    fontWeight: 600,
+    letterSpacing: '0.04em',
+    textTransform: 'uppercase',
+    '&::after': { borderRadius: 0 },
+    '&:hover': { borderColor: C.primary, backgroundColor: '#F6ECEA' }
+  },
+  'html body .MuiButton-text.MuiButton-colorPrimary, html body .MuiButton-textPrimary': {
+    color: C.primary,
+    '&:hover': { backgroundColor: '#F6ECEA' }
+  }
+};
 
 function useCartCount(enabled) {
   const [count, setCount] = useState(0);
@@ -413,7 +457,7 @@ function StoreHeader({ categories }) {
           component={RouterLink}
           to="/"
           aria-label={`${STORE_NAME} — Trang chủ`}
-          sx={{ ...linkSx, display: 'inline-flex', alignItems: 'center', gap: 1.25, fontFamily: SERIF, fontSize: { xs: 22, sm: 30 }, letterSpacing: '0.12em', flex: '0 0 auto', '&:hover': { color: C.ink } }}
+          sx={{ ...linkSx, display: 'inline-flex', alignItems: 'center', gap: 1.25, fontFamily: LOGO_FONT, fontSize: { xs: 22, sm: 30 }, letterSpacing: '0.12em', flex: '0 0 auto', '&:hover': { color: C.ink } }}
         >
           <ThorsLogo size={34} />
           <span>{STORE_NAME.toUpperCase()}</span>
@@ -557,7 +601,7 @@ const CONTACT_ICONS = {
 export function AnnouncementBar({ text }) {
   if (!text) return null;
   return (
-    <Box sx={{ bgcolor: C.ink, color: '#FFFFFF', fontSize: 13, letterSpacing: '0.04em', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, textAlign: 'center', py: '11px', px: 2 }}>
+    <Box sx={{ bgcolor: C.deep, color: '#FFFFFF', fontSize: 13, letterSpacing: '0.04em', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, textAlign: 'center', py: '11px', px: 2 }}>
       <Icon size={18}>
         <path d="M3 7h11v9H3z" />
         <path d="M14 10h4l3 3v3h-7" />
@@ -579,11 +623,11 @@ export function StoreFooter({ settings }) {
   ];
   const rowSx = { display: 'flex', gap: 1.25, alignItems: 'flex-start', '& svg': { flexShrink: 0, mt: '2px' } };
   return (
-    <Box component="footer" sx={{ bgcolor: C.ink, color: '#D9D6D0', mt: 'auto' }}>
+    <Box component="footer" sx={{ bgcolor: C.deep, color: '#E9DCD8', mt: 'auto' }}>
       <Box sx={{ ...container, pt: 9, pb: 4, display: 'flex', flexDirection: 'column', gap: 6 }}>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
           <Box sx={{ flex: '2 1 280px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, fontFamily: SERIF, fontSize: 26, letterSpacing: '0.12em', color: '#FFFFFF' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, fontFamily: SANS, fontWeight: 700, fontSize: 24, letterSpacing: '0.12em', color: '#FFFFFF' }}>
               <Box sx={{ display: 'flex', p: 0.75, bgcolor: '#FFFFFF', borderRadius: '12px' }}>
                 <ThorsLogo size={28} />
               </Box>
@@ -622,14 +666,14 @@ export function StoreFooter({ settings }) {
         </Box>
         <Box
           sx={{
-            borderTop: '1px solid #3A3A3A',
+            borderTop: '1px solid rgba(255,255,255,.18)',
             pt: 3,
             display: 'flex',
             flexWrap: 'wrap',
             justifyContent: 'space-between',
             gap: 1.5,
             fontSize: 13,
-            color: '#B5B1AA'
+            color: '#CDB9B4'
           }}
         >
           <span>
@@ -674,6 +718,7 @@ export default function StorefrontLayout() {
         '& .MuiButton-root': { borderRadius: 0, boxShadow: 'none' }
       }}
     >
+      <GlobalStyles styles={STOREFRONT_GLOBALS} />
       <AnnouncementBar text={website.announcement} />
       <StoreHeader categories={categories} />
 

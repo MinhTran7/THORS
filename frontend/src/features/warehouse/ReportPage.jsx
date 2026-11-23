@@ -64,7 +64,7 @@ export default function ReportPage() {
                 { header: 'Giá trị tồn đầu', key: 'opening_value', width: 15 },
                 { header: 'Giá vốn BQ cuối kỳ', key: 'unit_cost', width: 15 },
                 { header: 'Giá trị tồn cuối', key: 'closing_value', width: 15 },
-                { header: 'Lý do chưa đủ cơ sở', key: 'cost_note', width: 40 }
+                { header: 'Lý do chưa rõ giá nhập', key: 'cost_note', width: 40 }
               ]
             : [])
         ],
@@ -72,19 +72,19 @@ export default function ReportPage() {
           ...r,
           ...(cost
             ? {
-                opening_value: r.opening_value == null ? 'Chưa đủ cơ sở' : Number(r.opening_value),
-                unit_cost: r.closing_value == null ? 'Chưa đủ cơ sở' : r.unit_cost == null ? '' : Number(r.unit_cost),
-                closing_value: r.closing_value == null ? 'Chưa đủ cơ sở' : Number(r.closing_value)
+                opening_value: r.opening_value == null ? 'Chưa rõ giá nhập' : Number(r.opening_value),
+                unit_cost: r.closing_value == null ? 'Chưa rõ giá nhập' : r.unit_cost == null ? '' : Number(r.unit_cost),
+                closing_value: r.closing_value == null ? 'Chưa rõ giá nhập' : Number(r.closing_value)
               }
             : {})
         })),
         notes: [
           `Kỳ ${from} → ${to}; ${data.items.length} biến thể (toàn bộ kết quả lọc).`,
-          'Tồn cuối = Tồn đầu + Tăng − Giảm, tính từ lịch sử biến động kho (thẻ kho). Chuyển vị trí trong kho không tính tăng/giảm.',
-          'Biến thể có "Lịch sử thiếu" ≠ 0: dữ liệu cũ thay đổi tồn không được ghi lịch sử; tồn đầu kỳ có thể chưa chính xác.',
+          'Tồn cuối = Tồn đầu + Nhập − Xuất. Chuyển vị trí trong kho không tính.',
+          'Dòng có "Lịch sử thiếu" khác 0: tồn đầu kỳ có thể chưa chính xác do dữ liệu cũ.',
           ...(cost
             ? [
-                'Giá vốn = bình quân gia quyền liên hoàn: tính lại sau mỗi lần nhập theo đúng thứ tự thời gian của thẻ kho; xuất bán/kiểm kê giảm theo giá bình quân tại thời điểm đó; trả NCC theo đơn giá dòng nhập được trả; khách trả nhập lại theo giá vốn lúc bán. Tồn không có chứng từ giá ghi "Chưa đủ cơ sở", không tính bằng 0, giá bán hay giá nhập gần nhất. Giá trị đầu/cuối kỳ là trạng thái bình quân tại đúng thời điểm đó.'
+                'Giá vốn = giá nhập trung bình, tính lại sau mỗi lần nhập hàng. Hàng không rõ giá nhập ghi "Chưa rõ giá nhập" và không tính vào giá trị tồn.'
               ]
             : [])
         ]
@@ -98,7 +98,7 @@ export default function ReportPage() {
     <>
       <Title
         title="Báo cáo tồn kho"
-        subtitle="Nhập – xuất – tồn theo kỳ, khớp với thẻ kho và số tồn hiện tại. Chuyển vị trí không làm tăng/giảm tổng tồn."
+        subtitle="Số hàng nhập, xuất và tồn trong khoảng thời gian bạn chọn."
         action={
           <Stack direction="row" spacing={1}>
             <Button variant="outlined" component={Link} to="/warehouse/inventory">
@@ -111,7 +111,7 @@ export default function ReportPage() {
         }
       />
       <MainCard sx={{ mb: 2 }}>
-        <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} sx={{ alignItems: { md: 'center' } }}>
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} useFlexGap flexWrap="wrap" sx={{ alignItems: { md: 'center' } }}>
           <TextField
             size="small"
             type="date"
@@ -135,7 +135,7 @@ export default function ReportPage() {
             onChange={(e) => setQ(e.target.value)}
             onBlur={() => set({ q: q.trim() })}
             onKeyDown={(e) => e.key === 'Enter' && set({ q: q.trim() })}
-            sx={{ flex: 1 }}
+            sx={{ flex: { xs: 1, md: '1 1 220px' } }}
             slotProps={{ htmlInput: { 'aria-label': 'Tìm trong báo cáo' } }}
           />
           <TextField
@@ -177,8 +177,8 @@ export default function ReportPage() {
                       'Giá trị tồn cuối kỳ',
                       0,
                       t.unvalued_quantity
-                        ? `${number(t.unvalued_quantity)} sản phẩm chưa đủ cơ sở giá vốn — không tính · đầu kỳ ${money(t.opening_value)}`
-                        : `Bình quân gia quyền liên hoàn · đầu kỳ ${money(t.opening_value)}`,
+                        ? `${number(t.unvalued_quantity)} sản phẩm chưa rõ giá nhập, không tính · đầu kỳ ${money(t.opening_value)}`
+                        : `Theo giá nhập trung bình · đầu kỳ ${money(t.opening_value)}`,
                       null,
                       false,
                       money(t.closing_value)
@@ -189,8 +189,7 @@ export default function ReportPage() {
           />
           {t.ledger_gaps > 0 && (
             <Alert severity="info" sx={{ mb: 2 }}>
-              {number(t.ledger_gaps)} biến thể có lịch sử cũ không đầy đủ (cột “Lịch sử thiếu”): tồn đầu kỳ của chúng được suy ra từ lịch sử
-              đã ghi nên có thể chưa chính xác. Hệ thống không tạo lịch sử giả để bù.
+              {number(t.ledger_gaps)} biến thể thiếu lịch sử cũ nên tồn đầu kỳ có thể chưa chính xác.
             </Alert>
           )}
           {!cost && (
@@ -243,19 +242,19 @@ export default function ReportPage() {
                         key: 'opening_value',
                         label: 'Giá trị đầu kỳ',
                         align: 'right',
-                        render: (r) => (r.opening_value == null ? 'Chưa đủ cơ sở' : money(r.opening_value))
+                        render: (r) => (r.opening_value == null ? 'Chưa rõ giá nhập' : money(r.opening_value))
                       },
                       {
                         key: 'unit_cost',
                         label: 'Giá vốn BQ',
                         align: 'right',
-                        render: (r) => (r.closing_value == null ? 'Chưa đủ cơ sở' : r.unit_cost == null ? '—' : money(r.unit_cost))
+                        render: (r) => (r.closing_value == null ? 'Chưa rõ giá nhập' : r.unit_cost == null ? '—' : money(r.unit_cost))
                       },
                       {
                         key: 'closing_value',
                         label: 'Giá trị tồn cuối',
                         align: 'right',
-                        render: (r) => (r.closing_value == null ? <span title={r.cost_note}>Chưa đủ cơ sở</span> : money(r.closing_value))
+                        render: (r) => (r.closing_value == null ? <span title={r.cost_note}>Chưa rõ giá nhập</span> : money(r.closing_value))
                       }
                     ]
                   : []),

@@ -49,20 +49,6 @@ public class CheckoutRepository {
         return rows.isEmpty() ? null : rows.get(0);
     }
 
-    public int insertOrder(String orderNumber, int userId,
-                           String deliveryName, String deliveryPhone, String deliveryAddress,
-                           BigDecimal itemsAmount, BigDecimal shippingFee, BigDecimal totalAmount) {
-        return insertOrder(orderNumber, userId, deliveryName, deliveryPhone, deliveryAddress, itemsAmount, shippingFee, totalAmount, "COD");
-    }
-
-    public int insertOrder(String orderNumber, int userId,
-                           String deliveryName, String deliveryPhone, String deliveryAddress,
-                           BigDecimal itemsAmount, BigDecimal shippingFee, BigDecimal totalAmount,
-                           String paymentMethod) {
-        return insertOrder(orderNumber, userId, deliveryName, deliveryPhone, deliveryAddress,
-                itemsAmount, shippingFee, totalAmount, paymentMethod, null, null, BigDecimal.ZERO);
-    }
-
     /**
      * Đơn thanh toán online: giữ hàng trong {@code minutes} phút (tính theo giờ DB). Quá hạn chưa trả thì
      * OrderScheduler chuyển đơn sang EXPIRED và trả lại phần hàng đang giữ.

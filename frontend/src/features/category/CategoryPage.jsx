@@ -11,7 +11,6 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  Divider,
   Grid,
   IconButton,
   InputAdornment,
@@ -31,7 +30,7 @@ import {
   Tooltip,
   Typography
 } from '@mui/material';
-import { Pager } from 'features/account/components/Blocks';
+import { FilterResetButton, Pager } from 'features/account/components/Blocks';
 
 import {
   AppstoreOutlined,
@@ -110,17 +109,6 @@ const inputSx = (hasError) => ({
     '& fieldset': { borderColor: hasError ? C.error : C.border },
     '&:hover fieldset, &.Mui-focused fieldset': { borderColor: hasError ? C.error : C.cyan }
   }
-});
-
-const linkButtonSx = (color, hoverBg) => ({
-  textTransform: 'none',
-  fontSize: 13,
-  fontWeight: 600,
-  color,
-  borderRadius: 1.5,
-  px: 1.25,
-  py: 0.5,
-  '&:hover': { bgcolor: hoverBg }
 });
 
 const badgeSx = (bg, color, border) => ({
@@ -912,39 +900,14 @@ export default function CategoryPage() {
           </Select>
         </Box>
 
-        {/* Nút Bỏ lọc */}
-        <Box sx={{ minWidth: 0, display: 'flex' }}>
-          <Button
-            variant="outlined"
-            onClick={() => {
-              setSearch('');
-              setStatusFilter('ALL');
-              setTargetFilter('ALL');
-              setPage(1);
-            }}
-            disableRipple
-            sx={{
-              height: 44,
-              px: 2,
-              minWidth: 'unset',
-              borderRadius: 2.5,
-              textTransform: 'none',
-              fontSize: 13,
-              fontWeight: 600,
-              borderColor: C.border,
-              bgcolor: C.surface,
-              color: C.text,
-              whiteSpace: 'nowrap',
-              '&:hover': {
-                bgcolor: '#F8FAFC',
-                borderColor: C.border,
-                color: C.text
-              }
-            }}
-          >
-            Bỏ lọc
-          </Button>
-        </Box>
+        <FilterResetButton
+          onClick={() => {
+            setSearch('');
+            setStatusFilter('ALL');
+            setTargetFilter('ALL');
+            setPage(1);
+          }}
+        />
       </Box>
 
       {/* ─── KHỐI BẢNG DANH MỤC ─── */}

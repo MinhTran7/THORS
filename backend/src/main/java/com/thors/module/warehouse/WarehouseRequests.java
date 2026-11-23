@@ -142,10 +142,12 @@ public final class WarehouseRequests {
             @NotBlank
             @Pattern(regexp = "AVAILABLE|FULL|BLOCKED|MAINTENANCE")
             String status,
-            @NotNull Boolean active) {}
+            @NotNull Boolean active,
+            // Tên tầng hiển thị (không bắt buộc); để trống = mã kệ + số tầng (vd A2).
+            @Size(max = 50) String name) {}
 
     public record Metadata(
-            @NotBlank @Size(max = 2000) String description,
+            @Size(max = 2000) String description,
             @Size(max = 8) List<@Positive Integer> keepImageIds,
             @Size(max = 8)
             List<@Pattern(regexp = "[a-f0-9]{32}\\.(jpg|png|webp)") String> photoKeys) {}

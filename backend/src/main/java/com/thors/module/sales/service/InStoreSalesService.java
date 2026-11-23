@@ -2,17 +2,20 @@ package com.thors.module.sales.service;
 
 import com.thors.common.ApiException;
 import com.thors.module.account.entity.Account;
+import com.thors.module.promotion.service.PromotionService;
 import com.thors.module.sales.dto.CreateInStoreSaleRequest;
 import com.thors.module.sales.dto.InStoreSaleDetailResponse;
 import com.thors.module.sales.dto.InStoreSaleListItem;
 import com.thors.module.sales.dto.InStoreSalePageResponse;
 import com.thors.module.sales.dto.InStoreSaleResponse;
+import com.thors.module.sales.dto.PriceRange;
 import com.thors.module.sales.dto.SellerOption;
 import com.thors.security.SessionAccess;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,16 +37,21 @@ import java.util.UUID;
 public class InStoreSalesService {
 
     private static final BigDecimal ZERO = BigDecimal.ZERO;
+    // Phiếu giữ hàng bị bỏ quên (đóng trình duyệt khi đang hiện QR) quá thời gian này sẽ được dọn
+    private static final int HOLD_MINUTES = 30;
 
     private final JdbcTemplate jdbc;
     private final SessionAccess sessionAccess;
+    private final PromotionService promotionService;
 
     public InStoreSalesService(
             JdbcTemplate jdbc,
-            SessionAccess sessionAccess
+            SessionAccess sessionAccess,
+            PromotionService promotionService
     ) {
         this.jdbc = jdbc;
         this.sessionAccess = sessionAccess;
+        this.promotionService = promotionService;
     }
 
     /**
@@ -72,10 +80,7 @@ public class InStoreSalesService {
                     || item.quantity() == null
                     || item.quantity() <= 0) {
 
-                throw badRequest(
-                        "Mỗi sản phẩm phải có detailId hợp lệ "
-                                + "và quantity lớn hơn 0."
-                );
+                throw badRequest("Hóa đơn có sản phẩm hoặc số lượng không hợp lệ.");
             }
 
             try {
@@ -140,8 +145,8 @@ public class InStoreSalesService {
 
             } catch (EmptyResultDataAccessException ex) {
                 throw badRequest(
-                        "Không tìm thấy biến thể sản phẩm detailId="
-                                + detailId + "."
+                        "Có sản phẩm trong hóa đơn không còn tồn tại. "
+                                + "Vui lòng xóa sản phẩm đó và thêm lại."
                 );
             }
 
@@ -173,10 +178,9 @@ public class InStoreSalesService {
                 );
             }
 
-            line = line.withLineTotal(
-                    line.price().multiply(
-                            BigDecimal.valueOf(line.quantity())
-                    )
+            // Áp dụng khuyến mãi sản phẩm như bán online
+            line = line.priced(
+                    promotionService.salePrice(line.productId(), line.price())
             );
 
             lines.add(line);
@@ -216,21 +220,20 @@ public class InStoreSalesService {
         LocalDateTime now = LocalDateTime.now();
 
         String orderNumber = makeNumber("POS");
-        String invoiceNumber = makeNumber("INV");
 
-        String customerName =
-                normalizeCustomerName(request.customerName());
+        // Chuyển khoản: đơn chờ PayOS xác nhận, chưa tạo payment và hóa đơn
+        boolean awaitingTransfer = "ONLINE".equals(paymentMethod) && total.compareTo(ZERO) > 0;
 
         // Dùng chung bảng orders với đơn hàng online.
         int orderId = insertOrder(
                 seller.id(),
-                customerName,
                 orderNumber,
                 paymentMethod,
                 subtotal,
                 discount,
                 total,
-                now
+                now,
+                awaitingTransfer
         );
 
         // Dùng chung bảng order_item với đơn hàng online.
@@ -283,6 +286,20 @@ public class InStoreSalesService {
             );
         }
 
+        if (awaitingTransfer) {
+            return new InStoreSaleResponse(
+                    orderId,
+                    orderNumber,
+                    null,
+                    "AWAITING_PAYMENT",
+                    "UNPAID",
+                    paymentMethod,
+                    subtotal,
+                    discount,
+                    total
+            );
+        }
+
         /*
          * Bảng payment yêu cầu amount > 0.
          * Nếu đơn được giảm giá 100%, không tạo payment 0 đồng.
@@ -306,23 +323,7 @@ public class InStoreSalesService {
             );
         }
 
-        // Tạo hóa đơn cho đơn bán tại quầy.
-        jdbc.update(
-                """
-                INSERT INTO invoice (
-                    order_id,
-                    invoice_number,
-                    issued_at,
-                    issued_by,
-                    issuer_type
-                )
-                VALUES (?, ?, ?, ?, 'USER')
-                """,
-                orderId,
-                invoiceNumber,
-                java.sql.Timestamp.valueOf(now),
-                seller.id()
-        );
+        String invoiceNumber = insertInvoice(orderId, seller.id(), now);
 
         return new InStoreSaleResponse(
                 orderId,
@@ -338,8 +339,124 @@ public class InStoreSalesService {
     }
 
     /**
-     * Tạo đơn bán tại quầy trong bảng orders dùng chung.
+     * Hoàn tất đơn chuyển khoản sau khi PayOS báo đã nhận tiền.
      */
+    @Transactional
+    public InStoreSaleResponse completeTransfer(int orderId) {
+        Account seller = sessionAccess.current();
+        validateSeller(seller);
+
+        TransferOrder order = lockOrder(orderId);
+        String invoiceNumber = order.invoiceNumber();
+
+        if (!"COMPLETED".equals(order.orderStatus())) {
+            if (!"PAID".equals(order.paymentStatus())) {
+                throw badRequest("Chưa nhận được tiền chuyển khoản cho đơn này.");
+            }
+            if (!"AWAITING_PAYMENT".equals(order.orderStatus())
+                    && !"PENDING_CONFIRMATION".equals(order.orderStatus())) {
+                throw badRequest("Đơn không ở trạng thái chờ thanh toán.");
+            }
+
+            invoiceNumber = markTransferPaid(orderId, order, seller.id());
+        }
+
+        return new InStoreSaleResponse(
+                orderId,
+                order.orderNumber(),
+                invoiceNumber,
+                "COMPLETED",
+                "PAID",
+                order.paymentMethod(),
+                order.subtotal(),
+                order.discount(),
+                order.total()
+        );
+    }
+
+    /**
+     * Bỏ phiếu giữ hàng chuyển khoản chưa thanh toán: trả hàng về kho và xóa hẳn, không để lại đơn hủy.
+     */
+    @Transactional
+    public void cancelTransfer(int orderId) {
+        validateSeller(sessionAccess.current());
+
+        Integer exists = jdbc.queryForObject("SELECT COUNT(*) FROM orders WHERE order_id = ?", Integer.class, orderId);
+        if (exists == null || exists == 0) {
+            return;
+        }
+
+        TransferOrder order = lockOrder(orderId);
+
+        if ("PAID".equals(order.paymentStatus())) {
+            throw badRequest("Khách đã chuyển khoản, không thể hủy giao dịch này.");
+        }
+        if (!"AWAITING_PAYMENT".equals(order.orderStatus())) {
+            throw badRequest("Chỉ hủy được giao dịch đang chờ chuyển khoản.");
+        }
+
+        deleteHold(orderId);
+    }
+
+    /**
+     * Tự xử lý phiếu giữ hàng quá hạn: đã nhận tiền thì tạo hóa đơn, chưa thì xóa và trả hàng về kho.
+     */
+    @Scheduled(fixedDelay = 60_000L, initialDelay = 60_000L)
+    @Transactional
+    public void releaseExpiredTransfers() {
+        List<Integer> expired = jdbc.queryForList(
+                """
+                SELECT order_id
+                FROM orders
+                WHERE order_type = 'In-Store'
+                  AND order_status IN ('AWAITING_PAYMENT', 'PENDING_CONFIRMATION')
+                  AND order_date < ?
+                """,
+                Integer.class,
+                java.sql.Timestamp.valueOf(LocalDateTime.now().minusMinutes(HOLD_MINUTES))
+        );
+
+        for (Integer orderId : expired) {
+            TransferOrder order = lockOrder(orderId);
+            if ("PAID".equals(order.paymentStatus())) {
+                markTransferPaid(orderId, order, order.createdBy());
+            } else {
+                deleteHold(orderId);
+            }
+        }
+    }
+
+    private String markTransferPaid(int orderId, TransferOrder order, int issuedBy) {
+        jdbc.update("UPDATE orders SET order_status = 'COMPLETED' WHERE order_id = ?", orderId);
+        return order.invoiceNumber() != null
+                ? order.invoiceNumber()
+                : insertInvoice(orderId, issuedBy, LocalDateTime.now());
+    }
+
+    // Cộng lại tồn kho rồi xóa phiếu giữ hàng cùng dòng hàng, lịch sử kho và lần thanh toán PayOS
+    private void deleteHold(int orderId) {
+        List<Map<String, Object>> items = jdbc.queryForList(
+                "SELECT detail_id, quantity FROM order_item WHERE order_id = ? AND detail_id IS NOT NULL ORDER BY detail_id",
+                orderId
+        );
+
+        for (Map<String, Object> item : items) {
+            jdbc.update(
+                    "UPDATE product_detail SET stock_quantity = stock_quantity + ? WHERE detail_id = ?",
+                    ((Number) item.get("quantity")).intValue(),
+                    ((Number) item.get("detail_id")).intValue()
+            );
+        }
+
+        jdbc.update(
+                "DELETE FROM stock_adjustment WHERE order_item_id IN (SELECT order_item_id FROM order_item WHERE order_id = ?)",
+                orderId
+        );
+        jdbc.update("DELETE FROM payment WHERE order_id = ?", orderId);
+        jdbc.update("DELETE FROM order_item WHERE order_id = ?", orderId);
+        jdbc.update("DELETE FROM orders WHERE order_id = ?", orderId);
+    }
+
     /**
      * Lấy danh sách lịch sử bán hàng trực tiếp tại quầy (chỉ lấy order_type = 'In-Store').
      * Hỗ trợ tìm kiếm theo mã đơn, mã hóa đơn, tên khách hàng và lọc theo khoảng ngày.
@@ -357,10 +474,15 @@ public class InStoreSalesService {
         Account seller = sessionAccess.current();
         validateSeller(seller);
 
+        if (fromDate != null && toDate != null && fromDate.isAfter(toDate)) {
+            throw badRequest("Từ ngày không được sau đến ngày.");
+        }
+
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), 50);
 
-        StringBuilder where = new StringBuilder(" WHERE o.order_type = 'In-Store'");
+        // Chỉ hiện đơn đã bán thành công
+        StringBuilder where = new StringBuilder(" WHERE o.order_type = 'In-Store' AND o.order_status = 'COMPLETED'");
         List<Object> args = new ArrayList<>();
 
         if (q != null && !q.trim().isEmpty()) {
@@ -392,15 +514,8 @@ public class InStoreSalesService {
 
         if (paymentMethod != null && !paymentMethod.trim().isEmpty()) {
             String pm = paymentMethod.trim().toUpperCase();
-            String resolvedMethod = "COALESCE(o.payment_method, (SELECT p.payment_method FROM payment p WHERE p.order_id = o.order_id ORDER BY p.payment_id DESC LIMIT 1), 'CASH')";
-            if ("CASH".equals(pm)) {
-                where.append(" AND UPPER(").append(resolvedMethod).append(") IN ('CASH', 'TIEN_MAT', 'TIENMAT')");
-            } else if ("TRANSFER".equals(pm) || "ONLINE".equals(pm) || "BANK_TRANSFER".equals(pm)) {
-                where.append(" AND UPPER(").append(resolvedMethod).append(") IN ('ONLINE', 'TRANSFER', 'BANK_TRANSFER', 'BANK TRANSFER', 'CHUYEN_KHOAN')");
-            } else {
-                where.append(" AND UPPER(").append(resolvedMethod).append(") = ?");
-                args.add(pm);
-            }
+            where.append(" AND o.payment_method = ?");
+            args.add("TRANSFER".equals(pm) || "BANK_TRANSFER".equals(pm) ? "ONLINE" : pm);
         }
 
         String countSql = "SELECT COUNT(*) FROM orders o LEFT JOIN invoice i ON i.order_id = o.order_id LEFT JOIN `user` u ON u.user_id = o.created_by" + where;
@@ -453,8 +568,53 @@ public class InStoreSalesService {
     }
 
     /**
-     * Lấy chi tiết hóa đơn bán hàng tại quầy kèm danh sách mặt hàng đã bán.
+     * Giá sau khuyến mãi của từng biến thể, dùng hiển thị ở trang bán hàng.
      */
+    @Transactional(readOnly = true)
+    public Map<Integer, BigDecimal> salePrices(int productId) {
+        validateSeller(sessionAccess.current());
+
+        Map<Integer, BigDecimal> prices = new LinkedHashMap<>();
+        jdbc.query(
+                "SELECT detail_id, price FROM product_detail WHERE product_id = ? AND price IS NOT NULL",
+                rs -> {
+                    prices.put(rs.getInt("detail_id"), promotionService.salePrice(productId, rs.getBigDecimal("price")));
+                },
+                productId
+        );
+        return prices;
+    }
+
+    /**
+     * Khoảng giá gốc và giá sau khuyến mãi của từng sản phẩm, dùng ở ô tìm kiếm.
+     */
+    @Transactional(readOnly = true)
+    public Map<Integer, PriceRange> salePriceRanges() {
+        validateSeller(sessionAccess.current());
+
+        Map<Integer, PriceRange> ranges = new LinkedHashMap<>();
+        jdbc.query(
+                """
+                SELECT product_id, MIN(price) AS min_price, MAX(price) AS max_price
+                FROM product_detail
+                WHERE status = 'ACTIVE' AND price IS NOT NULL
+                GROUP BY product_id
+                """,
+                rs -> {
+                    int productId = rs.getInt("product_id");
+                    BigDecimal min = rs.getBigDecimal("min_price");
+                    BigDecimal max = rs.getBigDecimal("max_price");
+                    ranges.put(productId, new PriceRange(
+                            min,
+                            max,
+                            promotionService.salePrice(productId, min),
+                            promotionService.salePrice(productId, max)
+                    ));
+                }
+        );
+        return ranges;
+    }
+
     /**
      * Lấy danh sách thu ngân từng bán hàng tại quầy để phục vụ bộ lọc.
      */
@@ -474,6 +634,10 @@ public class InStoreSalesService {
         ));
     }
 
+    /**
+     * Lấy chi tiết hóa đơn bán hàng tại quầy kèm danh sách mặt hàng đã bán.
+     */
+    @Transactional(readOnly = true)
     public InStoreSaleDetailResponse getSaleDetail(int orderId) {
         Account seller = sessionAccess.current();
         validateSeller(seller);
@@ -533,15 +697,9 @@ public class InStoreSalesService {
                     oi.color_snapshot,
                     oi.quantity,
                     oi.unit_price,
-                    COALESCE(
-                        (SELECT pi.image_url FROM product_image pi
-                         WHERE pi.product_id = pd.product_id AND pi.deleted_at IS NULL
-                         ORDER BY pi.is_primary DESC, pi.image_id ASC LIMIT 1),
-                        (SELECT pi.image_url FROM product_image pi
-                         JOIN product p ON p.product_id = pi.product_id
-                         WHERE p.product_name = oi.product_name_snapshot AND pi.deleted_at IS NULL
-                         ORDER BY pi.is_primary DESC, pi.image_id ASC LIMIT 1)
-                    ) AS image_url
+                    (SELECT pi.image_url FROM product_image pi
+                     WHERE pi.product_id = pd.product_id AND pi.deleted_at IS NULL
+                     ORDER BY pi.is_primary DESC, pi.image_id ASC LIMIT 1) AS image_url
                 FROM order_item oi
                 LEFT JOIN product_detail pd ON pd.detail_id = oi.detail_id
                 WHERE oi.order_id = ?
@@ -582,15 +740,18 @@ public class InStoreSalesService {
         );
     }
 
+    /**
+     * Tạo đơn bán tại quầy trong bảng orders dùng chung.
+     */
     private int insertOrder(
             int sellerId,
-            String customerName,
             String orderNumber,
             String paymentMethod,
             BigDecimal subtotal,
             BigDecimal discount,
             BigDecimal total,
-            LocalDateTime now
+            LocalDateTime now,
+            boolean awaitingTransfer
     ) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
 
@@ -601,7 +762,6 @@ public class InStoreSalesService {
                         order_number,
                         order_type,
                         user_id,
-                        delivery_name,
                         order_date,
                         order_status,
                         total_amount,
@@ -626,14 +786,13 @@ public class InStoreSalesService {
                         ?,
                         ?,
                         ?,
-                        'COMPLETED',
                         ?,
                         ?,
                         NULL,
                         NULL,
                         ?,
                         ?,
-                        'PAID',
+                        ?,
                         ?,
                         0,
                         0,
@@ -653,14 +812,12 @@ public class InStoreSalesService {
             // Đơn tại quầy lưu ID người bán tạo đơn.
             ps.setInt(2, sellerId);
 
-            // Tên khách hàng là tùy chọn.
-            ps.setString(3, customerName);
-
             ps.setTimestamp(
-                    4,
+                    3,
                     java.sql.Timestamp.valueOf(now)
             );
 
+            ps.setString(4, awaitingTransfer ? "AWAITING_PAYMENT" : "COMPLETED");
             ps.setBigDecimal(5, total);
             ps.setInt(6, sellerId);
 
@@ -671,15 +828,16 @@ public class InStoreSalesService {
             );
 
             ps.setString(8, paymentMethod);
-            ps.setBigDecimal(9, subtotal);
-            ps.setBigDecimal(10, discount);
+            ps.setString(9, awaitingTransfer ? "UNPAID" : "PAID");
+            ps.setBigDecimal(10, subtotal);
+            ps.setBigDecimal(11, discount);
 
             ps.setTimestamp(
-                    11,
+                    12,
                     java.sql.Timestamp.valueOf(now)
             );
 
-            ps.setString(12, "IN_STORE_SALE");
+            ps.setString(13, "IN_STORE_SALE");
 
             return ps;
         }, keyHolder);
@@ -745,6 +903,73 @@ public class InStoreSalesService {
     }
 
     /**
+     * Tạo hóa đơn cho đơn bán tại quầy.
+     */
+    private String insertInvoice(int orderId, int sellerId, LocalDateTime now) {
+        String invoiceNumber = makeNumber("INV");
+
+        jdbc.update(
+                """
+                INSERT INTO invoice (
+                    order_id,
+                    invoice_number,
+                    issued_at,
+                    issued_by,
+                    issuer_type
+                )
+                VALUES (?, ?, ?, ?, 'USER')
+                """,
+                orderId,
+                invoiceNumber,
+                java.sql.Timestamp.valueOf(now),
+                sellerId
+        );
+
+        return invoiceNumber;
+    }
+
+    /**
+     * Khóa đơn tại quầy để hoàn tất hoặc hủy.
+     */
+    private TransferOrder lockOrder(int orderId) {
+        List<TransferOrder> found = jdbc.query(
+                """
+                SELECT
+                    o.order_number,
+                    o.order_status,
+                    o.payment_status,
+                    o.payment_method,
+                    COALESCE(o.items_amount, o.total_amount) AS subtotal,
+                    COALESCE(o.manual_discount_amount, 0) AS discount_amount,
+                    o.total_amount,
+                    o.created_by,
+                    (SELECT i.invoice_number FROM invoice i WHERE i.order_id = o.order_id) AS invoice_number
+                FROM orders o
+                WHERE o.order_id = ? AND o.order_type = 'In-Store'
+                FOR UPDATE
+                """,
+                (rs, rowNum) -> new TransferOrder(
+                        rs.getString("order_number"),
+                        rs.getString("order_status"),
+                        rs.getString("payment_status"),
+                        rs.getString("payment_method"),
+                        rs.getBigDecimal("subtotal"),
+                        rs.getBigDecimal("discount_amount"),
+                        rs.getBigDecimal("total_amount"),
+                        rs.getInt("created_by"),
+                        rs.getString("invoice_number")
+                ),
+                orderId
+        );
+
+        if (found.isEmpty()) {
+            throw new ApiException(404, "NOT_FOUND", "Không tìm thấy hóa đơn bán hàng tại quầy.");
+        }
+
+        return found.get(0);
+    }
+
+    /**
      * Chỉ OWNER và FAMILY_MEMBER được bán tại quầy.
      */
     private void validateSeller(Account seller) {
@@ -804,22 +1029,6 @@ public class InStoreSalesService {
         };
     }
 
-    private String normalizeCustomerName(String name) {
-        if (name == null || name.isBlank()) {
-            return null;
-        }
-
-        String trimmed = name.trim();
-
-        if (trimmed.length() > 100) {
-            throw badRequest(
-                    "Tên khách hàng không được vượt quá 100 ký tự."
-            );
-        }
-
-        return trimmed;
-    }
-
     private String makeNumber(String prefix) {
         String date = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE);
         String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 6).toUpperCase();
@@ -832,6 +1041,22 @@ public class InStoreSalesService {
                 "INVALID_SALE",
                 message
         );
+    }
+
+    /**
+     * Thông tin đơn tại quầy khi hoàn tất hoặc hủy chuyển khoản.
+     */
+    private record TransferOrder(
+            String orderNumber,
+            String orderStatus,
+            String paymentStatus,
+            String paymentMethod,
+            BigDecimal subtotal,
+            BigDecimal discount,
+            BigDecimal total,
+            int createdBy,
+            String invoiceNumber
+    ) {
     }
 
     /**
@@ -877,19 +1102,19 @@ public class InStoreSalesService {
             );
         }
 
-        SaleLine withLineTotal(BigDecimal total) {
+        SaleLine priced(BigDecimal unitPrice) {
             return new SaleLine(
                     detailId,
                     productId,
                     stockQuantity,
-                    price,
+                    unitPrice,
                     size,
                     color,
                     detailStatus,
                     productName,
                     productStatus,
                     quantity,
-                    total
+                    unitPrice.multiply(BigDecimal.valueOf(quantity))
             );
         }
     }

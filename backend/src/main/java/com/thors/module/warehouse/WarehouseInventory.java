@@ -200,11 +200,11 @@ public class WarehouseInventory {
         for (var row :
                 s.jdbc()
                         .queryForList(
-                                """
-                SELECT l.product_location_id,r.rack_code,t.level_number FROM product_location l
+                                s.withTierLabel("""
+                SELECT l.product_location_id,TIER_LABEL AS tier_label FROM product_location l
                 JOIN shelf_level t ON t.shelf_level_id=l.shelf_level_id JOIN rack r ON r.rack_id=t.rack_id
-                """))
-            labels.put(num(row, "product_location_id"), "" + row.get("rack_code") + row.get("level_number"));
+                """)))
+            labels.put(num(row, "product_location_id"), (String) row.get("tier_label"));
         return labels;
     }
 
@@ -675,7 +675,8 @@ public class WarehouseInventory {
                 LEFT JOIN order_item oi ON oi.order_item_id=m.order_item_id
                 LEFT JOIN orders o ON o.order_id=oi.order_id
                 LEFT JOIN return_request_item rri ON rri.return_request_item_id=m.return_request_item_id
-                WHERE m.detail_id=? ORDER BY m.adjusted_at DESC,m.adjustment_id DESC
+                WHERE m.detail_id=? AND (m.idempotency_key IS NULL OR m.idempotency_key NOT LIKE 'movereq:%')
+                ORDER BY m.adjusted_at DESC,m.adjustment_id DESC
                 """,
                                 detail);
         int balance = num(variant, "stock_quantity");

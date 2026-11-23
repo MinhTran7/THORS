@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import {
   Alert,
@@ -56,15 +56,13 @@ const C = {
   subtle: '#94A3B8',
   border: '#E2E8F0',
   borderLight: '#F1F5F9',
-  bg: '#F8FAFC',
   surface: '#FFFFFF',
   cyan: '#8EECF5',
   cyanHover: '#76E5EF',
   cyanText: '#0E7490',
   cream: '#FFF7AE',
   creamHover: '#FFF294',
-  creamText: '#713F12',
-  error: '#EF4444'
+  creamText: '#713F12'
 };
 
 const PAGE_SIZE = 8;
@@ -180,6 +178,17 @@ function normalizeCategories(response) {
   return [];
 }
 
+// Nhớ trạng thái danh sách sản phẩm trong phiên làm việc (đóng tab thì mất)
+const LIST_STATE_KEY = 'thors:product-list';
+function readListState() {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(LIST_STATE_KEY));
+    return value && typeof value === 'object' ? value : {};
+  } catch {
+    return {};
+  }
+}
+
 export default function ProductPage() {
   const navigate = useNavigate();
 
@@ -199,15 +208,34 @@ export default function ProductPage() {
   // STATES - SEARCH AND FILTER
   // ==========================================
 
-  const [activeTab, setActiveTab] = useState('ACTIVE');
-  const [search, setSearch] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('ALL');
+  // Link từ trang khác có thể mở sẵn tab và ô tìm kiếm, ví dụ /products?tab=INACTIVE&q=%2393 (Kho → phiếu đặt hàng).
+  // Không có link thì tab, ô tìm, danh mục và trang đang xem được nhớ lại (sessionStorage) để khi vào chi tiết / sửa
+  // sản phẩm rồi bấm "Quay lại danh sách sản phẩm" thì về đúng trang chứa sản phẩm đó.
+  const [searchParams] = useSearchParams();
+  const [saved] = useState(() => {
+    const tab = searchParams.get('tab');
+    const q = searchParams.get('q');
+    const validTab = ['ACTIVE', 'INACTIVE', 'ONLINE', 'LOW_STOCK', 'ALL'].includes(tab);
+    if (validTab || q) return { activeTab: validTab ? tab : 'ACTIVE', search: q || '' };
+    return readListState();
+  });
+  const [activeTab, setActiveTab] = useState(saved.activeTab ?? 'ACTIVE');
+  const [search, setSearch] = useState(saved.search ?? '');
+  const [categoryFilter, setCategoryFilter] = useState(saved.categoryFilter ?? 'ALL');
 
   // ==========================================
   // STATES - PAGINATION
   // ==========================================
 
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(saved.page ?? 1);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(LIST_STATE_KEY, JSON.stringify({ activeTab, search, categoryFilter, page }));
+    } catch {
+      // trình duyệt chặn sessionStorage thì thôi, không nhớ trang
+    }
+  }, [activeTab, search, categoryFilter, page]);
 
   // Menu "⋯" của từng dòng (ẩn/hiện sản phẩm, bật/tắt bán online)
   const [menuAnchor, setMenuAnchor] = useState(null);

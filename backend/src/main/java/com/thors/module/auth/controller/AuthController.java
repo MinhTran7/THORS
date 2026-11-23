@@ -5,6 +5,7 @@ import com.thors.config.Settings;
 import com.thors.integration.otp.OtpSender;
 import com.thors.module.account.mapper.AccountMapper;
 import com.thors.module.account.repository.AccountRepository;
+import com.thors.module.account.repository.PasswordChangeRequirementRepository;
 import com.thors.module.auth.dto.AuthRequests.*;
 import com.thors.module.auth.entity.OtpChallenge;
 import com.thors.module.auth.service.*;
@@ -25,6 +26,7 @@ public class AuthController {
   private final SessionAccess sessions;
   private final OtpSender sender;
   private final Settings settings;
+  private final PasswordChangeRequirementRepository passwordChanges;
 
   public AuthController(
           AuthService auth,
@@ -32,17 +34,20 @@ public class AuthController {
           AccountRepository users,
           SessionAccess sessions,
           OtpSender sender,
-          Settings settings) {
+          Settings settings,
+          PasswordChangeRequirementRepository passwordChanges) {
     this.auth = auth;
     this.otp = otp;
     this.users = users;
     this.sessions = sessions;
     this.sender = sender;
     this.settings = settings;
+    this.passwordChanges = passwordChanges;
   }
 
   record ResetGrant(int user, long version, long expires) implements Serializable {}
 
+  // GET /api/auth/csrf: trả CSRF token cho frontend (http.js refreshCsrf gọi trước request POST đầu tiên)
   @GetMapping("/csrf")
   Object csrf(CsrfToken token) {
     return Map.of("token", token.getToken(), "headerName", token.getHeaderName());
@@ -67,7 +72,8 @@ public class AuthController {
 
   @GetMapping("/me")
   Object me() {
-    return AccountMapper.view(sessions.current());
+    var a = sessions.current();
+    return AccountMapper.view(a, passwordChanges.required(a.id()));
   }
 
   @PostMapping("/register")
@@ -77,9 +83,18 @@ public class AuthController {
     return challenge(c);
   }
 
+  /**
+   * POST /api/auth/login — đăng nhập bằng email + mật khẩu (frontend: LoginPage.jsx → http.js).
+   * 1. @Valid kiểm tra record Login (không trống), sai → 400.
+   * 2. AuthService.authenticate kiểm tra email, mật khẩu, khóa 15 phút, trạng thái tài khoản.
+   *    Lỗi → ném ApiException (401 / 403 / 429), ApiErrors đổi thành JSON trả về.
+   * 3. Tài khoản chưa xác minh email → trả verificationRequired = true, KHÔNG tạo phiên.
+   * 4. Ngược lại → SessionAccess.login tạo phiên (cookie JSESSIONID) và trả thông tin tài khoản.
+   */
   @PostMapping("/login")
   Object login(@Valid @RequestBody Login r, HttpServletRequest req, HttpServletResponse res) {
     var a = auth.authenticate(r.identifier(), r.password());
+    // Tài khoản PENDING_VERIFICATION: frontend chuyển sang bước gửi mã xác minh (POST /api/auth/activation)
     if (a.pending())
       return Map.of(
               "verificationRequired",
@@ -88,8 +103,14 @@ public class AuthController {
               r.identifier().trim(),
               "channel", "EMAIL",
               "deliveryAvailable", sender.available("EMAIL"));
+    // Tài khoản đang hoạt động: tạo phiên đăng nhập, ghi audit LOGIN
     sessions.login(a, req, res);
-    return Map.of("verificationRequired", false, "account", AccountMapper.view(a));
+    boolean mustChange = passwordChanges.required(a.id());
+    // AccountMapper.view: chỉ lấy các trường được phép gửi ra ngoài (không gửi password_hash)
+    return Map.of(
+            "verificationRequired", false,
+            "passwordChangeRequired", mustChange,
+            "account", AccountMapper.view(a, mustChange));
   }
 
   @PostMapping("/activation")

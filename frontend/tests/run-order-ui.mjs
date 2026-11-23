@@ -409,6 +409,8 @@ try {
   await page.getByText('Đổi nhà cung cấp?', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Giữ nhà cung cấp cũ', exact: true }).click();
 
+  // Owner: save as draft or save and confirm right away.
+  await page.getByRole('button', { name: 'Lưu và xác nhận đặt hàng', exact: true }).waitFor();
   // First save fails: quick-created item is kept; retry does not create it again.
   await page.getByRole('button', { name: 'Lưu phiếu nháp', exact: true }).click();
   await page.getByText(/Lỗi mạng giả lập\. Hàng vừa tạo nhanh vẫn được giữ/).waitFor();
@@ -480,8 +482,8 @@ try {
   await page.getByText('Tổng số sản phẩm đã trả nhà cung cấp', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Tạo phiếu trả', exact: true }).click();
   await page.getByText('Chọn phiếu nhập để xem các sản phẩm có thể trả', { exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Quay lại', exact: true }).click();
-  await page.getByRole('textbox', { name: 'Tìm chứng từ' }).fill('PN00008');
+  await page.getByRole('button', { name: 'Đóng', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Tìm phiếu' }).fill('PN00008');
   await page.getByText('PT00012', { exact: true }).waitFor();
   await page.getByText('Chờ xuất trả', { exact: true }).first().waitFor();
 
@@ -505,7 +507,7 @@ try {
   await page.keyboard.press('Escape');
 
   // Dispatched return: money status is separate from the document status; refund in several steps, exchange.
-  await page.getByRole('textbox', { name: 'Tìm chứng từ' }).fill('PT00014');
+  await page.getByRole('textbox', { name: 'Tìm phiếu' }).fill('PT00014');
   await page.getByText('NCC trả một phần', { exact: true }).waitFor();
   await page.getByText('Còn nợ 50.000 ₫', { exact: true }).waitFor();
   await page.getByText('PT00014', { exact: true }).click();

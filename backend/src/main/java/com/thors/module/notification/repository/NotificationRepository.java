@@ -165,15 +165,59 @@ public class NotificationRepository {
                 userIds.stream().distinct().map(id -> new Object[] {id, notificationId}).toList());
     }
 
-    /** Gửi thông báo cho mọi tài khoản ACTIVE của một vai trò. */
-    public int linkRole(int notificationId, String roleName) {
-        return db.update(
+    /**
+     * Gửi thông báo cho mọi tài khoản ACTIVE của một vai trò. skipMutedType khác null thì bỏ qua người đã
+     * tắt loại thông báo đó (cần bảng notification_mute, xem NotificationMuteSchema).
+     */
+    public int linkRole(int notificationId, String roleName, String skipMutedType) {
+        String sql =
                 "INSERT INTO user_notification (user_id, notification_id, is_read)"
                         + " SELECT u.user_id, ?, 0 FROM `user` u"
                         + " JOIN `role` r ON r.role_id = u.role_id"
-                        + " WHERE r.role_name = ? AND u.account_status = 'ACTIVE'",
+                        + " WHERE r.role_name = ? AND u.account_status = 'ACTIVE'";
+        if (skipMutedType == null) return db.update(sql, notificationId, roleName);
+        return db.update(
+                sql + " AND NOT EXISTS (SELECT 1 FROM notification_mute m"
+                        + " WHERE m.user_id = u.user_id AND m.type = ?)",
                 notificationId,
-                roleName);
+                roleName,
+                skipMutedType);
+    }
+
+    // ---------------------------------------------------------------- Bật / tắt theo loại (notification_mute)
+
+    /** Những người trong danh sách đã tắt loại thông báo này. */
+    public List<Integer> mutedAmong(String type, Collection<Integer> userIds) {
+        if (userIds.isEmpty()) return List.of();
+        String marks = String.join(",", java.util.Collections.nCopies(userIds.size(), "?"));
+        List<Object> args = new ArrayList<>();
+        args.add(type);
+        args.addAll(userIds);
+        return db.queryForList(
+                "SELECT user_id FROM notification_mute WHERE type = ? AND user_id IN (" + marks + ")",
+                Integer.class,
+                args.toArray());
+    }
+
+    public boolean isMuted(int userId, String type) {
+        Integer n =
+                db.queryForObject(
+                        "SELECT COUNT(*) FROM notification_mute WHERE user_id = ? AND type = ?",
+                        Integer.class,
+                        userId,
+                        type);
+        return n != null && n > 0;
+    }
+
+    /** muted = true thì thêm dòng (bỏ qua nếu đã có), false thì xóa dòng. */
+    public void setMuted(int userId, String type, boolean muted) {
+        if (muted)
+            db.update(
+                    "INSERT INTO notification_mute (user_id, type) VALUES (?, ?)"
+                            + " ON DUPLICATE KEY UPDATE type = type",
+                    userId,
+                    type);
+        else db.update("DELETE FROM notification_mute WHERE user_id = ? AND type = ?", userId, type);
     }
 
     private static String limit(String value, int max) {

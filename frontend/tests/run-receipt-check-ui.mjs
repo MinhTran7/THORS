@@ -100,7 +100,16 @@ try {
       if (endpoint === '/api/auth/csrf') return json({ headerName: 'X-CSRF-TOKEN', token: 't' });
       if (endpoint === '/api/notifications/unread-count') return json({ count: 0 });
       if (endpoint.startsWith('/api/notifications')) return json([]);
-      if (endpoint === '/api/warehouse/snapshot') return json({ variants: [], racks: [], tiers: [], locations: [], images: [] });
+      if (endpoint === '/api/warehouse/snapshot')
+        return json({
+          // Sau khi nhập kho: hàng vừa nhận nằm ở "chưa xếp", chờ xếp lên kệ.
+          variants:
+            state.status === 'CONFIRMED'
+              ? state.lines.map((l) => ({ detail_id: l.detail_id, product_id: 10, product_name: l.product_name, color: l.color, size: l.size,
+                  stock_quantity: l.quantity, unassigned_quantity: l.quantity, assigned_quantity: 0, status: 'ACTIVE' }))
+              : [],
+          racks: [], tiers: [], locations: [], images: []
+        });
       if (endpoint === '/api/warehouse/documents') return json(documents(state));
       if (endpoint === '/api/warehouse/documents/20/unit-labels') {
         // Tem serial chờ nhận: đủ số trên phiếu, in lại không sinh mã mới; extra = in thêm cho một dòng.
@@ -122,34 +131,30 @@ try {
             });
           }
         }
-        return json({ units: state.units.filter((u) => !body?.itemId || u.in_receipt_item_id === body.itemId) });
+        // Chỉ tem chưa quét (in lại tem hỏng = đúng mã cũ)
+        return json({ units: state.units.filter((u) => !u.scanned && (!body?.itemId || u.in_receipt_item_id === body.itemId)) });
       }
       if (endpoint === '/api/warehouse/units/printed') return json({ updated: body.unitIds.length });
       if (endpoint === '/api/warehouse/documents/20/scan' && /-\d{4}$/.test(body.code || '')) {
         const unit = state.units.find((u) => u.serial_code === body.code.toUpperCase());
         if (!unit) return json({ code: 'BARCODE_NOT_FOUND', message: 'Không tìm thấy.' }, 404);
         if (unit.scanned) return json({ code: 'SCAN_DUPLICATE', message: `Tem ${unit.serial_code} đã quét rồi, không đếm thêm.` }, 409);
-        unit.scanned = true;
         const l = state.lines.find((x) => x.receipt_item_id === unit.in_receipt_item_id);
+        if (l.scanned_quantity + 1 > l.quantity && !(body.over && role === 'OWNER'))
+          return json({ code: 'SCAN_OVER', message: `Áo thun · Đen · ${l.size}: phiếu chỉ có ${l.quantity} sản phẩm, đã quét đủ.` }, 409);
+        unit.scanned = true;
         l.scanned_quantity += 1;
         return json({ ...l, serial_code: unit.serial_code });
       }
-      if (endpoint === '/api/warehouse/documents/20/scan') {
-        let target;
-        let l;
-        if (body.code) {
-          l = state.lines.find((x) => x.barcode === body.code.toUpperCase());
-          if (!l) return json({ code: 'SCAN_NOT_IN_RECEIPT', message: 'Áo thun · Trắng · M không có trong phiếu nhập này.' }, 409);
-          target = l.scanned_quantity + 1;
-        } else {
-          l = state.lines.find((x) => x.receipt_item_id === body.itemId);
-          target = body.quantity;
-        }
-        if (target > l.quantity && !(body.over && role === 'OWNER'))
-          return json({ code: 'SCAN_OVER', message: `Áo thun · Đen · ${l.size}: phiếu chỉ có ${l.quantity} sản phẩm, đã quét đủ.` }, 409);
-        l.scanned_quantity = target;
-        return json({ ...l });
-      }
+      if (endpoint === '/api/warehouse/documents/20/scan')
+        // Mã biến thể / nhập tay không còn được đếm: chỉ tem serial từng chiếc
+        return json(
+          {
+            code: 'SCAN_NEED_SERIAL',
+            message: `${(body.code || '').toUpperCase()} là mã biến thể, không đếm được từng chiếc. Hãy quét tem serial dán trên từng chiếc.`
+          },
+          409
+        );
       if (endpoint === '/api/warehouse/documents/20/receive') {
         const diff = state.lines.some((x) => x.scanned_quantity !== x.quantity);
         if (diff && role !== 'OWNER') return json({ code: 'WAREHOUSE_FORBIDDEN', message: 'Chủ cửa hàng cần chốt.' }, 403);
@@ -166,48 +171,68 @@ try {
     return { context, page, calls, state };
   }
 
-  // Family: scan with a hardware scanner (fast keys anywhere) and the code box; over-scan is refused.
+  const closePrint = async (page) => {
+    const dialog = page.getByRole('dialog', { name: 'In tem serial (mỗi chiếc một tem)' });
+    await dialog.getByRole('button', { name: 'Đóng' }).click();
+    await dialog.waitFor({ state: 'hidden' });
+  };
+
+  // Family: print labels, scan each serial (hardware scanner anywhere + code box); variant codes and over-scan are refused.
   const family = await open('FAMILY_MEMBER');
   {
     const { page, calls } = family;
     await page.getByRole('heading', { name: 'Đã quét 0 / 5' }).waitFor();
-    assert.equal(await page.getByRole('button', { name: 'Chốt nhận hàng' }).isDisabled(), true, 'nothing scanned yet');
-    await page.getByRole('button', { name: 'In tem' }).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Xác nhận nhập kho' }).isDisabled(), true, 'nothing scanned yet');
+    assert.equal(await page.getByRole('button', { name: /^Bớt 1/ }).count(), 0, 'no typed counts');
+    await page.getByRole('button', { name: 'Quét bằng camera' }).waitFor();
+    await page.getByRole('button', { name: 'In tem', exact: true }).click();
+    await closePrint(page);
     for (let i = 0; i < 3; i++) {
       await page.getByRole('heading', { name: /PN00020/ }).click();
-      await page.keyboard.type('TH000001', { delay: 5 });
+      await page.keyboard.type(`TH000001-000${i + 1}`, { delay: 5 });
       await page.keyboard.press('Enter');
       await page.getByRole('heading', { name: `Đã quét ${i + 1} / 5` }).waitFor();
     }
     const box = page.getByRole('textbox', { name: 'Mã tem kiểm hàng' });
     await box.fill('th000001');
     await box.press('Enter');
+    await page.getByText('là mã biến thể, không đếm được từng chiếc', { exact: false }).waitFor();
+    await page.getByRole('button', { name: 'In thêm 1 tem Áo thun · Đen · M' }).click();
+    await closePrint(page);
+    await box.fill('TH000001-0004');
+    await box.press('Enter');
     await page.getByText('phiếu chỉ có 3 sản phẩm, đã quét đủ', { exact: false }).waitFor();
     assert.equal(await page.getByRole('button', { name: 'Vẫn nhận thừa' }).count(), 0, 'family cannot accept extra goods');
-    await box.fill('TH000009');
-    await box.press('Enter');
-    await page.getByText('không có trong phiếu nhập này', { exact: false }).waitFor();
-    await box.fill('TH000002');
+    await box.fill('TH000002-0001');
     await box.press('Enter');
     await page.getByRole('heading', { name: 'Đã quét 4 / 5' }).waitFor();
     await page.getByText('Thiếu 1').waitFor();
-    assert.equal(await page.getByRole('button', { name: 'Chốt nhận hàng' }).isDisabled(), true, 'difference: owner closes it');
+    assert.equal(await page.getByRole('button', { name: 'Xác nhận nhập kho' }).isDisabled(), true, 'difference: owner closes it');
     await page.getByText('Báo chủ cửa hàng kiểm tra', { exact: false }).waitFor();
-    // "Bớt 1" then scan again.
-    await page.getByRole('button', { name: 'Bớt 1 Áo thun · Đen · M' }).click();
-    await page.getByRole('heading', { name: 'Đã quét 3 / 5' }).waitFor();
-    assert.ok(calls.some((c) => c.endpoint.endsWith('/scan') && c.body.itemId === 21 && c.body.quantity === 2));
-    await box.fill('TH000001');
-    await box.press('Enter');
-    await box.fill('TH000002');
+    // Tem hỏng: in lại đúng tem chưa quét của dòng đó
+    await page.getByRole('button', { name: 'In lại tem chưa quét Áo thun · Đen · L' }).click();
+    const dialog = page.getByRole('dialog', { name: 'In tem serial (mỗi chiếc một tem)' });
+    await dialog.getByText('TH000002-0002', { exact: true }).waitFor();
+    await dialog.getByRole('button', { name: 'In ngay 1 tem' }).waitFor();
+    assert.ok(calls.some((c) => c.endpoint.endsWith('/unit-labels') && c.body?.itemId === 22 && c.body?.extra === undefined));
+    await closePrint(page);
+    await box.fill('TH000002-0002');
     await box.press('Enter');
     await page.getByRole('heading', { name: 'Đã quét 5 / 5' }).waitFor();
-    await page.getByRole('button', { name: 'Chốt nhận hàng' }).click();
-    await page.getByRole('dialog', { name: /Chốt nhận hàng/ }).getByText('khớp phiếu', { exact: false }).waitFor();
+    await page.getByRole('button', { name: 'Xác nhận nhập kho' }).click();
+    await page.getByRole('dialog', { name: /Xác nhận nhập kho/ }).getByText('khớp phiếu', { exact: false }).waitFor();
     await page.getByRole('button', { name: 'Xác nhận', exact: true }).click();
     await page.getByRole('columnheader', { name: 'Thực nhận' }).waitFor();
     assert.ok(calls.some((c) => c.endpoint.endsWith('/receive') && c.body.reason === null));
+    // Quét xong, nhập kho xong: nút xếp lên kệ hiện ngay trên phiếu.
+    await page.getByRole('button', { name: 'Xếp lên kệ (3 chưa xếp)' }).waitFor();
     await page.screenshot({ path: path.join(artifacts, 'family-received.png'), fullPage: true });
+    await page.getByRole('button', { name: 'Xếp lên kệ (3 chưa xếp)' }).click();
+    const place = page.getByRole('dialog', { name: /^Xếp lên kệ · Áo thun/ });
+    await place.waitFor();
+    assert.equal(await place.getByLabel('Số lượng', { exact: false }).first().inputValue(), '3', 'điền sẵn số vừa nhận');
+    await page.screenshot({ path: path.join(artifacts, 'family-place.png'), fullPage: true });
+    await place.getByRole('button', { name: 'Đóng' }).click();
     await family.context.close();
   }
 
@@ -217,20 +242,24 @@ try {
     const { page, calls } = owner;
     await page.getByRole('heading', { name: 'Đã quét 0 / 5' }).waitFor();
     await page.getByRole('button', { name: 'Hủy phiếu' }).waitFor();
+    await page.getByRole('button', { name: 'In tem', exact: true }).click();
+    await closePrint(page);
+    await page.getByRole('button', { name: 'In thêm 1 tem Áo thun · Đen · L' }).click();
+    await closePrint(page);
     const box = page.getByRole('textbox', { name: 'Mã tem kiểm hàng' });
-    for (const code of ['TH000002', 'TH000002', 'TH000002']) {
+    for (const code of ['TH000002-0001', 'TH000002-0002', 'TH000002-0003']) {
       await box.fill(code);
       await box.press('Enter');
     }
     await page.getByRole('button', { name: 'Vẫn nhận thừa' }).click();
     await page.getByText('Thừa 1').waitFor();
-    assert.ok(calls.some((c) => c.endpoint.endsWith('/scan') && c.body.over === true && c.body.code === 'TH000002'));
-    await box.fill('TH000001');
+    assert.ok(calls.some((c) => c.endpoint.endsWith('/scan') && c.body.over === true && c.body.code === 'TH000002-0003'));
+    await box.fill('TH000001-0001');
     await box.press('Enter');
     await page.getByRole('heading', { name: 'Đã quét 4 / 5' }).waitFor();
     await page.screenshot({ path: path.join(artifacts, 'owner-check.png'), fullPage: true });
-    await page.getByRole('button', { name: 'Chốt nhận hàng' }).click();
-    const dialog = page.getByRole('dialog', { name: /Chốt nhận hàng/ });
+    await page.getByRole('button', { name: 'Xác nhận nhập kho' }).click();
+    const dialog = page.getByRole('dialog', { name: /Xác nhận nhập kho/ });
     await dialog.getByText('Chênh lệch:', { exact: false }).waitFor();
     assert.equal(await dialog.getByRole('button', { name: 'Xác nhận', exact: true }).isDisabled(), true, 'reason required');
     await dialog.getByLabel('Lý do').fill('NCC giao thiếu 2 áo M, thừa 1 áo L');

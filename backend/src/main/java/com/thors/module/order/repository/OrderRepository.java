@@ -137,6 +137,10 @@ public class OrderRepository {
      *
      * <p>dateFrom / dateTo (có thể null): lọc theo ngày đặt, gồm cả hai ngày đầu cuối. paymentFilter
      * (có thể null): lọc đúng giá trị cột payment_method (COD, ONLINE, CASH).
+     *
+     * <p>sourceFilter (có thể null): WEB hoặc FACEBOOK. Bảng orders không lưu nguồn đơn, nên suy từ
+     * tài khoản gắn với đơn giống DashboardService: khách tự đặt trên web thì user_id là tài khoản
+     * CUSTOMER; đơn Social POS do nhân viên tạo nên user_id là tài khoản nhân viên.
      */
     public Slice search(
             Integer customerId,
@@ -146,6 +150,7 @@ public class OrderRepository {
             LocalDate dateFrom,
             LocalDate dateTo,
             String paymentFilter,
+            String sourceFilter,
             int page,
             int size) {
         var where = new StringBuilder(" WHERE o.order_type = ?");
@@ -173,6 +178,11 @@ public class OrderRepository {
         if (paymentFilter != null) {
             where.append(" AND o.payment_method = ?");
             args.add(paymentFilter);
+        }
+        if (sourceFilter != null) {
+            where.append(sourceFilter.equals("WEB") ? " AND EXISTS" : " AND NOT EXISTS")
+                    .append(" (SELECT 1 FROM `user` su JOIN `role` sr ON sr.role_id = su.role_id")
+                    .append(" WHERE su.user_id = o.user_id AND sr.role_name = 'CUSTOMER')");
         }
         if (q != null) {
             String like =
@@ -838,6 +848,43 @@ public class OrderRepository {
                 """,
                 (rs, i) -> new Due(rs.getInt("order_id"), rs.getInt("user_id"), rs.getString("order_number")),
                 days);
+    }
+
+    // ------------------------------------------------------------------
+    // Ghi nhận thanh toán online (PayOS)
+    // ------------------------------------------------------------------
+
+    /** Đơn đang chờ ghi nhận thanh toán: trạng thái trước khi ghi nhận để biết cần báo gì. */
+    public record Payable(int orderId, int userId, String orderNumber, String orderStatus, String paymentStatus) {}
+
+    /** Khóa dòng (FOR UPDATE) để webhook và lần kiểm tra trạng thái chạy cùng lúc không báo trùng. */
+    public Optional<Payable> findPayableForUpdate(int orderId) {
+        return db.query(
+                        "SELECT order_id, user_id, order_number, order_status, payment_status"
+                                + " FROM orders WHERE order_id = ? FOR UPDATE",
+                        (rs, i) ->
+                                new Payable(
+                                        rs.getInt("order_id"),
+                                        rs.getInt("user_id"),
+                                        rs.getString("order_number"),
+                                        rs.getString("order_status"),
+                                        rs.getString("payment_status")),
+                        orderId)
+                .stream()
+                .findFirst();
+    }
+
+    /** Đánh dấu đã thanh toán; đơn đang chờ thanh toán thì chuyển sang chờ xác nhận. */
+    public void markOnlinePaid(int orderId) {
+        db.update(
+                """
+                UPDATE orders
+                SET payment_status = 'PAID',
+                    order_status = CASE WHEN order_status = 'AWAITING_PAYMENT'
+                                        THEN 'PENDING_CONFIRMATION' ELSE order_status END
+                WHERE order_id = ?
+                """,
+                orderId);
     }
 
     private record StatusCount(String status, long count) {}

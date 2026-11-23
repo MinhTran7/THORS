@@ -145,18 +145,106 @@ class WarehouseUnitsTest {
         var dup = fails(() -> docs.scan(FAMILY, r[0], new Scan("TH000001-0002", null, null, null)));
         assertEquals("SCAN_DUPLICATE", dup.code);
         scan(r[0], "TH000001-0004");
-        scan(r[0], "TH000001"); // tem mã biến thể cũ vẫn đếm được
-        assertEquals(3, db.queryForObject("SELECT scanned_quantity FROM stock_receipt_item WHERE receipt_item_id=?", Integer.class, r[1]));
+        var variant = fails(() -> docs.scan(FAMILY, r[0], new Scan("TH000001", null, null, null)));
+        assertEquals("SCAN_NEED_SERIAL", variant.code, "mã biến thể không đếm được từng chiếc");
+        assertEquals("WAREHOUSE_CONFLICT", fails(() -> docs.scan(FAMILY, r[0], new Scan(null, r[1], 1, null))).code,
+                "không nhập tay số đã quét");
+        assertEquals(2, db.queryForObject("SELECT scanned_quantity FROM stock_receipt_item WHERE receipt_item_id=?", Integer.class, r[1]));
+        assertEquals(List.of("TH000001-0001", "TH000001-0003", "TH000001-0005"), labels(r[0]),
+                "in lại (tem hỏng) chỉ in tem chưa quét, đúng mã cũ");
 
-        // Thiếu 2 chiếc: chủ cửa hàng chốt kèm lý do
-        run(() -> docs.receive(OWNER, r[0], "Giao thiếu 2"));
-        assertEquals(3, stock(1));
+        // Thiếu 3 chiếc: chủ cửa hàng chốt kèm lý do; chỉ chiếc đã quét vào kho
+        run(() -> docs.receive(OWNER, r[0], "Giao thiếu 3"));
+        assertEquals(2, stock(1));
         assertEquals("IN_STOCK", status("TH000001-0002"));
         assertEquals("IN_STOCK", status("TH000001-0004"));
-        assertEquals(1, count(1, "IN_STOCK") - 2, "chiếc quét bằng mã biến thể lấy một tem chưa quét");
-        assertEquals(2, count(1, "VOID"), "tem in thừa bị hủy");
+        assertEquals(3, count(1, "VOID"), "tem không quét bị hủy");
         assertEquals(0, count(1, "PENDING"));
+        assertEquals(0, unconfirmed(1), "chiếc nhận qua quét tem đã xác nhận");
         assertMatches(1);
+    }
+
+    private int unconfirmed(int detail) {
+        return db.queryForObject(
+                "SELECT COUNT(*) FROM product_unit WHERE detail_id=? AND status='IN_STOCK' AND scanned_at IS NULL", Integer.class, detail);
+    }
+
+    /** Hàng tồn từ trước khi có serial: {@code qty} chiếc, chưa quét xác nhận tem. */
+    private void oldStock(int detail, int qty) {
+        db.update("UPDATE product_detail SET stock_quantity=? WHERE detail_id=?", qty, detail);
+        run(() -> store.units().sync(detail));
+    }
+
+    /** Đánh dấu một chiếc đã quét xác nhận tem. */
+    private void confirmed(String serial) {
+        db.update("UPDATE product_unit SET scanned_at=CURRENT_TIMESTAMP WHERE serial_code=?", serial);
+    }
+
+    @Test
+    void unconfirmedFilterListsOnlyUnscannedUnitsInStock() {
+        oldStock(1, 3);
+        assertEquals(3, unconfirmed(1));
+        confirmed("TH000001-0002");
+        assertEquals(2L, run(() -> units.list(FAMILY, List.of(1), null, false, false, true)).get("unconfirmed"));
+        @SuppressWarnings("unchecked")
+        var rows = (List<Map<String, Object>>) run(() -> units.list(FAMILY, List.of(1), null, false, false, true)).get("units");
+        assertEquals(List.of("TH000001-0001", "TH000001-0003"), rows.stream().map(r -> r.get("serial_code")).toList());
+    }
+
+    @Test
+    void saleByVariantPrefersConfirmedUnits() {
+        oldStock(1, 3);
+        confirmed("TH000001-0003");
+        db.update("INSERT INTO orders(order_number) VALUES('DH001')");
+        db.update("INSERT INTO order_item(order_id,detail_id,quantity,reserved_quantity) VALUES(1,1,1,1)");
+        run(() -> store.sell(1, 1, 1, 1, 1, "ORDER_OUT:item:1", "Xuất bán đơn DH001"));
+        assertEquals("SOLD", status("TH000001-0003"), "chiếc đã xác nhận được bán trước");
+        assertEquals(2, unconfirmed(1));
+        assertMatches(1);
+    }
+
+    @Test
+    void supplierReturnTakesOnlyConfirmedUnits() {
+        receiveScanned(1, 2); // 2 chiếc đã xác nhận
+        db.update("UPDATE product_detail SET stock_quantity=5 WHERE detail_id=1"); // +3 chiếc chưa xác nhận
+        int receipt = db.queryForObject("SELECT MAX(receipt_id) FROM stock_receipt WHERE receipt_type='RECEIPT'", Integer.class);
+        int src = db.queryForObject("SELECT receipt_item_id FROM stock_receipt_item WHERE receipt_id=?", Integer.class, receipt);
+        int ret = id(run(() -> docs.create(OWNER, new Document("SUPPLIER_RETURN", receipt, null, "Lỗi may",
+                List.of(new Line(1, 2, BigDecimal.valueOf(1000), src))))), "receipt_id");
+        int item = db.queryForObject("SELECT receipt_item_id FROM stock_receipt_item WHERE receipt_id=?", Integer.class, ret);
+        run(() -> docs.confirm(OWNER, ret, null, List.of(new Pick(item, null, 2))));
+        assertEquals(2, count(1, "RETURNED_SUPPLIER"));
+        assertEquals(3, unconfirmed(1), "chiếc chưa xác nhận ở lại");
+        assertEquals(3, stock(1));
+        assertMatches(1);
+    }
+
+    @Test
+    void supplierReturnIsRefusedWhenNotEnoughConfirmed() {
+        receiveScanned(1, 2);
+        db.update("UPDATE product_detail SET stock_quantity=5 WHERE detail_id=1");
+        int receipt = db.queryForObject("SELECT MAX(receipt_id) FROM stock_receipt WHERE receipt_type='RECEIPT'", Integer.class);
+        int src = db.queryForObject("SELECT receipt_item_id FROM stock_receipt_item WHERE receipt_id=?", Integer.class, receipt);
+        int ret = id(run(() -> docs.create(OWNER, new Document("SUPPLIER_RETURN", receipt, null, "Lỗi may",
+                List.of(new Line(1, 2, BigDecimal.valueOf(1000), src))))), "receipt_id");
+        int item = db.queryForObject("SELECT receipt_item_id FROM stock_receipt_item WHERE receipt_id=?", Integer.class, ret);
+        // Chỉ còn 1 chiếc đã xác nhận (TH000001-0001), 4 chiếc chưa
+        run(() -> store.units().sync(1));
+        db.update("UPDATE product_unit SET scanned_at=NULL WHERE serial_code='TH000001-0002'");
+        var e = fails(() -> docs.confirm(OWNER, ret, null, List.of(new Pick(item, null, 2))));
+        assertEquals("UNITS_UNCONFIRMED", e.code);
+        assertTrue(e.getMessage().contains("chỉ có 1 chiếc"), e.getMessage());
+        assertEquals(5, stock(1), "không trừ gì");
+    }
+
+    @Test
+    void returnedFromOutsideNeedsConfirmingAgain() {
+        receiveScanned(1, 2);
+        db.update("UPDATE product_detail SET stock_quantity=1 WHERE detail_id=1"); // bán tại quầy
+        run(() -> store.units().sync(1));
+        db.update("UPDATE product_detail SET stock_quantity=2 WHERE detail_id=1"); // khách trả lại
+        run(() -> store.units().sync(1));
+        assertEquals(1, unconfirmed(1), "chiếc quay lại kho phải quét xác nhận lại");
     }
 
     @Test
@@ -170,13 +258,12 @@ class WarehouseUnitsTest {
     }
 
     @Test
-    void lowerTypedCountUnmarksLatestScansSoTheyCanBeScannedAgain() {
-        var r = waitingReceipt(1, 3);
-        var codes = labels(r[0]);
-        scan(r[0], codes.get(0));
-        scan(r[0], codes.get(1));
-        run(() -> docs.scan(FAMILY, r[0], new Scan(null, r[1], 1, null)));
-        assertEquals(1, id(scan(r[0], codes.get(1)) , "scanned_quantity") - 1, "tem vừa bớt quét lại được");
+    void extraLabelIsNewSerialAndOnlyNewOneIsReturned() {
+        var r = waitingReceipt(1, 2);
+        labels(r[0]);
+        @SuppressWarnings("unchecked")
+        var extra = (List<Map<String, Object>>) run(() -> units.receiptLabels(FAMILY, r[0], r[1], 1)).get("units");
+        assertEquals("TH000001-0003", extra.get(extra.size() - 1).get("serial_code"));
     }
 
     @Test
@@ -230,6 +317,7 @@ class WarehouseUnitsTest {
         run(() -> store.units().sync(1));
         assertEquals("IN_STOCK", status("TH000001-0001"));
         assertEquals(4, count(1, "IN_STOCK"));
+        assertEquals(1, unconfirmed(1), "chiếc quay lại phải quét xác nhận lại");
     }
 
     @Test

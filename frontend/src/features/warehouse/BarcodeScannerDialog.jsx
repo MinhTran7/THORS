@@ -162,9 +162,7 @@ export default function BarcodeScannerDialog({ onClose, scanRequest }) {
       <DialogContent>
         <Stack spacing={2} sx={{ pt: 1 }}>
           <Alert severity="info" icon={false}>
-            <b>Máy quét mã vạch (USB/Bluetooth):</b> cắm vào là dùng, bóp cò vào tem là ra kết quả — không cần bấm gì thêm.
-            <br />
-            Không có máy quét: gõ mã vào ô bên dưới, hoặc bật camera ở cuối hộp thoại.
+            Dùng máy quét, gõ mã vào ô bên dưới, hoặc bật camera.
           </Alert>
           <Box
             component="form"
@@ -229,8 +227,7 @@ export default function BarcodeScannerDialog({ onClose, scanRequest }) {
               {result.locations.length ? (
                 result.locations.map((location) => (
                   <Typography key={location.product_location_id}>
-                    {location.rack_code}
-                    {location.level_number}: {number(location.quantity)} sản phẩm
+                    {location.tier_label || `${location.rack_code}${location.level_number}`}: {number(location.quantity)} sản phẩm
                   </Typography>
                 ))
               ) : (

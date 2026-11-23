@@ -26,34 +26,28 @@ import {
   Tooltip,
   Typography
 } from '@mui/material';
-import { Pager } from 'features/account/components/Blocks';
+import { FilterResetButton, Pager } from 'features/account/components/Blocks';
 import {
   EditOutlined,
   EyeOutlined,
   PlusOutlined,
   SearchOutlined
 } from '@ant-design/icons';
-import {
-  changePromotionStatus,
-  getPromotions
-} from 'services/promotionService';
+import { changePromotionStatus, findProductConflict, getPromotions } from 'services/promotionService';
 import { useAuth } from 'features/auth/AuthProvider';
 import CustomerPromotionPage from './CustomerPromotionPage';
+import { KIND, kindOf, lockMessage, NoticeDialog } from './PromotionForm';
 import { useCrumbs } from '../../layouts/crumbs';
 
 const C = {
   text: '#1E293B',
   muted: '#64748B',
-  subtle: '#94A3B8',
   border: '#E2E8F0',
   borderLight: '#F1F5F9',
-  bg: '#F8FAFC',
   surface: '#FFFFFF',
   cyan: '#8EECF5',
   cyanHover: '#76E5EF',
-  cyanText: '#0E7490',
   cream: '#FFF7AE',
-  creamHover: '#FFF294',
   creamText: '#713F12'
 };
 
@@ -95,24 +89,16 @@ function getDiscountText(promotion) {
     : money(promotion.discountValue);
 }
 
-function PromotionSwitch({ promotion, onToggleNormal, onEndedClick, disabled }) {
+function PromotionSwitch({ promotion, onToggle, disabled }) {
   const isEnded = getScheduleStatus(promotion) === 'ENDED';
   const active = !isEnded && promotion.status === 'ACTIVE';
-
-  const handleToggle = () => {
-    if (isEnded) {
-      onEndedClick(promotion);
-    } else {
-      onToggleNormal(promotion);
-    }
-  };
 
   return (
     <Stack direction="row" alignItems="center" spacing={1.25} sx={{ pt: 0.5 }}>
       <Switch
         checked={active}
         disabled={disabled}
-        onChange={handleToggle}
+        onChange={() => onToggle(promotion)}
         size="small"
         sx={{
           width: 34,
@@ -156,14 +142,69 @@ function PromotionSwitch({ promotion, onToggleNormal, onEndedClick, disabled }) 
           color: active ? '#168B70' : '#75869F'
         }}
       >
-        {active ? 'Đang bật' : 'Đang tắt'}
+        {isEnded ? 'Đã kết thúc' : active ? 'Đang bật' : 'Đang tắt'}
       </Box>
     </Stack>
   );
 }
 
-function OwnerPromotionView() {
-  useCrumbs(['Danh sách khuyến mãi']);
+function FilterSelect({ label, value, onChange, options }) {
+  return (
+    <Box sx={{ minWidth: 0 }}>
+      <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>{label}</Typography>
+      <Select
+        fullWidth
+        size="small"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        sx={{
+          bgcolor: C.surface,
+          borderRadius: 2.5,
+          height: 44,
+          fontSize: 13.5,
+          '& .MuiOutlinedInput-notchedOutline': { borderColor: C.border },
+          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: C.cyan },
+          '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: C.cyan }
+        }}
+      >
+        {options.map(([key, text]) => (
+          <MenuItem key={key} value={key}>
+            {text}
+          </MenuItem>
+        ))}
+      </Select>
+    </Box>
+  );
+}
+
+function UsageBar({ promotion }) {
+  if (!(Number(promotion.minOrderValue) > 0))
+    return (
+      <Box>
+        <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: C.muted }}>Tự động áp dụng</Typography>
+        <Typography sx={{ fontSize: 11.5, color: '#94A3B8' }}>Không tính lượt</Typography>
+      </Box>
+    );
+  const used = Number(promotion.usedCount || 0);
+  const limit = Number(promotion.usageLimit || 0);
+  const percent = limit ? Math.min(100, (used / limit) * 100) : 0;
+  return (
+    <Box sx={{ maxWidth: 170 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
+        <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: C.text }}>{limit ? `${used}/${limit} lượt` : `${used} lượt`}</Typography>
+        {limit > 0 && <Typography sx={{ fontSize: 11.5, color: C.muted }}>{Math.round(percent)}%</Typography>}
+      </Box>
+      <Box sx={{ mt: 0.75, height: 6, borderRadius: 3, bgcolor: '#E2E8F0', overflow: 'hidden' }}>
+        <Box sx={{ width: `${percent}%`, height: '100%', borderRadius: 3, bgcolor: percent >= 100 ? '#EF4444' : percent >= 80 ? '#F59E0B' : '#67E8F9' }} />
+      </Box>
+      {!limit && <Typography sx={{ fontSize: 11.5, color: '#94A3B8', mt: 0.5 }}>Chưa đặt giới hạn</Typography>}
+    </Box>
+  );
+}
+
+function OwnerPromotionView({ kind }) {
+  const { base, title, name } = KIND[kind];
+  useCrumbs([title]);
 
   const navigate = useNavigate();
   const [promotions, setPromotions] = useState([]);
@@ -174,8 +215,23 @@ function OwnerPromotionView() {
   const [enableFilter, setEnableFilter] = useState('ALL');
   const [page, setPage] = useState(1);
   const [statusTarget, setStatusTarget] = useState(null);
-  const [endedTarget, setEndedTarget] = useState(null);
   const [changingStatus, setChangingStatus] = useState(false);
+  const [notice, setNotice] = useState('');
+
+  // Đã kết thúc thì không bật lại, đang diễn ra thì không tắt
+  const toggleStatus = (promotion) => {
+    const schedule = getScheduleStatus(promotion);
+    if (schedule === 'ENDED') setNotice(lockMessage(promotion));
+    else if (schedule === 'ONGOING' && promotion.status === 'ACTIVE') setNotice('Khuyến mãi đang diễn ra nên không thể tắt.');
+    else setStatusTarget(promotion);
+  };
+
+  // Đang diễn ra hoặc đã kết thúc thì báo, không cho sửa
+  const openEdit = (promotion) => {
+    const message = lockMessage(promotion);
+    if (message) setNotice(message);
+    else navigate(`${base}/${promotion.promotionId}/edit`);
+  };
 
   const loadPromotions = useCallback(async () => {
     setLoading(true);
@@ -207,9 +263,9 @@ function OwnerPromotionView() {
         enableFilter === 'ALL' ||
         (enableFilter === 'ACTIVE' && isPromotionActive(promotion)) ||
         (enableFilter === 'INACTIVE' && !isPromotionActive(promotion));
-      return matchesSearch && matchesSchedule && matchesEnable;
+      return kindOf(promotion) === kind && matchesSearch && matchesSchedule && matchesEnable;
     });
-  }, [promotions, search, scheduleFilter, enableFilter]);
+  }, [promotions, kind, search, scheduleFilter, enableFilter]);
 
   const pageCount = Math.max(1, Math.ceil(filteredPromotions.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
@@ -220,6 +276,11 @@ function OwnerPromotionView() {
     setChangingStatus(true);
     try {
       const nextStatus = statusTarget.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+      const conflict = nextStatus === 'ACTIVE' && (await findProductConflict(statusTarget));
+      if (conflict) {
+        const date = (value) => new Date(value).toLocaleDateString('vi-VN');
+        throw new Error(`Không thể bật: trùng sản phẩm với khuyến mãi “${conflict.name}” (${date(conflict.startDate)} – ${date(conflict.endDate)}).`);
+      }
       await changePromotionStatus(statusTarget.promotionId, nextStatus);
       setPromotions((prev) =>
         prev.map((item) =>
@@ -243,16 +304,16 @@ function OwnerPromotionView() {
   };
 
   return (
-    <Box sx={{ maxWidth: 1400, mx: 'auto', color: C.text, pb: 4 }}>
+    <Box sx={{ color: C.text, pb: 4 }}>
       {/* ─── TIÊU ĐỀ TRÊN CÙNG: DANH SÁCH KHUYẾN MÃI ─── */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5 }}>
         <Typography variant="h3" sx={{ fontWeight: 800, color: C.text }}>
-          Danh sách khuyến mãi
+          {title}
         </Typography>
         <Button
           variant="contained"
           startIcon={<PlusOutlined />}
-          onClick={() => navigate('/promotions/add')}
+          onClick={() => navigate(`${base}/add`)}
           sx={{
             bgcolor: C.cyan,
             color: C.text,
@@ -266,7 +327,7 @@ function OwnerPromotionView() {
             '&:hover': { bgcolor: C.cyanHover, boxShadow: 'none' }
           }}
         >
-          Thêm khuyến mãi
+          Thêm {name}
         </Button>
       </Box>
 
@@ -326,8 +387,9 @@ function OwnerPromotionView() {
           display: 'grid',
           gridTemplateColumns: {
             xs: '1fr',
-            sm: 'repeat(2, 1fr)',
-            md: 'minmax(200px, 1.8fr) 180px 180px auto'
+            sm: 'repeat(2, minmax(0, 1fr))',
+            // Chỉ dàn 1 hàng khi đủ chỗ (lg) để không tràn ngang
+            lg: 'minmax(200px, 1.8fr) minmax(150px, 180px) minmax(150px, 180px) auto'
           },
           gap: { xs: 1.5, lg: 2 },
           alignItems: 'flex-end'
@@ -367,100 +429,35 @@ function OwnerPromotionView() {
           />
         </Box>
 
-        <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>
-            Thời gian
-          </Typography>
-          <Select
-            fullWidth
-            size="small"
-            value={scheduleFilter}
-            onChange={(e) => {
-              setScheduleFilter(e.target.value);
-              setPage(1);
-            }}
-            sx={{
-              bgcolor: C.surface,
-              borderRadius: 2.5,
-              height: 44,
-              fontSize: 13.5,
-              '& .MuiOutlinedInput-notchedOutline': { borderColor: C.border },
-              '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: C.cyan },
-              '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: C.cyan }
-            }}
-          >
-            <MenuItem value="ALL">Tất cả</MenuItem>
-            <MenuItem value="ONGOING">Đang diễn ra</MenuItem>
-            <MenuItem value="UPCOMING">Sắp diễn ra</MenuItem>
-            <MenuItem value="ENDED">Đã kết thúc</MenuItem>
-          </Select>
-        </Box>
+        <FilterSelect
+          label="Thời gian"
+          value={scheduleFilter}
+          onChange={(value) => {
+            setScheduleFilter(value);
+            setPage(1);
+          }}
+          options={[
+            ['ALL', 'Tất cả'],
+            ['ONGOING', 'Đang diễn ra'],
+            ['UPCOMING', 'Sắp diễn ra'],
+            ['ENDED', 'Đã kết thúc']
+          ]}
+        />
+        <FilterSelect
+          label="Trạng thái"
+          value={enableFilter}
+          onChange={(value) => {
+            setEnableFilter(value);
+            setPage(1);
+          }}
+          options={[
+            ['ALL', 'Tất cả'],
+            ['ACTIVE', 'Đang bật'],
+            ['INACTIVE', 'Đang tắt']
+          ]}
+        />
 
-        <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>
-            Trạng thái
-          </Typography>
-          <Select
-            fullWidth
-            size="small"
-            value={enableFilter}
-            onChange={(e) => {
-              setEnableFilter(e.target.value);
-              setPage(1);
-            }}
-            sx={{
-              bgcolor: C.surface,
-              borderRadius: 2.5,
-              height: 44,
-              fontSize: 13.5,
-              '& .MuiOutlinedInput-notchedOutline': { borderColor: C.border },
-              '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: C.cyan },
-              '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: C.cyan }
-            }}
-          >
-            <MenuItem value="ALL">Tất cả</MenuItem>
-            <MenuItem value="ACTIVE">Đang bật</MenuItem>
-            <MenuItem value="INACTIVE">Đang tắt</MenuItem>
-          </Select>
-        </Box>
-
-        {/* Nút Bỏ lọc */}
-        <Box sx={{ minWidth: 0, display: 'flex' }}>
-          <Button
-            variant="outlined"
-            onClick={handleResetFilters}
-            disableRipple
-            sx={{
-              height: 44,
-              px: 1.75,
-              minWidth: 'unset',
-              borderRadius: 2.5,
-              textTransform: 'none',
-              fontSize: 13,
-              fontWeight: 600,
-              borderColor: C.border,
-              bgcolor: C.surface,
-              color: C.text,
-              whiteSpace: 'nowrap',
-              outline: 'none',
-              boxShadow: 'none !important',
-              transition: 'none',
-              '&:hover': {
-                bgcolor: C.surface,
-                borderColor: C.border,
-                color: C.text,
-                outline: 'none',
-                boxShadow: 'none !important'
-              },
-              '&:focus': { outline: 'none', boxShadow: 'none !important' },
-              '&:focus-visible': { outline: 'none', boxShadow: 'none !important' },
-              '&.Mui-focusVisible': { outline: 'none', boxShadow: 'none !important' },
-              '&:active': { outline: 'none', boxShadow: 'none !important' }
-            }}
-          >
-            Bỏ lọc
-          </Button>
-        </Box>
+        <FilterResetButton onClick={handleResetFilters} />
       </Box>
 
       {/* ─── KHỐI BẢNG DANH SÁCH KHUYẾN MÃI ─── */}
@@ -483,7 +480,8 @@ function OwnerPromotionView() {
             <TableContainer sx={{ overflowX: 'auto' }}>
               <Table
                 sx={{
-                  minWidth: 800,
+                  minWidth: 1100,
+                  tableLayout: 'fixed',
                   '& th': {
                     bgcolor: C.surface,
                     color: C.muted,
@@ -504,25 +502,27 @@ function OwnerPromotionView() {
               >
                 <TableHead>
                   <TableRow>
-                    <TableCell sx={{ pl: 3 }}>TÊN KHUYẾN MÃI</TableCell>
-                    <TableCell>MỨC GIẢM</TableCell>
-                    <TableCell>THỜI GIAN</TableCell>
-                    <TableCell sx={{ minWidth: 150 }}>SỬ DỤNG</TableCell>
-                    <TableCell>TRẠNG THÁI</TableCell>
-                    <TableCell align="center" sx={{ pr: 3 }}>THAO TÁC</TableCell>
+                    <TableCell align="center" sx={{ pl: 3, width: '5%' }}>STT</TableCell>
+                    <TableCell sx={{ width: '14%' }}>TÊN KHUYẾN MÃI</TableCell>
+                    <TableCell sx={{ width: '10%' }}>MỨC GIẢM</TableCell>
+                    <TableCell sx={{ width: '14%' }}>THỜI GIAN</TableCell>
+                    {kind === 'ORDER' && <TableCell sx={{ width: '18%' }}>ÁP DỤNG</TableCell>}
+                    {kind === 'ORDER' && <TableCell sx={{ width: '18%' }}>LƯỢT DÙNG</TableCell>}
+                    <TableCell sx={{ width: '12%' }}>TRẠNG THÁI</TableCell>
+                    <TableCell align="center" sx={{ pr: 3, width: '9%' }}>THAO TÁC</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {rows.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
+                      <TableCell colSpan={kind === 'ORDER' ? 8 : 6} align="center" sx={{ py: 6 }}>
                         <Typography sx={{ color: C.muted, fontSize: 14 }}>
                           Không có chương trình khuyến mãi nào phù hợp.
                         </Typography>
                       </TableCell>
                     </TableRow>
                   ) : (
-                    rows.map((promotion) => {
+                    rows.map((promotion, index) => {
                       const schedule = getScheduleStatus(promotion);
                       return (
                         <TableRow
@@ -530,36 +530,23 @@ function OwnerPromotionView() {
                           hover
                           sx={{ '&:hover': { bgcolor: '#FAFCFE' } }}
                         >
+                          <TableCell align="center" sx={{ pl: 3, color: C.muted, fontWeight: 600 }}>
+                            {(currentPage - 1) * PAGE_SIZE + index + 1}
+                          </TableCell>
                           {/* Tên khuyến mãi */}
-                          <TableCell sx={{ pl: 3 }}>
+                          <TableCell>
                             <Typography sx={{ fontWeight: 800, color: C.text, fontSize: 13.5, overflowWrap: 'anywhere' }}>
                               {promotion.name}
                             </Typography>
                             {promotion.description && (
-                              <Typography sx={{ fontSize: 12, color: '#94A3B8', mt: 0.25 }}>
+                              <Typography sx={{ fontSize: 12, color: '#94A3B8', mt: 0.25, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                                 {promotion.description}
                               </Typography>
                             )}
                           </TableCell>
 
-                          {/* Mức giảm - Màu vàng nhạt giống badge Tiền mặt */}
                           <TableCell>
-                            <Box
-                              sx={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                px: 1.5,
-                                py: 0.5,
-                                borderRadius: 4,
-                                bgcolor: C.cream,
-                                color: C.creamText,
-                                fontSize: 12,
-                                fontWeight: 700,
-                                letterSpacing: '0.01em'
-                              }}
-                            >
-                              {getDiscountText(promotion)}
-                            </Box>
+                            <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: C.text }}>{getDiscountText(promotion)}</Typography>
                           </TableCell>
 
                           {/* Thời gian */}
@@ -602,67 +589,28 @@ function OwnerPromotionView() {
                             </Box>
                           </TableCell>
 
-                          {/* Sử dụng - Đoạn tiến độ 0-100% màu xanh chủ đạo */}
-                          <TableCell sx={{ minWidth: 150 }}>
-                            {promotion.usageLimit == null ? (
-                              <Box sx={{ width: '100%', maxWidth: 130 }}>
-                                <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: C.text, mb: 0.6 }}>
-                                  Không giới hạn
-                                </Typography>
-                                <Box
-                                  sx={{
-                                    width: '100%',
-                                    height: 7,
-                                    borderRadius: 4,
-                                    bgcolor: '#F1F5F9',
-                                    border: `1px solid ${C.border}`
-                                  }}
-                                />
-                              </Box>
-                            ) : (
-                              (() => {
-                                const used = promotion.usedCount || 0;
-                                const limit = promotion.usageLimit;
-                                const percent = Math.min(100, Math.round((used * 100) / limit));
-                                return (
-                                  <Tooltip title={`Đã dùng: ${used} / ${limit} lượt`}>
-                                    <Box sx={{ width: '100%', maxWidth: 130, cursor: 'default' }}>
-                                      <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: C.text, mb: 0.6 }}>
-                                        {percent}%
-                                      </Typography>
-                                      <Box
-                                        sx={{
-                                          width: '100%',
-                                          height: 7,
-                                          borderRadius: 4,
-                                          bgcolor: '#F1F5F9',
-                                          border: `1px solid ${C.border}`,
-                                          overflow: 'hidden'
-                                        }}
-                                      >
-                                        <Box
-                                          sx={{
-                                            width: `${percent}%`,
-                                            height: '100%',
-                                            bgcolor: C.cyan,
-                                            borderRadius: 4,
-                                            transition: 'width 0.3s ease'
-                                          }}
-                                        />
-                                      </Box>
-                                    </Box>
-                                  </Tooltip>
-                                );
-                              })()
-                            )}
-                          </TableCell>
+                          {kind === 'ORDER' && (
+                            <TableCell>
+                              <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text }}>
+                                {promotion.applyScope === 'SELECTED' ? 'Sản phẩm chọn' : 'Toàn bộ cửa hàng'}
+                              </Typography>
+                              <Typography sx={{ fontSize: 11.5, color: '#94A3B8' }}>
+                                Đơn từ {Number(promotion.minOrderValue).toLocaleString('vi-VN')} đ
+                              </Typography>
+                            </TableCell>
+                          )}
+
+                          {kind === 'ORDER' && (
+                            <TableCell>
+                              <UsageBar promotion={promotion} />
+                            </TableCell>
+                          )}
 
                           {/* Trạng thái Switch & Chip chuẩn theo mẫu */}
                           <TableCell>
                             <PromotionSwitch
                               promotion={promotion}
-                              onToggleNormal={setStatusTarget}
-                              onEndedClick={setEndedTarget}
+                              onToggle={toggleStatus}
                               disabled={changingStatus && statusTarget?.promotionId === promotion.promotionId}
                             />
                           </TableCell>
@@ -673,7 +621,7 @@ function OwnerPromotionView() {
                               <Tooltip title="Xem chi tiết">
                                 <IconButton
                                   size="small"
-                                  onClick={() => navigate(`/promotions/${promotion.promotionId}`)}
+                                  onClick={() => navigate(`${base}/${promotion.promotionId}`)}
                                   sx={{
                                     color: '#64748B',
                                     p: 0.75,
@@ -689,7 +637,7 @@ function OwnerPromotionView() {
                               <Tooltip title="Chỉnh sửa">
                                 <IconButton
                                   size="small"
-                                  onClick={() => navigate(`/promotions/${promotion.promotionId}/edit`)}
+                                  onClick={() => openEdit(promotion)}
                                   sx={{
                                     color: '#64748B',
                                     p: 0.75,
@@ -744,6 +692,11 @@ function OwnerPromotionView() {
             Bạn có chắc muốn {statusTarget && statusTarget.status === 'ACTIVE' ? 'tắt' : 'bật'} chương trình{' '}
             <strong style={{ color: C.text }}>{statusTarget?.name}</strong>?
           </Typography>
+          {statusTarget?.status === 'ACTIVE' && getScheduleStatus(statusTarget) === 'ONGOING' && (
+            <Alert severity="warning" sx={{ mt: 1.5, fontSize: 13, borderRadius: 2 }}>
+              Khuyến mãi đang áp dụng. Sau khi tắt, khách sẽ không được giảm nữa; các đơn đã đặt vẫn giữ mức giảm cũ.
+            </Alert>
+          )}
         </DialogContent>
         <DialogActions sx={{ p: 2, pt: 1 }}>
           <Button
@@ -779,72 +732,17 @@ function OwnerPromotionView() {
         </DialogActions>
       </Dialog>
 
-      {/* Popup thông báo khi click bật khuyến mãi đã kết thúc */}
-      <Dialog
-        open={Boolean(endedTarget)}
-        onClose={() => setEndedTarget(null)}
-        maxWidth="xs"
-        fullWidth
-        PaperProps={{
-          sx: { borderRadius: 3.5, border: `1px solid ${C.border}`, p: 1 }
-        }}
-      >
-        <DialogTitle sx={{ color: C.text, fontWeight: 700, fontSize: 17, pb: 1 }}>
-          Khuyến mãi đã kết thúc
-        </DialogTitle>
-        <DialogContent>
-          <Typography sx={{ fontSize: 13.5, color: C.muted, lineHeight: 1.6 }}>
-            Chương trình <strong style={{ color: C.text }}>{endedTarget?.name}</strong> đã kết thúc vào lúc{' '}
-            <strong style={{ color: C.text }}>{dateText(endedTarget?.endDate)}</strong>.
-            <br />
-            Vui lòng chỉnh sửa ngày kết thúc sang tương lai để có thể bật lại khuyến mãi.
-          </Typography>
-        </DialogContent>
-        <DialogActions sx={{ p: 2, pt: 1, gap: 1 }}>
-          <Button
-            onClick={() => setEndedTarget(null)}
-            sx={{
-              color: C.muted,
-              textTransform: 'none',
-              fontSize: 13.5,
-              borderRadius: 2
-            }}
-          >
-            Đóng
-          </Button>
-          <Button
-            variant="contained"
-            onClick={() => {
-              const id = endedTarget?.promotionId;
-              setEndedTarget(null);
-              navigate(`/promotions/${id}/edit`);
-            }}
-            sx={{
-              bgcolor: C.cyan,
-              color: C.text,
-              boxShadow: 'none',
-              textTransform: 'none',
-              fontWeight: 700,
-              fontSize: 13.5,
-              borderRadius: 2,
-              px: 2.5,
-              '&:hover': { bgcolor: C.cyanHover, boxShadow: 'none' }
-            }}
-          >
-            Chỉnh sửa ngay
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <NoticeDialog message={notice} onClose={() => setNotice('')} />
     </Box>
   );
 }
 
-export default function PromotionPage() {
+export default function PromotionPage({ kind = 'PRODUCT' }) {
   const { account } = useAuth();
 
   if (account?.role === 'CUSTOMER') {
     return <CustomerPromotionPage />;
   }
 
-  return <OwnerPromotionView />;
+  return <OwnerPromotionView key={kind} kind={kind} />;
 }

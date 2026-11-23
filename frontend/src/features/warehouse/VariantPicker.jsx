@@ -26,6 +26,18 @@ import { Pager } from 'features/account/components/Blocks';
 import { api } from 'services/http';
 import { money, number, variantLabel, when } from './model';
 
+/** Hàng ngừng kinh doanh (sản phẩm hoặc biến thể đang tắt) không đặt được cho tới khi bật lại bên Sản phẩm. */
+const stopped = (r) => r.product_status !== 'ACTIVE' || r.variant_status !== 'ACTIVE';
+
+/**
+ * Sản phẩm tắt → Danh sách sản phẩm, mở sẵn tab "Đã ẩn" và tìm đúng mã #ID (chỉ còn 1 dòng, có công tắc Trạng thái);
+ * chỉ biến thể tắt → trang sửa đúng sản phẩm đó.
+ */
+const enableLink = (r) =>
+  r.product_status !== 'ACTIVE'
+    ? `/products?${new URLSearchParams({ tab: 'INACTIVE', q: `#${r.product_id}` })}`
+    : `/products/${r.product_id}/edit`;
+
 /** Open orders of other suppliers that make up a variant's "Đang đặt NCC khác" number. */
 function OtherOrdersDialog({ row, onClose }) {
   const orders = row.other_orders || [];
@@ -76,7 +88,7 @@ function OtherOrdersDialog({ row, onClose }) {
           </TableBody>
         </Table>
         <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 1 }}>
-          Chỉ gồm phiếu đặt đã xác nhận còn hàng chưa nhận. Bấm mã phiếu để mở chi tiết ở tab mới.
+          Bấm mã phiếu để xem chi tiết.
         </Typography>
       </DialogContent>
     </Dialog>
@@ -99,7 +111,19 @@ export default function VariantPicker({ supplier, excludeOrderId, categories, on
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [othersOf, setOthersOf] = useState(null);
+  const [reload, setReload] = useState(0);
   const autoSwitched = useRef('');
+
+  // Quay lại tab này sau khi bật sản phẩm bên trang Sản phẩm thì tải lại để chọn được ngay.
+  useEffect(() => {
+    const refresh = () => document.visibilityState === 'visible' && setReload((n) => n + 1);
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, []);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -132,10 +156,11 @@ export default function VariantPicker({ supplier, excludeOrderId, categories, on
     return () => {
       alive = false;
     };
-  }, [supplier, scope, search, categoryId, page, size, excludeOrderId]);
+  }, [supplier, scope, search, categoryId, page, size, excludeOrderId, reload]);
 
   const rows = result?.items || [];
-  const allOnPage = rows.length > 0 && rows.every((r) => existingIds.has(r.detail_id));
+  const selectable = rows.filter((r) => !stopped(r));
+  const allOnPage = selectable.length > 0 && selectable.every((r) => existingIds.has(r.detail_id));
 
   return (
     <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 2 }}>
@@ -163,15 +188,9 @@ export default function VariantPicker({ supplier, excludeOrderId, categories, on
           </Button>
         )}
       </Stack>
-      <Typography variant="caption" color="text.secondary" component="div" sx={{ mb: 1 }}>
-        {scope === 'history'
-          ? 'Theo lịch sử phiếu đặt đã xác nhận/đã đóng của nhà cung cấp này (không tính nháp, chờ duyệt, hủy). Đây không phải danh mục cung ứng chính thức.'
-          : 'Toàn bộ sản phẩm của cửa hàng, không lọc theo nhà cung cấp. Dùng khi đặt hàng lần đầu từ nhà cung cấp này.'}{' '}
-        Tồn hiện tại là tổng tồn toàn cửa hàng, không phải tồn theo nhà cung cấp.
-      </Typography>
       {scope === 'history' && result && !result.supplier_has_history && (
         <Alert severity="info" sx={{ mb: 1 }}>
-          Nhà cung cấp này chưa có phiếu đặt đã xác nhận. Chọn “Tất cả sản phẩm (mọi nhà cung cấp)” hoặc tạo nhanh hàng mới.
+          Chưa từng đặt hàng từ nhà cung cấp này. Bấm “Tất cả sản phẩm” để tìm hàng.
         </Alert>
       )}
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mb: 1 }}>
@@ -210,9 +229,9 @@ export default function VariantPicker({ supplier, excludeOrderId, categories, on
               <TableCell padding="checkbox">
                 <Checkbox
                   checked={allOnPage}
-                  indeterminate={!allOnPage && rows.some((r) => existingIds.has(r.detail_id))}
-                  disabled={!rows.length}
-                  onChange={() => onToggle(allOnPage ? rows : rows.filter((r) => !existingIds.has(r.detail_id)), !allOnPage)}
+                  indeterminate={!allOnPage && selectable.some((r) => existingIds.has(r.detail_id))}
+                  disabled={!selectable.length}
+                  onChange={() => onToggle(allOnPage ? selectable : selectable.filter((r) => !existingIds.has(r.detail_id)), !allOnPage)}
                   slotProps={{ input: { 'aria-label': 'Chọn cả trang' } }}
                 />
               </TableCell>
@@ -227,19 +246,40 @@ export default function VariantPicker({ supplier, excludeOrderId, categories, on
           <TableBody>
             {rows.map((r) => {
               const onForm = existingIds.has(r.detail_id);
+              const off = stopped(r);
               return (
-                <TableRow key={r.detail_id} hover selected={onForm}>
+                <TableRow key={r.detail_id} hover={!off} selected={onForm} sx={off ? { '& > td': { color: 'text.disabled' } } : undefined}>
                   <TableCell padding="checkbox">
+                    {/* Hàng đã lỡ có trên phiếu vẫn bỏ tích được; chưa có thì không tích được. */}
                     <Checkbox
                       checked={onForm}
+                      disabled={off && !onForm}
                       onChange={() => onToggle([r], !onForm)}
                       slotProps={{ input: { 'aria-label': `Chọn ${variantLabel(r)}` } }}
                     />
                   </TableCell>
                   <TableCell>
                     {variantLabel(r)} {onForm && <Chip size="small" label="Đã có trên phiếu" />}
-                    {(r.product_status !== 'ACTIVE' || r.variant_status !== 'ACTIVE') && (
-                      <Chip size="small" color="warning" variant="outlined" label="Ngừng kinh doanh" />
+                    {off && (
+                      <Tooltip
+                        title={
+                          r.product_status !== 'ACTIVE'
+                            ? 'Sản phẩm đang ẩn. Bấm để mở Danh sách sản phẩm, bật Trạng thái sang Hoạt động rồi quay lại đây để chọn.'
+                            : 'Biến thể này đang tắt. Bấm để mở trang sửa sản phẩm, bật lại biến thể rồi quay lại đây để chọn.'
+                        }
+                      >
+                        <Chip
+                          size="small"
+                          color="warning"
+                          variant="outlined"
+                          label="Ngừng kinh doanh · bật lại"
+                          component="a"
+                          href={enableLink(r)}
+                          target="_blank"
+                          rel="noopener"
+                          clickable
+                        />
+                      </Tooltip>
                     )}
                   </TableCell>
                   <TableCell>{r.category_name || '—'}</TableCell>
@@ -280,9 +320,7 @@ export default function VariantPicker({ supplier, excludeOrderId, categories, on
         </Table>
       </Box>
       <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ justifyContent: 'space-between', alignItems: { sm: 'center' } }}>
-        <Typography variant="body2" color="text.secondary">
-          Tích chọn là hàng được thêm ngay xuống phiếu bên dưới; bỏ tích để xóa khỏi phiếu.
-        </Typography>
+        <span />
         <Pager
           page={Math.min(page, Math.max(0, Math.ceil((result?.total || 0) / size) - 1))}
           total={result?.total || 0}

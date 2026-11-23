@@ -25,7 +25,7 @@ import {
 import { CloseOutlined, MinusOutlined, PlusOutlined } from '@ant-design/icons';
 import { api } from 'services/http';
 import { createCategory, getCategories } from 'services/categoryService';
-import { Choice, Field } from './components';
+import { Choice, Field, DialogClose } from './components';
 import { money, number } from './model';
 
 const MAX_MONEY = 999999999999;
@@ -200,7 +200,9 @@ function SuggestField({ value, onChange, options, label, error, disabled, maxLen
  */
 export default function QuickCreateDialog({ initial = {}, variants = [], withOrderFields = true, onCreated, onClose }) {
   const [categories, setCategories] = useState([]);
-  const [categoryId, setCategoryId] = useState('');
+  // Danh mục nhiều cấp: chọn danh mục lớn, còn danh mục con thì chọn tiếp cho tới danh mục cuối cùng.
+  // path = các danh mục đã chọn từ trên xuống; sản phẩm gắn vào danh mục cuối (không còn danh mục con).
+  const [path, setPath] = useState([]);
   const [newCategory, setNewCategory] = useState(null);
   const [categoryError, setCategoryError] = useState('');
   const [categoryBusy, setCategoryBusy] = useState(false);
@@ -245,13 +247,28 @@ export default function QuickCreateDialog({ initial = {}, variants = [], withOrd
     return { color: pick('color').sort((a, b) => a.localeCompare(b, 'vi')), size: pick('size') };
   }, [variants]);
 
+  const byName = (a, b) => (a.categoryName || '').localeCompare(b.categoryName || '', 'vi');
+  const activeIds = new Set(categories.map((c) => c.categoryId));
+  const roots = categories.filter((c) => !c.parentId || !activeIds.has(c.parentId)).sort(byName);
+  const childrenOf = (id) => categories.filter((c) => c.parentId === id).sort(byName);
+  const nameOf = (id) => categories.find((c) => c.categoryId === id)?.categoryName || '';
+  const last = path[path.length - 1];
+  const categoryId = last != null && childrenOf(last).length === 0 ? last : '';
+  // Các ô chọn: cấp 1 là danh mục lớn; mỗi cấp đã chọn còn danh mục con thì thêm một ô.
+  const levels = [roots, ...path.map(childrenOf)].filter((options, i) => i === 0 || options.length > 0);
+  const choose = (level, id) => setPath((old) => [...old.slice(0, level), ...(id === '' ? [] : [id])]);
+  // Danh mục mới tạo nằm trong danh mục sâu nhất đang chọn mà còn danh mục con (cùng cấp với các lựa chọn đang hiện).
+  const underIndex = path.reduce((found, id, i) => (childrenOf(id).length ? i : found), -1);
+
   const errors = rowErrors(rows, withOrderFields, new Set());
   const headerError = !name.trim()
     ? 'Nhập tên sản phẩm.'
     : name.trim().length > 200
       ? 'Tên tối đa 200 ký tự.'
       : !categoryId
-        ? 'Chọn danh mục.'
+        ? path.length
+          ? 'Chọn danh mục con.'
+          : 'Chọn danh mục.'
         : '';
   const exact = similar.filter((p) => p.exact);
   const lineAmount = (r) => {
@@ -274,10 +291,11 @@ export default function QuickCreateDialog({ initial = {}, variants = [], withOrd
     if (categoryBusy) return undefined;
     setCategoryBusy(true);
     try {
-      await createCategory({ categoryName });
+      const under = underIndex >= 0 ? path[underIndex] : null;
+      await createCategory({ categoryName, parentId: under });
       const list = await loadCategories();
       const createdCategory = list.find((c) => clean(c.categoryName).toLocaleLowerCase('vi') === categoryName.toLocaleLowerCase('vi'));
-      if (createdCategory) setCategoryId(createdCategory.categoryId);
+      if (createdCategory) setPath([...path.slice(0, underIndex + 1), createdCategory.categoryId]);
       setNewCategory(null);
     } catch (e) {
       setCategoryError(e.code === 'CATEGORY_NAME_EXISTS' ? 'Tên danh mục đã tồn tại (có thể đang ngừng hoạt động).' : e.message);
@@ -333,12 +351,11 @@ export default function QuickCreateDialog({ initial = {}, variants = [], withOrd
   return (
     <Dialog open onClose={() => !busy && onClose()} fullWidth maxWidth="xl">
       <DialogTitle>Tạo nhanh hàng mới</DialogTitle>
+      <DialogClose onClick={onClose} disabled={busy} />
       <DialogContent dividers>
         <Stack spacing={2}>
           <Alert severity="info">
-            {withOrderFields
-              ? 'Nhập thông tin hàng mới, số lượng đặt và giá nhập để thêm vào phiếu. Hàng mới chưa có tồn kho và chưa bật bán online.'
-              : 'Tạo hàng mới cho dòng Excel; số lượng và giá nhập lấy từ file. Hàng mới chưa có tồn kho và chưa bật bán online.'}
+            Hàng mới tạo chưa có tồn kho và chưa bán online.
           </Alert>
           <>
             <Field
@@ -351,22 +368,25 @@ export default function QuickCreateDialog({ initial = {}, variants = [], withOrd
               slotProps={{ htmlInput: { maxLength: 200 } }}
             />
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { sm: 'flex-end' } }}>
-              <Box sx={{ flex: 1 }}>
-                <Choice
-                  label="Danh mục"
-                  value={categoryId}
-                  disabled={locked}
-                  error={showErrors && headerError === 'Chọn danh mục.'}
-                  onChange={(e) => setCategoryId(e.target.value)}
-                >
-                  <MenuItem value="">Chọn danh mục đang hoạt động</MenuItem>
-                  {categories.map((c) => (
-                    <MenuItem key={c.categoryId} value={c.categoryId}>
-                      {c.categoryName}
-                    </MenuItem>
-                  ))}
-                </Choice>
-              </Box>
+              {levels.map((options, level) => (
+                <Box key={level} sx={{ flex: 1 }}>
+                  <Choice
+                    label={level === 0 ? 'Danh mục' : level === 1 ? 'Danh mục con' : `Danh mục con (cấp ${level + 1})`}
+                    value={path[level] ?? ''}
+                    disabled={locked}
+                    error={showErrors && Boolean(headerError) && headerError.startsWith('Chọn danh mục') && level === levels.length - 1}
+                    onChange={(e) => choose(level, e.target.value)}
+                  >
+                    <MenuItem value="">{level === 0 ? 'Chọn danh mục lớn' : `Chọn trong “${nameOf(path[level - 1])}”`}</MenuItem>
+                    {options.map((c) => (
+                      <MenuItem key={c.categoryId} value={c.categoryId}>
+                        {c.categoryName}
+                        {childrenOf(c.categoryId).length ? ` (${childrenOf(c.categoryId).length} danh mục con)` : ''}
+                      </MenuItem>
+                    ))}
+                  </Choice>
+                </Box>
+              ))}
               <Button variant="outlined" disabled={locked || newCategory != null} onClick={() => setNewCategory('')}>
                 + Thêm danh mục
               </Button>
@@ -380,7 +400,12 @@ export default function QuickCreateDialog({ initial = {}, variants = [], withOrd
                   value={newCategory}
                   onChange={(e) => setNewCategory(e.target.value)}
                   error={Boolean(categoryError)}
-                  helperText={categoryError || 'Danh mục chỉ được tạo khi bấm “Lưu danh mục”.'}
+                  helperText={
+                    categoryError ||
+                    (underIndex >= 0
+                      ? `Tạo danh mục con trong “${nameOf(path[underIndex])}”. Chỉ tạo khi bấm “Lưu danh mục”.`
+                      : 'Tạo danh mục lớn mới. Chỉ tạo khi bấm “Lưu danh mục”.')
+                  }
                   slotProps={{ htmlInput: { maxLength: 100, 'aria-label': 'Tên danh mục mới' } }}
                 />
                 <Button variant="contained" disabled={categoryBusy} onClick={saveCategory}>
@@ -534,9 +559,6 @@ export default function QuickCreateDialog({ initial = {}, variants = [], withOrd
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button disabled={busy} onClick={onClose}>
-          Quay lại
-        </Button>
         <Button variant="contained" disabled={busy} onClick={submit}>
           {busy ? 'Đang tạo…' : withOrderFields ? 'Tạo và thêm vào phiếu' : 'Tạo và dùng cho dòng Excel'}
         </Button>
