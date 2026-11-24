@@ -127,6 +127,7 @@ export const NAVIGATION = {
     { to: '/addresses', label: 'Địa chỉ của tôi', icon: <EnvironmentOutlined /> },
     { to: '/body-profile', label: 'Số đo của tôi', icon: <ColumnHeightOutlined /> },
     { to: '/try-on-history', label: 'Ảnh mặc thử', icon: <CameraOutlined /> },
+    { to: '/fitting-room', label: 'Phòng thử đồ', icon: <SkinOutlined /> },
     profile
   ]
 };
