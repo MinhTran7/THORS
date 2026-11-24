@@ -64,8 +64,6 @@ import EditAddressPage from 'features/customer/EditAddressPage';
 import BodyProfilePage from 'features/fitting/BodyProfilePage';
 import TryOnHistoryPage from 'features/tryon/TryOnHistoryPage';
 import OutfitPage from 'features/outfit/OutfitPage';
-// Phòng thử đồ 3D (người mẫu theo số đo + quần áo 3D)
-import FittingRoomPage from 'features/fitting-room/FittingRoomPage';
 
 // Shop management
 import ShopPage from 'features/shop/ShopPage';
@@ -147,9 +145,7 @@ export default createBrowserRouter([
               { path: '/addresses/:id/edit', element: <EditAddressPage /> },
               { path: '/body-profile', element: <BodyProfilePage /> },
               // Ảnh mặc thử bằng AI đã tạo (module tryon)
-              { path: '/try-on-history', element: <TryOnHistoryPage /> },
-              // Phòng thử đồ 3D (dùng số đo đã lưu của khách)
-              { path: '/fitting-room', element: <FittingRoomPage /> }
+              { path: '/try-on-history', element: <TryOnHistoryPage /> }
             ]
           },
           {

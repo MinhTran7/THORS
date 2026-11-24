@@ -344,8 +344,7 @@ function StoreHeader({ categories }) {
         ['/profile', 'Tài khoản của tôi'],
         ['/addresses', 'Địa chỉ giao hàng'],
         ['/body-profile', 'Số đo của tôi'],
-        ['/try-on-history', 'Ảnh mặc thử của tôi'],
-        ['/fitting-room', 'Phòng thử đồ']
+        ['/try-on-history', 'Ảnh mặc thử của tôi']
       ]
     : [
         ['/workspace', 'Trang quản lý'],

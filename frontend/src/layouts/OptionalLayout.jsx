@@ -33,8 +33,7 @@ const CUSTOMER_STOREFRONT_PATHS = [
   '/addresses/:id/edit',
   '/body-profile',
   '/try-on-history',
-  '/promotions',
-  '/fitting-room'
+  '/promotions'
 ];
 
 /**

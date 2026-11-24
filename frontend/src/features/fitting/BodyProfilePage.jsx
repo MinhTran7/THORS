@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Box,
   Button,
@@ -16,10 +16,6 @@ import { StoreAccountShell } from 'features/account/components/StoreAccount';
 import { C, cardSx, outlineButtonSx, primaryButtonSx } from 'features/customer/theme';
 import { deleteBodyProfile, getBodyProfile, saveBodyProfile } from './api';
 import StyleProfileCard from 'features/outfit/StyleProfileCard';
-import { FABRIC_COLORS, GARMENT_SIZES, WARDROBE } from './avatar/wardrobe';
-
-// Thư viện 3D khá nặng: chỉ tải khi mở trang này (không làm chậm trang cửa hàng)
-const AvatarViewer = lazy(() => import('./avatar/AvatarViewer'));
 
 // Khoảng hợp lệ: giống hệt BodyProfileService (backend) để báo lỗi ngay khi gõ, không phải đợi máy chủ
 const FIELDS = [
@@ -75,99 +71,6 @@ function Choice({ options, value, onChange }) {
   );
 }
 
-/**
- * Tủ đồ 3D cạnh người mẫu (kiểu game): bấm áo để mặc / cởi, chọn màu vải và size xem áo rộng hay ôm trên dáng mình.
- * wear: { id, color, size } | null. Áo là mẫu dựng sẵn, chưa gắn với sản phẩm thật của cửa hàng.
- */
-function Wardrobe({ gender, wear, onChange }) {
-  const items = WARDROBE[gender] ?? [];
-  if (!gender) return null;
-  const worn = items.find((i) => i.id === wear?.id);
-  const update = (patch) => onChange({ ...wear, ...patch });
-
-  return (
-    <Box sx={{ ...cardSx, p: 2.5 }}>
-      <Typography sx={{ fontWeight: 800, mb: 0.5 }}>Tủ đồ</Typography>
-      <Typography sx={{ fontSize: 13, color: C.muted, mb: 1.5 }}>Bấm vào áo để mặc thử lên người mẫu, bấm lần nữa để cởi.</Typography>
-
-      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 1.25 }}>
-        {items.map((item) => {
-          const on = worn?.id === item.id;
-          return (
-            <Box
-              key={item.id}
-              component="button"
-              type="button"
-              onClick={() => onChange(on ? null : { id: item.id, color: item.color, size: 'M' })}
-              aria-pressed={on}
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1,
-                p: 1.25,
-                borderRadius: '14px',
-                cursor: 'pointer',
-                font: 'inherit',
-                textAlign: 'left',
-                bgcolor: on ? C.cyan : '#fff',
-                color: on ? C.cyanInk : C.text,
-                border: `1.5px solid ${on ? C.cyan : C.border}`,
-                '&:hover': { borderColor: C.cyan }
-              }}
-            >
-              <Box
-                sx={{
-                  width: 26,
-                  height: 26,
-                  flexShrink: 0,
-                  borderRadius: '8px',
-                  bgcolor: on ? wear.color : item.color,
-                  border: '1px solid rgba(0,0,0,0.12)'
-                }}
-              />
-              <Typography sx={{ fontSize: 13.5, fontWeight: 700, lineHeight: 1.25 }}>{item.label}</Typography>
-            </Box>
-          );
-        })}
-      </Box>
-
-      {worn && (
-        <>
-          <Typography sx={{ fontWeight: 700, fontSize: 14, mt: 2, mb: 1 }}>Màu vải</Typography>
-          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-            {[[worn.color, 'Màu gốc'], ...FABRIC_COLORS].map(([color, name]) => (
-              <Box
-                key={name}
-                component="button"
-                type="button"
-                title={name}
-                aria-label={name}
-                onClick={() => update({ color })}
-                sx={{
-                  width: 30,
-                  height: 30,
-                  borderRadius: '50%',
-                  cursor: 'pointer',
-                  bgcolor: color,
-                  border: '1px solid rgba(0,0,0,0.15)',
-                  outline: wear.color === color ? `2.5px solid ${C.cyan}` : 'none',
-                  outlineOffset: 2
-                }}
-              />
-            ))}
-          </Box>
-
-          <Typography sx={{ fontWeight: 700, fontSize: 14, mt: 2, mb: 1 }}>Size áo</Typography>
-          <Choice options={Object.keys(GARMENT_SIZES).map((s) => [s, s])} value={wear.size} onChange={(size) => update({ size })} />
-          <Typography sx={{ fontSize: 12, color: C.muted, mt: 1 }}>
-            Áo mẫu để xem dáng; size thật của từng sản phẩm xem ở trang sản phẩm.
-          </Typography>
-        </>
-      )}
-    </Box>
-  );
-}
-
 // "170,5" hoặc "170.5" -> 170.5 ; ô trống -> null
 const toNumber = (text) => (String(text).trim() === '' ? null : Number(String(text).replace(',', '.')));
 
@@ -195,9 +98,6 @@ export default function BodyProfilePage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [wear, setWear] = useState(null); // áo đang mặc trong tủ đồ 3D { id, color, size }
-  // Áo của giới tính khác (vừa đổi Nam <-> Nữ) thì coi như chưa mặc
-  const wornItem = (WARDROBE[form.gender] ?? []).find((i) => i.id === wear?.id);
 
   const fill = (p) => setForm(p ? Object.fromEntries(Object.keys(EMPTY).map((k) => [k, p[k] ?? ''])) : EMPTY);
 
@@ -261,7 +161,7 @@ export default function BodyProfilePage() {
         <Box
           sx={{
             display: 'grid',
-            gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 640px) minmax(280px, 1fr)' },
+            gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 640px)' },
             gap: 3,
             alignItems: 'start'
           }}
@@ -309,23 +209,6 @@ export default function BodyProfilePage() {
                 </Button>
               )}
             </Box>
-          </Box>
-
-          <Box sx={{ display: 'grid', gap: 2 }}>
-            {/* Hình 3D xem trước: đổi dáng ngay khi gõ số đo (chưa cần bấm Lưu) */}
-            <Box
-              sx={{
-                ...cardSx,
-                height: { xs: 420, md: 560 },
-                overflow: 'hidden',
-                background: 'linear-gradient(180deg, #F7F5F2 0%, #ECE8E2 100%)'
-              }}
-            >
-              <Suspense fallback={null}>
-                <AvatarViewer profile={form} wear={wornItem ? { item: wornItem, color: wear.color, size: wear.size } : null} />
-              </Suspense>
-            </Box>
-            <Wardrobe gender={form.gender} wear={wornItem ? wear : null} onChange={setWear} />
           </Box>
         </Box>
       )}

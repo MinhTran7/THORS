@@ -1,4 +1,0 @@
-studio_small_08_1k.hdr
-Nguồn: Poly Haven (https://polyhaven.com/a/studio_small_08) - tác giả Sergej Majboroda.
-Giấy phép: CC0 1.0 (public domain) - dùng tự do, kể cả thương mại, không cần ghi công.
-Dùng làm ánh sáng môi trường (không hiển thị làm nền) cho người mẫu 3D - xem AvatarViewer.jsx.

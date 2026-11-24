@@ -18,7 +18,6 @@ const ROUTE_CRUMBS = [
   ['/body-profile', ['Tài khoản', 'Số đo của tôi']],
   ['/try-on-history', ['Tài khoản', 'Ảnh mặc thử của tôi']],
   ['/outfit', ['Phối đồ cho bạn']],
-  ['/fitting-room', ['Phòng thử đồ']],
   ['/accounts', ['Tài khoản']],
   ['/system-log', ['Nhật ký hệ thống']],
   ['/in-store-sales', ['Bán hàng tại quầy', 'Bán hàng']],
