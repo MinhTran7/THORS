@@ -230,24 +230,14 @@ export default function ImageSearchDialog({ open, onClose }) {
         {phase === 'result' && result && (
           <Box aria-live="polite">
             {/* Chỉ hiện kết quả: ảnh của khách + danh sách xếp theo mức giống (sản phẩm khớp, nếu có, đứng đầu) */}
-            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2 }}>
-              {preview && (
-                <Box
-                  component="img"
-                  src={preview}
-                  alt="Ảnh bạn đã gửi"
-                  sx={{ flex: '0 0 auto', width: 72, aspectRatio: '3 / 4', objectFit: 'cover', bgcolor: C.photo }}
-                />
-              )}
-              <Box sx={{ minWidth: 0 }}>
-                <Box component="h3" sx={{ m: 0, fontSize: 17, fontWeight: 600 }}>
-                  Sản phẩm giống ảnh của bạn
-                </Box>
-                <Box sx={{ fontSize: 13, color: C.muted, mt: 0.5 }}>
-                  {result.suggestionCategory ? `Danh mục ${result.suggestionCategory} · ` : ''}giống nhất ở đầu
-                </Box>
-              </Box>
-            </Box>
+            {preview && (
+              <Box
+                component="img"
+                src={preview}
+                alt="Ảnh bạn đã gửi"
+                sx={{ display: 'block', width: 72, aspectRatio: '3 / 4', objectFit: 'cover', bgcolor: C.photo, mb: 2 }}
+              />
+            )}
 
             {items.length > 0 ? (
               <Suggestions items={items} onNavigate={onClose} />
