@@ -1,9 +1,10 @@
-package com.thors.module.warehouse;
+package com.thors.module.warehouse.service;
 
-import static com.thors.module.warehouse.WarehouseStore.*;
+import com.thors.module.warehouse.repository.WarehouseStore;
+import static com.thors.module.warehouse.repository.WarehouseStore.*;
 
 import com.thors.module.account.entity.Account;
-import com.thors.module.warehouse.WarehouseRequests.Settlement;
+import com.thors.module.warehouse.dto.WarehouseRequests.Settlement;
 import java.math.BigDecimal;
 import java.text.NumberFormat;
 import java.time.LocalDate;

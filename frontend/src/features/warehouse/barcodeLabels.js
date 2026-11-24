@@ -60,8 +60,8 @@ export function barcodeSvg(code) {
   return svg.outerHTML;
 }
 
-/** Khóa của một mẫu tem: mã serial (mỗi chiếc một tem) hoặc biến thể. */
-export const labelKey = (v) => v.label_key ?? v.detail_id;
+/** Khóa của một mẫu tem: biến thể (mỗi biến thể một mã chung). */
+export const labelKey = (v) => v.detail_id;
 
 export function validateLabelQuantities(variants, quantities) {
   if (!variants.length) throw new Error('Hãy chọn ít nhất một biến thể cần in tem.');

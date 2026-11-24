@@ -1,6 +1,9 @@
-package com.thors.module.warehouse;
+package com.thors.module.warehouse.service;
 
-import static com.thors.module.warehouse.WarehouseStore.*;
+import com.thors.module.warehouse.repository.WarehouseStore;
+import com.thors.module.warehouse.repository.ProductUnits;
+
+import static com.thors.module.warehouse.repository.WarehouseStore.*;
 
 import com.thors.common.ApiException;
 import com.thors.module.account.entity.Account;
@@ -10,11 +13,11 @@ import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Hàng lỗi theo từng chiếc (serial), lưu ngay trên dòng của chiếc đó (cột defect_* của product_unit,
- * không có bảng riêng; mỗi chiếc giữ lỗi gần nhất, lịch sử nằm trong audit_log).
+ * Hàng lỗi. Kho dùng mã chung cho mỗi biến thể nên báo lỗi = quét mã biến thể + số chiếc lỗi; mỗi chiếc
+ * lỗi là một dòng trong product_unit (cột defect_*, không có bảng riêng; lịch sử nằm trong audit_log).
  *
- * <p>Báo lỗi không đổi tồn: chiếc lỗi vẫn trong kho, được đánh dấu để quầy bán không bán nó và để trả
- * NCC lấy nó trước. Tồn chỉ giảm khi trả NCC (phiếu trả) hoặc chủ cửa hàng "Bỏ hẳn" ({@link #discard}).
+ * <p>Báo lỗi không đổi tồn: chiếc lỗi vẫn trong kho, được đếm riêng để quầy bán cảnh báo và để trả NCC
+ * đóng lỗi trước. Tồn chỉ giảm khi trả NCC (phiếu trả) hoặc chủ cửa hàng "Bỏ hẳn" ({@link #discard}).
  *
  * <p>Mẫu lỗi: {@link #DEFAULT_TYPES} + các lỗi chủ cửa hàng đã tự gõ (lấy lại từ những lỗi đã ghi).
  */
@@ -64,16 +67,24 @@ public class WarehouseDefects {
     }
 
     /**
-     * Ghi lỗi cho chiếc có serial {@code serial} (đang trong kho). Chiếc đã có lỗi đang mở thì cập nhật lỗi
-     * đó. Tồn không đổi. Chủ cửa hàng được gõ lỗi mới; người nhà chọn trong mẫu có sẵn.
+     * Báo {@code quantity} chiếc lỗi của biến thể có mã chung {@code rawCode}: thêm {@code quantity} dòng lỗi
+     * đang mở. Không vượt số chiếc chưa báo lỗi (tồn - đang lỗi). Tồn không đổi. Chủ cửa hàng được gõ lỗi
+     * mới; người nhà chọn trong mẫu có sẵn.
      */
     public Map<String, Object> report(
-            Account a, String serial, List<String> types, String description, String source, List<String> photoKeys) {
+            Account a,
+            String rawCode,
+            Integer quantity,
+            List<String> types,
+            String description,
+            String source,
+            List<String> photoKeys) {
         policy.view(a);
         requireColumns();
-        String code = serial == null ? "" : serial.trim().toUpperCase(Locale.ROOT);
-        if (!ProductUnits.looksSerial(code))
-            throw invalid("Hãy quét tem serial của chiếc hàng (dạng TH000051-0003), không phải mã biến thể.");
+        String code = rawCode == null ? "" : rawCode.trim().toUpperCase(Locale.ROOT);
+        if (code.isEmpty()) throw invalid("Quét hoặc nhập mã hàng.");
+        int qty = quantity == null ? 1 : quantity;
+        if (qty < 1 || qty > 1000) throw invalid("Số chiếc lỗi từ 1 đến 1000.");
         if (!SOURCES.contains(source)) throw invalid("Chọn nguồn lỗi.");
         var known = knownTypes();
         var chosen = new ArrayList<String>();
@@ -100,21 +111,30 @@ public class WarehouseDefects {
         keys.forEach(photos::existing);
 
         s.lock();
-        var found = s.jdbc().queryForList("SELECT detail_id FROM product_unit WHERE serial_code=?", Integer.class, code);
-        if (found.isEmpty()) throw new ApiException(404, "BARCODE_NOT_FOUND", "Không tìm thấy chiếc hàng có mã " + code + ".");
-        s.units().sync(found.get(0));
-        var unit = s.one("SELECT unit_id,status,defect_status FROM product_unit WHERE serial_code=?", code);
-        if (!is(unit, "status", ProductUnits.IN_STOCK))
-            throw invalid("Chiếc " + code + " không còn trong kho (" + WarehouseDocuments.unitStatus(unit.get("status")) + ").");
-        int id = num(unit, "unit_id");
-        boolean update = is(unit, "defect_status", "OPEN");
+        var found = s.jdbc().queryForList(
+                "SELECT d.detail_id,d.color,d.size,p.product_name FROM product_detail d JOIN product p ON p.product_id=d.product_id"
+                        + " WHERE d.barcode=? AND d.status<>'DELETED'",
+                code);
+        if (found.isEmpty()) throw new ApiException(404, "BARCODE_NOT_FOUND", "Không tìm thấy hàng hóa có mã " + code + ".");
+        int detail = num(found.get(0), "detail_id");
+        String label = found.get(0).get("product_name") + " · " + found.get(0).get("color") + " · " + found.get(0).get("size");
+        int stock = num(s.one("SELECT stock_quantity FROM product_detail WHERE detail_id=? FOR UPDATE", detail), "stock_quantity");
+        int open = s.units().openDefects(detail);
+        if (qty > stock - open)
+            throw invalid(String.format(Locale.ROOT,
+                    "%s: tồn %d, đang báo lỗi %d — chỉ báo thêm được tối đa %d chiếc.",
+                    label, stock, open, Math.max(0, stock - open)));
+        var ids = s.units().create(detail, qty, "Báo lỗi");
         s.jdbc().update(
                 "UPDATE product_unit SET defect_status='OPEN',defect_types=?,defect_note=?,defect_source=?,defect_photos=?,"
-                        + "defect_by=?,defect_at=CURRENT_TIMESTAMP,defect_resolved_by=NULL,defect_resolved_at=NULL,"
-                        + "defect_resolve_note=NULL WHERE unit_id=?",
-                text, desc, source, keys.isEmpty() ? null : String.join(",", keys), a.id(), id);
-        s.audit(a.id(), update ? "DEFECT_UPDATE" : "DEFECT_REPORT", id, code + ": " + text + (desc == null ? "" : " — " + trim(desc)));
-        return one(id);
+                        + "defect_by=?,defect_at=CURRENT_TIMESTAMP WHERE unit_id IN (" + ProductUnits.marks(ids.size()) + ")",
+                ProductUnits.concat(
+                        new Object[] {text, desc, source, keys.isEmpty() ? null : String.join(",", keys), a.id()}, ids));
+        s.audit(a.id(), "DEFECT_REPORT", ids.get(0), trim(code + " ×" + qty + ": " + text + (desc == null ? "" : " — " + desc)));
+        var items = shaped(s.jdbc().queryForList(
+                s.withTierLabel(ROW) + " WHERE u.unit_id IN (" + ProductUnits.marks(ids.size()) + ") ORDER BY u.unit_id",
+                ids.toArray()));
+        return Map.of("code", code, "quantity", qty, "open", open + qty, "items", items);
     }
 
     private static final String ROW =
@@ -122,7 +142,7 @@ public class WarehouseDefects {
             SELECT u.unit_id AS defect_id,u.unit_id,u.detail_id,u.defect_types,u.defect_note AS description,
               u.defect_source AS source,u.defect_photos AS photo_keys,u.defect_status AS status,u.defect_at AS reported_at,
               u.defect_resolved_at AS resolved_at,u.defect_resolve_note AS resolve_note,ru.full_name AS reporter_name,
-              vu.full_name AS resolver_name,u.serial_code,u.status AS unit_status,d.color,d.size,p.product_name,p.product_id,
+              vu.full_name AS resolver_name,d.barcode,u.status AS unit_status,d.color,d.size,p.product_name,p.product_id,
               TIER_LABEL AS tier_label
             FROM product_unit u
             JOIN product_detail d ON d.detail_id=u.detail_id JOIN product p ON p.product_id=d.product_id
@@ -149,7 +169,7 @@ public class WarehouseDefects {
         return shaped(s.jdbc().queryForList(s.withTierLabel(ROW) + " WHERE u.unit_id=?", unitId)).get(0);
     }
 
-    /** Danh sách chiếc lỗi theo trạng thái lỗi (mặc định đang lỗi), tìm theo mã serial / tên sản phẩm. */
+    /** Danh sách chiếc lỗi theo trạng thái lỗi (mặc định đang lỗi), tìm theo mã hàng / tên sản phẩm. */
     @Transactional(readOnly = true)
     public Map<String, Object> list(Account a, String status, String q) {
         policy.view(a);
@@ -163,7 +183,7 @@ public class WarehouseDefects {
             args.add(st);
         }
         if (q != null && !q.isBlank()) {
-            where.append(" AND (UPPER(u.serial_code) LIKE ? OR LOWER(p.product_name) LIKE ?)");
+            where.append(" AND (UPPER(d.barcode) LIKE ? OR LOWER(p.product_name) LIKE ?)");
             String like = "%" + q.trim().toLowerCase(Locale.ROOT) + "%";
             args.add(like.toUpperCase(Locale.ROOT));
             args.add(like);
@@ -178,8 +198,8 @@ public class WarehouseDefects {
 
     private Map<String, Object> openDefect(int unitId) {
         var rows = s.jdbc().queryForList(
-                "SELECT unit_id,detail_id,serial_code,status,product_location_id,defect_types,defect_status FROM product_unit"
-                        + " WHERE unit_id=?",
+                "SELECT u.unit_id,u.detail_id,d.barcode,u.status,u.product_location_id,u.defect_types,u.defect_status"
+                        + " FROM product_unit u JOIN product_detail d ON d.detail_id=u.detail_id WHERE u.unit_id=?",
                 unitId);
         if (rows.isEmpty() || rows.get(0).get("defect_status") == null)
             throw new ApiException(404, "NOT_FOUND", "Không tìm thấy chiếc hàng lỗi.");
@@ -197,13 +217,14 @@ public class WarehouseDefects {
                 "UPDATE product_unit SET defect_status='FIXED',defect_resolved_by=?,defect_resolved_at=CURRENT_TIMESTAMP,"
                         + "defect_resolve_note=? WHERE unit_id=? AND defect_status='OPEN'",
                 a.id(), trim(note), unitId);
-        s.audit(a.id(), "DEFECT_FIX", unitId, unit.get("serial_code") + (note == null || note.isBlank() ? "" : ": " + trim(note)));
+        s.audit(a.id(), "DEFECT_FIX", unitId, unit.get("barcode") + (note == null || note.isBlank() ? "" : ": " + trim(note)));
         return one(unitId);
     }
 
     /**
-     * Chủ cửa hàng "Bỏ hẳn" chiếc lỗi: tồn giảm 1 (đúng ô kệ của chiếc đó), chiếc thành Mất/hỏng, sổ kho
-     * ghi một dòng điều chỉnh.
+     * Chủ cửa hàng "Bỏ hẳn" một chiếc lỗi: tồn giảm 1, chiếc thành Mất/hỏng, sổ kho ghi một dòng điều chỉnh.
+     * Lấy ra từ: ô kệ ghi trên dòng lỗi (dữ liệu cũ) nếu ô còn hàng; không thì hàng chưa xếp; không còn
+     * hàng chưa xếp thì ô đang chứa nhiều nhất.
      */
     public Map<String, Object> discard(Account a, int unitId, String note) {
         policy.owner(a);
@@ -211,18 +232,31 @@ public class WarehouseDefects {
         String reason = trim(note);
         if (reason == null) throw invalid("Nhập lý do bỏ chiếc hàng này.");
         s.lock();
-        int detail = num(openDefect(unitId), "detail_id");
-        s.units().sync(detail);
         var unit = openDefect(unitId);
-        String serial = (String) unit.get("serial_code");
-        if (!is(unit, "status", ProductUnits.IN_STOCK)) throw invalid("Chiếc " + serial + " không còn trong kho.");
+        int detail = num(unit, "detail_id");
+        String code = (String) unit.get("barcode");
         var variant = s.one("SELECT stock_quantity FROM product_detail WHERE detail_id=? FOR UPDATE", detail);
         int stock = num(variant, "stock_quantity");
         int held = s.held(detail);
         if (stock - 1 < held)
             throw invalid("Biến thể này đang giữ " + held + " cho đơn bán, tồn chỉ còn " + stock
                     + ". Xử lý đơn trước rồi mới bỏ chiếc lỗi.");
+        if (stock < 1) throw invalid("Biến thể này đã hết hàng trong kho.");
         Integer location = unit.get("product_location_id") == null ? null : num(unit, "product_location_id");
+        if (location != null
+                && s.count("SELECT COALESCE(SUM(quantity),0) FROM product_location WHERE product_location_id=? AND detail_id=?",
+                                location, detail) < 1) location = null;
+        if (location == null) {
+            long assigned = s.count("SELECT COALESCE(SUM(quantity),0) FROM product_location WHERE detail_id=?", detail);
+            if (stock - assigned < 1) {
+                var fullest = s.jdbc().queryForList(
+                        "SELECT product_location_id FROM product_location WHERE detail_id=? AND quantity>0"
+                                + " ORDER BY quantity DESC,product_location_id LIMIT 1",
+                        Integer.class,
+                        detail);
+                if (!fullest.isEmpty()) location = fullest.get(0);
+            }
+        }
         if (location != null
                 && s.jdbc().update(
                                 "UPDATE product_location SET quantity=quantity-1,updated_at=CURRENT_TIMESTAMP WHERE product_location_id=?"
@@ -231,7 +265,7 @@ public class WarehouseDefects {
                         != 1) throw invalid("Ô kệ vừa thay đổi, hãy tải lại.");
         if (s.jdbc().update("UPDATE product_detail SET stock_quantity=stock_quantity-1 WHERE detail_id=? AND stock_quantity>=1", detail) != 1)
             throw invalid("Tồn vừa thay đổi, hãy tải lại.");
-        String text = trim("Bỏ hàng lỗi " + serial + " (" + unit.get("defect_types") + "): " + reason);
+        String text = trim("Bỏ hàng lỗi " + code + " (" + unit.get("defect_types") + "): " + reason);
         s.jdbc().update(
                 """
                 INSERT INTO stock_adjustment(detail_id,quantity_change,reason,adjusted_by,movement_type,movement_quantity,source_location_id,idempotency_key)
@@ -244,7 +278,6 @@ public class WarehouseDefects {
                         + "defect_resolve_note=?,updated_at=CURRENT_TIMESTAMP WHERE unit_id=?",
                 text, a.id(), reason, unitId);
         s.stockAlert(detail, stock);
-        s.units().sync(detail);
         s.audit(a.id(), "DEFECT_DISCARD", unitId, text);
         return one(unitId);
     }

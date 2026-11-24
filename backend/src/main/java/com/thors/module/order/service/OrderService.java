@@ -10,7 +10,7 @@ import com.thors.module.order.dto.OrderViews;
 import com.thors.module.order.dto.OrderViews.Detail;
 import com.thors.module.order.dto.OrderViews.Page;
 import com.thors.module.order.repository.OrderRepository;
-import com.thors.module.warehouse.WarehouseStore;
+import com.thors.module.warehouse.repository.WarehouseStore;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;

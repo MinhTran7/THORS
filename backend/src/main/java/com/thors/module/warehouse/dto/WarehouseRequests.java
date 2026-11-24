@@ -1,4 +1,4 @@
-package com.thors.module.warehouse;
+package com.thors.module.warehouse.dto;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
@@ -41,7 +41,7 @@ public final class WarehouseRequests {
             @Size(max = 2000) List<@NotNull @Valid Pick> picks) {}
 
     /**
-     * Goods check of a receipt waiting for it: a scanned label {@code code} adds 1 to its line; or
+     * Goods check of a receipt waiting for it: a scanned variant code {@code code} adds 1 to its line; or
      * {@code itemId} + {@code quantity} sets the count of a line (typed in, "bớt 1"). {@code over} =
      * the Owner accepts more than the receipt line.
      */
@@ -181,19 +181,14 @@ public final class WarehouseRequests {
 
     public record BarcodeGenerate(@Size(max = 500) List<@Positive Integer> detailIds) {}
 
-    /** Các chiếc vừa in tem serial. */
-    public record UnitsPrinted(@Size(max = 5000) List<@Positive Integer> unitIds) {}
-
-    /** Ghi lỗi cho một chiếc (quét serial). source: SUPPLIER / WAREHOUSE / CUSTOMER. */
+    /** Báo {@code quantity} chiếc lỗi của biến thể có mã chung {@code code}. source: SUPPLIER / WAREHOUSE / CUSTOMER. */
     public record DefectReport(
-            @NotBlank @Size(max = 40) String serial,
+            @NotBlank @Size(max = 40) String code,
+            @NotNull @Min(1) @Max(1000) Integer quantity,
             @NotNull @Size(min = 1, max = 20) List<@NotBlank @Size(max = 60) String> types,
             @Size(max = 500) String description,
             @NotBlank @Pattern(regexp = "SUPPLIER|WAREHOUSE|CUSTOMER") String source,
             @Size(max = 8) List<@NotBlank @Size(max = 40) String> photoKeys) {}
 
     public record DefectResolve(@Size(max = 255) String note) {}
-
-    /** Tem serial phiếu nhập; itemId + extra = in thêm tem cho một dòng. */
-    public record UnitLabels(@Positive Integer itemId, @Min(1) @Max(1000) Integer extra) {}
 }

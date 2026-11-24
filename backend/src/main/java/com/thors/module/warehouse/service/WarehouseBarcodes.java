@@ -1,4 +1,6 @@
-package com.thors.module.warehouse;
+package com.thors.module.warehouse.service;
+
+import com.thors.module.warehouse.repository.WarehouseStore;
 
 import com.thors.common.ApiException;
 import com.thors.module.account.entity.Account;
@@ -13,12 +15,10 @@ import org.springframework.transaction.annotation.Transactional;
 public class WarehouseBarcodes {
     private final WarehouseStore s;
     private final WarehousePolicy policy;
-    private final WarehouseUnits units;
 
     public WarehouseBarcodes(WarehouseStore s, WarehousePolicy policy) {
         this.s = s;
         this.policy = policy;
-        this.units = new WarehouseUnits(s, policy);
     }
 
     /**
@@ -63,8 +63,8 @@ public class WarehouseBarcodes {
     }
 
     /**
-     * Mã biến thể (TH000006) hoặc serial một chiếc (TH000006-0001). Với serial, kết quả có thêm
-     * {@code unit} (trạng thái, ô kệ, phiếu nhập, đơn bán của chiếc đó).
+     * Tra mã chung của biến thể (product_detail.barcode, ví dụ TH000006). Kết quả có thêm
+     * {@code defective_quantity}: số chiếc của biến thể đang báo lỗi (chưa xử lý).
      */
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public Map<String, Object> lookup(Account actor, String rawCode) {
@@ -73,13 +73,6 @@ public class WarehouseBarcodes {
         if (!code.matches("[A-Z0-9._-]{1,40}")) {
             throw new ApiException(400, "INVALID_BARCODE", "Mã vạch không hợp lệ.");
         }
-        Map<String, Object> unit = null;
-        if (ProductUnits.looksSerial(code) && s.units().ready()) {
-            s.lock();
-            unit = units.find(code);
-        }
-        String where = unit == null ? "d.barcode=? AND d.status<>'DELETED'" : "d.detail_id=?";
-        Object key = unit == null ? code : unit.get("detail_id");
         var rows = s.jdbc().queryForList("""
                 SELECT d.detail_id,d.product_id,d.barcode,d.color,d.size,d.price,d.stock_quantity,d.status,p.product_name,
                   p.status AS product_status,
@@ -91,11 +84,13 @@ public class WarehouseBarcodes {
                 FROM product_detail d JOIN product p ON p.product_id=d.product_id
                 LEFT JOIN (SELECT detail_id,SUM(quantity) AS assigned FROM product_location GROUP BY detail_id) l
                   ON l.detail_id=d.detail_id
-                WHERE """ + " " + where, key);
+                WHERE d.barcode=? AND d.status<>'DELETED'
+                """, code);
         if (rows.isEmpty()) {
             throw new ApiException(404, "BARCODE_NOT_FOUND", "Không tìm thấy hàng hóa có mã vạch này.");
         }
-        var variant = rows.get(0);
+        var variant = rows.get(0); // map của Spring: không phân biệt hoa thường tên cột
+        variant.put("defective_quantity", s.units().openDefects(((Number) variant.get("detail_id")).intValue()));
         var locations = s.jdbc().queryForList(s.withTierLabel("""
                 SELECT l.product_location_id,l.shelf_level_id,l.quantity,l.description,
                   r.rack_code,t.level_number,TIER_LABEL AS tier_label
@@ -105,7 +100,6 @@ public class WarehouseBarcodes {
                 WHERE l.detail_id=? AND l.quantity>0
                 ORDER BY r.rack_code,t.level_number
                 """), variant.get("detail_id"));
-        if (unit == null) return Map.of("variant", variant, "locations", locations);
-        return Map.of("variant", variant, "locations", locations, "unit", unit);
+        return Map.of("variant", variant, "locations", locations);
     }
 }

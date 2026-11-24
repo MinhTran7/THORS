@@ -1,10 +1,12 @@
-package com.thors.module.warehouse;
+package com.thors.module.warehouse.service;
+
+import com.thors.module.warehouse.repository.WarehouseStore;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.thors.module.account.entity.Account;
 import com.thors.module.order.repository.OrderRepository;
-import com.thors.module.warehouse.WarehouseRequests.*;
+import com.thors.module.warehouse.dto.WarehouseRequests.*;
 import java.math.BigDecimal;
 import java.util.*;
 import java.util.function.Supplier;

@@ -1,9 +1,10 @@
-package com.thors.module.warehouse;
+package com.thors.module.warehouse.service;
 
-import static com.thors.module.warehouse.WarehouseStore.*;
+import com.thors.module.warehouse.repository.WarehouseStore;
+import static com.thors.module.warehouse.repository.WarehouseStore.*;
 
 import com.thors.module.account.entity.Account;
-import com.thors.module.warehouse.WarehouseRequests.Move;
+import com.thors.module.warehouse.dto.WarehouseRequests.Move;
 import java.util.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
