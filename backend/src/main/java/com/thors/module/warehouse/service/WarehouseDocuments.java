@@ -1,10 +1,11 @@
-package com.thors.module.warehouse;
+package com.thors.module.warehouse.service;
 
-import static com.thors.module.warehouse.WarehouseStore.*;
+import com.thors.module.warehouse.repository.WarehouseStore;
+import static com.thors.module.warehouse.repository.WarehouseStore.*;
 
 import com.thors.common.ApiException;
 import com.thors.module.account.entity.Account;
-import com.thors.module.warehouse.WarehouseRequests.*;
+import com.thors.module.warehouse.dto.WarehouseRequests.*;
 import java.math.BigDecimal;
 import java.util.*;
 import org.springframework.stereotype.Service;
@@ -431,18 +432,6 @@ public class WarehouseDocuments {
         return header(id);
     }
 
-    static String unitStatus(Object status) {
-        return switch (String.valueOf(status)) {
-            case ProductUnits.PENDING -> "chờ nhận";
-            case ProductUnits.IN_STOCK -> "đang trong kho";
-            case ProductUnits.SOLD -> "đã bán";
-            case ProductUnits.RETURNED_SUPPLIER -> "đã trả nhà cung cấp";
-            case ProductUnits.LOST -> "mất/hỏng";
-            case ProductUnits.VOID -> "tem đã hủy";
-            default -> String.valueOf(status);
-        };
-    }
-
     private static String label(Map<String, Object> v) {
         return v.get("product_name") + " · " + v.get("color") + " · " + v.get("size");
     }
@@ -455,9 +444,8 @@ public class WarehouseDocuments {
     }
 
     /**
-     * Goods check: one scanned serial label (printed for this receipt) adds 1 to its line; each label
-     * counts once. Variant barcodes and typed counts are refused once serials exist (database without
-     * product_unit: variant barcode / typed count as before). More than the receipt line is refused
+     * Goods check: scanning the variant's shared code adds 1 to its line; a typed count ({@code itemId} +
+     * {@code quantity}) sets the line (also used for "bớt 1"). More than the receipt line is refused
      * unless the Owner accepts it ({@code over}).
      */
     public Map<String, Object> scan(Account a, int id, Scan r) {
@@ -471,34 +459,8 @@ public class WarehouseDocuments {
         var lines = lines(id);
         Map<String, Object> line;
         int target;
-        Integer unit = null;
-        String serial = r.code() == null ? "" : r.code().trim().toUpperCase(Locale.ROOT);
-        var units = ProductUnits.looksSerial(serial) && s.units().ready()
-                ? s.jdbc().queryForList(
-                        "SELECT u.unit_id,u.status,u.scanned_at,u.in_receipt_item_id,i.receipt_id FROM product_unit u"
-                                + " LEFT JOIN stock_receipt_item i ON i.receipt_item_id=u.in_receipt_item_id WHERE u.serial_code=?",
-                        serial)
-                : List.<Map<String, Object>>of();
-        if (!units.isEmpty()) {
-            // Tem serial: đúng chiếc của phiếu này, mỗi tem chỉ đếm một lần.
-            var u = units.get(0);
-            if (!is(u, "status", ProductUnits.PENDING) || u.get("receipt_id") == null || num(u, "receipt_id") != id)
-                throw new ApiException(
-                        409,
-                        "SCAN_WRONG_UNIT",
-                        "Tem " + serial + (is(u, "status", ProductUnits.PENDING) ? " thuộc phiếu nhập khác."
-                                : " không phải tem của đợt nhập này (" + unitStatus(u.get("status")) + ")."));
-            if (u.get("scanned_at") != null)
-                throw new ApiException(409, "SCAN_DUPLICATE", "Tem " + serial + " đã quét rồi, không đếm thêm.");
-            int item = num(u, "in_receipt_item_id");
-            line = lines.stream()
-                    .filter(l -> num(l, "receipt_item_id") == item)
-                    .findFirst()
-                    .orElseThrow(() -> invalid("Tem " + serial + " không thuộc phiếu nhập này."));
-            target = num(line, "scanned_quantity") + 1;
-            unit = num(u, "unit_id");
-        } else if (r.code() != null && !r.code().isBlank()) {
-            String code = serial;
+        if (r.code() != null && !r.code().isBlank()) {
+            String code = r.code().trim().toUpperCase(Locale.ROOT);
             var found =
                     s.jdbc()
                             .queryForList(
@@ -509,14 +471,7 @@ public class WarehouseDocuments {
                 throw new ApiException(
                         404,
                         "BARCODE_NOT_FOUND",
-                        ProductUnits.looksSerial(code) ? "Không tìm thấy tem " + code + "." : "Không tìm thấy hàng hóa có mã " + code + ".");
-            if (s.units().ready())
-                // Mỗi chiếc phải có tem serial riêng được quét thì mới tính là đã nhận.
-                throw new ApiException(
-                        409,
-                        "SCAN_NEED_SERIAL",
-                        code + " là mã biến thể (" + label(found.get(0)) + "), không đếm được từng chiếc."
-                                + " Hãy quét tem serial dán trên từng chiếc (dạng " + code + "-0001).");
+                        "Không tìm thấy hàng hóa có mã " + code + ".");
             int detail = num(found.get(0), "detail_id");
             line =
                     lines.stream()
@@ -532,15 +487,13 @@ public class WarehouseDocuments {
                                                             + " (sai mẫu/màu/size?)."));
             target = num(line, "scanned_quantity") + 1;
         } else if (r.itemId() != null && r.quantity() != null) {
-            if (s.units().ready())
-                throw invalid("Số đã quét chỉ tăng khi quét tem serial của từng chiếc, không nhập tay.");
             line =
                     lines.stream()
                             .filter(l -> num(l, "receipt_item_id") == r.itemId())
                             .findFirst()
                             .orElseThrow(() -> invalid("Dòng hàng không thuộc phiếu nhập này."));
             target = r.quantity();
-        } else throw invalid("Cần mã tem, hoặc dòng hàng và số lượng.");
+        } else throw invalid("Cần mã hàng, hoặc dòng hàng và số lượng.");
         int expected = num(line, "quantity");
         if (target > expected && !(Boolean.TRUE.equals(r.over()) && "OWNER".equals(a.role())))
             throw new ApiException(
@@ -555,10 +508,7 @@ public class WarehouseDocuments {
                         "UPDATE stock_receipt_item SET scanned_quantity=? WHERE receipt_item_id=?",
                         target,
                         num(line, "receipt_item_id"));
-        if (unit != null)
-            s.jdbc().update("UPDATE product_unit SET scanned_at=CURRENT_TIMESTAMP WHERE unit_id=?", unit);
         var result = new HashMap<>(line);
-        if (unit != null) result.put("serial_code", serial);
         result.put("scanned_quantity", target);
         return result;
     }
@@ -607,11 +557,9 @@ public class WarehouseDocuments {
                     scanned = num(l, "scanned_quantity"),
                     src = num(l, "source_receipt_item_id");
             if (scanned == 0) {
-                s.units().voidPending(item, "Phiếu nhập không nhận được hàng của dòng này");
                 s.jdbc().update("DELETE FROM stock_receipt_item WHERE receipt_item_id=?", item);
                 continue;
             }
-            s.units().sync(detail);
             // Another receipt of the same order may have been closed meanwhile. More than the order is
             // only what the Owner accepted while scanning (and never for exchanged goods).
             long base = exchange ? exchanged(src) : num(s.one("SELECT quantity FROM stock_receipt_item WHERE receipt_item_id=?", src), "quantity");
@@ -637,7 +585,6 @@ public class WarehouseDocuments {
                                     scanned)
                     != 1) throw invalid("Tổng tồn vượt giới hạn cho phép.");
             movement(a, detail, scanned, "RECEIPT", item, null, "receipt:" + id + ":" + item, "Nhập theo phiếu #" + id);
-            s.units().receive(item, detail, scanned);
         }
         s.jdbc()
                 .update(
@@ -742,7 +689,6 @@ public class WarehouseDocuments {
             throw invalid(String.format("%s: cần lấy %d nhưng phân bổ vị trí là %d.", label, qty, picked));
         var variant =
                 s.one("SELECT stock_quantity FROM product_detail WHERE detail_id=? FOR UPDATE", detail);
-        s.units().sync(detail);
         long stock = num(variant, "stock_quantity");
         if (stock < qty)
             throw invalid(String.format("%s: tồn hiện tại %d, không đủ trả %d.", label, stock, qty));
@@ -762,7 +708,6 @@ public class WarehouseDocuments {
                             String.format(
                                     "%s: hàng chưa xếp vị trí chỉ còn %d, không lấy được %d.",
                                     label, stock - assigned, p.quantity()));
-                s.units().requireConfirmed(detail, null, p.quantity(), label, "hàng chưa xếp");
                 movement(a, detail, -p.quantity(), "SUPPLIER_RETURN", item, null, "return:" + item + ":unassigned", reason);
                 continue;
             }
@@ -792,7 +737,6 @@ public class WarehouseDocuments {
                         String.format(
                                 "%s: vị trí %s chỉ còn %d, không lấy được %d.",
                                 label, where, num(loc, "quantity"), p.quantity()));
-            s.units().requireConfirmed(detail, p.locationId(), p.quantity(), label, "vị trí " + where);
             movement(
                     a,
                     detail,
@@ -814,10 +758,8 @@ public class WarehouseDocuments {
                                 qty);
         if (changed != 1) throw invalid(label + ": tồn không đủ để xuất trả.");
         s.stockAlert(detail, before);
-        s.units().sync(
-                detail,
-                new ProductUnits.Out(ProductUnits.RETURNED_SUPPLIER, null, item, reason),
-                ProductUnits.EXTERNAL_IN);
+        // Hàng lỗi được trả trước: đóng các lỗi đang mở của biến thể (báo sớm nhất trước), tối đa số chiếc trả.
+        s.units().closeDefects(detail, qty, "RETURNED", reason);
     }
 
     /** Status/audit trail and stock movements of one document, from the existing audit/movement logs. */
@@ -933,9 +875,6 @@ public class WarehouseDocuments {
                             target,
                             reason,
                             id);
-            if (is(doc, "receipt_type", "RECEIPT"))
-                for (var l : lines(id))
-                    s.units().voidPending(num(l, "receipt_item_id"), "Phiếu nhập bị hủy/từ chối");
         }
         s.audit(a.id(), "DOCUMENT_" + action.toUpperCase(Locale.ROOT), id, reason);
         return header(id);

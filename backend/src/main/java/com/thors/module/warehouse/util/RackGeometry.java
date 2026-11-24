@@ -1,7 +1,7 @@
-package com.thors.module.warehouse;
+package com.thors.module.warehouse.util;
 
-import static com.thors.module.warehouse.WarehouseStore.invalid;
-import static com.thors.module.warehouse.WarehouseStore.num;
+import static com.thors.module.warehouse.repository.WarehouseStore.invalid;
+import static com.thors.module.warehouse.repository.WarehouseStore.num;
 
 import java.util.*;
 

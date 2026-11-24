@@ -1,4 +1,6 @@
-package com.thors.module.warehouse;
+package com.thors.module.warehouse.service;
+
+import com.thors.module.warehouse.repository.WarehouseStore;
 
 import com.thors.common.ApiException;
 import com.thors.module.account.entity.Account;
@@ -6,8 +8,8 @@ import com.thors.module.product.dto.CreateProductRequest;
 import com.thors.module.product.repository.ProductRepository;
 import com.thors.module.product.service.ProductCodes;
 import com.thors.module.product.service.ProductService;
-import com.thors.module.warehouse.WarehouseRequests.*;
-import static com.thors.module.warehouse.WarehouseStore.copy;
+import com.thors.module.warehouse.dto.WarehouseRequests.*;
+import static com.thors.module.warehouse.repository.WarehouseStore.copy;
 import java.util.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;

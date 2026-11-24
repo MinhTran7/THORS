@@ -1,10 +1,11 @@
-package com.thors.module.warehouse;
+package com.thors.module.warehouse.service;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.thors.common.ApiException;
 import com.thors.module.account.entity.Account;
-import com.thors.module.warehouse.WarehouseRequests.Move;
+import com.thors.module.warehouse.repository.WarehouseStore;
+import com.thors.module.warehouse.dto.WarehouseRequests.Move;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
@@ -71,9 +72,6 @@ class WarehouseMoveRequestsTest {
         var policy = new WarehousePolicy();
         var photos = new WarehousePhotos(photosDir.toString());
         requests = new WarehouseMoveRequests(store, policy, new WarehouseLayout(store, policy, photos), photos);
-        // 10 chiếc đã dán tem và quét xác nhận (chuyển kệ chỉ lấy chiếc đã xác nhận).
-        tx.execute(st -> store.units().sync(1));
-        db.update("UPDATE product_unit SET scanned_at=CURRENT_TIMESTAMP WHERE status='IN_STOCK'");
     }
 
     @AfterEach
@@ -217,22 +215,6 @@ class WarehouseMoveRequestsTest {
         assertEquals(2, at(tierA2));
         assertNull(db.queryForObject("SELECT description FROM product_location WHERE detail_id=1 AND shelf_level_id=?",
                 String.class, tierA2));
-    }
-
-    @Test
-    void onlyConfirmedUnitsCanBeMoved() {
-        // 2 trong 4 chiếc ở A1 chưa quét xác nhận tem
-        db.update("UPDATE product_unit SET scanned_at=NULL WHERE product_location_id=? AND unit_id IN"
-                + " (SELECT unit_id FROM product_unit WHERE product_location_id=? ORDER BY unit_id LIMIT 2)", placeA1, placeA1);
-        var e = fails(() -> requests.submit(OWNER, move(placeA1, tierA2, 3, "Tầng 2", List.of(PHOTO))));
-        assertEquals("UNITS_UNCONFIRMED", e.code);
-        assertTrue(e.getMessage().contains("chỉ có 2 chiếc"), e.getMessage());
-        assertEquals(4, at(tierA1));
-        run(() -> requests.submit(OWNER, move(placeA1, tierA2, 2, "Tầng 2", List.of(PHOTO))));
-        assertEquals(2, at(tierA2));
-        assertEquals(0L, db.queryForObject("SELECT COUNT(*) FROM product_unit u JOIN product_location l"
-                + " ON l.product_location_id=u.product_location_id WHERE l.shelf_level_id=? AND u.scanned_at IS NULL", Long.class, tierA2),
-                "chiếc chuyển đi là chiếc đã xác nhận");
     }
 
     @Test

@@ -9,19 +9,24 @@ import { useWarehouse } from './WarehouseContext';
 import { ActionDialog, DataTable, PhotoPicker, Title } from './components';
 import CameraScanDialog from './CameraScanDialog';
 import useBarcodeScanner from './useBarcodeScanner';
-import { defectSourceLabel, defectStatusColor, defectStatusLabel, docCode, unitStatusLabel, variantLabel, when } from './model';
+import { defectSourceLabel, defectStatusColor, defectStatusLabel, number, variantLabel, when } from './model';
 
 const STATUSES = ['OPEN', 'FIXED', 'DISCARDED', 'RETURNED', 'SOLD'];
 
-/** Biểu mẫu ghi lỗi cho chiếc vừa quét (lookup có `unit`). Chiếc đã có lỗi đang mở thì sửa lại lỗi đó. */
+/** Biểu mẫu báo lỗi cho biến thể vừa quét (mã chung): chọn số chiếc lỗi, loại lỗi, nguồn, ảnh. */
 function ReportForm({ found, types, owner, onSaved, onCancel }) {
-  const { unit, variant } = found;
-  const open = Boolean(unit.defect_id);
-  const [picked, setPicked] = useState(() => (open ? unit.defect_types.split(', ') : []));
-  const [source, setSource] = useState((open && unit.defect_source) || 'SUPPLIER');
-  const [description, setDescription] = useState((open && unit.defect_description) || '');
+  const { variant } = found;
+  const stock = Number(variant.stock_quantity) || 0;
+  const defective = Number(variant.defective_quantity) || 0;
+  const max = Math.max(0, stock - defective);
+  const [quantity, setQuantity] = useState('1');
+  const [picked, setPicked] = useState([]);
+  const [source, setSource] = useState('SUPPLIER');
+  const [description, setDescription] = useState('');
   const [extra, setExtra] = useState('');
-  const [photos, setPhotos] = useState(() => (open && unit.defect_photo_keys ? unit.defect_photo_keys.split(',') : []));
+  const [photos, setPhotos] = useState([]);
+  const qty = Number.parseInt(quantity, 10);
+  const qtyOk = Number.isInteger(qty) && qty >= 1 && qty <= max;
   // Mẫu có sẵn + lỗi chủ cửa hàng vừa gõ thêm (lưu xong sẽ thành lựa chọn cho lần sau)
   const choices = [...types, ...picked.filter((p) => !types.includes(p))];
   const addExtra = () => {
@@ -40,9 +45,9 @@ function ReportForm({ found, types, owner, onSaved, onCancel }) {
     try {
       await api('/warehouse/defects', {
         method: 'POST',
-        body: { serial: unit.serial_code, types: picked, description: description || null, source, photoKeys: photos }
+        body: { code: variant.barcode, quantity: qty, types: picked, description: description || null, source, photoKeys: photos }
       });
-      onSaved(`Đã ghi lỗi cho chiếc ${unit.serial_code}. Tồn kho không đổi.`);
+      onSaved(`Đã ghi lỗi ${number(qty)} chiếc ${variant.barcode} (${variantLabel(variant)}). Tồn kho không đổi.`);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -54,18 +59,24 @@ function ReportForm({ found, types, owner, onSaved, onCancel }) {
       <Box>
         <Typography variant="h5">{variantLabel(variant)}</Typography>
         <Typography color="text.secondary">
-          Chiếc <b style={{ fontFamily: 'monospace' }}>{unit.serial_code}</b> · {unitStatusLabel[unit.status]} ·{' '}
-          {unit.location || 'chưa xếp vị trí'} ·{' '}
-          {unit.in_receipt_id
-            ? `nhập theo ${docCode({ receipt_type: 'RECEIPT', receipt_id: unit.in_receipt_id })}`
-            : 'hàng tồn trước khi có serial'}
+          Mã <b style={{ fontFamily: 'monospace' }}>{variant.barcode}</b> · tồn {number(stock)} · đang báo lỗi {number(defective)}
         </Typography>
       </Box>
-      {open && (
-        <Alert severity="warning">
-          Chiếc này đang báo lỗi: {unit.defect_types}
-          {unit.defect_reporter ? ` (${unit.defect_reporter}, ${when(unit.defect_reported_at)})` : ''}. Lưu lại sẽ cập nhật lỗi đó.
-        </Alert>
+      {max === 0 ? (
+        <Alert severity="warning">Mọi chiếc trong kho của biến thể này đều đã báo lỗi, không báo thêm được.</Alert>
+      ) : (
+        <TextField
+          size="small"
+          type="number"
+          label="Số chiếc lỗi"
+          value={quantity}
+          onChange={(e) => setQuantity(e.target.value)}
+          onFocus={(e) => e.target.select()}
+          error={!qtyOk}
+          helperText={`Tối đa ${number(max)} chiếc (tồn trừ số đang báo lỗi)`}
+          slotProps={{ htmlInput: { min: 1, max, step: 1 } }}
+          sx={{ maxWidth: 220 }}
+        />
       )}
       <Box>
         <Typography variant="subtitle2" sx={{ mb: 1 }}>
@@ -127,8 +138,8 @@ function ReportForm({ found, types, owner, onSaved, onCancel }) {
         <Button onClick={onCancel} disabled={busy}>
           Bỏ qua
         </Button>
-        <Button variant="contained" color="error" disabled={busy || !picked.length} onClick={save}>
-          {busy ? 'Đang lưu…' : open ? 'Cập nhật lỗi' : 'Ghi lỗi'}
+        <Button variant="contained" color="error" disabled={busy || !picked.length || !qtyOk} onClick={save}>
+          {busy ? 'Đang lưu…' : 'Ghi lỗi'}
         </Button>
       </Stack>
     </Stack>
@@ -136,8 +147,8 @@ function ReportForm({ found, types, owner, onSaved, onCancel }) {
 }
 
 /**
- * Bán hàng → Xử lý hàng lỗi: quét tem serial để ra đúng chiếc, ghi lỗi (chọn mẫu lỗi có sẵn, mô tả,
- * ảnh). Báo lỗi không trừ tồn; chiếc lỗi không bán được ở quầy. Tồn chỉ giảm khi trả NCC hoặc chủ
+ * Bán hàng → Xử lý hàng lỗi: quét mã chung của biến thể, nhập số chiếc lỗi, ghi lỗi (chọn mẫu lỗi có sẵn,
+ * mô tả, ảnh). Báo lỗi không trừ tồn; chiếc lỗi không bán được ở quầy. Tồn chỉ giảm khi trả NCC hoặc chủ
  * cửa hàng "Bỏ hẳn".
  */
 export default function DefectsPage() {
@@ -163,13 +174,9 @@ export default function DefectsPage() {
     setNotice(null);
     try {
       const result = await api(`/warehouse/barcodes/lookup?code=${encodeURIComponent(value)}`);
-      if (!result.unit) throw new Error(`${value} là mã biến thể. Hãy quét tem serial của đúng chiếc bị lỗi (dạng ${value}-0001).`);
-      if (result.unit.status !== 'IN_STOCK')
-        throw new Error(
-          `Chiếc ${result.unit.serial_code} không còn trong kho (${unitStatusLabel[result.unit.status] || result.unit.status}).`
-        );
+      if (!(Number(result.variant.stock_quantity) > 0)) throw new Error(`${variantLabel(result.variant)} không còn hàng trong kho.`);
       setFound(result);
-      return { ok: true, message: `Đã tìm thấy ${result.unit.serial_code}` };
+      return { ok: true, message: `Đã tìm thấy ${result.variant.barcode}` };
     } catch (e) {
       setFound(null);
       setNotice({ severity: 'error', text: e.message });
@@ -185,13 +192,13 @@ export default function DefectsPage() {
     <Stack spacing={3}>
       <Title
         title="Xử lý hàng lỗi"
-        subtitle="Quét tem serial để ra đúng chiếc bị lỗi. Báo lỗi không trừ tồn; chiếc lỗi không bán được ở quầy cho tới khi sửa xong, trả nhà cung cấp hoặc bỏ hẳn."
+        subtitle="Quét mã hàng rồi nhập số chiếc bị lỗi. Báo lỗi không trừ tồn; chiếc lỗi không bán được ở quầy cho tới khi sửa xong, trả nhà cung cấp hoặc bỏ hẳn."
       />
       {migration && <Alert severity="warning">{migration.message}</Alert>}
       <MainCard>
         {found ? (
           <ReportForm
-            key={found.unit.serial_code}
+            key={found.variant.detail_id}
             found={found}
             types={typesSWR.data || []}
             owner={owner}
@@ -216,7 +223,7 @@ export default function DefectsPage() {
                     lookup(code);
                   }
                 }}
-                placeholder="Quét tem serial (máy quét dùng được ở bất kỳ đâu trên trang) hoặc gõ mã rồi Enter, ví dụ TH000051-0003"
+                placeholder="Quét mã hàng (máy quét dùng được ở bất kỳ đâu trên trang) hoặc gõ mã rồi Enter, ví dụ TH000051"
                 slotProps={{ htmlInput: { 'aria-label': 'Mã tem hàng lỗi', maxLength: 40 } }}
               />
               <Button variant="outlined" startIcon={<CameraOutlined />} onClick={() => setCamera(true)}>
@@ -256,7 +263,7 @@ export default function DefectsPage() {
             </Stack>
             <TextField
               size="small"
-              placeholder="Tìm mã serial / tên sản phẩm"
+              placeholder="Tìm mã hàng / tên sản phẩm"
               value={q}
               onChange={(e) => setQ(e.target.value)}
               sx={{ minWidth: 260 }}
@@ -268,9 +275,9 @@ export default function DefectsPage() {
             empty="Không có chiếc hàng lỗi nào."
             columns={[
               {
-                key: 'serial_code',
-                label: 'Mã serial',
-                render: (d) => <Typography sx={{ fontFamily: 'monospace' }}>{d.serial_code}</Typography>
+                key: 'barcode',
+                label: 'Mã hàng',
+                render: (d) => <Typography sx={{ fontFamily: 'monospace' }}>{d.barcode}</Typography>
               },
               { key: 'product', label: 'Sản phẩm · màu · size', render: variantLabel },
               {
@@ -295,7 +302,7 @@ export default function DefectsPage() {
               {
                 key: 'where',
                 label: 'Vị trí',
-                render: (d) => (d.unit_status === 'IN_STOCK' ? d.location || 'Chưa xếp' : unitStatusLabel[d.unit_status] || '—')
+                render: (d) => (d.status === 'OPEN' ? d.location || 'Trong kho' : '—')
               },
               {
                 key: 'photos',
@@ -360,15 +367,16 @@ export default function DefectsPage() {
             ]}
           />
           <Typography variant="caption" color="text.secondary">
-            Trả nhà cung cấp: lập phiếu trả như bình thường; khi xuất trả, hệ thống lấy chiếc đang lỗi của biến thể đó trước.
+            Trả nhà cung cấp: lập phiếu trả như bình thường; khi xuất trả, các chiếc đang lỗi của biến thể đó được tính là đã trả trước (báo
+            lỗi sớm nhất trước).
           </Typography>
         </Stack>
       </MainCard>
 
-      {camera && <CameraScanDialog title="Quét tem chiếc hàng lỗi" onDetected={lookup} onClose={() => setCamera(false)} />}
+      {camera && <CameraScanDialog title="Quét mã hàng lỗi" onDetected={lookup} onClose={() => setCamera(false)} />}
       {action && (
         <ActionDialog
-          title={action.kind === 'fix' ? `Sửa xong ${action.d.serial_code}` : `Bỏ hẳn ${action.d.serial_code}`}
+          title={action.kind === 'fix' ? `Sửa xong 1 chiếc ${action.d.barcode}` : `Bỏ hẳn 1 chiếc ${action.d.barcode}`}
           text={
             action.kind === 'fix'
               ? 'Chiếc này đã sửa xong và bán lại được. Tồn kho không đổi.'
@@ -380,7 +388,7 @@ export default function DefectsPage() {
             await api(`/warehouse/defects/${action.d.defect_id}/${action.kind}`, { method: 'POST', body: { note: note || null } });
             setNotice({
               severity: 'success',
-              text: action.kind === 'fix' ? `${action.d.serial_code} đã sửa xong.` : `Đã bỏ ${action.d.serial_code}, tồn giảm 1.`
+              text: action.kind === 'fix' ? `1 chiếc ${action.d.barcode} đã sửa xong.` : `Đã bỏ 1 chiếc ${action.d.barcode}, tồn giảm 1.`
             });
             mutate();
           }}

@@ -1,6 +1,19 @@
-package com.thors.module.warehouse;
+package com.thors.module.warehouse.controller;
 
-import com.thors.module.warehouse.WarehouseRequests.*;
+import com.thors.module.warehouse.service.WarehouseBarcodes;
+import com.thors.module.warehouse.service.WarehouseCatalog;
+import com.thors.module.warehouse.service.WarehouseCounts;
+import com.thors.module.warehouse.service.WarehouseDefects;
+import com.thors.module.warehouse.service.WarehouseDocuments;
+import com.thors.module.warehouse.service.WarehouseInventory;
+import com.thors.module.warehouse.service.WarehouseLayout;
+import com.thors.module.warehouse.service.WarehouseMoveRequests;
+import com.thors.module.warehouse.service.WarehouseOrders;
+import com.thors.module.warehouse.service.WarehousePhotos;
+import com.thors.module.warehouse.service.WarehousePolicy;
+import com.thors.module.warehouse.service.WarehouseSettlements;
+
+import com.thors.module.warehouse.dto.WarehouseRequests.*;
 import com.thors.security.SessionAccess;
 import jakarta.validation.Valid;
 import org.springframework.http.*;
@@ -22,7 +35,6 @@ public class WarehouseController {
     private final WarehouseInventory inventory;
     private final WarehouseCounts counts;
     private final WarehouseMoveRequests moveRequests;
-    private final WarehouseUnits units;
     private final WarehouseDefects defects;
 
     public WarehouseController(
@@ -38,7 +50,6 @@ public class WarehouseController {
             WarehouseInventory inventory,
             WarehouseCounts counts,
             WarehouseMoveRequests moveRequests,
-            WarehouseUnits units,
             WarehouseDefects defects) {
         this.sessions = sessions;
         this.docs = docs;
@@ -52,7 +63,6 @@ public class WarehouseController {
         this.inventory = inventory;
         this.counts = counts;
         this.moveRequests = moveRequests;
-        this.units = units;
         this.defects = defects;
     }
 
@@ -206,29 +216,7 @@ public class WarehouseController {
         return barcodes.generate(sessions.current(), r == null ? null : r.detailIds());
     }
 
-    /** Serial từng chiếc của các biến thể (?detail=1&detail=2), lọc theo trạng thái hoặc chưa in tem. */
-    @GetMapping("/units")
-    public Object units(
-            @RequestParam java.util.List<Integer> detail,
-            @RequestParam(required = false) String status,
-            @RequestParam(defaultValue = "false") boolean unprinted,
-            @RequestParam(defaultValue = "false") boolean defective,
-            @RequestParam(defaultValue = "false") boolean unconfirmed) {
-        return units.list(sessions.current(), detail, status, unprinted, defective, unconfirmed);
-    }
-
-    @PostMapping("/units/printed")
-    public Object unitsPrinted(@Valid @RequestBody UnitsPrinted r) {
-        return units.printed(sessions.current(), r.unitIds());
-    }
-
-    /** Tem serial (chờ nhận) cho phiếu nhập đang chờ kiểm hàng. */
-    @PostMapping("/documents/{id}/unit-labels")
-    public Object unitLabels(@PathVariable int id, @Valid @RequestBody(required = false) UnitLabels r) {
-        return units.receiptLabels(sessions.current(), id, r == null ? null : r.itemId(), r == null ? null : r.extra());
-    }
-
-    // ---- Hàng lỗi từng chiếc (trang Bán hàng → Xử lý hàng lỗi) ----
+    // ---- Hàng lỗi (trang Bán hàng → Xử lý hàng lỗi) ----
 
     @GetMapping("/defect-types")
     public Object defectTypes() {
@@ -242,10 +230,11 @@ public class WarehouseController {
 
     @PostMapping("/defects")
     public Object reportDefect(@Valid @RequestBody DefectReport r) {
-        return defects.report(sessions.current(), r.serial(), r.types(), r.description(), r.source(), r.photoKeys());
+        return defects.report(
+                sessions.current(), r.code(), r.quantity(), r.types(), r.description(), r.source(), r.photoKeys());
     }
 
-    /** id = unit_id của chiếc lỗi. */
+    /** id = mã dòng hàng lỗi (mỗi chiếc lỗi một dòng). */
     @PostMapping("/defects/{id}/fix")
     public Object fixDefect(@PathVariable int id, @Valid @RequestBody(required = false) DefectResolve r) {
         return defects.fix(sessions.current(), id, r == null ? null : r.note());

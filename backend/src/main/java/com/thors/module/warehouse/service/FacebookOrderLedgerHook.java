@@ -1,4 +1,4 @@
-package com.thors.module.warehouse;
+package com.thors.module.warehouse.service;
 
 import java.util.Arrays;
 import java.util.Map;

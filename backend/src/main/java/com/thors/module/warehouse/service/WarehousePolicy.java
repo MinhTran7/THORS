@@ -1,6 +1,7 @@
-package com.thors.module.warehouse;
+package com.thors.module.warehouse.service;
 
 import com.thors.common.ApiException;
+import com.thors.module.warehouse.repository.WarehouseStore;
 import com.thors.module.account.entity.Account;
 import org.springframework.stereotype.Component;
 
