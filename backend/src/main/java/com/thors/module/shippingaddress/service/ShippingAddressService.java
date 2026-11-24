@@ -50,7 +50,6 @@ public class ShippingAddressService {
         ShippingAddressRequest data = validate(request);
         addresses.update(userId, addressId, data);
         if (Boolean.TRUE.equals(data.isDefault())) {
-            addresses.clearDefault(userId);
             addresses.setDefault(userId, addressId);
         }
         return ShippingAddressResponse.from(find(userId, addressId));

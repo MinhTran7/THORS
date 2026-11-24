@@ -1,11 +1,9 @@
 package com.thors.module.sales.controller;
 
-import com.thors.module.payment.dto.PaymentLinkResponse;
 import com.thors.module.sales.dto.CreateInStoreSaleRequest;
 import com.thors.module.sales.dto.InStoreSaleDetailResponse;
 import com.thors.module.sales.dto.InStoreSalePageResponse;
 import com.thors.module.sales.dto.InStoreSaleResponse;
-import com.thors.module.sales.dto.PendingTransfer;
 import com.thors.module.sales.dto.PriceRange;
 import com.thors.module.sales.dto.SellerOption;
 import com.thors.module.sales.dto.VariantSale;
@@ -72,29 +70,8 @@ public class InStoreSalesController {
         return ResponseEntity.ok(salesService.variantSales(productId));
     }
 
-    @GetMapping("/pending")
-    public ResponseEntity<List<PendingTransfer>> pendingTransfers() {
-        return ResponseEntity.ok(salesService.pendingTransfers());
-    }
-
-    @PostMapping("/{orderId}/payment-link")
-    public ResponseEntity<PaymentLinkResponse> renewPaymentLink(@PathVariable int orderId) {
-        return ResponseEntity.ok(salesService.renewPaymentLink(orderId));
-    }
-
     @GetMapping("/{orderId}")
     public ResponseEntity<InStoreSaleDetailResponse> getSaleDetail(@PathVariable int orderId) {
         return ResponseEntity.ok(salesService.getSaleDetail(orderId));
-    }
-
-    @PostMapping("/{orderId}/complete")
-    public ResponseEntity<InStoreSaleResponse> completeTransfer(@PathVariable int orderId) {
-        return ResponseEntity.ok(salesService.completeTransfer(orderId));
-    }
-
-    @PostMapping("/{orderId}/cancel")
-    public ResponseEntity<InStoreSaleResponse> cancelTransfer(@PathVariable int orderId) {
-        InStoreSaleResponse completed = salesService.cancelTransfer(orderId);
-        return completed == null ? ResponseEntity.noContent().build() : ResponseEntity.ok(completed);
     }
 }

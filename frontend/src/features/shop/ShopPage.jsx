@@ -3,7 +3,7 @@ import { Link as RouterLink, useLocation, useNavigate, useOutletContext, useSear
 import { Box } from '@mui/material';
 import { useAuth } from 'features/auth/AuthProvider';
 import { api } from 'services/http';
-import { getPromotions } from 'services/promotionService';
+import { getVouchers } from 'services/promotionService';
 import { ColorSwatches, categoryTree, isNewProduct, money, priceText, useProductColors } from './ShopCommon';
 import PendingCartHandler from './PendingCartHandler';
 import ShopBanner, { latestVoucher } from './ShopBanner';
@@ -626,15 +626,14 @@ export default function ShopPage() {
   }, []);
 
   useEffect(() => {
-    if (!account) return;
-    getPromotions()
-      .then((d) => setVouchers(Array.isArray(d) ? d : d?.data || []))
+    getVouchers()
+      .then(setVouchers)
       .catch(() => setVouchers([]));
-  }, [account]);
+  }, []);
 
   const promoMap = useMemo(() => new Map(promos.map((p) => [p.productId, p])), [promos]);
-  // Voucher / khuyến mãi mới nhất: hiện thành slide đầu tiên của banner trên cùng
-  const voucher = useMemo(() => latestVoucher(promos, vouchers), [promos, vouchers]);
+  // Mã giảm giá đơn hàng mới nhất: hiện thành slide đầu tiên của banner trên cùng
+  const voucher = useMemo(() => latestVoucher(vouchers), [vouchers]);
 
   // Link dạng /#moi, /#ban-chay, /#uu-dai (từ header/footer): cuộn tới khối tương ứng khi khối đã hiện
   const hash = location.hash.slice(1);

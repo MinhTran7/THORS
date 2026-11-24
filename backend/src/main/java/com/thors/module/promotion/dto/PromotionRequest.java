@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 public record PromotionRequest(
+        String type,
         String name,
         String description,
         String discountType,
@@ -16,4 +17,4 @@ public record PromotionRequest(
         String applyScope,
         List<Integer> productIds
 ) {
-}
+}

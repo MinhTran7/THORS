@@ -89,9 +89,10 @@ public class ShippingAddressRepository {
         jdbc.update("UPDATE shipping_address SET is_default = 0 WHERE user_id = ? AND is_default = 1", userId);
     }
 
+    // Đặt một địa chỉ làm mặc định, bỏ mặc định các địa chỉ còn lại (một câu lệnh)
     public void setDefault(int userId, int addressId) {
-        jdbc.update("UPDATE shipping_address SET is_default = 1 WHERE user_id = ? AND address_id = ? AND is_deleted = 0",
-                userId, addressId);
+        jdbc.update("UPDATE shipping_address SET is_default = (address_id = ?) WHERE user_id = ? AND is_deleted = 0",
+                addressId, userId);
     }
 
     public void softDelete(int userId, int addressId) {

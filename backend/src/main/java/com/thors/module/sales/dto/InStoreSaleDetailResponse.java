@@ -15,12 +15,10 @@ public record InStoreSaleDetailResponse(
         BigDecimal totalAmount,
         String paymentMethod,
         String paymentStatus,
-        String orderStatus,
         List<SaleItemDetail> items
 ) {
     public record SaleItemDetail(
             int orderItemId,
-            Integer detailId,
             String productName,
             String size,
             String color,

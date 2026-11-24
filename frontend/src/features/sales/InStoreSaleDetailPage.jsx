@@ -19,7 +19,7 @@ import { ArrowLeftOutlined, CreditCardOutlined, DollarOutlined, PictureOutlined,
 import { api } from '../../services/http';
 import { useCrumbs } from '../../layouts/crumbs';
 import ReceiptDialog from './ReceiptDialog';
-import { isCashMethod, money, splitDateTime } from './salesFormat';
+import { isCashMethod, money, splitDateTime, toReceiptItems } from './salesFormat';
 
 const C = {
   text: '#0F172A',
@@ -51,19 +51,11 @@ export default function InStoreSaleDetailPage() {
 
   const items = data?.items || [];
 
-  const cartItems = items.map((item) => ({
-    key: item.orderItemId,
-    name: item.productName || 'Sản phẩm',
-    size: item.size,
-    color: item.color,
-    price: Number(item.unitPrice || 0),
-    quantity: item.quantity
-  }));
+  const cartItems = toReceiptItems(items);
 
   const saleData = data
     ? {
         invoiceNumber: data.invoiceNumber,
-        orderNumber: data.orderNumber,
         itemsAmount: data.subtotal,
         discountAmount: data.discountAmount,
         totalAmount: data.totalAmount,

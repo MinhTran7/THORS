@@ -1,7 +1,9 @@
 package com.thors.module.promotion.controller;
 
+import com.thors.module.promotion.dto.PromotionAdjustRequest;
+import com.thors.module.promotion.dto.PromotionOrder;
 import com.thors.module.promotion.dto.PromotionRequest;
-import com.thors.module.promotion.entity.Promotion;
+import com.thors.module.promotion.dto.PromotionView;
 import com.thors.module.promotion.service.PromotionService;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
@@ -19,18 +21,23 @@ public class PromotionController {
     }
 
     @GetMapping
-    public List<Promotion> getAll() {
+    public List<PromotionView> getAll() {
         return promotionService.getAll();
     }
 
     @GetMapping("/{promotionId}")
-    public Promotion getById(@PathVariable int promotionId) {
+    public PromotionView getById(@PathVariable int promotionId) {
         return promotionService.getById(promotionId);
+    }
+
+    @GetMapping("/{promotionId}/orders")
+    public List<PromotionOrder> getOrders(@PathVariable int promotionId) {
+        return promotionService.getOrders(promotionId);
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public Promotion create(@RequestBody PromotionRequest request) {
+    public PromotionView create(@RequestBody PromotionRequest request) {
         return promotionService.create(request);
     }
 
@@ -40,10 +47,28 @@ public class PromotionController {
         promotionService.update(promotionId, request);
     }
 
+    @PatchMapping("/{promotionId}/adjust")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void adjust(@PathVariable int promotionId, @RequestBody PromotionAdjustRequest request) {
+        promotionService.adjust(promotionId, request);
+    }
+
     @PatchMapping("/{promotionId}/status")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void changeStatus(@PathVariable int promotionId, @RequestBody StatusRequest request) {
         promotionService.changeStatus(promotionId, request.status());
+    }
+
+    @PostMapping("/{promotionId}/end")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void endEarly(@PathVariable int promotionId) {
+        promotionService.endEarly(promotionId);
+    }
+
+    @DeleteMapping("/{promotionId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable int promotionId) {
+        promotionService.delete(promotionId);
     }
 
     public record StatusRequest(String status) {

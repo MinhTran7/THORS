@@ -10,8 +10,6 @@ public record InStoreSaleListItem(
         LocalDateTime orderDate,
         String sellerName,
         BigDecimal totalAmount,
-        String paymentMethod,
-        String paymentStatus,
-        String orderStatus
+        String paymentMethod
 ) {
 }

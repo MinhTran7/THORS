@@ -34,10 +34,10 @@ const ROUTE_CRUMBS = [
   ['/promotions/add', ['Khuyến mãi sản phẩm', 'Thêm khuyến mãi sản phẩm']],
   ['/promotions/:promotionId/edit', ['Khuyến mãi sản phẩm', 'Sửa khuyến mãi sản phẩm']],
   ['/promotions/:promotionId', ['Khuyến mãi sản phẩm', 'Chi tiết khuyến mãi sản phẩm']],
-  ['/order-discounts', ['Giảm giá đơn hàng']],
-  ['/order-discounts/add', ['Giảm giá đơn hàng', 'Thêm giảm giá đơn hàng']],
-  ['/order-discounts/:promotionId/edit', ['Giảm giá đơn hàng', 'Sửa giảm giá đơn hàng']],
-  ['/order-discounts/:promotionId', ['Giảm giá đơn hàng', 'Chi tiết giảm giá đơn hàng']],
+  ['/order-discounts', ['Mã giảm giá online']],
+  ['/order-discounts/add', ['Mã giảm giá online', 'Thêm mã giảm giá']],
+  ['/order-discounts/:promotionId/edit', ['Mã giảm giá online', 'Sửa mã giảm giá']],
+  ['/order-discounts/:promotionId', ['Mã giảm giá online', 'Chi tiết mã giảm giá']],
   ...warehouseMenu.map(([key, label]) => [`/warehouse/${key}/*`, ['Kho', label]])
 ];
 

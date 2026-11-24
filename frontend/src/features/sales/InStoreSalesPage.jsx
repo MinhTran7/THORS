@@ -38,8 +38,7 @@ import CameraScanDialog from '../warehouse/CameraScanDialog';
 import { useCrumbs } from '../../layouts/crumbs';
 import ReceiptDialog from './ReceiptDialog';
 import ProductInfoDialog from './ProductInfoDialog';
-import TransferQrDialog from './TransferQrDialog';
-import { money } from './salesFormat';
+import { money, toReceiptItems } from './salesFormat';
 
 const priceRangeText = (min, max) =>
   min == null
@@ -54,14 +53,13 @@ const formatNumberInput = (val) => {
   return digits ? Number(digits).toLocaleString('vi-VN') : '';
 };
 const isActive = (value) => String(value ?? '').toUpperCase() === 'ACTIVE';
-const getId = (p) => p?.productId ?? p?.id;
-const getVariantId = (v) => v?.detailId ?? v?.variantId ?? v?.id;
-const getStock = (v) => Number(v?.stockQuantity ?? v?.stock ?? 0);
-const getPrice = (v) => Number(v?.price ?? v?.salePrice ?? v?.sale_price ?? 0);
-const getList = (data) => (Array.isArray(data) ? data : (data?.content ?? data?.data ?? []));
-const getProductStock = (p) => Number(p?.stockQuantity ?? p?.totalStock ?? p?.stock ?? p?.quantity ?? 0);
-// transfer: đơn đang chờ khách chuyển khoản { sale, link }
-// Trang bán hàng không dùng hiệu ứng hover/bấm nút (cả trong các popup có class này)
+const getId = (p) => p?.productId;
+const getVariantId = (v) => v?.detailId;
+const getStock = (v) => Number(v?.stockQuantity ?? 0);
+const getPrice = (v) => Number(v?.price ?? 0);
+const getProductStock = (p) => Number(p?.totalStock ?? 0);
+// Giá sau khuyến mãi và số còn bán được của từng biến thể: { [detailId]: { price, available } }
+const salePricesOf = (productId) => api(`/sales/in-store/prices/${productId}`).catch(() => ({}));
 const NO_EFFECTS = 'pos-no-effects';
 const noEffectStyles = {
   [`.${NO_EFFECTS} .MuiButtonBase-root, .${NO_EFFECTS} .MuiButtonBase-root::after`]: { transition: 'none !important' },
@@ -75,8 +73,7 @@ const blankOrder = (id, label) => ({
   payment: 'Cash',
   discount: '',
   discountType: 'amount',
-  customerPaid: '',
-  transfer: null
+  customerPaid: ''
 });
 
 export default function InStoreSalesPage() {
@@ -102,6 +99,10 @@ export default function InStoreSalesPage() {
   const [loading, setLoading] = useState(true);
   const [addingId, setAddingId] = useState(null);
   const [infoLine, setInfoLine] = useState(null);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
 
   // Quản lý nhiều tab hóa đơn chờ kiểu Sapo
   const [orders, setOrders] = useState([blankOrder(1, 'Hóa đơn 1')]);
@@ -113,23 +114,13 @@ export default function InStoreSalesPage() {
     return orders.find((o) => o.id === activeOrderId) || orders[0] || {};
   }, [orders, activeOrderId]);
 
-  // Hóa đơn đang chờ chuyển khoản: khóa giỏ hàng
-  const locked = Boolean(activeOrder.transfer);
-
-  // Số lượng cùng biến thể đang nằm ở các hóa đơn chờ khác (đơn chờ chuyển khoản đã trừ kho trên server)
+  // Số lượng cùng biến thể đang nằm ở các hóa đơn chờ khác
   const otherTabsQty = (key) =>
-    orders.reduce(
-      (sum, o) => (o.id === activeOrder.id || o.transfer ? sum : sum + (o.cart.find((line) => line.key === key)?.quantity ?? 0)),
-      0
-    );
+    orders.reduce((sum, o) => (o.id === activeOrder.id ? sum : sum + (o.cart.find((line) => line.key === key)?.quantity ?? 0)), 0);
 
   // Cập nhật tồn kho mới nhất của biến thể cho mọi hóa đơn chờ
   function syncStock(key, stock) {
     setOrders((prev) => prev.map((o) => ({ ...o, cart: o.cart.map((line) => (line.key === key ? { ...line, stock } : line)) })));
-  }
-
-  function updateOrder(id, patch) {
-    setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, ...patch } : o)));
   }
 
   // Đóng một hóa đơn; hết hóa đơn thì mở hóa đơn trống mới
@@ -214,10 +205,6 @@ export default function InStoreSalesPage() {
 
   function closeOrderTab(id, e) {
     e?.stopPropagation();
-    if (orders.find((o) => o.id === id)?.transfer) {
-      setError('Hóa đơn đang chờ thanh toán. Bấm "Hủy chuyển khoản" trước khi đóng.');
-      return;
-    }
     if (orders.length <= 1) {
       cancelInvoice();
       return;
@@ -233,73 +220,16 @@ export default function InStoreSalesPage() {
   const [selectedColor, setSelectedColor] = useState('');
   const [variantQuantity, setVariantQuantity] = useState(1);
   const [loadingVariants, setLoadingVariants] = useState(false);
-
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const submittingRef = useRef(false);
+  const [variantQtyDraft, setVariantQtyDraft] = useState(null);
+  const [editingKey, setEditingKey] = useState(null);
 
   // Modal hóa đơn sau thanh toán
-  const [receiptOpen, setReceiptOpen] = useState(false);
-  const [completedSale, setCompletedSale] = useState(null);
-  const [completedCart, setCompletedCart] = useState([]);
-  const [completedAt, setCompletedAt] = useState(null);
-  const [completedPayment, setCompletedPayment] = useState({ received: 0, change: 0 });
-
-  // Hóa đơn đang hiện mã QR
-  const [qrTabId, setQrTabId] = useState(null);
-  const qrTransfer = orders.find((o) => o.id === qrTabId)?.transfer ?? null;
-
-  // Mở lại các hóa đơn đang chờ chuyển khoản khi tải lại trang
-  useEffect(() => {
-    api('/sales/in-store/pending')
-      .then((list) =>
-        setOrders((prev) => {
-          const fresh = prev.length === 1 && !prev[0].cart.length;
-          const used = new Set(fresh ? [] : prev.map((o) => o.label));
-          let n = 0;
-          const nextLabel = () => {
-            do n++;
-            while (used.has(`Hóa đơn ${n}`));
-            return `Hóa đơn ${n}`;
-          };
-          const restored = (list ?? [])
-            .filter(({ sale }) => !prev.some((o) => o.transfer?.sale.orderId === sale.orderId))
-            .map(({ sale, items }) => ({
-              ...blankOrder(`pending-${sale.orderId}`, nextLabel()),
-              payment: 'Bank transfer',
-              discount: String(sale.discountAmount ?? ''),
-              transfer: { sale, link: null },
-              cart: items.map((item) => ({
-                key: `${item.productId}-${item.detailId}`,
-                productId: item.productId,
-                variantId: item.detailId,
-                name: item.productName,
-                image: item.imageUrl || '',
-                size: item.size ?? '',
-                color: item.color ?? '',
-                price: Number(item.unitPrice),
-                originalPrice: Number(item.originalPrice),
-                stock: item.available,
-                quantity: item.quantity
-              }))
-            }));
-          // Chưa bán gì: chỉ hiện các hóa đơn đang chờ (hóa đơn đầu tiên được mở)
-          if (!restored.length) return prev;
-          return fresh ? restored : [...restored, ...prev];
-        })
-      )
-      .catch(() => {});
-  }, []);
+  // completed: { sale, cart, at, received, change }
+  const [completed, setCompleted] = useState(null);
+  const receiptOpen = Boolean(completed);
 
   useEffect(() => {
-    loadPriceRanges();
-    getProducts()
-      .then((res) => {
-        setProducts(getList(res?.data ?? res).filter((p) => isActive(p.status)));
-      })
-      .catch((err) => setError(err.message || 'Không thể tải danh sách sản phẩm.'))
-      .finally(() => setLoading(false));
+    reloadProducts((err) => setError(err.message || 'Không thể tải danh sách sản phẩm.')).finally(() => setLoading(false));
   }, []);
 
   // Khoảng giá gốc và giá sau khuyến mãi cho ô tìm kiếm
@@ -356,13 +286,9 @@ export default function InStoreSalesPage() {
     setVariantDialogOpen(true);
 
     try {
-      const [res, sales] = await Promise.all([getProductById(id), api(`/sales/in-store/prices/${id}`).catch(() => ({}))]);
-      const data = res?.data ?? res;
-      const detail = data?.data ?? data;
-      const item = detail?.product ?? detail;
-      const rawVariants = detail?.variants ?? item?.variants ?? detail?.productVariants ?? item?.productVariants ?? [];
-
-      const activeVariants = Array.isArray(rawVariants) ? rawVariants.filter((v) => isActive(v.status)) : [];
+      const [detail, sales] = await Promise.all([getProductById(id), salePricesOf(id)]);
+      const item = detail.product;
+      const activeVariants = detail.variants.filter((v) => isActive(v.status));
 
       if (!activeVariants.length) {
         setVariantDialogOpen(false);
@@ -370,14 +296,7 @@ export default function InStoreSalesPage() {
         return;
       }
 
-      const image =
-        detail?.images?.[0]?.imageUrl ||
-        item?.images?.[0]?.imageUrl ||
-        product.primaryImageUrl ||
-        product.imageUrl ||
-        product.thumbnailUrl ||
-        product.mainImageUrl ||
-        '';
+      const image = detail.images[0]?.imageUrl || product.primaryImageUrl || '';
 
       setVariantProduct({ ...product, ...item, productId: id, image });
       // Số lượng còn bán được đã trừ hàng giữ cho đơn khác
@@ -412,9 +331,6 @@ export default function InStoreSalesPage() {
     setSelectedColor('');
     setVariantQuantity(1);
   }
-
-  const [variantQtyDraft, setVariantQtyDraft] = useState(null);
-  const [editingKey, setEditingKey] = useState(null);
 
   const variantKey = selectedVariant ? `${getId(variantProduct)}-${getVariantId(selectedVariant)}` : '';
   const inCartQty = selectedVariant ? (cart.find((line) => line.key === variantKey && line.key !== editingKey)?.quantity ?? 0) : 0;
@@ -502,7 +418,7 @@ export default function InStoreSalesPage() {
     setSuccess('');
     try {
       const line = await scanToCartLine(code);
-      const sale = (await api(`/sales/in-store/prices/${line.productId}`).catch(() => ({})))[line.variantId];
+      const sale = (await salePricesOf(line.productId))[line.variantId];
       line.originalPrice = line.price;
       line.price = Number(sale?.price ?? line.price);
       line.stock = sale?.available ?? line.stock;
@@ -532,7 +448,7 @@ export default function InStoreSalesPage() {
   }
 
   // Máy quét cắm vào là dùng: bóp cò ở bất kỳ đâu trên trang (trừ khi đang mở hộp thoại khác).
-  useBarcodeScanner(addScanned, !variantDialogOpen && !receiptOpen && !discountOpen && !cameraOpen && !qrTabId && !locked);
+  useBarcodeScanner(addScanned, !variantDialogOpen && !receiptOpen && !discountOpen && !cameraOpen);
 
   function updateQuantity(key, delta) {
     setCart((current) =>
@@ -614,22 +530,8 @@ export default function InStoreSalesPage() {
         }
       });
 
-      if (result.orderStatus !== 'AWAITING_PAYMENT') {
-        const received = method === 'Cash' && rawPaidNumber > 0 ? rawPaidNumber : Number(result.totalAmount ?? total);
-        await finishSale(result, tabId, received, method === 'Cash' ? changeAmount : 0);
-        return;
-      }
-
-      // Chuyển khoản: tạo mã PayOS, gắn đơn vào hóa đơn này rồi hiện QR
-      try {
-        const link = await api('/payment/payos/create-link', { method: 'POST', body: { orderId: result.orderId } });
-        updateOrder(tabId, { payment: 'Bank transfer', transfer: { sale: result, link } });
-        setQrTabId(tabId);
-        reloadProducts();
-      } catch (err) {
-        await api(`/sales/in-store/${result.orderId}/cancel`, { method: 'POST' }).catch(() => {});
-        throw new Error(`Không tạo được mã thanh toán: ${err.message || 'lỗi kết nối'}`);
-      }
+      const received = method === 'Cash' && rawPaidNumber > 0 ? rawPaidNumber : Number(result.totalAmount ?? total);
+      await finishSale(result, tabId, received, method === 'Cash' ? changeAmount : 0);
     } catch (err) {
       if (err.code === 'PRICE_CHANGED') await refreshCartPrices(tabId);
       setError(err.message || 'Không thể tạo đơn hàng. Vui lòng thử lại.');
@@ -640,23 +542,17 @@ export default function InStoreSalesPage() {
   }
 
   // Hiện hóa đơn, đóng hóa đơn vừa bán và tải lại tồn kho
-  async function finishSale(result, tabId, received = Number(result.totalAmount), change = 0) {
+  async function finishSale(result, tabId, received, change) {
     const detail = await api(`/sales/in-store/${result.orderId}`).catch(() => null);
-    const soldItems = detail?.items?.map((item) => ({
-      key: item.orderItemId,
-      name: item.productName,
-      size: item.size ?? '',
-      color: item.color ?? '',
-      quantity: item.quantity,
-      price: Number(item.unitPrice)
-    }));
+    const soldItems = toReceiptItems(detail?.items);
 
-    setCompletedSale(result);
-    setCompletedCart(soldItems?.length ? soldItems : (ordersRef.current.find((o) => o.id === tabId)?.cart ?? []));
-    setCompletedAt(new Date());
-    setCompletedPayment({ received, change });
-    setReceiptOpen(true);
-    setQrTabId((cur) => (cur === tabId ? null : cur));
+    setCompleted({
+      sale: result,
+      cart: soldItems.length ? soldItems : (ordersRef.current.find((o) => o.id === tabId)?.cart ?? []),
+      at: new Date(),
+      received,
+      change
+    });
     removeTab(tabId);
     reloadProducts();
   }
@@ -664,7 +560,7 @@ export default function InStoreSalesPage() {
   // Lấy lại giá sau khuyến mãi và số lượng còn bán được cho các sản phẩm trong hóa đơn
   async function refreshCartPrices(tabId) {
     const ids = [...new Set((ordersRef.current.find((o) => o.id === tabId)?.cart ?? []).map((line) => line.productId))];
-    const sales = Object.assign({}, ...(await Promise.all(ids.map((id) => api(`/sales/in-store/prices/${id}`).catch(() => ({}))))));
+    const sales = Object.assign({}, ...(await Promise.all(ids.map(salePricesOf))));
     setOrders((prev) =>
       prev.map((o) =>
         o.id !== tabId
@@ -680,100 +576,11 @@ export default function InStoreSalesPage() {
     );
   }
 
-  // Hiện mã QR; hóa đơn mở lại sau khi tải trang chưa có mã thì tạo mã mới (mã cũ bị hủy)
-  async function showQr() {
-    const tab = activeOrder;
-    if (!tab.transfer.link) {
-      if (submittingRef.current) return;
-      submittingRef.current = true;
-      setSubmitting(true);
-      setError('');
-      try {
-        const link = await api(`/sales/in-store/${tab.transfer.sale.orderId}/payment-link`, { method: 'POST' });
-        updateOrder(tab.id, { transfer: { ...tab.transfer, link } });
-      } catch (err) {
-        setError(err.message || 'Không tạo được mã thanh toán.');
-        return;
-      } finally {
-        submittingRef.current = false;
-        setSubmitting(false);
-      }
-    }
-    setQrTabId(tab.id);
-  }
-
-  function reloadProducts() {
+  function reloadProducts(onError = () => {}) {
     loadPriceRanges();
-    getProducts()
-      .then((res) => {
-        setProducts(getList(res?.data ?? res).filter((p) => isActive(p.status)));
-      })
-      .catch(() => {});
-  }
-
-  function dropTransfer(tabId) {
-    updateOrder(tabId, { transfer: null, payment: 'Cash' });
-    setQrTabId((cur) => (cur === tabId ? null : cur));
-  }
-
-  // Kiểm tra tiền về mỗi 3 giây cho mọi hóa đơn chờ chuyển khoản, kể cả khi đã tắt QR
-  const checkingRef = useRef(new Set());
-  const pendingKey = orders
-    .filter((o) => o.transfer)
-    .map((o) => o.transfer.sale.orderId)
-    .join(',');
-
-  useEffect(() => {
-    if (!pendingKey) return undefined;
-    const check = () =>
-      ordersRef.current
-        .filter((o) => o.transfer)
-        .forEach(async (o) => {
-          const { orderId } = o.transfer.sale;
-          if (checkingRef.current.has(orderId)) return;
-          checkingRef.current.add(orderId);
-          try {
-            const res = await api(`/payment/payos/status/${orderId}`);
-            if (res?.paid) await finishSale(await api(`/sales/in-store/${orderId}/complete`, { method: 'POST' }), o.id);
-          } catch (err) {
-            // Quá hạn giữ hàng: đơn đã bị hệ thống hủy
-            if (err.status === 404) {
-              dropTransfer(o.id);
-              setError(`${o.label}: mã chuyển khoản đã hết hạn, hàng đã trả về kho.`);
-            }
-          } finally {
-            checkingRef.current.delete(orderId);
-          }
-        });
-    check();
-    const timer = setInterval(check, 3000);
-    return () => clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingKey]);
-
-  // Hủy chuyển khoản: hủy mã PayOS, trả hàng về kho, mở khóa giỏ; khách đã chuyển thì hoàn tất luôn
-  async function cancelTransfer() {
-    const tab = activeOrder;
-    if (!tab.transfer || submittingRef.current) return;
-    submittingRef.current = true;
-    setSubmitting(true);
-    setError('');
-    try {
-      const result = await api(`/sales/in-store/${tab.transfer.sale.orderId}/cancel`, { method: 'POST' });
-      if (result?.orderId) {
-        setSuccess('Khách đã chuyển khoản xong, đã hoàn tất hóa đơn.');
-        await finishSale(result, tab.id);
-      } else {
-        dropTransfer(tab.id);
-        setSuccess('Đã hủy chuyển khoản.');
-        reloadProducts();
-      }
-    } catch (err) {
-      setError(err.message || 'Không hủy được chuyển khoản.');
-    } finally {
-      submittingRef.current = false;
-      setSubmitting(false);
-    }
+    return getProducts()
+      .then((res) => setProducts(res.filter((p) => isActive(p.status))))
+      .catch(onError);
   }
 
   function cancelInvoice() {
@@ -789,14 +596,6 @@ export default function InStoreSalesPage() {
     });
     setError('');
     setSuccess('Đã hủy hóa đơn.');
-  }
-
-  function handleReceiptClose() {
-    setReceiptOpen(false);
-    setCompletedSale(null);
-    setCompletedCart([]);
-    setCompletedAt(null);
-    setCompletedPayment({ received: 0, change: 0 });
   }
 
   return (
@@ -830,8 +629,7 @@ export default function InStoreSalesPage() {
                 <TextField
                   fullWidth
                   size="small"
-                  placeholder="Tìm theo tên sản phẩm hoặc mã SKU"
-                  disabled={locked}
+                  placeholder="Tìm theo tên sản phẩm hoặc mã sản phẩm"
                   inputRef={searchInputRef}
                   value={search}
                   onFocus={() => setSearchOpen(true)}
@@ -862,7 +660,6 @@ export default function InStoreSalesPage() {
                           <IconButton
                             size="small"
                             aria-label="Quét mã bằng camera"
-                            disabled={locked}
                             title="Có máy quét: cứ bóp cò là thêm vào hóa đơn. Không có máy quét: bấm để quét bằng camera."
                             onClick={() => setCameraOpen(true)}
                           >
@@ -1062,8 +859,7 @@ export default function InStoreSalesPage() {
                       borderBottom: '1px solid #F1F5F9',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: 1.25,
-                      ...(locked && { pointerEvents: 'none', opacity: 0.6 })
+                      gap: 1.25
                     }}
                   >
                     <Typography sx={{ width: 22, fontSize: 12.5, fontWeight: 700, color: '#94A3B8', textAlign: 'center', flexShrink: 0 }}>
@@ -1187,6 +983,9 @@ export default function InStoreSalesPage() {
             py: 1.5,
             boxShadow: '0 1px 4px rgba(0,0,0,0.03)',
             minHeight: 0,
+            alignSelf: 'start',
+            maxHeight: '100%',
+            overflowY: 'auto',
             display: 'flex',
             flexDirection: 'column',
             '& > *': { flexShrink: 0 }
@@ -1221,11 +1020,6 @@ export default function InStoreSalesPage() {
                   }}
                 >
                   <span>{ord.label}</span>
-                  {ord.transfer && (
-                    <Box component="span" sx={{ fontSize: 10.5, fontWeight: 700, color: '#B45309' }}>
-                      · Chờ thanh toán
-                    </Box>
-                  )}
                   {orders.length > 1 && (
                     <Box
                       component="span"
@@ -1295,7 +1089,7 @@ export default function InStoreSalesPage() {
                 fontWeight: 700
               }}
             >
-              {locked ? 'Chờ thanh toán' : 'Đang tạo'}
+              Đang tạo
             </Box>
           </Box>
 
@@ -1317,7 +1111,7 @@ export default function InStoreSalesPage() {
                   <Typography sx={{ fontSize: 13, color: '#64748B' }}>
                     Giảm giá{discountType === 'percent' && discountNumber > 0 ? ` (${discountNumber}%)` : ''}
                   </Typography>
-                  <IconButton size="small" disabled={locked} onClick={openDiscount} sx={{ p: 0.25, color: '#64748B' }}>
+                  <IconButton size="small" onClick={openDiscount} sx={{ p: 0.25, color: '#64748B' }}>
                     <EditOutlined style={{ fontSize: 12 }} />
                   </IconButton>
                 </Box>
@@ -1350,7 +1144,6 @@ export default function InStoreSalesPage() {
                   component="button"
                   type="button"
                   onClick={() => setPayment('Cash')}
-                  disabled={locked}
                   sx={{
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -1368,8 +1161,7 @@ export default function InStoreSalesPage() {
                     boxShadow: 'none',
                     outline: 'none',
                     WebkitTapHighlightColor: 'transparent',
-                    userSelect: 'none',
-                    '&:disabled': { opacity: 0.5, cursor: 'not-allowed' }
+                    userSelect: 'none'
                   }}
                 >
                   <DollarOutlined />
@@ -1379,8 +1171,7 @@ export default function InStoreSalesPage() {
                 <Box
                   component="button"
                   type="button"
-                  onClick={() => (locked ? showQr() : completeSale('Bank transfer'))}
-                  disabled={submitting}
+                  onClick={() => setPayment('Bank transfer')}
                   sx={{
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -1441,12 +1232,12 @@ export default function InStoreSalesPage() {
             </Box>
           </Box>
 
-          <Box sx={{ mt: 'auto', pt: 1 }}>
+          <Box sx={{ mt: 5 }}>
             <Button
               fullWidth
               variant="contained"
-              onClick={() => completeSale('Cash')}
-              disabled={submitting || locked}
+              onClick={() => completeSale(payment)}
+              disabled={submitting}
               startIcon={!submitting && <CheckOutlined />}
               sx={{
                 bgcolor: '#8EECF5',
@@ -1464,13 +1255,13 @@ export default function InStoreSalesPage() {
                 }
               }}
             >
-              {submitting ? 'Đang xử lý...' : locked ? 'Đang chờ khách chuyển khoản' : 'Hoàn tất thanh toán'}
+              {submitting ? 'Đang xử lý...' : 'Hoàn tất thanh toán'}
             </Button>
 
             <Box sx={{ textAlign: 'center', mt: 0.75 }}>
               <Button
                 size="small"
-                onClick={locked ? cancelTransfer : cancelInvoice}
+                onClick={cancelInvoice}
                 disabled={submitting}
                 startIcon={<DeleteOutlined style={{ fontSize: 12 }} />}
                 sx={{
@@ -1480,7 +1271,7 @@ export default function InStoreSalesPage() {
                   textTransform: 'none'
                 }}
               >
-                {locked ? 'Hủy chuyển khoản' : 'Hủy hóa đơn'}
+                Hủy hóa đơn
               </Button>
             </Box>
           </Box>
@@ -1927,18 +1718,17 @@ export default function InStoreSalesPage() {
       {/* Modal Hóa đơn sau thanh toán */}
       <ReceiptDialog
         open={receiptOpen}
-        onClose={handleReceiptClose}
-        saleData={completedSale}
-        cartItems={completedCart}
+        onClose={() => setCompleted(null)}
+        saleData={completed?.sale}
+        cartItems={completed?.cart}
         sellerName={account?.fullName ?? ''}
-        completedAt={completedAt}
-        receivedAmount={completedPayment.received}
-        changeAmount={completedPayment.change}
+        completedAt={completed?.at}
+        receivedAmount={completed?.received}
+        changeAmount={completed?.change}
       />
 
       <ProductInfoDialog line={infoLine} onClose={() => setInfoLine(null)} />
 
-      <TransferQrDialog transfer={qrTransfer} onClose={() => setQrTabId(null)} />
     </Box>
   );
 }

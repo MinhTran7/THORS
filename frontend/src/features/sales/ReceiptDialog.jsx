@@ -42,12 +42,8 @@ export default function ReceiptDialog({
   if (!saleData) return null;
 
   const displaySeller = sellerName.trim() || '—';
-  const received = receivedAmount ?? saleData.receivedAmount ?? (saleData.paymentMethod === 'CASH' ? saleData.totalAmount : 0);
-  const change = changeAmount ?? saleData.changeAmount ?? 0;
-
-  function handlePrint() {
-    window.print();
-  }
+  const received = receivedAmount ?? (saleData.paymentMethod === 'CASH' ? saleData.totalAmount : 0);
+  const change = changeAmount ?? 0;
 
   return (
     <>
@@ -206,7 +202,7 @@ export default function ReceiptDialog({
               )}
               <ReceiptRow
                 label="Trạng thái"
-                value={saleData.paymentStatus === 'PAID' || saleData.paymentStatus === 'SUCCESS' ? 'Đã thanh toán' : saleData.paymentStatus}
+                value={saleData.paymentStatus === 'PAID' ? 'Đã thanh toán' : saleData.paymentStatus}
               />
             </Stack>
 
@@ -230,7 +226,7 @@ export default function ReceiptDialog({
           <Button
             variant="contained"
             startIcon={<PrinterOutlined />}
-            onClick={handlePrint}
+            onClick={() => window.print()}
             sx={{
               ...buttonSx,
               flex: 1,

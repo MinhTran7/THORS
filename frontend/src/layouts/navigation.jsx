@@ -66,7 +66,7 @@ const OWNER_MENU = [
     icon: <PercentageOutlined />,
     children: [
       { to: '/promotions', label: 'Khuyến mãi sản phẩm', icon: <GiftOutlined /> },
-      { to: '/order-discounts', label: 'Giảm giá đơn hàng', icon: <TagOutlined /> }
+      { to: '/order-discounts', label: 'Mã giảm giá online', icon: <TagOutlined /> }
     ]
   },
   {

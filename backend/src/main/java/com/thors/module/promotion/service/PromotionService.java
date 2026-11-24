@@ -1,22 +1,30 @@
 package com.thors.module.promotion.service;
 
 import com.thors.common.ApiException;
+import com.thors.module.account.entity.Account;
 import com.thors.module.notification.service.NotificationPublisher;
 import com.thors.module.notification.service.NotificationTypes;
+import com.thors.module.promotion.dto.PromotionAdjustRequest;
+import com.thors.module.promotion.dto.PromotionOrder;
 import com.thors.module.promotion.dto.PromotionRequest;
+import com.thors.module.promotion.dto.PromotionView;
+import com.thors.module.promotion.dto.VoucherView;
 import com.thors.module.promotion.entity.Promotion;
 import com.thors.module.promotion.repository.PromotionRepository;
 import com.thors.security.SessionAccess;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
-import java.util.function.BiFunction;
+import java.util.Set;
 
 @Service
 public class PromotionService {
@@ -29,91 +37,127 @@ public class PromotionService {
     private final PromotionRepository repository;
     private final SessionAccess sessionAccess;
     private final NotificationPublisher notifications;
+    private final PricingService pricing;
 
-    public PromotionService(PromotionRepository repository, SessionAccess sessionAccess, NotificationPublisher notifications) {
+    public PromotionService(PromotionRepository repository, SessionAccess sessionAccess, NotificationPublisher notifications,
+                            PricingService pricing) {
         this.repository = repository;
         this.sessionAccess = sessionAccess;
         this.notifications = notifications;
+        this.pricing = pricing;
     }
 
     // ---- Xem ----
 
-    // Owner xem tất cả; khách chỉ xem khuyến mãi còn hiệu lực và còn lượt
-    public List<Promotion> getAll() {
-        return switch (sessionAccess.current().role()) {
-            case "OWNER" -> repository.findAll().stream().map(this::withProductIds).toList();
-            case "CUSTOMER" -> repository.findAvailable(LocalDateTime.now()).stream()
-                    .filter(promotion -> !promotion.isExhausted())
-                    .map(this::withProductIds)
-                    .toList();
+    // Owner xem tất cả. Nhánh khách giữ cho trang Checkout cũ (trang khách mới dùng getVouchers)
+    public List<PromotionView> getAll() {
+        LocalDateTime now = LocalDateTime.now();
+        Account account = sessionAccess.current();
+        List<Promotion> promotions = switch (account.role()) {
+            case "OWNER" -> repository.findAll();
+            case "CUSTOMER" -> availableVouchers(now, account.id());
             default -> throw forbidden();
         };
+        return repository.withProductIds(promotions).stream().map(p -> PromotionView.of(p, now)).toList();
     }
 
-    public Promotion getById(int id) {
-        return withProductIds(switch (sessionAccess.current().role()) {
-            case "OWNER" -> repository.findById(id).orElseThrow(PromotionService::notFound);
-            case "CUSTOMER" -> repository.findAvailableById(id, LocalDateTime.now()).orElseThrow(PromotionService::notFound);
-            default -> throw forbidden();
-        });
+    public PromotionView getById(int id) {
+        requireOwner();
+        return PromotionView.of(repository.withProductIds(find(id)), LocalDateTime.now());
     }
 
-    // ---- Giá sau khuyến mãi ----
+    public List<PromotionOrder> getOrders(int id) {
+        requireOwner();
+        find(id);
+        return repository.findOrders(id);
+    }
 
+    // Mã giảm giá online còn hiệu lực, còn lượt; khách đã đăng nhập không thấy mã mình đã dùng
+    public List<VoucherView> getVouchers() {
+        return availableVouchers(LocalDateTime.now(), currentCustomerId()).stream().map(VoucherView::of).toList();
+    }
+
+    // Giữ cho Checkout đang gọi; tính giá nằm ở PricingService
     public BigDecimal salePrice(int productId, BigDecimal price) {
-        return repository.findRunningProductPromotion(productId, LocalDateTime.now())
-                .map(promotion -> price.subtract(promotion.discountOf(price)))
-                .orElse(price);
+        return pricing.salePrice(productId, price);
     }
 
-    // Tính giá cho nhiều sản phẩm: chỉ đọc các khuyến mãi đang chạy một lần, kết quả giống salePrice
-    public BiFunction<Integer, BigDecimal, BigDecimal> salePricer() {
-        List<Promotion> running = repository.findRunningProductPromotions(LocalDateTime.now()).stream()
-                .map(this::withProductIds)
-                .toList();
-        return (productId, price) -> running.stream()
-                .filter(p -> "ALL".equals(p.applyScope()) || p.productIds().contains(productId))
-                .findFirst()
-                .map(p -> price.subtract(p.discountOf(price)))
-                .orElse(price);
-    }
-
-    // ---- Tạo, sửa, bật/tắt ----
+    // ---- Tạo, sửa ----
 
     @Transactional
-    public Promotion create(PromotionRequest request) {
+    public PromotionView create(PromotionRequest request) {
         requireOwner();
         Draft d = validate(request);
-        checkProductOverlap(0, d.minimum(), d.scope(), d.productIds(), d.start(), d.end());
+        if (!d.isVoucher()) {
+            repository.lockForWrite();
+            checkProductOverlap(0, d.scope(), d.productIds(), d.start(), d.end());
+        }
 
-        int id = repository.create(d.name(), d.description(), d.type(), d.value(), d.minimum(), d.start(), d.end(),
-                d.usageLimit(), d.scope(), sessionAccess.current().id());
+        int id = repository.create(d.type(), d.name(), d.description(), d.discountType(), d.value(), d.minimum(),
+                d.start(), d.end(), d.usageLimit(), d.scope(), sessionAccess.current().id());
         repository.replacePromotionProducts(id, d.productIds());
-        notifyCustomersCreated(id, d);
-        return withProductIds(repository.findById(id).orElseThrow(PromotionService::notFound));
+        afterCommit(() -> notifyCustomersCreated(id, d));
+        return PromotionView.of(repository.withProductIds(find(id)), LocalDateTime.now());
     }
 
-    // Chỉ sửa được khuyến mãi sắp diễn ra
+    // Sửa toàn bộ: chỉ khi chưa bắt đầu, không đổi loại khuyến mãi
     @Transactional
     public void update(int id, PromotionRequest request) {
         requireOwner();
-        Promotion existing = repository.findById(id).orElseThrow(PromotionService::notFound);
-        if (!LocalDateTime.now().isBefore(existing.startDate())) {
+        Promotion existing = find(id);
+        if (!existing.canEdit(LocalDateTime.now())) {
             throw badRequest("PROMOTION_STARTED", "Khuyến mãi đã bắt đầu nên không thể chỉnh sửa.");
         }
-
         Draft d = validate(request);
-        if ("ACTIVE".equals(existing.status())) {
-            checkProductOverlap(id, d.minimum(), d.scope(), d.productIds(), d.start(), d.end());
+        if (!d.type().equals(existing.type())) {
+            throw badRequest("PROMOTION_TYPE_LOCKED", "Không thể đổi loại khuyến mãi.");
         }
-        if (repository.update(id, d.name(), d.description(), d.type(), d.value(), d.minimum(), d.start(), d.end(),
-                d.usageLimit(), d.scope()) == 0) {
-            throw notFound();
+        if (!d.isVoucher() && existing.isActive()) {
+            repository.lockForWrite();
+            checkProductOverlap(id, d.scope(), d.productIds(), d.start(), d.end());
         }
+        repository.update(id, d.name(), d.description(), d.discountType(), d.value(), d.minimum(), d.start(), d.end(),
+                d.usageLimit(), d.scope());
         repository.replacePromotionProducts(id, d.productIds());
     }
 
-    // Bật lại: chưa kết thúc và không trùng sản phẩm; tắt: không được khi đang diễn ra
+    // Sửa khi đang chạy: chỉ gia hạn ngày kết thúc và điều chỉnh lượt dùng (mã giảm giá online)
+    @Transactional
+    public void adjust(int id, PromotionAdjustRequest request) {
+        requireOwner();
+        if (request == null) {
+            throw badRequest("PROMOTION_REQUIRED", "Vui lòng nhập thông tin cần sửa.");
+        }
+        if (!find(id).isOrderVoucher()) {
+            repository.lockForWrite();
+        }
+        Promotion p = repository.lockById(id).orElseThrow(PromotionService::notFound);
+        if (!p.canAdjust(LocalDateTime.now())) {
+            throw badRequest("PROMOTION_NOT_RUNNING", "Chỉ sửa được thời gian và lượt dùng khi khuyến mãi đang diễn ra.");
+        }
+
+        LocalDateTime end = request.endDate() == null ? p.endDate() : request.endDate();
+        if (end.isBefore(p.endDate())) {
+            throw badRequest("PROMOTION_END_INVALID", "Chỉ được gia hạn, thời gian kết thúc mới phải sau thời gian cũ.");
+        }
+
+        Integer usageLimit = p.usageLimit();
+        if (p.isOrderVoucher() && request.usageLimit() != null) {
+            usageLimit = request.usageLimit();
+            if (usageLimit < Math.max(1, p.usedCount())) {
+                throw badRequest("PROMOTION_USAGE_LIMIT_INVALID",
+                        "Giới hạn lượt dùng phải từ 1 trở lên và không nhỏ hơn số lượt đã dùng (" + p.usedCount() + ").");
+            }
+        }
+
+        if (!p.isOrderVoucher() && p.isActive() && end.isAfter(p.endDate())) {
+            checkProductOverlap(id, p.applyScope(), repository.findProductIds(id), p.startDate(), end);
+        }
+        repository.adjust(id, end, usageLimit);
+    }
+
+    // ---- Vòng đời: bật/tắt, kết thúc sớm, xóa ----
+
     @Transactional
     public void changeStatus(int id, String status) {
         requireOwner();
@@ -122,31 +166,73 @@ public class PromotionService {
             throw badRequest("PROMOTION_STATUS_INVALID", "Trạng thái chỉ được là ACTIVE hoặc INACTIVE.");
         }
 
-        Promotion promotion = repository.findById(id).orElseThrow(PromotionService::notFound);
+        Promotion p = find(id);
         LocalDateTime now = LocalDateTime.now();
+        Promotion.Schedule schedule = p.schedule(now);
+        if (schedule == Promotion.Schedule.ENDED) {
+            throw badRequest("PROMOTION_ENDED", "Khuyến mãi đã kết thúc nên không thể bật hoặc tắt.");
+        }
         if ("ACTIVE".equals(next)) {
-            if (!promotion.endDate().isAfter(now)) {
-                throw badRequest("PROMOTION_ENDED", "Khuyến mãi đã kết thúc nên không thể bật lại.");
+            if (!p.canEnable(now)) {
+                return;
             }
-            checkProductOverlap(id, promotion.minOrderValue(), promotion.applyScope(), repository.findProductIds(id),
-                    promotion.startDate(), promotion.endDate());
-        } else if ("ACTIVE".equals(promotion.status()) && !now.isBefore(promotion.startDate()) && now.isBefore(promotion.endDate())) {
-            throw badRequest("PROMOTION_RUNNING", "Khuyến mãi đang diễn ra nên không thể tắt.");
+            if (!p.isOrderVoucher()) {
+                repository.lockForWrite();
+                checkProductOverlap(id, p.applyScope(), repository.findProductIds(id), p.startDate(), p.endDate());
+            }
+        } else if (!p.canDisable(now)) {
+            if (schedule == Promotion.Schedule.ONGOING && p.isActive()) {
+                throw badRequest("PROMOTION_RUNNING", "Khuyến mãi đang diễn ra nên không thể tắt. Hãy dùng Kết thúc sớm.");
+            }
+            return;
         }
         repository.updateStatus(id, next);
+    }
+
+    // Kết thúc ngay khuyến mãi đang chạy: đơn đã đặt giữ nguyên số tiền đã giảm
+    @Transactional
+    public void endEarly(int id) {
+        requireOwner();
+        Promotion p = find(id);
+        LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS);
+        if (!p.canEndEarly(now)) {
+            throw badRequest("PROMOTION_NOT_RUNNING", "Chỉ kết thúc sớm được khuyến mãi đang diễn ra.");
+        }
+        repository.endAt(id, now.isAfter(p.startDate()) ? now : p.startDate().plusSeconds(1));
+    }
+
+    // Chỉ xóa khuyến mãi sắp diễn ra và chưa có đơn nào gắn với nó
+    @Transactional
+    public void delete(int id) {
+        requireOwner();
+        Promotion p = find(id);
+        if (!p.canDelete(LocalDateTime.now()) || repository.countOrders(id) > 0) {
+            throw badRequest("PROMOTION_NOT_DELETABLE", "Chỉ xóa được khuyến mãi sắp diễn ra và chưa có đơn nào sử dụng.");
+        }
+        repository.delete(id);
     }
 
     // ---- Kiểm tra dữ liệu ----
 
     // Dữ liệu khuyến mãi đã chuẩn hóa và kiểm tra (dùng chung cho tạo và sửa)
-    private record Draft(String name, String description, String type, BigDecimal value, BigDecimal minimum,
-                         LocalDateTime start, LocalDateTime end, Integer usageLimit, String scope, List<Integer> productIds) {
+    private record Draft(String type, String name, String description, String discountType, BigDecimal value,
+                         BigDecimal minimum, LocalDateTime start, LocalDateTime end, Integer usageLimit, String scope,
+                         List<Integer> productIds) {
+        boolean isVoucher() {
+            return Promotion.ORDER_VOUCHER.equals(type);
+        }
     }
 
     private Draft validate(PromotionRequest r) {
         if (r == null) {
             throw badRequest("PROMOTION_REQUIRED", "Vui lòng nhập thông tin khuyến mãi.");
         }
+
+        String type = r.type() == null ? "" : r.type().trim().toUpperCase(Locale.ROOT);
+        if (!Promotion.PRODUCT_DISCOUNT.equals(type) && !Promotion.ORDER_VOUCHER.equals(type)) {
+            throw badRequest("PROMOTION_KIND_INVALID", "Loại khuyến mãi không hợp lệ.");
+        }
+        boolean voucher = Promotion.ORDER_VOUCHER.equals(type);
 
         String name = r.name() == null ? "" : r.name().trim();
         if (name.isEmpty() || name.length() > 100) {
@@ -158,29 +244,36 @@ public class PromotionService {
             throw badRequest("PROMOTION_DESCRIPTION_INVALID", "Mô tả tối đa 255 ký tự.");
         }
 
-        String type = r.discountType() == null ? "" : r.discountType().trim().toUpperCase(Locale.ROOT);
+        String discountType = r.discountType() == null ? "" : r.discountType().trim().toUpperCase(Locale.ROOT);
         BigDecimal value = r.discountValue();
-        if (!"PERCENT".equals(type) && !"FIXED".equals(type)) {
+        if (!"PERCENT".equals(discountType) && !"FIXED".equals(discountType)) {
             throw badRequest("PROMOTION_TYPE_INVALID", "Loại giảm giá không hợp lệ.");
         }
         if (value == null || value.signum() <= 0) {
             throw badRequest("PROMOTION_VALUE_INVALID", "Giá trị giảm giá phải lớn hơn 0.");
         }
-        if ("PERCENT".equals(type) && (value.compareTo(ONE_HUNDRED) > 0 || value.stripTrailingZeros().scale() > 2)) {
+        if ("PERCENT".equals(discountType) && (value.compareTo(ONE_HUNDRED) > 0 || value.stripTrailingZeros().scale() > 2)) {
             throw badRequest("PROMOTION_PERCENT_INVALID", "Phần trăm giảm tối đa 100% và tối đa 2 chữ số thập phân.");
         }
-        if ("FIXED".equals(type) && !isWholeAmount(value)) {
+        if ("FIXED".equals(discountType) && !isWholeAmount(value)) {
             throw badRequest("PROMOTION_FIXED_INVALID", "Số tiền giảm cố định phải là số nguyên VNĐ, tối đa 9.999.999.999.");
         }
 
-        // Có đơn tối thiểu = mã giảm đơn hàng (áp dụng cả cửa hàng, bắt buộc giới hạn lượt dùng)
-        BigDecimal minimum = r.minOrderValue();
-        if (minimum == null || minimum.signum() < 0 || !isWholeAmount(minimum)) {
-            throw badRequest("PROMOTION_MINIMUM_INVALID", "Giá trị đơn tối thiểu phải là số nguyên VNĐ từ 0 đến 9.999.999.999.");
-        }
-        boolean orderVoucher = minimum.signum() > 0;
-        if (orderVoucher && "FIXED".equals(type) && value.compareTo(minimum) >= 0) {
-            throw badRequest("PROMOTION_VALUE_INVALID", "Số tiền giảm phải nhỏ hơn giá trị đơn tối thiểu.");
+        // Mã giảm giá online: bắt buộc đơn tối thiểu và giới hạn lượt dùng, áp cho cả đơn
+        BigDecimal minimum = BigDecimal.ZERO;
+        Integer usageLimit = null;
+        if (voucher) {
+            minimum = r.minOrderValue();
+            if (minimum == null || minimum.signum() <= 0 || !isWholeAmount(minimum)) {
+                throw badRequest("PROMOTION_MINIMUM_INVALID", "Giá trị đơn tối thiểu phải là số nguyên VNĐ từ 1 đến 9.999.999.999.");
+            }
+            if ("FIXED".equals(discountType) && value.compareTo(minimum) >= 0) {
+                throw badRequest("PROMOTION_VALUE_INVALID", "Số tiền giảm phải nhỏ hơn giá trị đơn tối thiểu.");
+            }
+            usageLimit = r.usageLimit();
+            if (usageLimit == null || usageLimit < 1) {
+                throw badRequest("PROMOTION_USAGE_LIMIT_INVALID", "Vui lòng nhập giới hạn lượt dùng từ 1 trở lên.");
+            }
         }
 
         LocalDateTime start = r.startDate();
@@ -190,18 +283,14 @@ public class PromotionService {
                     "Thời gian bắt đầu phải từ hiện tại trở đi và thời gian kết thúc phải sau thời gian bắt đầu.");
         }
 
-        Integer usageLimit = orderVoucher ? r.usageLimit() : null;
-        if (orderVoucher && (usageLimit == null || usageLimit < 1)) {
-            throw badRequest("PROMOTION_USAGE_LIMIT_INVALID", "Vui lòng nhập giới hạn lượt dùng từ 1 trở lên.");
-        }
-
-        String scope = orderVoucher || r.applyScope() == null || r.applyScope().isBlank()
+        String scope = voucher || r.applyScope() == null || r.applyScope().isBlank()
                 ? "ALL" : r.applyScope().trim().toUpperCase(Locale.ROOT);
         if (!"ALL".equals(scope) && !"SELECTED".equals(scope)) {
             throw badRequest("PROMOTION_SCOPE_INVALID", "Phạm vi áp dụng không hợp lệ.");
         }
 
-        return new Draft(name, description, type, value, minimum, start, end, usageLimit, scope, validateProducts(scope, r.productIds()));
+        return new Draft(type, name, description, discountType, value, minimum, start, end, usageLimit, scope,
+                validateProducts(scope, r.productIds()));
     }
 
     private List<Integer> validateProducts(String scope, List<Integer> ids) {
@@ -218,12 +307,8 @@ public class PromotionService {
         return unique;
     }
 
-    // Một sản phẩm không được thuộc hai khuyến mãi sản phẩm trùng thời gian
-    private void checkProductOverlap(int id, BigDecimal minimum, String scope, List<Integer> productIds,
-                                     LocalDateTime start, LocalDateTime end) {
-        if (minimum != null && minimum.signum() > 0) {
-            return;
-        }
+    // Một sản phẩm không được thuộc hai khuyến mãi sản phẩm đang bật trùng thời gian
+    private void checkProductOverlap(int id, String scope, List<Integer> productIds, LocalDateTime start, LocalDateTime end) {
         repository.findOverlappingProductPromotion(id, scope, productIds, start, end).ifPresent(other -> {
             throw badRequest("PROMOTION_PRODUCT_OVERLAP", "Có sản phẩm đang thuộc khuyến mãi “" + other.name() + "” trong cùng thời gian.");
         });
@@ -236,9 +321,43 @@ public class PromotionService {
 
     // ---- Tiện ích ----
 
-    // Báo khách khi có khuyến mãi mới; khuyến mãi chưa bắt đầu không gắn liên kết (trang khách chỉ hiện khuyến mãi đang chạy)
+    private List<Promotion> availableVouchers(LocalDateTime now, Integer customerId) {
+        Set<Integer> used = customerId == null ? Set.of() : repository.findUsedPromotionIds(customerId);
+        return repository.findAvailableVouchers(now).stream()
+                .filter(p -> !p.isExhausted() && !used.contains(p.promotionId()))
+                .toList();
+    }
+
+    private Integer currentCustomerId() {
+        try {
+            Account account = sessionAccess.current();
+            return "CUSTOMER".equals(account.role()) ? account.id() : null;
+        } catch (ApiException e) {
+            return null;
+        }
+    }
+
+    private Promotion find(int id) {
+        return repository.findById(id).orElseThrow(PromotionService::notFound);
+    }
+
+    // Chạy sau khi transaction commit thành công (không có transaction thì chạy ngay)
+    private static void afterCommit(Runnable task) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            task.run();
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                task.run();
+            }
+        });
+    }
+
+    // Báo khách khi có khuyến mãi mới; khuyến mãi chưa bắt đầu không gắn liên kết
     private void notifyCustomersCreated(int id, Draft d) {
-        String discount = "PERCENT".equals(d.type())
+        String discount = "PERCENT".equals(d.discountType())
                 ? "giảm " + d.value().stripTrailingZeros().toPlainString() + "%"
                 : "giảm " + String.format(Locale.forLanguageTag("vi-VN"), "%,d", d.value().longValue()) + "đ";
         boolean startsNow = !d.start().isAfter(LocalDateTime.now());
@@ -249,12 +368,6 @@ public class PromotionService {
                         + " đến " + NOTICE_TIME.format(d.end()) + ".";
         notifications.toRole("CUSTOMER", NotificationTypes.PROMOTION, title, message,
                 startsNow ? NotificationTypes.ENTITY_PROMOTION : null, startsNow ? id : null);
-    }
-
-    private Promotion withProductIds(Promotion p) {
-        return new Promotion(p.promotionId(), p.name(), p.description(), p.discountValue(), p.startDate(), p.endDate(),
-                p.status(), p.createdBy(), p.discountType(), p.minOrderValue(), p.usageLimit(), p.applyScope(),
-                repository.findProductIds(p.promotionId()), p.usedCount());
     }
 
     private void requireOwner() {

@@ -1,12 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Box, Button, CircularProgress, Dialog, IconButton, InputAdornment, Tab, Tabs, TextField } from '@mui/material';
 import { SearchOutlined, CloseOutlined } from '@ant-design/icons';
-import { getPromotions } from 'services/promotionService';
-import { kindOf } from './PromotionForm';
+import { getVouchers } from 'services/promotionService';
 import { useCrumbs } from '../../layouts/crumbs';
 import { StoreAccountShell } from 'features/account/components/StoreAccount';
 import { C, RADIUS, SANS } from 'features/shop/storeTheme';
-import { money } from './promotionFormat';
+import { formatDate, formatDateTime, money } from './promotionFormat';
 
 const HOUR = 3600 * 1000;
 const DAY = 24 * HOUR;
@@ -22,18 +21,6 @@ const TABS = [
 
 const isPercent = (p) => p.discountType === 'PERCENT';
 
-const pad = (n) => String(n).padStart(2, '0');
-
-const formatDate = (val) => {
-  const d = new Date(val);
-  return val && !Number.isNaN(d.getTime()) ? `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}` : '—';
-};
-
-const formatDateTime = (val) => {
-  const d = new Date(val);
-  return val && !Number.isNaN(d.getTime()) ? `${pad(d.getHours())}:${pad(d.getMinutes())} ${formatDate(val)}` : '—';
-};
-
 const timeLeft = (end) => {
   const ms = new Date(end) - Date.now();
   if (!(ms > 0) || ms > 3 * DAY) return null;
@@ -41,9 +28,6 @@ const timeLeft = (end) => {
 };
 
 const isUpcoming = (p) => new Date(p.startDate) > new Date();
-
-// Chỉ hiện mã giảm giá đơn hàng đang bật và chưa hết hạn
-const isVoucher = (p) => kindOf(p) === 'ORDER' && p.status === 'ACTIVE' && new Date(p.endDate) > new Date();
 
 const matchTab = (p, tab) =>
   tab === 'ALL' ||
@@ -153,7 +137,7 @@ function ConditionDialog({ promotion, onClose }) {
     ['Bắt đầu', formatDateTime(promotion.startDate)],
     ['Kết thúc', formatDateTime(promotion.endDate)],
     ['Áp dụng', 'Toàn bộ đơn hàng'],
-    promotion.usageLimit && ['Lượt còn lại', `${promotion.usageLimit - promotion.usedCount}/${promotion.usageLimit}`]
+    promotion.remaining != null && ['Lượt còn lại', promotion.remaining]
   ].filter(Boolean);
 
   return (
@@ -235,8 +219,8 @@ export default function CustomerPromotionPage() {
   useEffect(() => {
     let active = true;
     const load = () =>
-      getPromotions()
-        .then((res) => active && setPromotions((Array.isArray(res) ? res : res?.data || []).filter(isVoucher)))
+      getVouchers()
+        .then((res) => active && setPromotions(res))
         .catch((err) => console.error('Lỗi tải danh sách khuyến mãi:', err))
         .finally(() => active && setLoading(false));
     load();
