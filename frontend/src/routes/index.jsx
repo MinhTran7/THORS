@@ -19,7 +19,6 @@ import ChangePasswordPage from 'features/account/pages/ChangePasswordPage';
 import FamilyListPage from 'features/account/pages/FamilyListPage';
 import FamilyFormPage from 'features/account/pages/FamilyFormPage';
 import WebsiteSettingsPage from 'features/website/WebsiteSettingsPage';
-import TryOnModelsPage from 'features/tryon/TryOnModelsPage';
 import FamilyDetailPage from 'features/account/pages/FamilyDetailPage';
 import AccountsPage from 'features/account/pages/AccountListPage';
 import SystemLogPage from 'features/account/pages/SystemLogPage';
@@ -191,8 +190,6 @@ export default createBrowserRouter([
               { path: '/returns', element: <ReturnsPage /> },
               // Kênh bán hàng > Website: thông tin chung của website (footer, thanh thông báo)
               { path: '/website', element: <WebsiteSettingsPage /> },
-              // Người mẫu dựng sẵn cho "Mặc thử bằng AI" (module tryon)
-              { path: '/tryon-models', element: <TryOnModelsPage /> },
               // Promotion (của phuoc)
               { path: '/promotions/add', element: <AddPromotionPage /> },
               { path: '/promotions/:promotionId', element: <PromotionDetailPage /> },

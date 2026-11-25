@@ -5,7 +5,13 @@ import com.thors.module.category.entity.Category;
 import com.thors.module.category.mapper.CategoryMapper;
 import org.springframework.jdbc.BadSqlGrammarException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
+import java.sql.PreparedStatement;
+import java.sql.Statement;
+import java.sql.Types;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.List;
 
@@ -32,7 +38,8 @@ public class CategoryRepository {
                    c.target_group,
                    c.icon,
                    p.category_name AS parent_name,
-                   (SELECT COUNT(*) FROM category ch WHERE ch.parent_id = c.category_id) AS child_count
+                   (SELECT COUNT(*) FROM category ch WHERE ch.parent_id = c.category_id) AS child_count,
+                   (SELECT COUNT(*) FROM product pr WHERE pr.category_id = c.category_id) AS product_count
             FROM category c
             LEFT JOIN category p ON p.category_id = c.parent_id
             """;
@@ -45,7 +52,8 @@ public class CategoryRepository {
                    c.parent_id,
                    c.target_group,
                    p.category_name AS parent_name,
-                   (SELECT COUNT(*) FROM category ch WHERE ch.parent_id = c.category_id) AS child_count
+                   (SELECT COUNT(*) FROM category ch WHERE ch.parent_id = c.category_id) AS child_count,
+                   (SELECT COUNT(*) FROM product pr WHERE pr.category_id = c.category_id) AS product_count
             FROM category c
             LEFT JOIN category p ON p.category_id = c.parent_id
             """;
@@ -54,7 +62,8 @@ public class CategoryRepository {
             SELECT c.category_id,
                    c.category_name,
                    c.description,
-                   c.status
+                   c.status,
+                   (SELECT COUNT(*) FROM product pr WHERE pr.category_id = c.category_id) AS product_count
             FROM category c
             """;
 
@@ -135,11 +144,15 @@ public class CategoryRepository {
             VALUES (?, ?, 'ACTIVE')
             """;
 
-        return jdbcTemplate.update(
-                sql,
-                categoryName,
-                description
-        );
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        jdbcTemplate.update(connection -> {
+            PreparedStatement ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+            ps.setString(1, categoryName);
+            ps.setString(2, description);
+            return ps;
+        }, keyHolder);
+
+        return generatedId(keyHolder);
     }
 
     /** Thêm danh mục kèm danh mục cha / đối tượng (cần migration). */
@@ -155,7 +168,26 @@ public class CategoryRepository {
             VALUES (?, ?, ?, ?, 'ACTIVE')
             """;
 
-        return jdbcTemplate.update(sql, categoryName, description, parentId, targetGroup);
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        jdbcTemplate.update(connection -> {
+            PreparedStatement ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+            ps.setString(1, categoryName);
+            ps.setString(2, description);
+            if (parentId == null) {
+                ps.setNull(3, Types.INTEGER);
+            } else {
+                ps.setInt(3, parentId);
+            }
+            ps.setString(4, targetGroup);
+            return ps;
+        }, keyHolder);
+
+        return generatedId(keyHolder);
+    }
+
+    /** category_id tự tăng của dòng vừa INSERT. */
+    private static int generatedId(KeyHolder keyHolder) {
+        return Objects.requireNonNull(keyHolder.getKey(), "Không lấy được mã danh mục vừa tạo.").intValue();
     }
 
     public Optional<Category> findById(int categoryId) {
@@ -252,6 +284,27 @@ public class CategoryRepository {
         """;
 
         return jdbcTemplate.update(sql, status, categoryId);
+    }
+
+    /** Số danh mục con trực tiếp, kể cả đang ngưng (0 nếu DB chưa có cột parent_id). */
+    public int countChildren(int categoryId) {
+        try {
+            Integer count = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM category WHERE parent_id = ?",
+                    Integer.class,
+                    categoryId);
+            return count == null ? 0 : count;
+        } catch (BadSqlGrammarException e) {
+            return 0;
+        }
+    }
+
+    /** Chuyển mọi sản phẩm gắn trực tiếp vào danh mục nguồn sang danh mục đích; trả số sản phẩm đã chuyển. */
+    public int transferProducts(int sourceCategoryId, int targetCategoryId) {
+        return jdbcTemplate.update(
+                "UPDATE product SET category_id = ? WHERE category_id = ?",
+                targetCategoryId,
+                sourceCategoryId);
     }
 
     /** Số danh mục con đang hoạt động (0 nếu DB chưa có cột parent_id). */

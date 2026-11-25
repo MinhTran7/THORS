@@ -40,15 +40,10 @@ import {
   EllipsisOutlined,
   EyeOutlined,
   FolderAddOutlined,
-  ManOutlined,
-  ShoppingOutlined,
-  SmileOutlined,
-  TagOutlined,
-  TeamOutlined,
-  WomanOutlined,
   PlusOutlined,
   RightOutlined,
   SearchOutlined,
+  SwapOutlined,
   TagsOutlined,
   WarningOutlined
 } from '@ant-design/icons';
@@ -58,6 +53,8 @@ import {
   createCategory,
   updateCategory,
   changeCategoryStatus,
+  transferProducts,
+  isAssignableCategory,
   TARGET_GROUPS,
   targetGroupLabel,
   isStandardTarget,
@@ -65,9 +62,6 @@ import {
   descendantIds
 } from 'services/categoryService';
 
-import { getProducts } from 'services/productService';
-import CategoryIconPicker from './CategoryIconPicker';
-import { findCategoryIcon } from './categoryIcons';
 import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../customer/theme';
 
 const PAGE_SIZE = 5;
@@ -126,34 +120,8 @@ const badgeSx = (bg, color, border) => ({
   flexShrink: 0
 });
 
-// Icon danh mục con theo đối tượng (cùng tông màu với nhãn ở cột Đối tượng)
-const TARGET_ICON = {
-  MEN: ManOutlined,
-  WOMEN: WomanOutlined,
-  KIDS: SmileOutlined,
-  UNISEX: TeamOutlined
-};
-
-// Danh mục gốc (có hay chưa có danh mục con) dùng chung icon túi mua sắm
-function CategoryIcon({ category }) {
-  // Icon tự chọn ở bảng icon (nếu có)
-  const chosen = findCategoryIcon(category.icon);
-  if (chosen) return <chosen.Icon />;
-  if (category.isChild) {
-    const Icon = TARGET_ICON[category.targetGroup] || TagOutlined;
-    return <Icon />;
-  }
-  return <ShoppingOutlined />;
-}
-
-// Màu nền ô icon: danh mục con lấy theo đối tượng
-function iconTone(category) {
-  const tone = category.isChild && TARGET_BADGE[category.targetGroup];
-  if (tone) return { bgcolor: tone.bg, color: tone.color, borderColor: tone.border };
-  // Danh mục gốc: ô icon xanh cyan đậm hơn để nổi bật so với danh mục con
-  if (!category.isChild) return { bgcolor: '#E3FAFD', color: '#0E7490', borderColor: C.cyan };
-  return { bgcolor: C.surface, color: C.muted, borderColor: C.border };
-}
+// (Bỏ icon danh mục - ô icon trong bảng, ô "Icon danh mục" trong form, CategoryIconPicker - 24/11/2026.
+//  Cột category.icon ở DB / API vẫn giữ, giao diện không dùng nữa.)
 
 // Đối tượng tự nhập (vd "Bé gái"): nhãn màu trung tính
 const CUSTOM_TARGET_TONE = { bg: '#F8FAFC', color: '#475569', border: '#E2E8F0' };
@@ -263,10 +231,8 @@ function StatisticCard({
 
 export default function CategoryPage() {
   const [categories, setCategories] = useState([]);
-  const [products, setProducts] = useState([]);
 
   const [loading, setLoading] = useState(true);
-  const [productsLoaded, setProductsLoaded] = useState(false);
 
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -287,6 +253,10 @@ export default function CategoryPage() {
 
   const [statusDialog, setStatusDialog] = useState(null);
   const [changingStatus, setChangingStatus] = useState(false);
+
+  // Chuyển nhanh sản phẩm gắn trực tiếp sang danh mục lá: { category, targetCategoryId, error }
+  const [transferDialog, setTransferDialog] = useState(null);
+  const [transferring, setTransferring] = useState(false);
 
   const [viewCategory, setViewCategory] = useState(null);
 
@@ -311,23 +281,10 @@ export default function CategoryPage() {
     }
   }
 
-  async function loadProducts() {
-    try {
-      const data = await getProducts();
-      if (!Array.isArray(data)) {
-        throw new Error('Dữ liệu sản phẩm không hợp lệ.');
-      }
-      setProducts(data);
-      setProductsLoaded(true);
-    } catch (e) {
-      console.error('Không thể tải số lượng sản phẩm:', e);
-      setProductsLoaded(false);
-    }
-  }
-
+  // Số sản phẩm của từng danh mục do backend đếm sẵn (category.productCount),
+  // không còn tải toàn bộ sản phẩm về máy để đếm.
   useEffect(() => {
     loadCategories();
-    loadProducts();
   }, []);
 
   // ==========================================
@@ -339,16 +296,20 @@ export default function CategoryPage() {
     [categories]
   );
 
+  // categoryId -> số sản phẩm gắn trực tiếp (backend đếm bằng SQL)
   const productCountMap = useMemo(() => {
     const counts = new Map();
-    for (const product of products) {
-      const categoryId = Number(product.categoryId);
-      counts.set(categoryId, (counts.get(categoryId) || 0) + 1);
+    for (const item of categories) {
+      counts.set(Number(item.categoryId), Number(item.productCount) || 0);
     }
     return counts;
-  }, [products]);
+  }, [categories]);
 
-  const categorizedProducts = productsLoaded ? products.length : null;
+  // Tổng sản phẩm có danh mục = cộng số sản phẩm trực tiếp của mọi danh mục (mỗi sản phẩm thuộc đúng 1 danh mục)
+  const categorizedProducts = useMemo(
+    () => (loading ? null : categories.reduce((sum, item) => sum + (Number(item.productCount) || 0), 0)),
+    [categories, loading]
+  );
 
   // Danh mục gốc / danh mục con
   const rootCategories = useMemo(() => categories.filter((item) => !item.parentId), [categories]);
@@ -366,13 +327,13 @@ export default function CategoryPage() {
 
   // Số sản phẩm gắn trực tiếp vào danh mục
   function getDirectProductCount(categoryId) {
-    if (!productsLoaded) return null;
+    if (loading) return null;
     return productCountMap.get(Number(categoryId)) || 0;
   }
 
   // Danh mục cha: cộng cả sản phẩm của các danh mục con, cháu…
   function getProductCount(categoryId) {
-    if (!productsLoaded) return null;
+    if (loading) return null;
     return (childrenOf.get(categoryId) || []).reduce(
       (sum, child) => sum + (getProductCount(child.categoryId) || 0),
       getDirectProductCount(categoryId)
@@ -625,6 +586,7 @@ export default function CategoryPage() {
         description,
         parentId: form.parentId,
         targetGroup,
+        // Giữ icon cũ (nếu có) khi sửa, để API không xóa mất
         icon: form.icon
       };
 
@@ -659,7 +621,7 @@ export default function CategoryPage() {
 
   function openStatusDialog(category) {
     setSuccess('');
-    setStatusDialog(category);
+    setStatusDialog({ ...category, error: '' });
   }
 
   async function handleChangeStatus() {
@@ -677,17 +639,78 @@ export default function CategoryPage() {
       setStatusDialog(null);
       setSuccess(
         newStatus === 'ACTIVE'
-          ? 'Đã kích hoạt danh mục thành công.'
-          : 'Đã ngưng hoạt động danh mục thành công.'
+          ? `Đã kích hoạt danh mục "${category.categoryName}".`
+          : `Đã ngưng hoạt động danh mục "${category.categoryName}".`
       );
       await loadCategories();
     } catch (e) {
-      setError(e?.message || 'Không thể thay đổi trạng thái danh mục.');
-      setStatusDialog(null);
+      // Báo lỗi ngay trong hộp thoại (thông báo đầu trang bị hộp thoại che)
+      setStatusDialog((current) =>
+        current ? { ...current, error: e?.message || 'Không thể thay đổi trạng thái danh mục.' } : current
+      );
     } finally {
       setChangingStatus(false);
     }
   }
+
+  // Ràng buộc của danh mục đang mở trong hộp thoại đổi trạng thái (kiểm tra trước, khỏi đợi API báo 409)
+  const isDeactivating = statusDialog?.status === 'ACTIVE';
+  // Sản phẩm của danh mục + các danh mục con, cháu (sẽ bị ẩn khỏi gian hàng Online - ShopRepository chỉ lấy danh mục ACTIVE)
+  const affectedProductCount = statusDialog ? getProductCount(statusDialog.categoryId) || 0 : 0;
+  const statusDirectCount = statusDialog ? getDirectProductCount(statusDialog.categoryId) || 0 : 0;
+  const activeChildrenCount = statusDialog
+    ? (childrenOf.get(statusDialog.categoryId) || []).filter((c) => c.status === 'ACTIVE').length
+    : 0;
+  const statusParent = statusDialog?.parentId ? categories.find((c) => c.categoryId === statusDialog.parentId) : null;
+  const isParentInactive = Boolean(statusDialog && !isDeactivating && statusParent && statusParent.status !== 'ACTIVE');
+  const blockedByChildren = isDeactivating && activeChildrenCount > 0;
+  const cannotConfirmStatus = blockedByChildren || isParentInactive;
+
+  // ==========================================
+  // TRANSFER PRODUCTS
+  // ==========================================
+
+  function openTransferDialog(category) {
+    // Gợi ý sẵn danh mục con trực tiếp đầu tiên nhận được sản phẩm (đang hoạt động, không có con)
+    const firstLeafChild = (childrenOf.get(category.categoryId) || []).find(isAssignableCategory);
+    setTransferDialog({
+      category,
+      targetCategoryId: firstLeafChild ? String(firstLeafChild.categoryId) : '',
+      error: ''
+    });
+  }
+
+  async function handleTransferProducts() {
+    if (!transferDialog?.category || !transferDialog.targetCategoryId || transferring) return;
+
+    setTransferring(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const res = await transferProducts(transferDialog.category.categoryId, transferDialog.targetCategoryId);
+      const targetName =
+        res?.targetCategoryName ||
+        categories.find((c) => String(c.categoryId) === String(transferDialog.targetCategoryId))?.categoryName ||
+        '';
+      setTransferDialog(null);
+      setSuccess(`Đã chuyển ${res?.movedCount ?? ''} sản phẩm sang danh mục "${targetName}".`);
+      await loadCategories();
+    } catch (e) {
+      // Báo lỗi ngay trong hộp thoại để người dùng chọn lại danh mục đích
+      setTransferDialog((current) =>
+        current ? { ...current, error: e?.message || 'Không thể chuyển sản phẩm sang danh mục khác.' } : current
+      );
+    } finally {
+      setTransferring(false);
+    }
+  }
+
+  // Danh mục đích chọn được: danh mục lá đang hoạt động, khác danh mục nguồn
+  const transferTargets = transferDialog
+    ? treeCategories.filter((c) => isAssignableCategory(c) && c.categoryId !== transferDialog.category.categoryId)
+    : [];
+  const transferDescendants = transferDialog ? descendantIds(categories, transferDialog.category.categoryId) : new Set();
 
   // ==========================================
   // ACTION MENU
@@ -795,9 +818,9 @@ export default function CategoryPage() {
             label="Sản phẩm đã phân loại"
             value={categorizedProducts === null ? '—' : categorizedProducts}
             note={
-              productsLoaded
-                ? 'Tổng số sản phẩm có danh mục'
-                : 'Đang kết nối dữ liệu'
+              loading
+                ? 'Đang kết nối dữ liệu'
+                : 'Tổng số sản phẩm có danh mục'
             }
             icon={<AppstoreOutlined />}
             highlight
@@ -944,18 +967,19 @@ export default function CategoryPage() {
           >
             <TableHead>
               <TableRow>
-                <TableCell sx={{ pl: 3 }}>TÊN DANH MỤC</TableCell>
+                <TableCell sx={{ pl: 3, minWidth: 260 }}>TÊN DANH MỤC</TableCell>
+                <TableCell sx={{ minWidth: 120 }}>ĐỐI TƯỢNG</TableCell>
                 <TableCell>MÔ TẢ</TableCell>
-                <TableCell>SỐ SẢN PHẨM</TableCell>
-                <TableCell>TRẠNG THÁI</TableCell>
-                <TableCell align="center" sx={{ pr: 3 }}>THAO TÁC</TableCell>
+                <TableCell sx={{ minWidth: 140 }}>SỐ SẢN PHẨM</TableCell>
+                <TableCell sx={{ minWidth: 130 }}>TRẠNG THÁI</TableCell>
+                <TableCell align="center" sx={{ pr: 3, minWidth: 130 }}>THAO TÁC</TableCell>
               </TableRow>
             </TableHead>
 
             <TableBody>
               {loading && (
                 <TableRow>
-                  <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
+                  <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
                     <CircularProgress size={32} sx={{ color: C.cyan }} />
                     <Typography fontSize={13.5} color={C.muted} sx={{ mt: 1.5 }}>
                       Đang tải danh mục...
@@ -997,9 +1021,9 @@ export default function CategoryPage() {
                       >
                         <Stack
                           direction="row"
-                          spacing={1.5}
-                          // Mỗi cấp thụt vào 34px; ô mũi tên luôn chiếm chỗ để các cấp thẳng hàng
-                          sx={{ alignItems: 'center', ml: `${(category.depth || 0) * 34}px` }}
+                          spacing={1.25}
+                          // Mỗi cấp thụt vào 28px; ô mũi tên luôn chiếm chỗ để các cấp thẳng hàng
+                          sx={{ alignItems: 'center', ml: `${(category.depth || 0) * 28}px` }}
                         >
                           <Box
                               aria-label={open ? 'Thu gọn danh mục con' : 'Xem danh mục con'}
@@ -1019,24 +1043,6 @@ export default function CategoryPage() {
                             >
                               {open ? <DownOutlined /> : <RightOutlined />}
                             </Box>
-                          <Box
-                            sx={{
-                              width: category.isChild ? 28 : 36,
-                              height: category.isChild ? 28 : 36,
-                              fontSize: category.isChild ? 13 : 16,
-                              bgcolor: iconTone(category).bgcolor,
-                              border: `1px solid ${iconTone(category).borderColor}`,
-                              borderRadius: 2,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              color: iconTone(category).color,
-                              flexShrink: 0
-                            }}
-                          >
-                            <CategoryIcon category={category} />
-                          </Box>
-
                           <Box>
                             <Typography
                               sx={{
@@ -1052,6 +1058,12 @@ export default function CategoryPage() {
                         </Stack>
                       </TableCell>
 
+                      {/* TARGET GROUP */}
+                      <TableCell>
+                        {/* Chưa gắn đối tượng thì để trống */}
+                        {category.targetGroup && <TargetBadge value={category.targetGroup} />}
+                      </TableCell>
+
                       {/* DESCRIPTION */}
                       <TableCell>
                         <Typography
@@ -1064,7 +1076,7 @@ export default function CategoryPage() {
                             whiteSpace: 'nowrap'
                           }}
                         >
-                          {category.description || '—'}
+                          {category.description || ''}
                         </Typography>
                       </TableCell>
 
@@ -1080,8 +1092,30 @@ export default function CategoryPage() {
                           {productCount ?? '—'}
                         </Typography>
                         {directCount > 0 && (
-                          <Tooltip title="Danh mục cha không nên chứa sản phẩm trực tiếp. Hãy sửa từng sản phẩm và chọn danh mục con phù hợp.">
-                            <Typography sx={{ fontSize: 12, color: '#B45309', fontWeight: 600, mt: 0.25, cursor: 'help' }}>
+                          <Tooltip title="Danh mục cha không nên chứa sản phẩm trực tiếp. Nhấn để chuyển nhanh các sản phẩm này sang danh mục con.">
+                            <Typography
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => openTransferDialog(category)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  openTransferDialog(category);
+                                }
+                              }}
+                              sx={{
+                                fontSize: 12,
+                                color: '#B45309',
+                                fontWeight: 600,
+                                mt: 0.25,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 0.5,
+                                '&:hover': { textDecoration: 'underline', color: '#92400E' }
+                              }}
+                            >
+                              <SwapOutlined style={{ fontSize: 11 }} />
                               {directCount} chưa chuyển sang danh mục con
                             </Typography>
                           </Tooltip>
@@ -1196,24 +1230,27 @@ export default function CategoryPage() {
                             </IconButton>
                           </Tooltip>
 
-                          <Tooltip title="Tùy chọn khác">
-                            <IconButton
-                              size="small"
-                              onClick={(event) =>
-                                openActionMenu(event, category)
-                              }
-                              sx={{
-                                color: '#64748B',
-                                p: 0.75,
-                                '&:hover': {
-                                  color: '#0F172A',
-                                  bgcolor: 'transparent'
+                          {/* Menu 3 chấm chỉ còn thao tác riêng (thêm danh mục con / chuyển sản phẩm); không có thì ẩn */}
+                          {(isActive || (getDirectProductCount(category.categoryId) || 0) > 0) && (
+                            <Tooltip title="Tùy chọn khác">
+                              <IconButton
+                                size="small"
+                                onClick={(event) =>
+                                  openActionMenu(event, category)
                                 }
-                              }}
-                            >
-                              <EllipsisOutlined style={{ fontSize: 17 }} />
-                            </IconButton>
-                          </Tooltip>
+                                sx={{
+                                  color: '#64748B',
+                                  p: 0.75,
+                                  '&:hover': {
+                                    color: '#0F172A',
+                                    bgcolor: 'transparent'
+                                  }
+                                }}
+                              >
+                                <EllipsisOutlined style={{ fontSize: 17 }} />
+                              </IconButton>
+                            </Tooltip>
+                          )}
                         </Stack>
                       </TableCell>
                     </TableRow>
@@ -1222,7 +1259,7 @@ export default function CategoryPage() {
 
               {!loading && filteredCategories.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
+                  <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
                     <Typography
                       sx={{
                         fontSize: 14,
@@ -1265,30 +1302,7 @@ export default function CategoryPage() {
           sx: { borderRadius: 3, boxShadow: '0 4px 16px rgba(0,0,0,0.08)', p: 0.5 }
         }}
       >
-        <MenuItem
-          onClick={() => {
-            const selected = menuCategory;
-            closeActionMenu();
-            setViewCategory(selected);
-          }}
-          sx={{ fontSize: 13.5, fontWeight: 600, py: 1, borderRadius: 1.5 }}
-        >
-          <EyeOutlined style={{ marginRight: 10, color: C.muted }} />
-          Xem chi tiết
-        </MenuItem>
-
-        <MenuItem
-          onClick={() => {
-            const selected = menuCategory;
-            closeActionMenu();
-            openEditDialog(selected);
-          }}
-          sx={{ fontSize: 13.5, fontWeight: 600, py: 1, borderRadius: 1.5 }}
-        >
-          <EditOutlined style={{ marginRight: 10, color: C.muted }} />
-          Chỉnh sửa danh mục
-        </MenuItem>
-
+        {/* Xem chi tiết / Chỉnh sửa đã có nút ở cột Thao tác, Ngưng / Kích hoạt đã có công tắc ở cột Trạng thái */}
         {menuCategory && menuCategory.status === 'ACTIVE' && (
           <MenuItem
             onClick={() => {
@@ -1303,19 +1317,20 @@ export default function CategoryPage() {
           </MenuItem>
         )}
 
-        <MenuItem
-          onClick={() => {
-            const selected = menuCategory;
-            closeActionMenu();
-            openStatusDialog(selected);
-          }}
-          sx={{ fontSize: 13.5, fontWeight: 600, py: 1, borderRadius: 1.5, color: menuCategory?.status === 'ACTIVE' ? '#D97706' : '#059669' }}
-        >
-          <WarningOutlined style={{ marginRight: 10 }} />
-          {menuCategory?.status === 'ACTIVE'
-            ? 'Ngưng hoạt động'
-            : 'Kích hoạt danh mục'}
-        </MenuItem>
+        {menuCategory && (getDirectProductCount(menuCategory.categoryId) || 0) > 0 && (
+          <MenuItem
+            onClick={() => {
+              const selected = menuCategory;
+              closeActionMenu();
+              openTransferDialog(selected);
+            }}
+            sx={{ fontSize: 13.5, fontWeight: 600, py: 1, borderRadius: 1.5 }}
+          >
+            <SwapOutlined style={{ marginRight: 10, color: C.muted }} />
+            Chuyển sản phẩm sang danh mục khác
+          </MenuItem>
+        )}
+
       </Menu>
 
       {/* VIEW CATEGORY DIALOG */}
@@ -1602,20 +1617,6 @@ export default function CategoryPage() {
 
               <Box>
                 <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>
-                  Icon danh mục
-                </Typography>
-                <CategoryIconPicker
-                  value={form.icon}
-                  disabled={saving}
-                  onChange={(icon) => setForm((prev) => ({ ...prev, icon }))}
-                  defaultPreview={
-                    <CategoryIcon category={{ isChild: Boolean(form.parentId), targetGroup: form.targetGroup }} />
-                  }
-                />
-              </Box>
-
-              <Box>
-                <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>
                   Mô tả danh mục
                 </Typography>
                 <TextField
@@ -1682,31 +1683,100 @@ export default function CategoryPage() {
         </DialogTitle>
 
         <DialogContent>
-          <Typography sx={{ fontSize: 14, color: C.text, lineHeight: 1.6 }}>
-            Bạn có chắc chắn muốn{' '}
-            <strong>
-              {statusDialog?.status === 'ACTIVE'
-                ? 'ngưng hoạt động'
-                : 'kích hoạt'}
-            </strong>
-            {' '}danh mục{' '}
-            <strong>{statusDialog?.categoryName}</strong>?
-          </Typography>
+          {statusDialog && (
+            <Stack spacing={2} sx={{ mt: 0.5 }}>
+              {statusDialog.error && (
+                <Alert severity="error" sx={{ borderRadius: 2.5 }}>
+                  {statusDialog.error}
+                </Alert>
+              )}
 
-          {statusDialog?.status === 'ACTIVE' && (
-            <Box
-              sx={{
-                bgcolor: '#FFFDE7',
-                border: '1.5px solid #FDE047',
-                borderRadius: 2.5,
-                p: 2,
-                mt: 2
-              }}
-            >
-              <Typography sx={{ fontSize: 12.5, color: '#713F12', lineHeight: 1.6 }}>
-                Danh mục này sẽ chuyển sang trạng thái ngưng. Các sản phẩm thuộc danh mục sẽ không bị xóa khỏi hệ thống.
+              <Typography sx={{ fontSize: 14, color: C.text, lineHeight: 1.6 }}>
+                Bạn có chắc chắn muốn <strong>{isDeactivating ? 'ngưng hoạt động' : 'kích hoạt'}</strong> danh mục{' '}
+                <strong>{statusDialog.categoryName}</strong>?
               </Typography>
-            </Box>
+
+              {/* Chặn: còn danh mục con đang hoạt động (backend cũng chặn - 409 CATEGORY_HAS_ACTIVE_CHILDREN) */}
+              {blockedByChildren && (
+                <Box sx={{ bgcolor: '#FEF2F2', border: '1.5px solid #FCA5A5', borderRadius: 2.5, p: 2 }}>
+                  <Typography sx={{ fontSize: 13, color: '#991B1B', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                    <WarningOutlined style={{ color: '#DC2626' }} /> Chưa thể ngưng hoạt động
+                  </Typography>
+                  <Typography sx={{ fontSize: 12.5, color: '#B91C1C', mt: 0.5, lineHeight: 1.6 }}>
+                    Danh mục này còn <strong>{activeChildrenCount} danh mục con</strong> đang hoạt động. Hãy ngưng các danh
+                    mục con trước.
+                  </Typography>
+                </Box>
+              )}
+
+              {/* Ngưng danh mục đang có sản phẩm: sản phẩm bị ẩn khỏi gian hàng Online */}
+              {isDeactivating && !blockedByChildren && affectedProductCount > 0 && (
+                <Box sx={{ bgcolor: '#FFFBEB', border: '1.5px solid #FCD34D', borderRadius: 2.5, p: 2 }}>
+                  <Typography sx={{ fontSize: 13, color: '#92400E', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                    <WarningOutlined style={{ color: '#D97706' }} /> Ảnh hưởng đến bán hàng
+                  </Typography>
+                  <Typography sx={{ fontSize: 12.5, color: '#78350F', mt: 0.5, lineHeight: 1.6 }}>
+                    Danh mục này đang có <strong>{affectedProductCount} sản phẩm</strong>. Khi ngưng hoạt động:
+                  </Typography>
+                  <Box component="ul" sx={{ m: 0, mt: 0.5, pl: 2.5, fontSize: 12.5, color: '#78350F', lineHeight: 1.6 }}>
+                    <li>
+                      Các sản phẩm này sẽ <strong>bị ẩn khỏi gian hàng Online</strong> ngay lập tức.
+                    </li>
+                    <li>Không chọn được danh mục này khi thêm sản phẩm hoặc chuyển sản phẩm sang.</li>
+                    <li>Sản phẩm không bị xóa; kích hoạt lại danh mục thì hiện lại như cũ.</li>
+                  </Box>
+                  {statusDirectCount > 0 && (
+                    <Button
+                      size="small"
+                      color="inherit"
+                      startIcon={<SwapOutlined />}
+                      disabled={changingStatus}
+                      onClick={() => {
+                        const selected = statusDialog;
+                        setStatusDialog(null);
+                        openTransferDialog(selected);
+                      }}
+                      sx={{ mt: 1, px: 1, fontSize: 12.5, fontWeight: 700, color: '#B45309', textTransform: 'none' }}
+                    >
+                      Chuyển {statusDirectCount} sản phẩm sang danh mục khác trước
+                    </Button>
+                  )}
+                </Box>
+              )}
+
+              {/* Ngưng danh mục chưa có sản phẩm */}
+              {isDeactivating && !blockedByChildren && affectedProductCount === 0 && (
+                <Box sx={{ bgcolor: '#FFFDE7', border: '1.5px solid #FDE047', borderRadius: 2.5, p: 2 }}>
+                  <Typography sx={{ fontSize: 12.5, color: '#713F12', lineHeight: 1.6 }}>
+                    Danh mục này chưa có sản phẩm. Khi ngưng, danh mục sẽ không còn hiện trong các ô chọn danh mục.
+                  </Typography>
+                </Box>
+              )}
+
+              {/* Chặn: danh mục cha đang ngưng (backend cũng chặn - 409 PARENT_CATEGORY_INACTIVE) */}
+              {isParentInactive && (
+                <Box sx={{ bgcolor: '#FEF2F2', border: '1.5px solid #FCA5A5', borderRadius: 2.5, p: 2 }}>
+                  <Typography sx={{ fontSize: 13, color: '#991B1B', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                    <WarningOutlined style={{ color: '#DC2626' }} /> Chưa thể kích hoạt
+                  </Typography>
+                  <Typography sx={{ fontSize: 12.5, color: '#B91C1C', mt: 0.5, lineHeight: 1.6 }}>
+                    Danh mục cha <strong>"{statusParent?.categoryName}"</strong> đang ngưng hoạt động. Hãy kích hoạt danh
+                    mục cha trước.
+                  </Typography>
+                </Box>
+              )}
+
+              {/* Kích hoạt hợp lệ */}
+              {!isDeactivating && !isParentInactive && (
+                <Box sx={{ bgcolor: '#F0FDF4', border: '1.5px solid #BBF7D0', borderRadius: 2.5, p: 2 }}>
+                  <Typography sx={{ fontSize: 12.5, color: '#166534', lineHeight: 1.6 }}>
+                    {affectedProductCount > 0
+                      ? `${affectedProductCount} sản phẩm của danh mục sẽ hiện lại trên gian hàng Online và danh mục chọn được khi thêm sản phẩm.`
+                      : 'Danh mục sẽ hoạt động trở lại và chọn được khi thêm sản phẩm.'}
+                  </Typography>
+                </Box>
+              )}
+            </Stack>
           )}
         </DialogContent>
 
@@ -1716,24 +1786,134 @@ export default function CategoryPage() {
             onClick={() => setStatusDialog(null)}
             sx={outlineButtonSx}
           >
-            Hủy
+            {cannotConfirmStatus ? 'Đóng' : 'Hủy'}
           </Button>
 
           <Button
-            disabled={changingStatus}
+            disabled={changingStatus || cannotConfirmStatus}
             onClick={handleChangeStatus}
             sx={{
               ...outlineButtonSx,
               border: 'none',
-              bgcolor: statusDialog?.status === 'ACTIVE' ? '#FEF3C7' : C.cyan,
-              color: statusDialog?.status === 'ACTIVE' ? '#92400E' : '#0F172A',
+              bgcolor: isDeactivating ? '#FEF3C7' : C.cyan,
+              color: isDeactivating ? '#92400E' : '#0F172A',
               fontWeight: 800,
               '&:hover': {
-                bgcolor: statusDialog?.status === 'ACTIVE' ? '#FDE68A' : C.cyanHover
-              }
+                bgcolor: isDeactivating ? '#FDE68A' : C.cyanHover
+              },
+              '&.Mui-disabled': { bgcolor: '#F1F5F9', color: '#94A3B8' }
             }}
           >
-            {changingStatus ? 'Đang xử lý...' : 'Xác nhận'}
+            {changingStatus ? 'Đang xử lý...' : isDeactivating ? 'Ngưng hoạt động' : 'Kích hoạt'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* TRANSFER PRODUCTS DIALOG */}
+      <Dialog
+        open={Boolean(transferDialog)}
+        onClose={() => {
+          if (!transferring) setTransferDialog(null);
+        }}
+        fullWidth
+        maxWidth="sm"
+        PaperProps={{ sx: { borderRadius: 3.5, p: 1 } }}
+      >
+        <DialogTitle sx={{ fontWeight: 800, color: '#0F172A', fontSize: 18 }}>
+          Chuyển sản phẩm sang danh mục khác
+        </DialogTitle>
+
+        <DialogContent>
+          {transferDialog && (
+            <Stack spacing={2.5} sx={{ mt: 1 }}>
+              {transferDialog.error && (
+                <Alert severity="error" sx={{ borderRadius: 2.5 }}>
+                  {transferDialog.error}
+                </Alert>
+              )}
+
+              <Box sx={{ p: 2, borderRadius: 2.5, bgcolor: C.surface, border: `1px solid ${C.border}` }}>
+                <Typography sx={{ fontSize: 13, color: C.muted, fontWeight: 600 }}>Danh mục nguồn</Typography>
+                <Typography sx={{ fontSize: 15, fontWeight: 800, color: '#0F172A', mt: 0.25 }}>
+                  {pathNameOf(transferDialog.category.categoryId) || transferDialog.category.categoryName}
+                </Typography>
+                <Typography sx={{ fontSize: 13, color: '#B45309', fontWeight: 600, mt: 0.5 }}>
+                  Đang có {getDirectProductCount(transferDialog.category.categoryId) || 0} sản phẩm gắn trực tiếp.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>
+                  Danh mục nhận sản phẩm{' '}
+                  <Box component="span" sx={{ color: C.error }}>
+                    *
+                  </Box>
+                </Typography>
+                <TextField
+                  select
+                  fullWidth
+                  size="small"
+                  disabled={transferring}
+                  value={transferDialog.targetCategoryId}
+                  onChange={(e) => setTransferDialog({ ...transferDialog, targetCategoryId: e.target.value, error: '' })}
+                  SelectProps={{
+                    displayEmpty: true,
+                    renderValue: (value) => {
+                      if (!value) return <Box component="span" sx={{ color: C.muted }}>Chọn danh mục con (danh mục lá)</Box>;
+                      return pathNameOf(Number(value)) || value;
+                    }
+                  }}
+                  sx={inputSx(false)}
+                >
+                  {transferTargets.length === 0 && (
+                    <MenuItem value="" disabled>
+                      Chưa có danh mục lá nào đang hoạt động
+                    </MenuItem>
+                  )}
+                  {transferTargets.map((c) => (
+                    <MenuItem key={c.categoryId} value={String(c.categoryId)} sx={{ fontSize: 13.5 }}>
+                      <Box sx={{ pl: (c.depth || 0) * 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+                        {c.pathName}
+                        {transferDescendants.has(c.categoryId) && (
+                          <Box component="span" sx={badgeSx('#E0F2FE', '#0369A1', '#BAE6FD')}>
+                            Danh mục con
+                          </Box>
+                        )}
+                      </Box>
+                    </MenuItem>
+                  ))}
+                </TextField>
+                <Typography sx={{ fontSize: 12, color: C.muted, mt: 0.75 }}>
+                  Chỉ chọn được danh mục đang hoạt động và không có danh mục con.
+                </Typography>
+              </Box>
+
+              <Box sx={{ bgcolor: '#FFFDE7', border: '1.5px solid #FDE047', borderRadius: 2.5, p: 2 }}>
+                <Typography sx={{ fontSize: 12.5, color: '#713F12', lineHeight: 1.6 }}>
+                  Toàn bộ sản phẩm gắn trực tiếp vào danh mục nguồn sẽ được chuyển sang danh mục đã chọn ngay lập tức.
+                </Typography>
+              </Box>
+            </Stack>
+          )}
+        </DialogContent>
+
+        <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+          <Button disabled={transferring} onClick={() => setTransferDialog(null)} sx={outlineButtonSx}>
+            Hủy
+          </Button>
+          <Button
+            disabled={transferring || !transferDialog?.targetCategoryId}
+            onClick={handleTransferProducts}
+            sx={{
+              ...outlineButtonSx,
+              border: 'none',
+              bgcolor: C.cyan,
+              color: '#0F172A',
+              fontWeight: 800,
+              '&:hover': { bgcolor: C.cyanHover }
+            }}
+          >
+            {transferring ? 'Đang chuyển...' : 'Xác nhận chuyển'}
           </Button>
         </DialogActions>
       </Dialog>

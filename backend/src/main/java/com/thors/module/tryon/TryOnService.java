@@ -17,7 +17,6 @@ import com.thors.module.tryon.TryOnRepository.ItemRow;
 import com.thors.module.tryon.TryOnRepository.JobRow;
 import com.thors.module.tryon.TryOnRepository.ModelRow;
 import jakarta.annotation.PreDestroy;
-import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -38,10 +37,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
- * Mặc thử 2D, 3 chế độ:
+ * Mặc thử 2D, 2 chế độ (chế độ MODEL - người mẫu dựng sẵn - đã bỏ 24/11/2026; job MODEL cũ vẫn đọc / dọn được):
  * <ul>
- *   <li>MODEL - người mẫu dựng sẵn dáng gần khách (chọn theo số đo). Không có dữ liệu cá nhân: kết quả
- *       dùng chung cho mọi khách, giữ thors.tryon.model-keep-days ngày; đã có sẵn thì trả ngay, không tính lượt.</li>
  *   <li>GENERATE - AI tạo người mẫu mới theo mô tả dáng của khách đang mặc món đồ (1 món / lần).</li>
  *   <li>PHOTO - ảnh của khách (tải / chụp); phải đồng ý, ảnh tự xóa sau thors.tryon.keep-hours giờ.</li>
  * </ul>
@@ -66,7 +63,6 @@ public class TryOnService {
     private final BodyProfileRepository bodyProfiles;
     private final int dailyLimit;
     private final int keepHours;
-    private final int modelKeepDays;
     private final ExecutorService workers;
     private volatile boolean ready;
 
@@ -74,7 +70,6 @@ public class TryOnService {
                         SizeChartRepository categories, BodyProfileRepository bodyProfiles,
                         @Value("${thors.tryon.daily-limit:5}") int dailyLimit,
                         @Value("${thors.tryon.keep-hours:24}") int keepHours,
-                        @Value("${thors.tryon.model-keep-days:30}") int modelKeepDays,
                         @Value("${thors.tryon.workers:2}") int workerCount) {
         this.repo = repo;
         this.images = images;
@@ -83,7 +78,6 @@ public class TryOnService {
         this.bodyProfiles = bodyProfiles;
         this.dailyLimit = Math.max(1, dailyLimit);
         this.keepHours = Math.max(1, keepHours);
-        this.modelKeepDays = Math.max(1, modelKeepDays);
         AtomicInteger n = new AtomicInteger();
         this.workers = Executors.newFixedThreadPool(Math.max(1, workerCount), r -> {
             Thread t = new Thread(r, "tryon-worker-" + n.incrementAndGet());
@@ -128,20 +122,18 @@ public class TryOnService {
     /**
      * Tạo lần mặc thử.
      *
-     * @param mode PHOTO | MODEL | GENERATE
+     * @param mode PHOTO | GENERATE (chế độ MODEL - người mẫu dựng sẵn - đã bỏ 24/11/2026)
      * @param photo ảnh mới (PHOTO)
      * @param photoFromJob dùng lại ảnh của lần thử trước, khỏi tải lại khi "đổi món" (PHOTO)
-     * @param modelId người mẫu dựng sẵn (MODEL)
      * @param consent khách đã đồng ý điều khoản dùng ảnh (bắt buộc ở PHOTO)
      */
-    public JobView create(Account actor, String mode, MultipartFile photo, Long photoFromJob, Integer modelId,
+    public JobView create(Account actor, String mode, MultipartFile photo, Long photoFromJob,
                           List<Integer> productIds, boolean consent) {
         requireCustomer(actor);
         requireReady();
         String m = mode == null ? "PHOTO" : mode.trim().toUpperCase(Locale.ROOT);
         TryOnPlan.Result plan = TryOnPlan.plan(picks(productIds));
         return switch (m) {
-            case "MODEL" -> createOnModel(actor, modelId, plan);
             case "GENERATE" -> createGenerated(actor, plan);
             case "PHOTO" -> createOnPhoto(actor, photo, photoFromJob, plan, consent);
             default -> throw new ApiException(400, "TRYON_MODE", "Chế độ mặc thử không hợp lệ.");
@@ -190,30 +182,14 @@ public class TryOnService {
         return submit(jobId, plan.skipped());
     }
 
-    private JobView createOnModel(Account actor, Integer modelId, TryOnPlan.Result plan) {
-        if (modelId == null) throw new ApiException(400, "TRYON_MODEL_REQUIRED", "Hãy chọn người mẫu.");
-        ModelRow model = repo.model(modelId).filter(ModelRow::active)
-                .orElseThrow(() -> new ApiException(404, "TRYON_MODEL_NOT_FOUND", "Người mẫu không còn được dùng."));
-
-        // Người mẫu không có dữ liệu cá nhân: kết quả của khách khác cũng dùng được
-        var reusable = repo.findReusableModel(modelId, plan.steps());
-        if (reusable.isPresent()) return view(repo.find(reusable.get()).orElseThrow(), true, plan.skipped());
-
-        requireTurnLeft(actor);
-        String hash = TryOnImageStore.sha256(model.imageUrl().getBytes(StandardCharsets.UTF_8));
-        long jobId = repo.insertJob(actor.id(), "MODEL", modelId, provider.name(), hash, model.imageUrl(),
-                now().plusDays(modelKeepDays), plan.steps());
-        return submit(jobId, plan.skipped());
-    }
-
     private JobView createGenerated(Account actor, TryOnPlan.Result plan) {
         if (!provider.supportsGenerate()) {
             throw new ApiException(400, "TRYON_GENERATE_UNSUPPORTED",
-                    "Dịch vụ AI hiện tại chưa hỗ trợ tự tạo người mẫu. Hãy chọn người mẫu dựng sẵn hoặc ảnh của bạn.");
+                    "Dịch vụ AI hiện tại chưa hỗ trợ tự tạo người mẫu. Hãy dùng ảnh của bạn.");
         }
         if (plan.steps().size() != 1) {
             throw new ApiException(400, "TRYON_GENERATE_ONE",
-                    "AI tạo người mẫu chỉ mặc được 1 món mỗi lần. Để thử cả bộ, hãy chọn người mẫu dựng sẵn hoặc ảnh của bạn.");
+                    "AI tạo người mẫu chỉ mặc được 1 món mỗi lần. Để thử cả bộ, hãy dùng ảnh của bạn.");
         }
         if (bodyProfiles.findByUserId(actor.id()).isEmpty()) {
             throw new ApiException(400, "TRYON_NEED_BODY_PROFILE",

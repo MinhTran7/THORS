@@ -162,7 +162,7 @@ public class ProductRepository {
                 enabled
                         ? """
                           UPDATE product_detail SET online_sales_enabled = 1
-                          WHERE product_id = ? AND status = 'ACTIVE' AND price IS NOT NULL
+                          WHERE product_id = ? AND status = 'ACTIVE' AND price IS NOT NULL AND price > 0
                           """
                         : "UPDATE product_detail SET online_sales_enabled = 0 WHERE product_id = ?",
                 productId
@@ -181,7 +181,7 @@ public class ProductRepository {
     /** Số biến thể đang hoạt động, đã có giá (mới bật bán online được). */
     public int countSellableVariants(int productId) {
         Integer count = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM product_detail WHERE product_id = ? AND status = 'ACTIVE' AND price IS NOT NULL",
+                "SELECT COUNT(*) FROM product_detail WHERE product_id = ? AND status = 'ACTIVE' AND price IS NOT NULL AND price > 0",
                 Integer.class,
                 productId
         );
@@ -599,11 +599,13 @@ public class ProductRepository {
             String color,
             java.math.BigDecimal price
     ) {
+        // Giá bị xóa / về 0 thì tự tắt bán online (không để khách mua giá 0đ)
         String sql = """
             UPDATE product_detail
             SET size = ?,
                 color = ?,
-                price = ?
+                price = ?,
+                online_sales_enabled = CASE WHEN ? IS NULL OR ? <= 0 THEN 0 ELSE online_sales_enabled END
             WHERE detail_id = ?
               AND product_id = ?
             """;
@@ -612,6 +614,8 @@ public class ProductRepository {
                 sql,
                 size,
                 color,
+                price,
+                price,
                 price,
                 detailId,
                 productId

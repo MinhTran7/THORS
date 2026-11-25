@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { Box, Button, Checkbox, CircularProgress, Dialog, DialogContent, FormControlLabel, IconButton, Typography } from '@mui/material';
 import { C, SERIF } from 'features/shop/storeTheme';
-import { BODY_LABELS, GENDER_LABELS, createTryOnJob, deleteMyTryOnPhotos, getTryOnJob, getTryOnModels, getTryOnQuota } from './api';
+import { createTryOnJob, deleteMyTryOnPhotos, getTryOnJob, getTryOnModels, getTryOnQuota } from './api';
 import { captureVideo, normalizeFile } from './photo';
 
 const POLL_MS = 2500;
@@ -73,9 +73,9 @@ const clearResults = () => {
 // AI chưa vẽ được giày dép / phụ kiện (role từ trang Phối đồ; không có role = món lẻ ở trang sản phẩm)
 const canTry = (item) => !['SHOES', 'ACCESSORY'].includes(item.role);
 
-// 3 cách mặc thử. GENERATE chỉ mặc được 1 món mỗi lần.
+// 2 cách mặc thử. GENERATE chỉ mặc được 1 món mỗi lần.
+// (Chế độ "Người mẫu dáng giống bạn" - người mẫu dựng sẵn do Owner tải lên - đã bỏ 24/11/2026.)
 const MODES = [
-  { key: 'MODEL', label: 'Người mẫu dáng giống bạn' },
   { key: 'GENERATE', label: 'AI tạo người mẫu', single: true },
   { key: 'PHOTO', label: 'Ảnh của tôi' }
 ];
@@ -86,17 +86,16 @@ const MODES = [
  *   Cả bộ: khách tích chọn món muốn mặc thử (giày dép / phụ kiện AI chưa vẽ được nên không chọn được).
  * extraActions (không bắt buộc): nút thêm ở màn hình kết quả, vd "Thêm cả bộ vào giỏ".
  *
- * Chế độ: người mẫu dựng sẵn (chọn theo số đo, mặc định) | AI tạo người mẫu | ảnh của khách (phải đồng ý).
- * Các bước: chọn người mẫu / ảnh -> gửi -> chờ (hỏi trạng thái mỗi 2,5 giây) -> xem ảnh kết quả.
+ * Chế độ: ảnh của khách (mặc định, phải đồng ý) | AI tạo người mẫu (khi dịch vụ AI hỗ trợ).
+ * Các bước: chọn ảnh -> gửi -> chờ (hỏi trạng thái mỗi 2,5 giây) -> xem ảnh kết quả.
  */
 export default function TryOnDialog({ open, onClose, items: allItems, extraActions }) {
   // Món được tích chọn để mặc thử (mặc định: mọi món AI vẽ được)
   const [selectedIds, setSelectedIds] = useState(() => allItems.filter(canTry).map((i) => i.productId));
   const items = allItems.filter((i) => selectedIds.includes(i.productId));
   const toggleItem = (id) => setSelectedIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
-  const [mode, setMode] = useState('MODEL');
-  const [choice, setChoice] = useState(null); // { models, suggestedModelId, gender, generateDescription }
-  const [modelId, setModelId] = useState(null);
+  const [mode, setMode] = useState('PHOTO');
+  const [choice, setChoice] = useState(null); // { gender, generateDescription } - mô tả người mẫu AI sẽ tạo
   const [quota, setQuota] = useState(null);
   const [step, setStep] = useState('setup'); // setup | camera | running | result
   const [photo, setPhoto] = useState(null); // { blob, url } ảnh mới
@@ -146,15 +145,10 @@ export default function TryOnDialog({ open, onClose, items: allItems, extraActio
     getTryOnQuota()
       .then((q) => alive && setQuota(q))
       .catch((e) => alive && setQuota({ failed: true, message: e.message }));
-    // Người mẫu: chưa có ai thì mở sẵn tab "Ảnh của tôi"
+    // Mô tả người mẫu cho chế độ "AI tạo người mẫu" (theo số đo đã lưu)
     getTryOnModels()
-      .then((c) => {
-        if (!alive) return;
-        setChoice(c);
-        setModelId((id) => id ?? c.suggestedModelId ?? c.models[0]?.modelId ?? null);
-        if (!c.models.length && !c.gender) setMode((m) => (m === 'MODEL' ? 'PHOTO' : m));
-      })
-      .catch(() => alive && setChoice({ models: [], failed: true }));
+      .then((c) => alive && setChoice(c))
+      .catch(() => alive && setChoice({ failed: true }));
     const last = readLastJob();
     if (last) {
       getTryOnJob(last)
@@ -214,7 +208,6 @@ export default function TryOnDialog({ open, onClose, items: allItems, extraActio
     try {
       const j = await createTryOnJob({
         mode,
-        modelId: mode === 'MODEL' ? modelId : null,
         photo: mode === 'PHOTO' && !useLast ? photo?.blob : null,
         photoFromJob: mode === 'PHOTO' && useLast ? lastJob?.jobId : null,
         productIds: items.map((i) => i.productId),
@@ -253,28 +246,13 @@ export default function TryOnDialog({ open, onClose, items: allItems, extraActio
     }
   };
 
-  // Đổi giới tính người mẫu (khách xem cả người mẫu khác giới tính với số đo đã lưu)
-  const changeGender = async (gender) => {
-    try {
-      const c = await getTryOnModels(gender);
-      setChoice(c);
-      setModelId(c.suggestedModelId ?? c.models[0]?.modelId ?? null);
-    } catch (e) {
-      setError(e.message);
-    }
-  };
-
   const hasPhoto = useLast ? Boolean(lastJob) : Boolean(photo);
   const notReady = quota && (quota.failed || !quota.ready);
   const noTurns = quota && quota.ready && quota.remaining <= 0;
   // Phải chọn ít nhất 1 món; AI tạo người mẫu chỉ mặc đúng 1 món
   const modeReady =
     items.length > 0 &&
-    (mode === 'MODEL'
-      ? Boolean(modelId)
-      : mode === 'GENERATE'
-        ? items.length === 1 && Boolean(choice?.generateDescription)
-        : hasPhoto && consent);
+    (mode === 'GENERATE' ? items.length === 1 && Boolean(choice?.generateDescription) : hasPhoto && consent);
 
   return (
     <Dialog open={open} onClose={busy ? undefined : onClose} maxWidth="md" fullWidth>
@@ -321,7 +299,7 @@ export default function TryOnDialog({ open, onClose, items: allItems, extraActio
             <SetupStep
               {...{ mode, allItems, selectedIds, toggleItem, quota, photo, lastJob, useLast, setUseLast, consent, setConsent }}
               {...{ notReady, noTurns, busy }}
-              {...{ choice, modelId, setModelId, changeGender }}
+              choice={choice}
               onPickFile={() => fileRef.current?.click()}
               onCamera={() => setStep('camera')}
               canStart={modeReady && !notReady && !noTurns && !busy}
@@ -378,88 +356,6 @@ export default function TryOnDialog({ open, onClose, items: allItems, extraActio
   );
 }
 
-/** Chọn người mẫu dựng sẵn: người mẫu gợi ý theo số đo được chọn sẵn, đổi được giới tính. */
-function ModelPicker({ choice, modelId, setModelId, changeGender }) {
-  if (!choice) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-        <CircularProgress size={28} sx={{ color: C.ink }} />
-      </Box>
-    );
-  }
-  return (
-    <Box>
-      <Box sx={{ display: 'flex', gap: 1, mb: 1.5 }}>
-        {Object.entries(GENDER_LABELS).map(([key, label]) => (
-          <Button
-            key={key}
-            size="small"
-            onClick={() => changeGender(key)}
-            sx={{ ...buttonSx(choice.gender === key), py: 0.25, minWidth: 0 }}
-          >
-            {label}
-          </Button>
-        ))}
-      </Box>
-      {choice.models.length === 0 ? (
-        <Typography sx={{ fontSize: 13.5, color: C.muted }}>
-          Cửa hàng chưa có người mẫu {choice.gender ? GENDER_LABELS[choice.gender].toLowerCase() : ''}. Bạn hãy chọn “AI tạo người mẫu” hoặc
-          “Ảnh của tôi”.
-        </Typography>
-      ) : (
-        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1, maxHeight: 360, overflowY: 'auto', pr: 0.5 }}>
-          {choice.models.map((m) => (
-            <Box
-              key={m.modelId}
-              onClick={() => setModelId(m.modelId)}
-              sx={{
-                cursor: 'pointer',
-                borderRadius: '10px',
-                overflow: 'hidden',
-                position: 'relative',
-                outline: modelId === m.modelId ? `2.5px solid ${C.ink}` : `1px solid ${C.line}`,
-                outlineOffset: modelId === m.modelId ? 1 : 0
-              }}
-            >
-              <Box
-                component="img"
-                src={m.imageUrl}
-                alt=""
-                sx={{ width: '100%', aspectRatio: '3 / 4', objectFit: 'cover', display: 'block' }}
-              />
-              {m.modelId === choice.suggestedModelId && (
-                <Typography
-                  sx={{
-                    position: 'absolute',
-                    top: 4,
-                    left: 4,
-                    bgcolor: C.ink,
-                    color: '#fff',
-                    fontSize: 10.5,
-                    fontWeight: 700,
-                    px: 0.75,
-                    borderRadius: '6px'
-                  }}
-                >
-                  Gợi ý
-                </Typography>
-              )}
-              <Typography sx={{ fontSize: 11.5, textAlign: 'center', py: 0.5 }}>
-                {BODY_LABELS[m.bodyType]} · {m.heightCm} cm
-              </Typography>
-            </Box>
-          ))}
-        </Box>
-      )}
-      {choice.suggestedModelId && (
-        <Typography sx={{ fontSize: 12, color: C.muted, mt: 1 }}>
-          “Gợi ý”: người mẫu có dáng và chiều cao gần với số đo bạn đã lưu.
-        </Typography>
-      )}
-    </Box>
-  );
-}
-
 /** AI tạo người mẫu theo mô tả dáng từ số đo đã lưu. */
 function GeneratePanel({ choice }) {
   return (
@@ -500,9 +396,6 @@ function SetupStep({
   noTurns,
   busy,
   choice,
-  modelId,
-  setModelId,
-  changeGender,
   onPickFile,
   onCamera,
   canStart,
@@ -511,7 +404,6 @@ function SetupStep({
   const preview = useLast ? null : photo?.url;
   return (
     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '320px 1fr' }, gap: 3 }}>
-      {mode === 'MODEL' && <ModelPicker {...{ choice, modelId, setModelId, changeGender }} />}
       {mode === 'GENERATE' && <GeneratePanel choice={choice} />}
       {/* Ảnh của khách */}
       {mode === 'PHOTO' && (
@@ -645,8 +537,7 @@ function SetupStep({
           </>
         ) : (
           <Typography sx={{ fontSize: 13, color: C.muted, mb: 2 }}>
-            Không cần ảnh của bạn.{' '}
-            {mode === 'MODEL' ? 'Bộ đồ này đã có người thử trên người mẫu này thì hiện ngay và không tính lượt.' : ''}
+            Không cần ảnh của bạn.
           </Typography>
         )}
 
@@ -761,9 +652,7 @@ function ResultStep({ job, busy, extraActions, onAgain, onDelete }) {
         <Typography sx={{ fontWeight: 700, mb: 1 }}>{failed ? 'Chưa mặc thử được' : 'Kết quả mặc thử'}</Typography>
         {job.reused && (
           <Typography sx={{ fontSize: 13, color: C.muted, mb: 1 }}>
-            {job.mode === 'MODEL'
-              ? 'Món này đã được thử trên người mẫu này, đây là kết quả có sẵn (không tính lượt).'
-              : 'Bạn đã thử đúng ảnh và món này trước đó, đây là kết quả cũ (không tính lượt).'}
+            Bạn đã thử đúng ảnh và món này trước đó, đây là kết quả cũ (không tính lượt).
           </Typography>
         )}
         {job.items.map((i) => (
@@ -792,12 +681,9 @@ function ResultStep({ job, busy, extraActions, onAgain, onDelete }) {
           <Button onClick={onAgain} sx={buttonSx(false)}>
             {failed ? 'Thử lại' : 'Thử cách khác'}
           </Button>
-          {/* Chỉ chế độ có ảnh / kết quả riêng của khách */}
-          {job.mode !== 'MODEL' && (
-            <Button onClick={onDelete} disabled={busy} sx={{ ...buttonSx(false), borderColor: C.line, color: C.muted }}>
-              Xóa ảnh của tôi
-            </Button>
-          )}
+          <Button onClick={onDelete} disabled={busy} sx={{ ...buttonSx(false), borderColor: C.line, color: C.muted }}>
+            Xóa ảnh của tôi
+          </Button>
         </Box>
       </Box>
     </Box>

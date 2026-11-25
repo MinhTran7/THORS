@@ -48,9 +48,7 @@ const OWNER_MENU = [
     icon: <SkinOutlined />,
     children: [
       { to: '/products', label: 'Danh sách sản phẩm', icon: <UnorderedListOutlined /> },
-      { to: '/categories', label: 'Danh mục', icon: <AppstoreOutlined /> },
-      // Người mẫu dựng sẵn cho "Mặc thử bằng AI" (module tryon)
-      { to: '/tryon-models', label: 'Người mẫu thử đồ', icon: <CameraOutlined /> }
+      { to: '/categories', label: 'Danh mục', icon: <AppstoreOutlined /> }
     ]
   },
   {
@@ -102,7 +100,7 @@ const OWNER_MENU = [
 ];
 
 // Các trang chỉ OWNER được vào (khớp với RequireAuth roles={['OWNER']} trong routes/index.jsx).
-const OWNER_ONLY = new Set(['/products', '/categories', '/returns', '/family', '/promotions', '/order-discounts', '/website', '/tryon-models']);
+const OWNER_ONLY = new Set(['/products', '/categories', '/returns', '/family', '/promotions', '/order-discounts', '/website']);
 
 const without = (menu, hidden) =>
   menu

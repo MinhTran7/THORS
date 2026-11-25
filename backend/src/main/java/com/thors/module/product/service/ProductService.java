@@ -1140,7 +1140,7 @@ public class ProductService {
             if (productRepository.countSellableVariants(productId) == 0) {
                 throw badRequest(
                         "NO_SELLABLE_VARIANT",
-                        "Sản phẩm chưa có biến thể đang hoạt động và có giá bán để bật bán online."
+                        "Sản phẩm chưa có biến thể đang hoạt động và có giá bán (lớn hơn 0đ) để bật bán online."
                 );
             }
         }
@@ -1166,8 +1166,13 @@ public class ProductService {
             if (!"ACTIVE".equals(variant.get("status"))) {
                 throw badRequest("VARIANT_INACTIVE", "Biến thể #" + detailId + " đang ngưng, không bật bán online được.");
             }
-            if (variant.get("price") == null) {
-                throw badRequest("VARIANT_NO_PRICE", "Biến thể #" + detailId + " chưa có giá bán.");
+            // Chưa có giá hoặc giá 0đ thì không cho bán online
+            Object rawPrice = variant.get("price");
+            BigDecimal variantPrice = rawPrice instanceof BigDecimal p ? p
+                    : rawPrice instanceof Number n ? new BigDecimal(n.toString()) : null;
+            if (variantPrice == null || variantPrice.signum() <= 0) {
+                throw badRequest("VARIANT_NO_PRICE",
+                        "Biến thể #" + detailId + " chưa có giá bán (phải lớn hơn 0đ) nên chưa bật bán online được.");
             }
         }
 

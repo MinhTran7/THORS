@@ -31,7 +31,6 @@ const ROUTE_CRUMBS = [
   ['/products/:productId', ['Sản phẩm', 'Chi tiết sản phẩm']],
   ['/returns', ['Hoàn hàng / Đổi trả']],
   ['/website', ['Kênh bán hàng', 'Website']],
-  ['/tryon-models', ['Sản phẩm', 'Người mẫu thử đồ']],
   ['/promotions', ['Khuyến mãi sản phẩm']],
   ['/promotions/add', ['Khuyến mãi sản phẩm', 'Thêm khuyến mãi sản phẩm']],
   ['/promotions/:promotionId/edit', ['Khuyến mãi sản phẩm', 'Sửa khuyến mãi sản phẩm']],
