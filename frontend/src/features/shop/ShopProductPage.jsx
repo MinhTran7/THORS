@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link as RouterLink, useNavigate, useOutletContext, useParams } from 'react-router-dom';
+import { Link as RouterLink, useNavigate, useOutletContext, useParams, useSearchParams } from 'react-router-dom';
 import { Box, Button, Chip, Typography } from '@mui/material';
 import { useAuth } from 'features/auth/AuthProvider';
 import { buyNow as goBuyNow, stashBuyNow } from 'features/cart/checkout';
@@ -30,6 +30,10 @@ function salePriceOf(price, promo) {
 /** Trang chi tiết sản phẩm công khai: /shop/products/:productId */
 export default function ShopProductPage() {
   const { productId } = useParams();
+  // ?color=...&size=... (vd. bấm sản phẩm trong giỏ hàng): mở sẵn đúng phân loại
+  const [searchParams] = useSearchParams();
+  const wantColor = searchParams.get('color') || '';
+  const wantSize = searchParams.get('size') || '';
   const navigate = useNavigate();
   const auth = useAuth();
   const account = auth?.account;
@@ -76,6 +80,13 @@ export default function ShopProductPage() {
       .then((d) => setPromos(d.items || []))
       .catch(() => setPromos([]));
   }, [productId]);
+
+  // Chọn sẵn màu / size theo đường dẫn khi đã tải xong sản phẩm
+  useEffect(() => {
+    const list = data?.variants || [];
+    if (wantColor && list.some((v) => v.color === wantColor)) setColor(wantColor);
+    if (wantSize && list.some((v) => v.size === wantSize && (!wantColor || v.color === wantColor))) setSize(wantSize);
+  }, [data, wantColor, wantSize]);
 
   // "Có thể bạn sẽ thích": ưu tiên sản phẩm cùng danh mục (bỏ sản phẩm đang xem);
   // danh mục chưa đủ RELATED_COUNT sản phẩm thì lấy thêm sản phẩm mới nhất ở danh mục khác cho đủ.
@@ -206,8 +217,9 @@ export default function ShopProductPage() {
   return (
     // Header + footer do StorefrontLayout lo
     <Box>
-      <Box sx={{ maxWidth: 1320, mx: 'auto', boxSizing: 'border-box', px: { xs: '16px', sm: '40px' }, py: { xs: 3, md: 5 } }}>
-        <Box component="nav" aria-label="Breadcrumb" sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', fontSize: 13, color: C.muted, mb: 2 }}>
+      <Box sx={{ maxWidth: 1320, mx: 'auto', boxSizing: 'border-box', px: { xs: '16px', sm: '40px' }, pt: { xs: 2.5, md: 3 }, pb: { xs: 3, md: 5 } }}>
+        {/* Khoảng cách trên (tới header) = khoảng cách dưới (tới nội dung) */}
+        <Box component="nav" aria-label="Breadcrumb" sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', fontSize: 13, color: C.muted, mb: { xs: 2.5, md: 3 } }}>
           <Box component={RouterLink} to="/" sx={{ color: C.muted, textDecoration: 'none', '&:hover': { color: C.ink } }}>
             Trang chủ
           </Box>

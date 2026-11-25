@@ -45,16 +45,210 @@ function fetchPromos() {
   return promoRequest;
 }
 
-// Danh mục cho ô chọn: danh mục lớn, danh mục con thụt vào bằng "— "
-function categoryOptions(categories) {
-  const out = [];
-  const walk = (nodes, depth) =>
-    nodes.forEach((n) => {
-      out.push({ id: n.categoryId, label: `${'— '.repeat(depth)}${n.categoryName}` });
-      walk(n.children, depth + 1);
+// Đường đi từ gốc tới danh mục id (để tự mở các danh mục cha của mục đang chọn)
+function pathTo(nodes, id, trail = []) {
+  for (const n of nodes) {
+    const next = [...trail, n.categoryId];
+    if (String(n.categoryId) === String(id)) return next;
+    const found = pathTo(n.children, id, next);
+    if (found.length) return found;
+  }
+  return [];
+}
+
+function findName(nodes, id) {
+  for (const n of nodes) {
+    if (String(n.categoryId) === String(id)) return n.categoryName;
+    const found = findName(n.children, id);
+    if (found) return found;
+  }
+  return '';
+}
+
+const rowSx = (depth, selected) => ({
+  flex: 1,
+  minWidth: 0,
+  py: 1,
+  pl: 2 + depth * 2.5,
+  pr: 1,
+  border: 0,
+  bgcolor: 'transparent',
+  textAlign: 'left',
+  font: 'inherit',
+  fontSize: 15,
+  fontWeight: depth === 0 ? 600 : 400,
+  color: selected ? C.primary : depth === 0 ? C.ink : C.muted,
+  cursor: 'pointer',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  '&:hover': { color: C.primary },
+  ...focusRing
+});
+
+// Một danh mục trong cây: bấm tên để chọn, bấm mũi tên để xem danh mục con (giống bộ lọc ở trang danh sách)
+function CategoryRow({ node, depth, selectedId, expanded, onToggle, onPick }) {
+  const hasKids = node.children.length > 0;
+  const open = expanded.has(node.categoryId);
+  const selected = String(selectedId) === String(node.categoryId);
+  return (
+    <Box component="li" sx={{ listStyle: 'none' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', pr: 1 }}>
+        <Box component="button" type="button" aria-current={selected || undefined} onClick={() => onPick(node.categoryId)} sx={rowSx(depth, selected)}>
+          {node.categoryName}
+        </Box>
+        {hasKids && (
+          <Box
+            component="button"
+            type="button"
+            aria-label={`${open ? 'Thu gọn' : 'Xem'} danh mục con của ${node.categoryName}`}
+            aria-expanded={open}
+            onClick={() => onToggle(node.categoryId)}
+            sx={{
+              width: 32,
+              height: 32,
+              p: 0,
+              border: 0,
+              bgcolor: 'transparent',
+              color: C.muted,
+              cursor: 'pointer',
+              display: 'grid',
+              placeItems: 'center',
+              flexShrink: 0,
+              '&:hover': { color: C.ink },
+              ...focusRing
+            }}
+          >
+            <Box component="span" sx={{ display: 'flex', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }}>
+              <Icon size={16}>
+                <path d="M6 9l6 6 6-6" />
+              </Icon>
+            </Box>
+          </Box>
+        )}
+      </Box>
+      {hasKids && open && (
+        <Box component="ul" sx={{ m: 0, p: 0 }}>
+          {node.children.map((child) => (
+            <CategoryRow key={child.categoryId} node={child} depth={depth + 1} selectedId={selectedId} expanded={expanded} onToggle={onToggle} onPick={onPick} />
+          ))}
+        </Box>
+      )}
+    </Box>
+  );
+}
+
+// Nút chọn danh mục bên trái thanh tìm kiếm + bảng cây danh mục xổ xuống
+function CategoryPicker({ categories, value, onChange, onOpen }) {
+  const tree = useMemo(() => categoryTree(categories), [categories]);
+  const ref = useRef(null);
+  const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState(() => new Set());
+  const label = (value && findName(tree, value)) || 'Tất cả danh mục';
+
+  // Mở bảng: tự xổ các danh mục cha của mục đang chọn
+  const show = () => {
+    const path = pathTo(tree, value);
+    if (path.length > 1) setExpanded((prev) => new Set([...prev, ...path.slice(0, -1)]));
+    setOpen(true);
+    onOpen?.();
+  };
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (e) => {
+      if (!ref.current?.contains(e.target)) setOpen(false);
+    };
+    const onKey = (e) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const toggle = (id) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
     });
-  walk(categoryTree(categories), 0);
-  return out;
+  const pick = (id) => {
+    onChange(id === '' ? '' : String(id));
+    setOpen(false);
+  };
+
+  return (
+    <Box ref={ref} sx={{ position: 'relative', display: { xs: 'none', sm: 'block' }, flexShrink: 0 }}>
+      <Box
+        component="button"
+        type="button"
+        aria-haspopup="true"
+        aria-expanded={open}
+        aria-label={`Danh mục tìm kiếm: ${label}`}
+        onClick={() => (open ? setOpen(false) : show())}
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1.5,
+          height: 40,
+          maxWidth: 220,
+          pl: 2,
+          pr: 1.5,
+          border: 0,
+          borderRadius: 999,
+          bgcolor: '#FFFFFF',
+          font: 'inherit',
+          fontSize: 14,
+          fontWeight: 600,
+          color: C.ink,
+          cursor: 'pointer',
+          ...focusRing
+        }}
+      >
+        <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {label}
+        </Box>
+        <Box component="span" sx={{ display: 'flex', flexShrink: 0, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }}>
+          <Icon size={16}>
+            <path d="M6 9l6 6 6-6" />
+          </Icon>
+        </Box>
+      </Box>
+
+      {open && (
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 'calc(100% + 14px)',
+            left: -8,
+            zIndex: 45,
+            width: 300,
+            maxHeight: 'min(480px, 65vh)',
+            overflowY: 'auto',
+            py: 1,
+            bgcolor: '#FFFFFF',
+            borderRadius: '16px',
+            border: `1px solid ${C.line}`,
+            boxShadow: '0 18px 40px rgba(0,0,0,.14)'
+          }}
+        >
+          <Box sx={{ display: 'flex', pr: 1 }}>
+            <Box component="button" type="button" aria-current={!value || undefined} onClick={() => pick('')} sx={{ ...rowSx(0, !value), fontWeight: 400, color: !value ? C.primary : C.ink }}>
+              Tất cả danh mục
+            </Box>
+          </Box>
+          <Box component="ul" sx={{ m: 0, p: 0 }}>
+            {tree.map((node) => (
+              <CategoryRow key={node.categoryId} node={node} depth={0} selectedId={value} expanded={expanded} onToggle={toggle} onPick={pick} />
+            ))}
+          </Box>
+        </Box>
+      )}
+    </Box>
+  );
 }
 
 function SuggestionPrice({ product, promo }) {
@@ -85,7 +279,6 @@ export default function StoreSearch({ categories = [], initialQuery = '', autoFo
   const [failed, setFailed] = useState(false);
   const [active, setActive] = useState(-1);
   const [promos, setPromos] = useState(() => new Map());
-  const options = useMemo(() => categoryOptions(categories), [categories]);
   const q = input.trim();
 
   useEffect(() => setInput(initialQuery), [initialQuery]);
@@ -183,63 +376,8 @@ export default function StoreSearch({ categories = [], initialQuery = '', autoFo
           '&:focus-within': { boxShadow: `0 0 0 2px ${C.primary}` }
         }}
       >
-        {/* Chọn danh mục để tìm trong đó */}
-        <Box
-          component="label"
-          sx={{
-            position: 'relative',
-            display: { xs: 'none', sm: 'flex' },
-            alignItems: 'center',
-            flexShrink: 0,
-            height: 40,
-            bgcolor: '#FFFFFF',
-            borderRadius: 999,
-            '&::after': {
-              content: '""',
-              position: 'absolute',
-              right: 14,
-              width: 7,
-              height: 7,
-              borderRight: `1.5px solid ${C.ink}`,
-              borderBottom: `1.5px solid ${C.ink}`,
-              transform: 'translateY(-2px) rotate(45deg)',
-              pointerEvents: 'none'
-            }
-          }}
-        >
-          <Box component="span" sx={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>
-            Danh mục tìm kiếm
-          </Box>
-          <Box
-            component="select"
-            value={categoryId}
-            onChange={(e) => setCategoryId(e.target.value)}
-            sx={{
-              appearance: 'none',
-              height: '100%',
-              maxWidth: 200,
-              border: 0,
-              bgcolor: 'transparent',
-              borderRadius: 999,
-              pl: 2,
-              pr: 4.5,
-              font: 'inherit',
-              fontSize: 14,
-              fontWeight: 600,
-              color: C.ink,
-              cursor: 'pointer',
-              textOverflow: 'ellipsis',
-              ...focusRing
-            }}
-          >
-            <option value="">Tất cả danh mục</option>
-            {options.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.label}
-              </option>
-            ))}
-          </Box>
-        </Box>
+        {/* Chọn danh mục để tìm trong đó (cây danh mục, bấm mũi tên để xem danh mục con) */}
+        <CategoryPicker categories={categories} value={categoryId} onChange={setCategoryId} onOpen={() => setOpen(false)} />
 
         <Box
           component="input"

@@ -31,7 +31,7 @@ public class OrderScheduler {
             int expired = service.expireUnpaidOrders();
             if (expired > 0) log.info("Đã hết hạn thanh toán {} đơn hàng", expired);
         } catch (RuntimeException e) {
-            log.warn("Không xử lý được đơn hết hạn thanh toán: {}", e.getClass().getSimpleName());
+            log.warn("Không xử lý được đơn hết hạn thanh toán: {}", e.toString());
         }
     }
 
