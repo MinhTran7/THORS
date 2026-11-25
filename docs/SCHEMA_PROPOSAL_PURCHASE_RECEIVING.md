@@ -93,6 +93,6 @@ ALTER TABLE product_detail
 | Bán tại quầy (`InStoreSalesService`, `InStoreSalesPage`) | Backend trả lỗi “Chưa thiết lập giá bán”; frontend khóa chọn biến thể và hiển thị nhãn này thay vì 0 ₫. |
 | Online: cửa hàng, giỏ hàng, checkout (`ShopRepository`, `CartRepository`, `CheckoutRepository`) | Biến thể bị loại khỏi trang cửa hàng; `available = false` nên không thêm giỏ/đặt được. |
 | Hiển thị quản lý sản phẩm (`ProductPage`, `ProductDetailPage`) | “Chưa thiết lập giá bán”; `MIN/MAX(price)` bỏ qua NULL. |
-| Đơn mẫu (`OrderRepository.createSampleOrder`, `ReturnRepository.seedSampleOrder`) | Chỉ chọn biến thể có giá. |
+| Đơn mẫu (`ReturnRepository.seedSampleOrder`) | Chỉ chọn biến thể có giá. |
 
 Không có luồng nào trong backend bật `online_sales_enabled`; nếu sau này thêm, cần chặn bật khi giá NULL.

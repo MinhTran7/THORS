@@ -70,7 +70,7 @@ class DeliveryProofServiceTest {
     private void order(String status, String carrier) {
         Shipment shipment = carrier == null ? null : new Shipment(carrier, null, null, null, null, null);
         Detail d = new Detail(ORDER, "ORD-42", null, status, null, "COD", "UNPAID", null, 0, null, 0, null, 0, 0, 0,
-                null, null, null, null, null, null, null, shipment, null, List.of(), null, null);
+                null, null, null, null, null, null, null, shipment, null, List.of(), null, null, null);
         when(orders.detail(any(), eq(ORDER))).thenReturn(d);
     }
 

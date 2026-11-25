@@ -25,6 +25,16 @@ public class ReturnableOrderResponse {
     private LocalDateTime orderDate;
     private BigDecimal totalAmount;
     private List<OrderItemDetail> items;
+    /** Mốc giao thành công (cột orders.shipment_delivered_at, giờ UTC); null nếu chưa ghi nhận. */
+    private LocalDateTime deliveredAt;
+
+    public LocalDateTime getDeliveredAt() {
+        return deliveredAt;
+    }
+
+    public void setDeliveredAt(LocalDateTime deliveredAt) {
+        this.deliveredAt = deliveredAt;
+    }
 
     public static class OrderItemDetail {
         private int orderItemId;

@@ -120,15 +120,87 @@ export function FilterSelect({ value, onChange, options, label, minWidth = 150 }
   );
 }
 
-export function Toolbar({ children }) {
+/** alignEnd: canh đáy các ô lọc, dùng khi trong thanh có ô có nhãn nằm trên (như DateRangeFilter). */
+export function Toolbar({ children, alignEnd = false }) {
   return (
-    <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} sx={{ mb: 2 }}>
+    <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} sx={{ mb: 2, alignItems: alignEnd ? { md: 'flex-end' } : undefined }}>
       {children}
     </Stack>
   );
 }
 
-export function FilterResetButton({ onClick, disabled }) {
+const pad2 = (n) => String(n).padStart(2, '0');
+
+/** Hôm nay dạng yyyy-MM-dd theo giờ máy (giá trị của input type="date"). */
+export const todayYmd = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+};
+
+/** Viền, nền, bo góc chung cho mọi ô lọc (ô ngày, ô chọn, ô tìm) để thanh lọc các trang giống nhau. */
+export const filterInputSx = (height = 44) => ({
+  '& .MuiOutlinedInput-root': {
+    bgcolor: '#FFFFFF',
+    borderRadius: '10px',
+    height,
+    fontSize: 13.5,
+    '& fieldset': { borderColor: '#E2E8F0' },
+    '&:hover fieldset': { borderColor: '#8EECF5' },
+    '&.Mui-focused fieldset': { borderColor: '#8EECF5' }
+  }
+});
+
+/** Một ô lọc có nhãn nằm trên (cùng kiểu với DateRangeFilter). width: số px hoặc chuỗi; grow = giãn hết chỗ trống. */
+export function FilterField({ label, width, grow = false, children }) {
+  return (
+    <Box sx={{ minWidth: 0, width: { xs: '100%', md: width }, flex: grow ? { md: '1 1 240px' } : { md: '0 0 auto' } }}>
+      <Typography sx={{ fontSize: 13, fontWeight: 600, color: brand.ink, mb: 0.75 }}>{label}</Typography>
+      {children}
+    </Box>
+  );
+}
+
+/**
+ * Lọc theo khoảng ngày dùng chung cho mọi trang: 2 ô "Từ ngày" / "Đến ngày", nhãn nằm trên ô.
+ * from / to dạng yyyy-MM-dd, chuỗi rỗng = không giới hạn phía đó. onChange({ from, to }).
+ * Không cho chọn ngày tương lai (trừ khi allowFuture); chọn "Từ" sau "Đến" thì tự kéo ô kia theo,
+ * nên khoảng ngày luôn hợp lệ. Trả về 2 ô liền nhau (Fragment) để nằm được trong grid lẫn flex của trang.
+ */
+export function DateRangeFilter({ from, to, onChange, allowFuture = false, height = 44, width = 150, fromLabel = 'Từ ngày', toLabel = 'Đến ngày' }) {
+  const max = allowFuture ? undefined : todayYmd();
+  const clamp = (v) => (v && max && v > max ? max : v);
+  const setFrom = (value) => {
+    const next = clamp(value);
+    onChange({ from: next, to: next && to && next > to ? next : to });
+  };
+  const setTo = (value) => {
+    const next = clamp(value);
+    onChange({ from: next && from && from > next ? next : from, to: next });
+  };
+  const field = (label, value, set, input) => (
+    <Box sx={{ minWidth: 0, width: { xs: '100%', md: width }, flexShrink: 0 }}>
+      <Typography sx={{ fontSize: 13, fontWeight: 600, color: brand.ink, mb: 0.75 }}>{label}</Typography>
+      <TextField
+        fullWidth
+        size="small"
+        type="date"
+        value={value || ''}
+        onChange={(event) => set(event.target.value)}
+        slotProps={{ htmlInput: { ...input, 'aria-label': label } }}
+        sx={filterInputSx(height)}
+      />
+    </Box>
+  );
+  return (
+    <>
+      {field(fromLabel, from, setFrom, { max: to && max ? (to < max ? to : max) : to || max })}
+      {field(toLabel, to, setTo, { min: from || undefined, max })}
+    </>
+  );
+}
+
+/** Nút "Bỏ lọc" dùng chung; height khớp với chiều cao các ô lọc của trang (44 hoặc 40). */
+export function FilterResetButton({ onClick, disabled, height = 44 }) {
   return (
     <Button
       variant="outlined"
@@ -136,7 +208,8 @@ export function FilterResetButton({ onClick, disabled }) {
       disabled={disabled}
       sx={{
         justifySelf: 'start',
-        height: 44,
+        flexShrink: 0,
+        height,
         px: 1.75,
         minWidth: 'unset',
         borderRadius: '10px',

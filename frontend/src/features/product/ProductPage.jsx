@@ -201,6 +201,8 @@ export default function ProductPage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  // Lỗi của hộp thoại ẩn/hiện sản phẩm hoặc bật/tắt bán online: chỉ hiện trong hộp thoại, đóng là xoá
+  const [dialogError, setDialogError] = useState('');
   const [success, setSuccess] = useState('');
   const [loadedAt, setLoadedAt] = useState(null);
 
@@ -413,6 +415,7 @@ export default function ProductPage() {
   function closeStatusDialog() {
     if (statusSaving) return;
     setStatusDialogProduct(null);
+    setDialogError('');
   }
 
   async function confirmChangeProductStatus() {
@@ -436,8 +439,8 @@ export default function ProductPage() {
 
       await loadProducts({ silent: true });
     } catch (err) {
-      setError(err?.message || 'Không thể đổi trạng thái sản phẩm. Vui lòng thử lại.');
-      setStatusDialogProduct(null);
+      // Giữ hộp thoại mở và báo lỗi ngay trong đó (biết rõ là sản phẩm nào), không đẩy lên đầu trang
+      setDialogError(err?.message || 'Không thể đổi trạng thái sản phẩm. Vui lòng thử lại.');
     } finally {
       setStatusSaving(false);
     }
@@ -458,6 +461,7 @@ export default function ProductPage() {
   function closeOnlineDialog() {
     if (onlineSaving) return;
     setOnlineDialogProduct(null);
+    setDialogError('');
   }
 
   async function confirmToggleOnline() {
@@ -486,8 +490,7 @@ export default function ProductPage() {
           : `Đã tắt bán online cho "${product.productName}".`
       );
     } catch (err) {
-      setError(err?.message || 'Không thể đổi trạng thái bán online. Vui lòng thử lại.');
-      setOnlineDialogProduct(null);
+      setDialogError(err?.message || 'Không thể đổi trạng thái bán online. Vui lòng thử lại.');
     } finally {
       setOnlineSaving(false);
     }
@@ -1019,6 +1022,11 @@ export default function ProductPage() {
               </Typography>
             </Box>
           )}
+          {dialogError && (
+            <Alert severity="error" sx={{ mt: 2, borderRadius: 2.5, fontSize: 13 }}>
+              {dialogError}
+            </Alert>
+          )}
         </DialogContent>
 
         <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
@@ -1077,6 +1085,11 @@ export default function ProductPage() {
                 : 'Mọi biến thể sẽ bị ẩn khỏi cửa hàng online; khách không thể thêm vào giỏ hay đặt mới. Bán tại quầy và Facebook không bị ảnh hưởng.'}
             </Typography>
           </Box>
+          {dialogError && (
+            <Alert severity="error" sx={{ mt: 2, borderRadius: 2.5, fontSize: 13 }}>
+              {dialogError}
+            </Alert>
+          )}
         </DialogContent>
 
         <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>

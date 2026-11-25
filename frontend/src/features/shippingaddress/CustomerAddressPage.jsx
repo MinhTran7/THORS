@@ -49,6 +49,8 @@ export default function CustomerAddressPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [target, setTarget] = useState(null);
+  // Lỗi xóa địa chỉ: chỉ hiện trong hộp thoại xác nhận, đóng hộp thoại là xoá
+  const [deleteError, setDeleteError] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [notice, setNotice] = useState(null);
 
@@ -78,16 +80,23 @@ export default function CustomerAddressPage() {
 
   async function confirmDelete() {
     setDeleting(true);
+    setDeleteError('');
     try {
       await deleteShippingAddress(target.addressId);
       setTarget(null);
       await load();
     } catch (err) {
-      setTarget(null);
-      setError(err.message || 'Không thể xóa địa chỉ giao hàng.');
+      // Giữ hộp thoại mở (biết rõ địa chỉ nào) và báo lỗi trong đó
+      setDeleteError(err.message || 'Không thể xóa địa chỉ giao hàng.');
     } finally {
       setDeleting(false);
     }
+  }
+
+  function closeDeleteDialog() {
+    if (deleting) return;
+    setTarget(null);
+    setDeleteError('');
   }
 
   return (
@@ -275,7 +284,7 @@ export default function CustomerAddressPage() {
 
       <Dialog
         open={Boolean(target)}
-        onClose={() => !deleting && setTarget(null)}
+        onClose={closeDeleteDialog}
         maxWidth="xs"
         fullWidth
         slotProps={{ paper: { sx: { borderRadius: '24px', p: 1 } } }}
@@ -285,10 +294,11 @@ export default function CustomerAddressPage() {
           <Typography sx={{ fontSize: 14, color: C.muted }}>
             Bạn có chắc muốn xóa địa chỉ của <strong>{target?.recipientName}</strong> không?
           </Typography>
+          {deleteError && <Typography sx={{ color: C.error, fontSize: 13.5, fontWeight: 600, mt: 1.5 }}>{deleteError}</Typography>}
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
           <Button
-            onClick={() => setTarget(null)}
+            onClick={closeDeleteDialog}
             disabled={deleting}
             sx={{
               ...outlineButtonSx,

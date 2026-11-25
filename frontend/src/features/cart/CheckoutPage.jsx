@@ -252,6 +252,15 @@ export default function CheckoutPage() {
   const [openAddressDialog, setOpenAddressDialog] = useState(false);
   const [isCreatingAddress, setIsCreatingAddress] = useState(false);
   const [savingAddress, setSavingAddress] = useState(false);
+  // Lỗi lưu địa chỉ mới: hiện trong hộp thoại địa chỉ, đóng hộp thoại là xoá (không hiện cạnh nút Đặt hàng)
+  const [addressError, setAddressError] = useState('');
+
+  const closeAddressDialog = () => {
+    if (savingAddress) return;
+    setOpenAddressDialog(false);
+    setIsCreatingAddress(false);
+    setAddressError('');
+  };
 
   const handleSaveNewAddress = async () => {
     const found = validateAddress(addr);
@@ -259,6 +268,7 @@ export default function CheckoutPage() {
     if (Object.keys(found).length) return;
 
     setSavingAddress(true);
+    setAddressError('');
     try {
       const payload = {
         recipientName: addr.receiverName.trim(),
@@ -283,7 +293,7 @@ export default function CheckoutPage() {
       setIsCreatingAddress(false);
       setOpenAddressDialog(false);
     } catch (e) {
-      setSubmitError(e.message || 'Không thể lưu địa chỉ');
+      setAddressError(e.message || 'Không thể lưu địa chỉ');
     } finally {
       setSavingAddress(false);
     }
@@ -1009,10 +1019,7 @@ export default function CheckoutPage() {
       </Dialog>
       <Dialog
         open={openAddressDialog}
-        onClose={() => {
-          setOpenAddressDialog(false);
-          setIsCreatingAddress(false);
-        }}
+        onClose={closeAddressDialog}
         maxWidth="xs"
         fullWidth
         PaperProps={{
@@ -1036,21 +1043,21 @@ export default function CheckoutPage() {
               {isCreatingAddress ? 'Thêm địa chỉ mới' : 'Địa chỉ nhận hàng'}
             </Typography>
           </Stack>
-          <IconButton
-            size="small"
-            onClick={() => {
-              setOpenAddressDialog(false);
-              setIsCreatingAddress(false);
-            }}
-            sx={{ color: '#94A3B8' }}
-          >
+          <IconButton size="small" onClick={closeAddressDialog} sx={{ color: '#94A3B8' }}>
             <CloseOutlined style={{ fontSize: 14 }} />
           </IconButton>
         </DialogTitle>
 
         <DialogContent sx={{ p: 2, px: 2.5 }}>
           {isCreatingAddress ? (
-            newAddressForm
+            <>
+              {newAddressForm}
+              {addressError && (
+                <Alert severity="error" sx={{ mt: 1.5 }}>
+                  {addressError}
+                </Alert>
+              )}
+            </>
           ) : addresses.length === 0 ? (
             <Box sx={{ textAlign: 'center', py: 4 }}>
               <Typography sx={{ fontSize: 14, color: '#6B7280' }}>

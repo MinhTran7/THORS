@@ -19,14 +19,18 @@ public final class ContactNormalizer {
     return value == null || value.isBlank() ? null : email(value);
   }
 
-  /** Keep the entered number; canonicalization is only for matching and delivery. */
+  public static final String PHONE_RULE = "Số điện thoại gồm 10 chữ số, bắt đầu bằng 0.";
+
+  /**
+   * Số điện thoại người dùng nhập vào tài khoản: đúng 10 chữ số, bắt đầu bằng 0 (cho phép khoảng trắng,
+   * dấu chấm, gạch ngang khi gõ). Trả về dạng 0xxxxxxxxx để lưu; trống = null. Việc so trùng / đăng nhập
+   * vẫn dùng {@link #phone} để nhận cả số cũ đã lưu dạng +84.
+   */
   public static String phoneInput(String value) {
     if (value == null || value.isBlank()) return null;
-    phone(value);
-    String entered = value.trim();
-    if (entered.length() > 15)
-      throw new ApiException(400, "PHONE", "Số điện thoại tối đa 15 ký tự.");
-    return entered;
+    String p = value.trim().replaceAll("[ .\\-]", "");
+    if (!p.matches("0\\d{9}")) throw new ApiException(400, "PHONE", PHONE_RULE);
+    return p;
   }
 
   public static String channel(String value) {

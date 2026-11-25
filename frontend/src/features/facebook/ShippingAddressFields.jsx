@@ -48,7 +48,7 @@ const CHECK_VIEW = {
     bg: '#F1F5F9',
     color: C.muted,
     icon: <InfoCircleFilled />,
-    text: 'Dịch vụ bản đồ (Goong / OpenStreetMap) không phản hồi, chưa kiểm tra được. Vẫn tạo đơn được.'
+    text: 'Dịch vụ bản đồ (OpenStreetMap) không phản hồi, chưa kiểm tra được. Vẫn tạo đơn được.'
   }
 };
 

@@ -11,7 +11,7 @@ import { useCrumbs } from 'layouts/crumbs';
 import { imageError } from 'services/imageUpload';
 import { accountsApi } from '../api';
 import { brand, cardSx, fs } from '../tokens';
-import { fullName, phone } from '../validation';
+import { fullName, phone, toLocalPhone } from '../validation';
 import { BrandButton, OutlineButton } from '../components/Brand';
 import { FormField, TextInput } from '../components/Form';
 import { NoticeBox, PageHeader } from '../components/Blocks';
@@ -41,7 +41,7 @@ export default function UpdateProfilePage() {
 
   const form = useFormik({
     enableReinitialize: true,
-    initialValues: { fullName: data?.fullName ?? '', phone: data?.phone ?? '' },
+    initialValues: { fullName: data?.fullName ?? '', phone: toLocalPhone(data?.phone) },
     validationSchema: schema,
     onSubmit: async (values) => {
       setError('');

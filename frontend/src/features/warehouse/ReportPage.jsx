@@ -4,6 +4,7 @@ import { Alert, Button, Checkbox, CircularProgress, FormControlLabel, MenuItem, 
 import useSWR from 'swr';
 import MainCard from 'components/MainCard';
 import { api } from 'services/http';
+import { DateRangeFilter, FilterResetButton } from 'features/account/components/Blocks';
 import { DataTable, Metrics, Title } from './components';
 import { money, number } from './model';
 import { exportSheet } from './excelWorkbook';
@@ -111,23 +112,9 @@ export default function ReportPage() {
         }
       />
       <MainCard sx={{ mb: 2 }}>
-        <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} useFlexGap flexWrap="wrap" sx={{ alignItems: { md: 'center' } }}>
-          <TextField
-            size="small"
-            type="date"
-            label="Từ ngày"
-            value={from}
-            onChange={(e) => set({ from: e.target.value })}
-            slotProps={{ inputLabel: { shrink: true } }}
-          />
-          <TextField
-            size="small"
-            type="date"
-            label="Đến ngày"
-            value={to}
-            onChange={(e) => set({ to: e.target.value })}
-            slotProps={{ inputLabel: { shrink: true } }}
-          />
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} useFlexGap flexWrap="wrap" sx={{ alignItems: { md: 'flex-end' } }}>
+          {/* Ô lọc ngày dùng chung; để trống thì về mặc định đầu tháng → hôm nay */}
+          <DateRangeFilter from={from} to={to} height={40} onChange={(range) => set(range)} />
           <TextField
             size="small"
             placeholder="Tìm tên, mã SP, mã vạch"
@@ -156,6 +143,14 @@ export default function ReportPage() {
           <FormControlLabel
             control={<Checkbox checked={!onlyMoving} onChange={(e) => set({ all: e.target.checked ? '1' : '' })} />}
             label="Gồm biến thể không phát sinh"
+          />
+          <FilterResetButton
+            height={40}
+            disabled={[...params.keys()].length === 0 && !q}
+            onClick={() => {
+              setQ('');
+              setParams(new URLSearchParams(), { replace: true });
+            }}
           />
         </Stack>
       </MainCard>

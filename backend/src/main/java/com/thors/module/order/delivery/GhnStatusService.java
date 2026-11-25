@@ -100,6 +100,7 @@ public class GhnStatusService {
                 orders.markShippingByCarrier(t.orderId());
                 notifyCustomer(t, "Đơn hàng đang được giao",
                         "GHN đã lấy hàng đơn " + t.orderNumber() + " và đang giao đến bạn.");
+                notifyOwner(t, "GHN đã lấy hàng", "GHN đã lấy hàng đơn " + t.orderNumber() + " và đang đi giao.");
             }
             case "DELIVERED" -> {
                 if (orders.markDeliveredByCarrier(t.orderId()))
@@ -120,8 +121,13 @@ public class GhnStatusService {
                 notifyOwner(t, "Đơn đang hoàn về",
                         "Đơn " + t.orderNumber() + " đang được GHN hoàn về cửa hàng.");
             }
-            case "RETURNED" -> notifyOwner(t, "Đơn đã hoàn về",
-                    "Đơn " + t.orderNumber() + " đã được GHN hoàn về cửa hàng.");
+            case "RETURNED" -> {
+                notifyCustomer(t, "Đơn hàng đã hoàn về cửa hàng",
+                        "Đơn " + t.orderNumber() + " không giao được và đã được GHN hoàn về cửa hàng."
+                                + " Cửa hàng sẽ liên hệ với bạn để xử lý.");
+                notifyOwner(t, "Đơn đã hoàn về",
+                        "Đơn " + t.orderNumber() + " đã được GHN hoàn về cửa hàng.");
+            }
             case "CANCELLED" -> {
                 // Vận đơn bị hủy trên GHN (shop hủy trên trang GHN hoặc GHN hủy): hủy luôn đơn trên THORS
                 String why = "Vận đơn GHN bị hủy" + (blank(reason) ? "" : ": " + reason.trim());
@@ -147,7 +153,9 @@ public class GhnStatusService {
         return LocalDateTime.now(ZoneOffset.UTC);
     }
 
+    /** Đơn Facebook gắn tài khoản nhân viên (khách không có tài khoản web) nên không gửi. */
     private void notifyCustomer(Tracked t, String title, String message) {
+        if (!orders.isCustomerAccount(t.userId())) return;
         notifications.toUser(
                 t.userId(), NotificationTypes.ORDER_STATUS, title, message, NotificationTypes.ENTITY_ORDER, t.orderId());
     }

@@ -20,6 +20,7 @@ import {
 import useSWR from 'swr';
 import { api } from 'services/http';
 import { useWarehouse } from './WarehouseContext';
+import { DateRangeFilter, FilterResetButton } from 'features/account/components/Blocks';
 import { DataTable } from './components';
 import BarcodePrintDialog from './BarcodePrintDialog';
 import { docLink, money, movementLabel, number, orderCode, skuLabel, stockStateColor, stockStateLabel, when } from './model';
@@ -104,7 +105,7 @@ function StockCard({ id, kind }) {
   const moves = kind === 'move';
   return (
     <Stack spacing={1.5}>
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { sm: 'flex-end' } }}>
         {!moves && (
           <TextField
             select
@@ -122,21 +123,26 @@ function StockCard({ id, kind }) {
             ))}
           </TextField>
         )}
-        <TextField
-          size="small"
-          type="date"
-          label="Từ ngày"
-          value={from}
-          onChange={(e) => (setFrom(e.target.value), setPage(0))}
-          slotProps={{ inputLabel: { shrink: true } }}
+        {/* Ô lọc ngày và nút Bỏ lọc dùng chung */}
+        <DateRangeFilter
+          from={from}
+          to={to}
+          height={40}
+          onChange={(range) => {
+            setFrom(range.from);
+            setTo(range.to);
+            setPage(0);
+          }}
         />
-        <TextField
-          size="small"
-          type="date"
-          label="Đến ngày"
-          value={to}
-          onChange={(e) => (setTo(e.target.value), setPage(0))}
-          slotProps={{ inputLabel: { shrink: true } }}
+        <FilterResetButton
+          height={40}
+          disabled={!type && !from && !to}
+          onClick={() => {
+            setType('');
+            setFrom('');
+            setTo('');
+            setPage(0);
+          }}
         />
       </Stack>
       <Typography variant="caption" color="text.secondary">
