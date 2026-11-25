@@ -1,0 +1,143 @@
+import { useEffect, useState } from 'react';
+import { Box, Button, Dialog, InputAdornment, TextField, Typography } from '@mui/material';
+import { formatNumberInput, money, NO_EFFECTS } from './salesFormat';
+
+const TYPES = [
+  { value: 'amount', label: 'VNĐ' },
+  { value: 'percent', label: '%' }
+];
+
+// Giảm giá tay theo VNĐ hoặc %; maxPercent: giới hạn theo vai trò (null là không giới hạn)
+export default function DiscountDialog({ open, type, value, subtotal, maxPercent, onApply, onClose }) {
+  const [draftType, setDraftType] = useState(type);
+  const [draftValue, setDraftValue] = useState(value);
+  const [draftError, setDraftError] = useState('');
+
+  useEffect(() => {
+    if (!open) return;
+    setDraftType(type);
+    setDraftValue(value);
+    setDraftError('');
+  }, [open, type, value]);
+
+  const percentAmount = (v) => Math.round((subtotal * Math.min(100, v)) / 100);
+
+  function apply() {
+    const number = Number(draftValue) || 0;
+    if (draftType === 'percent' && number > 100) return setDraftError('Phần trăm giảm tối đa là 100%.');
+    if (draftType === 'amount' && number > subtotal) return setDraftError('Giảm giá không được vượt quá tổng tiền hàng.');
+    const amount = draftType === 'percent' ? percentAmount(number) : number;
+    if (maxPercent != null && amount * 100 > subtotal * maxPercent)
+      return setDraftError(`Thành viên gia đình chỉ được giảm tối đa ${maxPercent}% tổng tiền hàng.`);
+    onApply(draftType, draftValue);
+  }
+
+  return (
+    <Dialog
+      className={NO_EFFECTS}
+      open={open}
+      onClose={onClose}
+      fullWidth
+      slotProps={{ paper: { sx: { maxWidth: 380, borderRadius: 3.5, m: 2 } } }}
+    >
+      <Box sx={{ p: 2.5 }}>
+        <Typography sx={{ fontSize: 16.5, fontWeight: 800, color: '#0F172A', mb: 2 }}>Giảm giá</Typography>
+
+        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, mb: 2 }}>
+          {TYPES.map((opt) => {
+            const selected = draftType === opt.value;
+            return (
+              <Box
+                key={opt.value}
+                component="button"
+                type="button"
+                onClick={() => {
+                  setDraftType(opt.value);
+                  setDraftValue('');
+                  setDraftError('');
+                }}
+                sx={{
+                  fontFamily: 'inherit',
+                  fontWeight: 700,
+                  fontSize: 13,
+                  height: 36,
+                  borderRadius: 2.5,
+                  cursor: 'pointer',
+                  outline: 'none',
+                  bgcolor: selected ? '#FEF9C3' : '#FFFFFF',
+                  border: `1.5px solid ${selected ? '#FDE047' : '#E2E8F0'}`,
+                  color: selected ? '#854D0E' : '#475569'
+                }}
+              >
+                {opt.label}
+              </Box>
+            );
+          })}
+        </Box>
+
+        <TextField
+          fullWidth
+          autoFocus
+          size="small"
+          placeholder={draftType === 'percent' ? 'Nhập % giảm' : 'Nhập số tiền giảm'}
+          value={draftType === 'amount' ? formatNumberInput(draftValue) : draftValue}
+          onChange={(e) => {
+            setDraftValue(e.target.value.replace(/\D/g, '').slice(0, draftType === 'percent' ? 3 : 12));
+            setDraftError('');
+          }}
+          onKeyDown={(e) => e.key === 'Enter' && apply()}
+          error={Boolean(draftError)}
+          helperText={
+            draftError ||
+            (draftType === 'percent' && Number(draftValue) > 0
+              ? `= ${money(percentAmount(Number(draftValue)))}`
+              : `Tổng tiền hàng: ${money(subtotal)}${maxPercent != null ? ` · Giảm tối đa ${maxPercent}%` : ''}`)
+          }
+          slotProps={{
+            input: { endAdornment: <InputAdornment position="end">{draftType === 'percent' ? '%' : 'đ'}</InputAdornment> },
+            htmlInput: { inputMode: 'numeric' }
+          }}
+          sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, height: 40 } }}
+        />
+
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 2.5 }}>
+          <Button
+            type="button"
+            onClick={onClose}
+            sx={{
+              border: '1px solid #E2E8F0',
+              color: '#334155',
+              fontWeight: 600,
+              fontSize: 12.5,
+              height: 34,
+              px: 2,
+              borderRadius: 1.5,
+              textTransform: 'none'
+            }}
+          >
+            Hủy
+          </Button>
+          <Button
+            type="button"
+            variant="contained"
+            onClick={apply}
+            sx={{
+              bgcolor: '#8EECF5',
+              '&:hover': { bgcolor: '#8EECF5' },
+              color: '#0F172A',
+              fontWeight: 700,
+              fontSize: 12.5,
+              height: 34,
+              px: 2,
+              borderRadius: 1.5,
+              textTransform: 'none',
+              boxShadow: 'none'
+            }}
+          >
+            Áp dụng
+          </Button>
+        </Box>
+      </Box>
+    </Dialog>
+  );
+}

@@ -5,8 +5,9 @@ import com.thors.module.account.entity.Account;
 import com.thors.module.notification.service.NotificationPublisher;
 import com.thors.module.notification.service.NotificationTypes;
 import com.thors.module.promotion.dto.PromotionAdjustRequest;
-import com.thors.module.promotion.dto.PromotionOrder;
+import com.thors.module.promotion.dto.PromotionOrdersReport;
 import com.thors.module.promotion.dto.PromotionRequest;
+import com.thors.module.promotion.dto.PromotionSalesReport;
 import com.thors.module.promotion.dto.PromotionView;
 import com.thors.module.promotion.dto.VoucherView;
 import com.thors.module.promotion.entity.Promotion;
@@ -29,6 +30,7 @@ import java.util.Set;
 @Service
 public class PromotionService {
 
+    private static final Set<String> SALE_CHANNELS = Set.of("Online", "In-Store");
     private static final BigDecimal ONE_HUNDRED = new BigDecimal("100");
     // Giới hạn số tiền (giảm cố định, đơn tối thiểu): vừa cột DECIMAL(12) và ô nhập 10 chữ số
     private static final BigDecimal MAX_AMOUNT = new BigDecimal("9999999999");
@@ -66,10 +68,26 @@ public class PromotionService {
         return PromotionView.of(repository.withProductIds(find(id)), LocalDateTime.now());
     }
 
-    public List<PromotionOrder> getOrders(int id) {
+    // Hiệu quả của mã giảm giá online (khuyến mãi sản phẩm xem ở getSales)
+    public PromotionOrdersReport getOrders(int id) {
         requireOwner();
-        find(id);
-        return repository.findOrders(id);
+        Promotion p = find(id);
+        if (!p.isOrderVoucher()) {
+            throw badRequest("PROMOTION_KIND_INVALID", "Khuyến mãi sản phẩm xem ở báo cáo hiệu quả khuyến mãi.");
+        }
+        return PromotionOrdersReport.of(p, repository.findOrders(id));
+    }
+
+    // Hiệu quả của khuyến mãi sản phẩm, lọc theo kênh bán (null là tất cả); mã giảm giá online xem ở getOrders
+    public PromotionSalesReport getSales(int id, String channel) {
+        requireOwner();
+        if (find(id).isOrderVoucher()) {
+            throw badRequest("PROMOTION_KIND_INVALID", "Mã giảm giá online xem ở danh sách đơn đã dùng mã.");
+        }
+        if (channel != null && !SALE_CHANNELS.contains(channel)) {
+            throw badRequest("PROMOTION_CHANNEL_INVALID", "Kênh bán chỉ được là Online hoặc In-Store.");
+        }
+        return PromotionSalesReport.of(repository.findSaleItems(id, channel));
     }
 
     // Mã giảm giá online còn hiệu lực, còn lượt; khách đã đăng nhập không thấy mã mình đã dùng
@@ -77,7 +95,7 @@ public class PromotionService {
         return availableVouchers(LocalDateTime.now(), currentCustomerId()).stream().map(VoucherView::of).toList();
     }
 
-    // Giữ cho Checkout đang gọi; tính giá nằm ở PricingService
+    // Giữ cho giỏ hàng (CartService) đang gọi; tính giá nằm ở PricingService
     public BigDecimal salePrice(int productId, BigDecimal price) {
         return pricing.salePrice(productId, price);
     }
@@ -206,7 +224,7 @@ public class PromotionService {
     public void delete(int id) {
         requireOwner();
         Promotion p = find(id);
-        if (!p.canDelete(LocalDateTime.now()) || repository.countOrders(id) > 0) {
+        if (!p.canDelete(LocalDateTime.now()) || repository.hasOrders(id)) {
             throw badRequest("PROMOTION_NOT_DELETABLE", "Chỉ xóa được khuyến mãi sắp diễn ra và chưa có đơn nào sử dụng.");
         }
         repository.delete(id);
@@ -355,19 +373,29 @@ public class PromotionService {
         });
     }
 
-    // Báo khách khi có khuyến mãi mới; khuyến mãi chưa bắt đầu không gắn liên kết
+    // Báo khách khi có khuyến mãi mới, nội dung và liên kết theo loại; khuyến mãi chưa bắt đầu không gắn liên kết
     private void notifyCustomersCreated(int id, Draft d) {
         String discount = "PERCENT".equals(d.discountType())
                 ? "giảm " + d.value().stripTrailingZeros().toPlainString() + "%"
-                : "giảm " + String.format(Locale.forLanguageTag("vi-VN"), "%,d", d.value().longValue()) + "đ";
+                : "giảm " + money(d.value());
+        String target = d.isVoucher()
+                ? "cho đơn từ " + money(d.minimum())
+                : "ALL".equals(d.scope()) ? "cho toàn bộ sản phẩm" : "cho " + d.productIds().size() + " sản phẩm";
         boolean startsNow = !d.start().isAfter(LocalDateTime.now());
-        String title = startsNow ? "Khuyến mãi mới đang diễn ra" : "Sắp có khuyến mãi mới";
-        String message = startsNow
-                ? "Khuyến mãi \"" + d.name() + "\" (" + discount + ") đã bắt đầu, áp dụng đến " + NOTICE_TIME.format(d.end()) + "."
-                : "Khuyến mãi \"" + d.name() + "\" (" + discount + ") sẽ bắt đầu từ " + NOTICE_TIME.format(d.start())
-                        + " đến " + NOTICE_TIME.format(d.end()) + ".";
+        String title = d.isVoucher()
+                ? (startsNow ? "Mã giảm giá mới" : "Sắp có mã giảm giá mới")
+                : (startsNow ? "Sản phẩm đang giảm giá" : "Sắp có giảm giá sản phẩm");
+        String time = startsNow
+                ? "áp dụng đến " + NOTICE_TIME.format(d.end())
+                : "từ " + NOTICE_TIME.format(d.start()) + " đến " + NOTICE_TIME.format(d.end());
+        String message = "\"" + d.name() + "\": " + discount + " " + target + ", " + time + ".";
+        String entity = d.isVoucher() ? NotificationTypes.ENTITY_PROMOTION : NotificationTypes.ENTITY_PRODUCT_SALE;
         notifications.toRole("CUSTOMER", NotificationTypes.PROMOTION, title, message,
-                startsNow ? NotificationTypes.ENTITY_PROMOTION : null, startsNow ? id : null);
+                startsNow ? entity : null, startsNow ? id : null);
+    }
+
+    private static String money(BigDecimal value) {
+        return String.format(Locale.forLanguageTag("vi-VN"), "%,d", value.longValue()) + "đ";
     }
 
     private void requireOwner() {

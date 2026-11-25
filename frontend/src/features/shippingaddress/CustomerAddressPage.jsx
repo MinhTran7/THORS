@@ -1,14 +1,27 @@
 import { useEffect, useState } from 'react';
-import { Box, Typography, Button, CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions, Divider } from '@mui/material';
-import { PlusOutlined, EditOutlined, DeleteOutlined, EnvironmentOutlined, StarFilled } from '@ant-design/icons';
+import { Box, Typography, Button, CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions, IconButton } from '@mui/material';
+import {
+  PlusOutlined,
+  EditOutlined,
+  DeleteOutlined,
+  EnvironmentOutlined,
+  StarFilled,
+  StarOutlined,
+  UserOutlined,
+  PhoneOutlined,
+  CloseOutlined,
+  ExclamationCircleOutlined
+} from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useCrumbs } from '../../layouts/crumbs';
-import { getShippingAddresses, deleteShippingAddress } from '../../services/shippingAddressService';
+import { getShippingAddresses, deleteShippingAddress, setDefaultShippingAddress } from '../../services/shippingAddressService';
 import { StoreAccountShell } from 'features/account/components/StoreAccount';
 import { C, cardSx, outlineButtonSx, primaryButtonSx } from './theme';
 import { C as STORE, focusRing } from 'features/shop/storeTheme';
 
 const MAX_ADDRESSES = 5;
+
+const YELLOW = { bg: '#FEF9C3', border: '#FDE68A', text: '#A16207', star: '#FACC15' };
 
 const LIMIT_NOTICE = {
   title: 'Đã đạt giới hạn địa chỉ',
@@ -38,8 +51,155 @@ const addButtonSx = {
   fontSize: 14.5,
   fontWeight: 800,
   cursor: 'pointer',
+  transition: 'background-color 0.15s ease',
+  '&:hover': { bgcolor: STORE.primaryDark },
   ...focusRing
 };
+
+const TONES = {
+  neutral: { color: '#1F2937', bg: '#FFFFFF', border: C.border, hover: '#F8FAFC' },
+  danger: { color: '#DC2626', bg: '#FFFFFF', border: '#FECACA', hover: '#FEF2F2' }
+};
+
+function ActionButton({ tone, icon, children, ...props }) {
+  const t = TONES[tone];
+  return (
+    <Box
+      component="button"
+      type="button"
+      {...props}
+      sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 0.75,
+        height: 34,
+        px: 1.5,
+        borderRadius: '10px',
+        border: `1px solid ${t.border}`,
+        bgcolor: t.bg,
+        color: t.color,
+        fontFamily: 'inherit',
+        fontSize: 13,
+        fontWeight: 700,
+        whiteSpace: 'nowrap',
+        cursor: 'pointer',
+        transition: 'background-color 0.15s ease',
+        '&:hover': { bgcolor: t.hover },
+        '&:disabled': { opacity: 0.6, cursor: 'default' },
+        ...focusRing
+      }}
+    >
+      {icon}
+      {children}
+    </Box>
+  );
+}
+
+function AddressCard({ address: a, busy, defaulting, onDefault, onEdit, onDelete }) {
+  return (
+    <Box
+      sx={{
+        position: 'relative',
+        bgcolor: C.surface,
+        borderRadius: '18px',
+        border: a.isDefault ? `1.5px solid ${STORE.accent}` : `1px solid ${C.border}`,
+        p: { xs: 2, sm: 2.5 },
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 2
+      }}
+    >
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+        <Box
+          sx={{
+            width: 42,
+            height: 42,
+            borderRadius: '12px',
+            flexShrink: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            bgcolor: a.isDefault ? YELLOW.bg : STORE.sand,
+            color: a.isDefault ? YELLOW.text : STORE.accent
+          }}
+        >
+          <EnvironmentOutlined style={{ fontSize: 19 }} />
+        </Box>
+
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+            <Typography sx={{ fontWeight: 800, fontSize: 15.5, color: '#0F172A', lineHeight: 1.3, wordBreak: 'break-word' }}>
+              {a.addressDetail}
+            </Typography>
+            {a.isDefault ? (
+              <Box
+                sx={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 0.5,
+                  flexShrink: 0,
+                  px: 1.25,
+                  py: 0.35,
+                  borderRadius: 99,
+                  bgcolor: YELLOW.bg,
+                  border: `1px solid ${YELLOW.border}`,
+                  color: YELLOW.text,
+                  fontSize: 11.5,
+                  fontWeight: 800
+                }}
+              >
+                <StarFilled style={{ fontSize: 11, color: YELLOW.star }} />
+                Mặc định
+              </Box>
+            ) : (
+              <IconButton
+                size="small"
+                title="Đặt làm mặc định"
+                aria-label="Đặt làm mặc định"
+                disabled={busy}
+                onClick={onDefault}
+                sx={{ flexShrink: 0, mt: -0.5, mr: -0.5, '&:hover': { bgcolor: YELLOW.bg } }}
+              >
+                {defaulting ? (
+                  <CircularProgress size={16} sx={{ color: YELLOW.star }} />
+                ) : (
+                  <StarOutlined style={{ fontSize: 20, color: YELLOW.star }} />
+                )}
+              </IconButton>
+            )}
+          </Box>
+          <Typography sx={{ fontSize: 13.5, color: C.muted, mt: 0.25, lineHeight: 1.5 }}>
+            {a.wardName}, {a.provinceName}
+          </Typography>
+        </Box>
+      </Box>
+
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 2.5, rowGap: 0.5, color: '#374151', fontSize: 13.5 }}>
+        <Box title="Tên người nhận" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, fontWeight: 700 }}>
+          <UserOutlined style={{ fontSize: 14, color: C.muted }} />
+          {a.recipientName}
+        </Box>
+        <Box title="Số điện thoại" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
+          <PhoneOutlined style={{ fontSize: 14, color: C.muted }} />
+          {a.phone}
+        </Box>
+      </Box>
+
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
+        {a.isDefault ? <Typography sx={{ fontSize: 13, color: C.muted }}>Ưu tiên khi thanh toán</Typography> : <Box />}
+
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <ActionButton tone="neutral" onClick={onEdit} icon={<EditOutlined style={{ fontSize: 13 }} />}>
+            Chỉnh sửa
+          </ActionButton>
+          <ActionButton tone="danger" onClick={onDelete} icon={<DeleteOutlined style={{ fontSize: 13 }} />}>
+            Xóa
+          </ActionButton>
+        </Box>
+      </Box>
+    </Box>
+  );
+}
 
 export default function CustomerAddressPage() {
   useCrumbs(['Tài khoản', 'Địa chỉ của tôi']);
@@ -51,6 +211,7 @@ export default function CustomerAddressPage() {
   const [target, setTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [notice, setNotice] = useState(null);
+  const [defaulting, setDefaulting] = useState(null);
 
   async function load() {
     setLoading(true);
@@ -74,6 +235,18 @@ export default function CustomerAddressPage() {
       return;
     }
     navigate('/addresses/new');
+  }
+
+  async function makeDefault(address) {
+    setDefaulting(address.addressId);
+    try {
+      await setDefaultShippingAddress(address.addressId);
+      await load();
+    } catch (err) {
+      setError(err.message || 'Không thể đặt địa chỉ mặc định.');
+    } finally {
+      setDefaulting(null);
+    }
   }
 
   async function confirmDelete() {
@@ -103,28 +276,51 @@ export default function CustomerAddressPage() {
         )
       }
     >
-      {error && <Typography sx={{ color: C.error, fontSize: 13.5, fontWeight: 600, mb: 2 }}>{error}</Typography>}
+      {error && (
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1.25,
+            mb: 2.5,
+            px: 2,
+            py: 1.25,
+            borderRadius: '12px',
+            bgcolor: '#FEF2F2',
+            border: '1px solid #FECACA',
+            color: '#B91C1C',
+            fontSize: 13.5,
+            fontWeight: 600
+          }}
+        >
+          <ExclamationCircleOutlined style={{ fontSize: 16 }} />
+          <Box sx={{ flex: 1 }}>{error}</Box>
+          <IconButton size="small" onClick={() => setError('')} sx={{ color: '#B91C1C' }}>
+            <CloseOutlined style={{ fontSize: 12 }} />
+          </IconButton>
+        </Box>
+      )}
 
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}>
-          <CircularProgress size={36} sx={{ color: C.cyan }} />
+          <CircularProgress size={36} sx={{ color: STORE.accent }} />
         </Box>
       ) : addresses.length === 0 ? (
         <Box sx={{ ...cardSx, p: { xs: 4, md: 8 }, textAlign: 'center', boxShadow: 'none', border: `1px solid ${C.border}` }}>
           <Box
             sx={{
-              width: 120,
-              height: 120,
+              width: 112,
+              height: 112,
               mx: 'auto',
               mb: 2.5,
               borderRadius: '50%',
-              bgcolor: '#E6F9FB',
+              bgcolor: STORE.sand,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center'
             }}
           >
-            <EnvironmentOutlined style={{ fontSize: 40, color: C.teal }} />
+            <EnvironmentOutlined style={{ fontSize: 40, color: STORE.accent }} />
           </Box>
           <Typography sx={{ fontSize: 18, fontWeight: 800, mb: 1 }}>Bạn chưa lưu địa chỉ giao hàng nào</Typography>
           <Typography sx={{ fontSize: 13.5, color: C.muted, maxWidth: 420, mx: 'auto', mb: 3, lineHeight: 1.6 }}>
@@ -136,123 +332,24 @@ export default function CustomerAddressPage() {
           </Box>
         </Box>
       ) : (
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2.5 }}>
-          {addresses.map((a) => (
-            <Box
-              key={a.addressId}
-              sx={{
-                bgcolor: C.surface,
-                borderRadius: '20px',
-                border: a.isDefault ? `2px solid ${STORE.accent}` : `1px solid ${C.border}`,
-                px: { xs: 2, sm: 2.5 },
-                py: { xs: 1.75, sm: 2 },
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between'
-              }}
-            >
-              <Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2 }}>
-                  <Box>
-                    <Typography sx={{ fontWeight: 800, fontSize: 15.5, color: '#0F172A', lineHeight: 1.25 }}>
-                      {a.recipientName}
-                    </Typography>
-                    <Typography sx={{ fontSize: 13, color: C.muted, mt: 0.25 }}>{a.phone}</Typography>
-                  </Box>
-
-                  {a.isDefault && (
-                    <Box
-                      sx={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 0.5,
-                        bgcolor: '#FEF9C3',
-                        color: '#854D0E',
-                        px: 1.25,
-                        py: 0.3,
-                        borderRadius: 99,
-                        fontSize: 11.5,
-                        fontWeight: 700,
-                        border: '1px solid #FDE047',
-                        flexShrink: 0
-                      }}
-                    >
-                      <StarFilled style={{ fontSize: 11, color: '#EAB308' }} />
-                      Mặc định
-                    </Box>
-                  )}
-                </Box>
-
-                <Box sx={{ mt: 1.25, mb: 0.5 }}>
-                  <Typography sx={{ fontSize: 14, color: '#0F172A', fontWeight: 700, mb: 0.25 }}>
-                    {a.addressDetail}
-                  </Typography>
-                  <Typography sx={{ fontSize: 13, color: C.muted, lineHeight: 1.45 }}>
-                    {a.wardName}, {a.provinceName}
-                  </Typography>
-                </Box>
-              </Box>
-
-              <Box sx={{ mt: 1 }}>
-                <Divider sx={{ my: 1.25, borderColor: '#F1F5F9' }} />
-
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  {a.isDefault ? (
-                    <Typography sx={{ fontSize: 12, color: '#94A3B8' }}>Ưu tiên khi thanh toán</Typography>
-                  ) : (
-                    <Box />
-                  )}
-
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                    <Box
-                      component="button"
-                      type="button"
-                      onClick={() => navigate(`/addresses/${a.addressId}/edit`)}
-                      sx={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 0.5,
-                        fontSize: 13,
-                        fontWeight: 600,
-                        color: '#0F172A',
-                        bgcolor: 'transparent',
-                        border: 0,
-                        p: 0,
-                        cursor: 'pointer'
-                      }}
-                    >
-                      <EditOutlined style={{ fontSize: 13 }} />
-                      Chỉnh sửa
-                    </Box>
-
-                    <Box
-                      component="button"
-                      type="button"
-                      onClick={() => (a.isDefault ? setNotice(DEFAULT_NOTICE) : setTarget(a))}
-                      sx={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 0.5,
-                        fontSize: 13,
-                        fontWeight: 600,
-                        color: '#FF6B60',
-                        bgcolor: 'transparent',
-                        border: 0,
-                        p: 0,
-                        cursor: 'pointer',
-                        transition: 'color 0.15s ease',
-                        '&:hover': { color: '#FF3527' }
-                      }}
-                    >
-                      <DeleteOutlined style={{ fontSize: 13 }} />
-                      Xóa
-                    </Box>
-                  </Box>
-                </Box>
-              </Box>
-            </Box>
-          ))}
-        </Box>
+        <>
+          <Typography sx={{ fontSize: 13, color: C.muted, mb: 1.5 }}>
+            Đã lưu <strong style={{ color: '#111111' }}>{addresses.length}</strong>/{MAX_ADDRESSES} địa chỉ
+          </Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {addresses.map((a) => (
+              <AddressCard
+                key={a.addressId}
+                address={a}
+                busy={defaulting !== null}
+                defaulting={defaulting === a.addressId}
+                onDefault={() => makeDefault(a)}
+                onEdit={() => navigate(`/addresses/${a.addressId}/edit`)}
+                onDelete={() => (a.isDefault ? setNotice(DEFAULT_NOTICE) : setTarget(a))}
+              />
+            ))}
+          </Box>
+        </>
       )}
 
       <Dialog
@@ -267,7 +364,7 @@ export default function CustomerAddressPage() {
           <Typography sx={{ fontSize: 14, color: C.muted, lineHeight: 1.6 }}>{notice?.content}</Typography>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setNotice(null)} sx={primaryButtonSx}>
+          <Button color="inherit" onClick={() => setNotice(null)} sx={primaryButtonSx}>
             Đóng
           </Button>
         </DialogActions>
@@ -288,6 +385,7 @@ export default function CustomerAddressPage() {
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
           <Button
+            color="inherit"
             onClick={() => setTarget(null)}
             disabled={deleting}
             sx={{
@@ -298,6 +396,7 @@ export default function CustomerAddressPage() {
             Hủy
           </Button>
           <Button
+            color="inherit"
             onClick={confirmDelete}
             disabled={deleting}
             sx={{

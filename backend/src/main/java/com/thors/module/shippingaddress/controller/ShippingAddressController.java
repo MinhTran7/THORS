@@ -42,6 +42,12 @@ public class ShippingAddressController {
         return service.update(sessions.current(), addressId, request);
     }
 
+    @PatchMapping("/{addressId}/default")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void setDefault(@PathVariable int addressId) {
+        service.setDefault(sessions.current(), addressId);
+    }
+
     @DeleteMapping("/{addressId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable int addressId) {

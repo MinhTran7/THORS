@@ -292,10 +292,10 @@ export default function AddressForm({ title, submitLabel, initial, lockDefault =
             {error || 'Kiểm tra lại thông tin trước khi lưu.'}
           </Typography>
           <Box sx={{ display: 'flex', gap: 1.5 }}>
-            <Button onClick={() => navigate('/addresses')} disabled={saving} sx={outlineButtonSx}>
+            <Button color="inherit" onClick={() => navigate('/addresses')} disabled={saving} sx={outlineButtonSx}>
               Hủy
             </Button>
-            <Button type="submit" disabled={saving} sx={primaryButtonSx}>
+            <Button color="inherit" type="submit" disabled={saving} sx={primaryButtonSx}>
               {saving ? 'Đang lưu...' : submitLabel}
             </Button>
           </Box>

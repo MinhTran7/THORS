@@ -1,8 +1,9 @@
 package com.thors.module.promotion.controller;
 
 import com.thors.module.promotion.dto.PromotionAdjustRequest;
-import com.thors.module.promotion.dto.PromotionOrder;
+import com.thors.module.promotion.dto.PromotionOrdersReport;
 import com.thors.module.promotion.dto.PromotionRequest;
+import com.thors.module.promotion.dto.PromotionSalesReport;
 import com.thors.module.promotion.dto.PromotionView;
 import com.thors.module.promotion.service.PromotionService;
 import org.springframework.http.HttpStatus;
@@ -31,8 +32,13 @@ public class PromotionController {
     }
 
     @GetMapping("/{promotionId}/orders")
-    public List<PromotionOrder> getOrders(@PathVariable int promotionId) {
+    public PromotionOrdersReport getOrders(@PathVariable int promotionId) {
         return promotionService.getOrders(promotionId);
+    }
+
+    @GetMapping("/{promotionId}/sales")
+    public PromotionSalesReport getSales(@PathVariable int promotionId, @RequestParam(required = false) String channel) {
+        return promotionService.getSales(promotionId, channel);
     }
 
     @PostMapping

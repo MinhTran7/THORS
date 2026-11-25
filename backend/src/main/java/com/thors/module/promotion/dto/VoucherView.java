@@ -18,8 +18,7 @@ public record VoucherView(
         Integer remaining
 ) {
     public static VoucherView of(Promotion p) {
-        Integer remaining = p.usageLimit() == null ? null : p.usageLimit() - p.usedCount();
         return new VoucherView(p.promotionId(), p.name(), p.description(), p.discountType(), p.discountValue(),
-                p.minOrderValue(), p.startDate(), p.endDate(), remaining);
+                p.minOrderValue(), p.startDate(), p.endDate(), p.remaining());
     }
 }

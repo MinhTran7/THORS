@@ -1,5 +1,6 @@
 package com.thors.module.order.repository;
 
+import com.thors.module.promotion.dto.SalePrice;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
@@ -101,13 +102,14 @@ public class CheckoutRepository {
         return key == null ? 0 : key.intValue();
     }
 
-    public void insertItem(int orderId, int detailId, int quantity, BigDecimal unitPrice,
+    public void insertItem(int orderId, int detailId, int quantity, SalePrice price,
                            String productName, String size, String color) {
         jdbcTemplate.update("""
             INSERT INTO order_item
-                (order_id, detail_id, quantity, unit_price,
+                (order_id, detail_id, quantity, unit_price, original_price, promotion_id,
                  product_name_snapshot, size_snapshot, color_snapshot, reserved_quantity)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 0)
-            """, orderId, detailId, quantity, unitPrice, productName, size, color);
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+            """, orderId, detailId, quantity, price.price(), price.originalPrice(), price.promotionId(),
+                productName, size, color);
     }
 }

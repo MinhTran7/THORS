@@ -33,11 +33,14 @@ export const formatDate = (value) => {
   return d ? `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}` : '—';
 };
 
-/** HH:mm dd/MM/yyyy */
-export const formatDateTime = (value) => {
+/** HH:mm */
+export const formatTime = (value) => {
   const d = toValidDate(value);
-  return d ? `${pad(d.getHours())}:${pad(d.getMinutes())} ${formatDate(d)}` : '—';
+  return d ? `${pad(d.getHours())}:${pad(d.getMinutes())}` : '—';
 };
+
+/** HH:mm dd/MM/yyyy */
+export const formatDateTime = (value) => (toValidDate(value) ? `${formatTime(value)} ${formatDate(value)}` : '—');
 
 /** Giá trị cho ô datetime-local (giờ địa phương), mặc định là bây giờ */
 export const toInputDateTime = (value = new Date()) => {
@@ -76,3 +79,6 @@ export const toggleBlockedMessage = (p) => {
   if (p.status === 'ACTIVE') return 'Khuyến mãi đang diễn ra nên không thể tắt. Dùng "Kết thúc sớm" nếu cần dừng ngay.';
   return 'Không thể thay đổi trạng thái khuyến mãi này.';
 };
+
+// Mở trang chi tiết đơn ở tab mới để không rời trang khuyến mãi
+export const openInNewTab = (path) => window.open(path, '_blank', 'noopener');

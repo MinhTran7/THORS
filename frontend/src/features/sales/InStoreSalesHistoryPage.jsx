@@ -19,7 +19,7 @@ import {
 } from '@mui/material';
 import { CreditCardOutlined, DollarOutlined, EyeOutlined, SearchOutlined, ShoppingCartOutlined } from '@ant-design/icons';
 import { FilterResetButton, Pager } from 'features/account/components/Blocks';
-import { api } from '../../services/http';
+import { getSales, getSellers } from '../../services/salesService';
 import { useCrumbs } from '../../layouts/crumbs';
 import { useDebounced } from '../account/hooks';
 import { isCashMethod, money, splitDateTime } from './salesFormat';
@@ -37,17 +37,6 @@ const C = {
 };
 
 const PAGE_SIZE = 8;
-
-function buildQuery(params = {}) {
-  const search = new URLSearchParams();
-  Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== '') {
-      search.set(key, value);
-    }
-  });
-  const text = search.toString();
-  return text ? `?${text}` : '';
-}
 
 export default function InStoreSalesHistoryPage() {
   useCrumbs(['Bán hàng tại quầy', 'Danh sách hóa đơn']);
@@ -70,8 +59,8 @@ export default function InStoreSalesHistoryPage() {
 
   const debouncedSearch = useDebounced(q.trim(), 350);
 
-  // Lấy danh sách thu ngân để phục vụ bộ lọc
-  const { data: sellersData } = useSWR('/sales/in-store/sellers', () => api('/sales/in-store/sellers'), { revalidateOnFocus: false });
+  // Lấy danh sách người bán để phục vụ bộ lọc
+  const { data: sellersData } = useSWR('in-store-sellers', getSellers, { revalidateOnFocus: false });
   const sellers = sellersData || [];
 
   const params = {
@@ -84,11 +73,10 @@ export default function InStoreSalesHistoryPage() {
     size: PAGE_SIZE
   };
 
-  const queryStr = buildQuery(params);
   const dateError = fromDate && toDate && fromDate > toDate ? 'Từ ngày không được sau đến ngày.' : '';
-  const swrKey = dateError ? null : `/sales/in-store${queryStr}`;
+  const swrKey = dateError ? null : ['in-store-sales', JSON.stringify(params)];
 
-  const { data, error, isLoading } = useSWR(swrKey, (url) => api(url), { keepPreviousData: true, revalidateOnFocus: false });
+  const { data, error, isLoading } = useSWR(swrKey, () => getSales(params), { keepPreviousData: true, revalidateOnFocus: false });
 
   const items = dateError ? [] : (data?.items ?? []);
   const total = dateError ? 0 : (data?.total ?? 0);
@@ -177,9 +165,9 @@ export default function InStoreSalesHistoryPage() {
           />
         </Box>
 
-        {/* Lọc theo thu ngân */}
+        {/* Lọc theo người bán */}
         <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>Thu ngân</Typography>
+          <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>Người bán</Typography>
           <Select
             fullWidth
             size="small"
@@ -342,7 +330,7 @@ export default function InStoreSalesHistoryPage() {
                 </TableCell>
                 <TableCell>Mã hóa đơn</TableCell>
                 <TableCell>Thời gian</TableCell>
-                <TableCell>Thu ngân</TableCell>
+                <TableCell>Người bán</TableCell>
                 <TableCell>Tổng tiền</TableCell>
                 <TableCell>Phương thức</TableCell>
                 <TableCell align="center">Thao tác</TableCell>
@@ -398,7 +386,7 @@ export default function InStoreSalesHistoryPage() {
                         <Typography sx={{ fontSize: 11.5, color: '#94A3B8' }}>{time}</Typography>
                       </TableCell>
 
-                      {/* Thu ngân */}
+                      {/* Người bán */}
                       <TableCell>
                         <Typography sx={{ fontSize: 13, color: C.text, fontWeight: 500 }}>{sale.sellerName || '—'}</Typography>
                       </TableCell>

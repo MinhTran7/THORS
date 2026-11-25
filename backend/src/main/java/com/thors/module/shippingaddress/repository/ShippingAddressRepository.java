@@ -26,14 +26,17 @@ public class ShippingAddressRepository {
             rs.getString("ward_code"),
             rs.getString("ward_name"),
             rs.getString("address_detail"),
-            rs.getBoolean("is_default"),
-            rs.getTimestamp("created_at").toLocalDateTime(),
-            rs.getTimestamp("updated_at").toLocalDateTime());
+            rs.getBoolean("is_default"));
 
     private final JdbcTemplate jdbc;
 
     public ShippingAddressRepository(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
+    }
+
+    // Khóa tài khoản tới hết transaction: các thao tác địa chỉ của cùng một khách chạy lần lượt
+    public void lockOwner(int userId) {
+        jdbc.queryForList("SELECT user_id FROM `user` WHERE user_id = ? FOR UPDATE", Integer.class, userId);
     }
 
     public int count(int userId) {
@@ -89,10 +92,11 @@ public class ShippingAddressRepository {
         jdbc.update("UPDATE shipping_address SET is_default = 0 WHERE user_id = ? AND is_default = 1", userId);
     }
 
-    // Đặt một địa chỉ làm mặc định, bỏ mặc định các địa chỉ còn lại (một câu lệnh)
+    // Bỏ mặc định cũ trước rồi mới đặt mặc định mới: bảng chỉ cho mỗi khách một địa chỉ mặc định (uq_shipping_address_default)
     public void setDefault(int userId, int addressId) {
-        jdbc.update("UPDATE shipping_address SET is_default = (address_id = ?) WHERE user_id = ? AND is_deleted = 0",
-                addressId, userId);
+        clearDefault(userId);
+        jdbc.update("UPDATE shipping_address SET is_default = 1 WHERE user_id = ? AND address_id = ? AND is_deleted = 0",
+                userId, addressId);
     }
 
     public void softDelete(int userId, int addressId) {

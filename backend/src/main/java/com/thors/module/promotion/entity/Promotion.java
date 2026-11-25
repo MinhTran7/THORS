@@ -41,6 +41,11 @@ public record Promotion(
         return usageLimit != null && usedCount != null && usedCount >= usageLimit;
     }
 
+    // Lượt dùng còn lại của mã giảm giá online; null nếu không giới hạn
+    public Integer remaining() {
+        return usageLimit == null ? null : Math.max(0, usageLimit - (usedCount == null ? 0 : usedCount));
+    }
+
     public Schedule schedule(LocalDateTime now) {
         if (now.isBefore(startDate)) return Schedule.UPCOMING;
         if (!now.isBefore(endDate)) return Schedule.ENDED;

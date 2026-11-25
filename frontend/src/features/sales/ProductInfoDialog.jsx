@@ -3,6 +3,7 @@ import { Alert, Box, CircularProgress, Dialog, IconButton, Typography } from '@m
 import { CloseOutlined, ShoppingCartOutlined } from '@ant-design/icons';
 import { getProductById } from '../../services/productService';
 import { api } from '../../services/http';
+import { getVariantSales } from '../../services/salesService';
 
 const num = (value) => Number(value || 0).toLocaleString('vi-VN');
 const money = (value) => (value == null ? '—' : `${num(value)} đ`);
@@ -55,7 +56,7 @@ export default function ProductInfoDialog({ line, onClose }) {
       })
       .catch((err) => active && setError(err.message || 'Không thể tải thông tin sản phẩm.'));
     // Giá sau khuyến mãi của từng biến thể
-    api(`/sales/in-store/prices/${line.productId}`)
+    getVariantSales(line.productId)
       .then((res) => active && setSalePrices(res))
       .catch(() => {});
     return () => {
@@ -72,7 +73,7 @@ export default function ProductInfoDialog({ line, onClose }) {
     .map(Number);
   const minPrice = Math.min(...prices);
   const maxPrice = Math.max(...prices);
-  const salePriceOf = (v) => (salePrices[v.detailId] != null ? Number(salePrices[v.detailId]) : Number(v.price));
+  const salePriceOf = (v) => Number(salePrices[v.detailId]?.price ?? v.price);
   const sales = variants.filter((v) => v.price != null).map(salePriceOf);
   const onSale = sales.some((p, i) => p < prices[i]);
   const totalStock = product?.totalStock ?? variants.reduce((sum, v) => sum + Number(v.stockQuantity || 0), 0);

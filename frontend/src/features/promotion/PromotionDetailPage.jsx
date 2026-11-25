@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Box,
@@ -15,17 +15,17 @@ import {
   Typography
 } from '@mui/material';
 import { ArrowLeftOutlined, DeleteOutlined, EditOutlined, PictureOutlined, StopOutlined } from '@ant-design/icons';
-import { getPromotionById, getPromotionOrders } from 'services/promotionService';
+import { getPromotionById } from 'services/promotionService';
 import { getProducts } from 'services/productService';
 import { categoryFullName, getCategories } from 'services/categoryService';
 import { useCrumbs } from '../../layouts/crumbs';
-import { orderStatusMeta } from 'features/order/constants';
 import { ConfirmDialog, NoticeDialog } from './PromotionForm';
 import { deleteAction, endEarlyAction } from './promotionActions';
 import {
   discountText,
   editBlockedMessage,
-  formatDateTime,
+  formatDate,
+  formatTime,
   KIND,
   kindOf,
   money,
@@ -33,31 +33,9 @@ import {
   productRows,
   SCHEDULE_LABEL
 } from './promotionFormat';
-
-const C = {
-  text: '#1E293B',
-  muted: '#64748B',
-  subtle: '#94A3B8',
-  border: '#E2E8F0',
-  borderLight: '#F1F5F9',
-  bg: '#F8FAFC',
-  surface: '#FFFFFF',
-  cyan: '#8EECF5',
-  cyanHover: '#76E5EF',
-  cyanText: '#0E7490',
-  cream: '#FFF7AE',
-  creamHover: '#FFF294',
-  creamText: '#713F12'
-};
-
-const cardSx = {
-  bgcolor: C.surface,
-  borderRadius: 3.5,
-  border: `1px solid ${C.border}`,
-  boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
-  p: { xs: 2.5, sm: 3 },
-  mb: 2.5
-};
+import { C, cardSx, tableSx } from './promotionDetailStyles';
+import PromotionOrdersCard from './PromotionOrdersCard';
+import PromotionSalesCard from './PromotionSalesCard';
 
 const secondaryButtonSx = {
   textTransform: 'none',
@@ -69,33 +47,6 @@ const secondaryButtonSx = {
   px: 2,
   height: 44,
   '&:hover': { bgcolor: C.bg }
-};
-
-const tableSx = {
-  '& th': {
-    bgcolor: '#F8FAFC',
-    color: C.subtle,
-    fontSize: 11.5,
-    fontWeight: 700,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-    py: 1.5,
-    borderBottom: `1px solid ${C.borderLight}`
-  },
-  '& td': {
-    borderColor: C.borderLight,
-    py: 1.75,
-    fontSize: 13.5,
-    color: C.text
-  }
-};
-
-// Màu nhãn trạng thái đơn theo tone của features/order/constants
-const TONE = {
-  success: { bg: '#DCFCE7', color: '#166534' },
-  warning: { bg: '#FEF9C3', color: '#854D0E' },
-  danger: { bg: '#FEE2E2', color: '#B91C1C' },
-  neutral: { bg: '#F1F5F9', color: '#475569' }
 };
 
 export default function PromotionDetailPage({ kind = 'PRODUCT' }) {
@@ -112,7 +63,6 @@ export default function PromotionDetailPage({ kind = 'PRODUCT' }) {
   const [productsLoading, setProductsLoading] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [orders, setOrders] = useState(null);
   const [confirm, setConfirm] = useState(null);
   const [working, setWorking] = useState(false);
 
@@ -141,18 +91,6 @@ export default function PromotionDetailPage({ kind = 'PRODUCT' }) {
       mounted = false;
     };
   }, [promotionId, kind, navigate]);
-
-  // Mã giảm giá online: các đơn đã dùng mã
-  useEffect(() => {
-    if (kind !== 'ORDER') return undefined;
-    let mounted = true;
-    getPromotionOrders(promotionId)
-      .then((res) => mounted && setOrders(res))
-      .catch(() => mounted && setOrders([]));
-    return () => {
-      mounted = false;
-    };
-  }, [promotionId, kind]);
 
   useEffect(() => {
     if (kind !== 'PRODUCT') return undefined;
@@ -359,10 +297,23 @@ export default function PromotionDetailPage({ kind = 'PRODUCT' }) {
             <Typography sx={{ fontSize: 12, color: C.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
               Thời hạn áp dụng
             </Typography>
-            <Stack spacing={0.5} sx={{ mt: 1 }}>
-              <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: C.text }}>Từ: {formatDateTime(promotion.startDate)}</Typography>
-              <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: C.text }}>Đến: {formatDateTime(promotion.endDate)}</Typography>
-            </Stack>
+            <Box sx={{ mt: 1, display: 'grid', gridTemplateColumns: 'auto auto auto', columnGap: 1.5, rowGap: 0.75, alignItems: 'center' }}>
+              {[
+                ['Bắt đầu', promotion.startDate],
+                ['Kết thúc', promotion.endDate]
+              ].map(([label, value]) => (
+                <Fragment key={label}>
+                  <Typography sx={{ fontSize: 12.5, color: C.muted }}>{label}</Typography>
+                  <Typography sx={{ fontSize: 14, fontWeight: 700, color: C.text }}>{formatDate(value)}</Typography>
+                  <Box
+                    component="span"
+                    sx={{ px: 1, py: 0.25, borderRadius: 1.5, bgcolor: C.borderLight, fontSize: 13, fontWeight: 600, color: C.text }}
+                  >
+                    {formatTime(value)}
+                  </Box>
+                </Fragment>
+              ))}
+            </Box>
           </Box>
 
           {/* Cột 4: Trạng thái (Chỉ hiển thị trạng thái thời gian, đã bỏ bật/tắt) */}
@@ -427,86 +378,10 @@ export default function PromotionDetailPage({ kind = 'PRODUCT' }) {
         </Card>
       )}
 
-      {/* ─── CARD: ĐƠN ĐÃ DÙNG MÃ (chỉ mã giảm giá online) ─── */}
-      {kind === 'ORDER' && (
-        <Card sx={cardSx}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 1, mb: 2 }}>
-            <Typography sx={{ fontWeight: 800, fontSize: 16, color: C.text }}>Đơn đã dùng mã</Typography>
-            {orders?.length > 0 && (
-              <Typography sx={{ fontSize: 13, color: C.muted }}>
-                {orders.length} đơn · đã giảm {money(orders.reduce((sum, o) => sum + Number(o.discountAmount || 0), 0))}
-              </Typography>
-            )}
-          </Box>
-
-          {orders === null ? (
-            <Box sx={{ py: 4, display: 'flex', justifyContent: 'center' }}>
-              <CircularProgress size={30} sx={{ color: C.cyan }} />
-            </Box>
-          ) : orders.length === 0 ? (
-            <Typography sx={{ fontSize: 13.5, color: C.muted, py: 2 }}>Chưa có đơn hàng nào dùng mã này.</Typography>
-          ) : (
-            <TableContainer sx={{ border: `1px solid ${C.borderLight}`, borderRadius: 2.5, overflow: 'hidden' }}>
-              <Table sx={tableSx}>
-                <TableHead>
-                  <TableRow>
-                    <TableCell sx={{ pl: 3 }}>Mã đơn</TableCell>
-                    <TableCell>Khách hàng</TableCell>
-                    <TableCell>Ngày đặt</TableCell>
-                    <TableCell align="right">Tiền hàng</TableCell>
-                    <TableCell align="right">Được giảm</TableCell>
-                    <TableCell align="right">Tổng tiền</TableCell>
-                    <TableCell align="center" sx={{ pr: 3 }}>
-                      Trạng thái
-                    </TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {orders.map((order) => {
-                    const status = orderStatusMeta(order.orderStatus);
-                    const tone = TONE[status.tone] || TONE.neutral;
-                    return (
-                      <TableRow
-                        key={order.orderId}
-                        hover
-                        onClick={() => navigate(`/orders/${order.orderId}`)}
-                        sx={{ cursor: 'pointer', '&:hover': { bgcolor: '#FAFCFE' } }}
-                      >
-                        <TableCell sx={{ pl: 3, fontWeight: '700 !important' }}>{order.orderNumber}</TableCell>
-                        <TableCell>{order.customerName || '—'}</TableCell>
-                        <TableCell sx={{ color: `${C.muted} !important` }}>{formatDateTime(order.orderDate)}</TableCell>
-                        <TableCell align="right">{money(order.itemsAmount)}</TableCell>
-                        <TableCell align="right" sx={{ color: '#B45309 !important', fontWeight: '700 !important' }}>
-                          − {money(order.discountAmount)}
-                        </TableCell>
-                        <TableCell align="right" sx={{ fontWeight: '700 !important' }}>
-                          {money(order.totalAmount)}
-                        </TableCell>
-                        <TableCell align="center" sx={{ pr: 3 }}>
-                          <Box
-                            component="span"
-                            sx={{
-                              px: 1.25,
-                              py: 0.4,
-                              borderRadius: 99,
-                              fontSize: 12,
-                              fontWeight: 700,
-                              bgcolor: tone.bg,
-                              color: tone.color,
-                              whiteSpace: 'nowrap'
-                            }}
-                          >
-                            {status.label}
-                          </Box>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          )}
-        </Card>
+      {kind === 'ORDER' ? (
+        <PromotionOrdersCard promotionId={promotion.promotionId} />
+      ) : (
+        <PromotionSalesCard promotionId={promotion.promotionId} />
       )}
 
       {/* ─── CARD 3: PHẠM VI ÁP DỤNG ─── */}

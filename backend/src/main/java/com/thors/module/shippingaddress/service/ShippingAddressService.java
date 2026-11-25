@@ -10,11 +10,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.regex.Pattern;
 
 @Service
 public class ShippingAddressService {
 
     private static final int MAX_ADDRESSES = 5;
+    private static final Pattern NAME = Pattern.compile("[\\p{L}\\p{M} ]+");
     private final ShippingAddressRepository addresses;
 
     public ShippingAddressService(ShippingAddressRepository addresses) {
@@ -33,6 +35,7 @@ public class ShippingAddressService {
     public ShippingAddressResponse create(Account actor, ShippingAddressRequest request) {
         int userId = customerId(actor);
         ShippingAddressRequest data = validate(request);
+        addresses.lockOwner(userId);
         int count = addresses.count(userId);
         if (count >= MAX_ADDRESSES) {
             throw new ApiException(409, "ADDRESS_LIMIT", "Bạn chỉ được lưu tối đa 5 địa chỉ giao hàng.");
@@ -46,8 +49,9 @@ public class ShippingAddressService {
     @Transactional
     public ShippingAddressResponse update(Account actor, int addressId, ShippingAddressRequest request) {
         int userId = customerId(actor);
-        find(userId, addressId);
         ShippingAddressRequest data = validate(request);
+        addresses.lockOwner(userId);
+        find(userId, addressId);
         addresses.update(userId, addressId, data);
         if (Boolean.TRUE.equals(data.isDefault())) {
             addresses.setDefault(userId, addressId);
@@ -56,8 +60,17 @@ public class ShippingAddressService {
     }
 
     @Transactional
+    public void setDefault(Account actor, int addressId) {
+        int userId = customerId(actor);
+        addresses.lockOwner(userId);
+        find(userId, addressId);
+        addresses.setDefault(userId, addressId);
+    }
+
+    @Transactional
     public void delete(Account actor, int addressId) {
         int userId = customerId(actor);
+        addresses.lockOwner(userId);
         if (find(userId, addressId).isDefault()) {
             throw new ApiException(409, "DEFAULT_ADDRESS_CANNOT_DELETE",
                     "Không thể xóa địa chỉ mặc định. Vui lòng chọn địa chỉ khác làm mặc định trước.");
@@ -83,8 +96,12 @@ public class ShippingAddressService {
         if (!phone.matches("0\\d{9}")) {
             throw new ApiException(400, "PHONE_INVALID", "Số điện thoại phải gồm 10 chữ số và bắt đầu bằng số 0.");
         }
+        String name = text(r.recipientName(), "Họ và tên người nhận", 2, 100);
+        if (!NAME.matcher(name).matches()) {
+            throw new ApiException(400, "ADDRESS_INVALID", "Họ và tên người nhận chỉ được gồm chữ cái và khoảng trắng.");
+        }
         return new ShippingAddressRequest(
-                text(r.recipientName(), "Họ và tên người nhận", 2, 100),
+                name,
                 phone,
                 text(r.provinceCode(), "Tỉnh/Thành phố", 1, 20),
                 text(r.provinceName(), "Tỉnh/Thành phố", 1, 100),

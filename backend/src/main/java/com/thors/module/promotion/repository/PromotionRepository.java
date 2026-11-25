@@ -1,6 +1,7 @@
 package com.thors.module.promotion.repository;
 
 import com.thors.module.promotion.dto.PromotionOrder;
+import com.thors.module.promotion.dto.PromotionSaleItem;
 import com.thors.module.promotion.entity.Promotion;
 import com.thors.module.promotion.mapper.PromotionMapper;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -89,10 +90,13 @@ public class PromotionRepository {
                 Integer.class, userId));
     }
 
-    // Mọi đơn có gắn khuyến mãi (kể cả đơn đã hủy), dùng khi xóa
-    public int countOrders(int promotionId) {
-        Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM orders WHERE promotion_id = ?", Integer.class, promotionId);
-        return count == null ? 0 : count;
+    // Có đơn nào gắn khuyến mãi (mã giảm giá trên đơn hoặc khuyến mãi sản phẩm trên dòng hàng, kể cả đơn đã hủy), dùng khi xóa
+    public boolean hasOrders(int promotionId) {
+        Boolean used = jdbc.queryForObject("""
+                SELECT EXISTS (SELECT 1 FROM orders WHERE promotion_id = ?)
+                    OR EXISTS (SELECT 1 FROM order_item WHERE promotion_id = ?)
+                """, Boolean.class, promotionId, promotionId);
+        return Boolean.TRUE.equals(used);
     }
 
     public Optional<Promotion> findRunningProductPromotion(int productId, LocalDateTime now) {
@@ -140,6 +144,25 @@ public class PromotionRepository {
     }
 
     // Các đơn đã áp mã, mới nhất trước
+    // Dòng hàng đã áp dụng khuyến mãi sản phẩm; không tính đơn đã hủy, bị từ chối, hết hạn
+    public List<PromotionSaleItem> findSaleItems(int promotionId, String orderType) {
+        return jdbc.query("""
+                SELECT o.order_id, o.order_number, o.order_type, o.order_date,
+                       oi.product_name_snapshot, oi.size_snapshot, oi.color_snapshot, oi.quantity,
+                       oi.original_price, oi.unit_price
+                FROM order_item oi
+                JOIN orders o ON o.order_id = oi.order_id
+                WHERE oi.promotion_id = ? AND o.order_status NOT IN ('CANCELLED', 'REJECTED', 'EXPIRED')
+                  AND (? IS NULL OR o.order_type = ?)
+                ORDER BY o.order_date DESC, o.order_id DESC, oi.order_item_id
+                """,
+                (rs, i) -> new PromotionSaleItem(rs.getInt("order_id"), rs.getString("order_number"), rs.getString("order_type"),
+                        rs.getTimestamp("order_date") == null ? null : rs.getTimestamp("order_date").toLocalDateTime(),
+                        rs.getString("product_name_snapshot"), rs.getString("size_snapshot"), rs.getString("color_snapshot"),
+                        rs.getInt("quantity"), rs.getBigDecimal("original_price"), rs.getBigDecimal("unit_price")),
+                promotionId, orderType, orderType);
+    }
+
     public List<PromotionOrder> findOrders(int promotionId) {
         return jdbc.query("""
                 SELECT o.order_id, o.order_number, o.order_date, COALESCE(u.full_name, o.delivery_name) AS customer_name,

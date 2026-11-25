@@ -16,26 +16,31 @@ import {
   Typography
 } from '@mui/material';
 import { ArrowLeftOutlined, CreditCardOutlined, DollarOutlined, PictureOutlined, PrinterOutlined } from '@ant-design/icons';
-import { api } from '../../services/http';
+import { getSale } from '../../services/salesService';
 import { useCrumbs } from '../../layouts/crumbs';
 import ReceiptDialog from './ReceiptDialog';
-import { isCashMethod, money, splitDateTime, toReceiptItems } from './salesFormat';
+import { isCashMethod, money, splitDateTime } from './salesFormat';
 
 const C = {
   text: '#0F172A',
   muted: '#64748B',
-  subtle: '#94A3B8',
   border: '#E2E8F0',
   borderLight: '#F1F5F9',
-  bg: '#F8FAFC',
-  surface: '#FFFFFF',
   cyan: '#8EECF5',
   cyanHover: '#76E5EF',
   cyanText: '#0E7490',
   cream: '#FFF7AE',
-  creamHover: '#FFF294',
   creamText: '#713F12'
 };
+
+function SummaryRow({ label, value }) {
+  return (
+    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <Typography sx={{ fontSize: 14, color: C.muted }}>{label}</Typography>
+      <Typography sx={{ fontSize: 14, fontWeight: 600, color: C.text }}>{value}</Typography>
+    </Box>
+  );
+}
 
 export default function InStoreSaleDetailPage() {
   const { orderId } = useParams();
@@ -44,25 +49,12 @@ export default function InStoreSaleDetailPage() {
 
   useCrumbs(['Bán hàng tại quầy', 'Danh sách hóa đơn', 'Chi tiết hóa đơn']);
 
-  const { data, error, isLoading } = useSWR(orderId ? `/sales/in-store/${orderId}` : null, () => api(`/sales/in-store/${orderId}`));
+  const { data, error, isLoading } = useSWR(orderId ? ['in-store-sale', orderId] : null, () => getSale(orderId));
 
   const isCash = isCashMethod(data?.paymentMethod);
   const { date, time } = splitDateTime(data?.orderDate);
 
   const items = data?.items || [];
-
-  const cartItems = toReceiptItems(items);
-
-  const saleData = data
-    ? {
-        invoiceNumber: data.invoiceNumber,
-        itemsAmount: data.subtotal,
-        discountAmount: data.discountAmount,
-        totalAmount: data.totalAmount,
-        paymentMethod: data.paymentMethod,
-        paymentStatus: data.paymentStatus
-      }
-    : null;
 
   if (isLoading) {
     return (
@@ -176,11 +168,10 @@ export default function InStoreSaleDetailPage() {
             </Typography>
           </Box>
 
-          {/* Thu ngân */}
+          {/* Người bán */}
           <Box>
-            <Typography sx={{ fontSize: 13, fontWeight: 500, color: C.muted, mb: 0.75 }}>Thu ngân</Typography>
+            <Typography sx={{ fontSize: 13, fontWeight: 500, color: C.muted, mb: 0.75 }}>Người bán</Typography>
             <Typography sx={{ fontSize: 14.5, fontWeight: 700, color: C.text }}>{data.sellerName || '—'}</Typography>
-            <Typography sx={{ fontSize: 12, color: C.subtle, mt: 0.25 }}>Nhân viên bán hàng</Typography>
           </Box>
 
           {/* Phương thức - Trả về màu cũ chuẩn */}
@@ -299,6 +290,11 @@ export default function InStoreSaleDetailPage() {
 
                     {/* Đơn giá */}
                     <TableCell align="right">
+                      {item.originalPrice > item.unitPrice && (
+                        <Typography sx={{ fontSize: 12.5, color: C.muted, textDecoration: 'line-through' }}>
+                          {money(item.originalPrice)}
+                        </Typography>
+                      )}
                       <Typography sx={{ fontSize: 14, color: C.text }}>{money(item.unitPrice)}</Typography>
                     </TableCell>
 
@@ -326,17 +322,8 @@ export default function InStoreSaleDetailPage() {
         <Typography sx={{ fontSize: 16, fontWeight: 700, color: C.text, mb: 2.5 }}>Tổng kết hóa đơn</Typography>
 
         <Stack spacing={1.5}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Typography sx={{ fontSize: 14, color: C.muted }}>Tổng tiền hàng</Typography>
-            <Typography sx={{ fontSize: 14, fontWeight: 600, color: C.text }}>{money(data.subtotal)}</Typography>
-          </Box>
-
-          {Number(data.discountAmount || 0) > 0 && (
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Typography sx={{ fontSize: 14, color: C.muted }}>Giảm giá hóa đơn</Typography>
-              <Typography sx={{ fontSize: 14, fontWeight: 600, color: C.text }}>-{money(data.discountAmount)}</Typography>
-            </Box>
-          )}
+          <SummaryRow label="Tổng tiền hàng" value={money(data.subtotal)} />
+          {data.manualDiscount > 0 && <SummaryRow label="Giảm giá thêm" value={`-${money(data.manualDiscount)}`} />}
 
           <Divider sx={{ borderColor: C.borderLight, my: 1 }} />
 
@@ -345,19 +332,12 @@ export default function InStoreSaleDetailPage() {
 
             <Typography sx={{ fontSize: 24, fontWeight: 900, color: C.text }}>{money(data.totalAmount)}</Typography>
           </Box>
+          <Typography sx={{ fontSize: 12.5, color: C.muted, textAlign: 'right' }}>Giá bán đã bao gồm thuế</Typography>
         </Stack>
       </Card>
 
       {/* Dialog in hóa đơn nhiệt chuẩn */}
-      <ReceiptDialog
-        open={receiptOpen}
-        onClose={() => setReceiptOpen(false)}
-        saleData={saleData}
-        cartItems={cartItems}
-        sellerName={data?.sellerName || ''}
-        completedAt={data?.orderDate}
-        closeText="Đóng"
-      />
+      <ReceiptDialog open={receiptOpen} onClose={() => setReceiptOpen(false)} sale={data} closeText="Đóng" />
     </Box>
   );
 }

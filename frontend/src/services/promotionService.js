@@ -6,6 +6,9 @@ export const getPromotionById = (promotionId) => api(`/promotions/${promotionId}
 
 export const getPromotionOrders = (promotionId) => api(`/promotions/${promotionId}/orders`);
 
+export const getPromotionSales = (promotionId, channel) =>
+  api(`/promotions/${promotionId}/sales${channel ? `?channel=${encodeURIComponent(channel)}` : ''}`);
+
 export const createPromotion = (data) => api('/promotions', { method: 'POST', body: toPayload(data) });
 
 export const updatePromotion = (promotionId, data) => api(`/promotions/${promotionId}`, { method: 'PUT', body: toPayload(data) });

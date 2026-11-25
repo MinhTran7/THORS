@@ -3,7 +3,6 @@ package com.thors.module.sales.controller;
 import com.thors.module.sales.dto.CreateInStoreSaleRequest;
 import com.thors.module.sales.dto.InStoreSaleDetailResponse;
 import com.thors.module.sales.dto.InStoreSalePageResponse;
-import com.thors.module.sales.dto.InStoreSaleResponse;
 import com.thors.module.sales.dto.PriceRange;
 import com.thors.module.sales.dto.SellerOption;
 import com.thors.module.sales.dto.VariantSale;
@@ -34,7 +33,7 @@ public class InStoreSalesController {
     }
 
     @PostMapping
-    public ResponseEntity<InStoreSaleResponse> createSale(
+    public ResponseEntity<InStoreSaleDetailResponse> createSale(
             @RequestBody CreateInStoreSaleRequest request
     ) {
         return ResponseEntity
