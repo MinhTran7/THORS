@@ -7,7 +7,7 @@ import static org.mockito.Mockito.*;
 import com.thors.module.account.entity.Account;
 import com.thors.module.notification.service.NotificationPublisher;
 import com.thors.module.notification.service.NotificationTypes;
-import com.thors.module.promotion.dto.CreatePromotionRequest;
+import com.thors.module.promotion.dto.PromotionRequest;
 import com.thors.module.promotion.entity.Promotion;
 import com.thors.module.promotion.repository.PromotionRepository;
 import com.thors.module.promotion.service.PromotionService;
@@ -44,8 +44,8 @@ class PromotionNotificationTest {
                         "ALL", List.of(), 0)));
     }
 
-    private CreatePromotionRequest request(String type, String value, LocalDateTime start) {
-        return new CreatePromotionRequest("Sale 11/11", null, type, new BigDecimal(value), BigDecimal.ZERO,
+    private PromotionRequest request(String type, String value, LocalDateTime start) {
+        return new PromotionRequest("Sale 11/11", null, type, new BigDecimal(value), BigDecimal.ZERO,
                 start, start.plusDays(3), null, "ALL", null);
     }
 

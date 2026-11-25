@@ -1,6 +1,5 @@
 package com.thors.module.shippingaddress.entity;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 public record ShippingAddress(
@@ -13,8 +12,6 @@ public record ShippingAddress(
         String wardCode,
         String wardName,
         String addressDetail,
-        BigDecimal latitude,
-        BigDecimal longitude,
         boolean isDefault,
         LocalDateTime createdAt,
         LocalDateTime updatedAt) {

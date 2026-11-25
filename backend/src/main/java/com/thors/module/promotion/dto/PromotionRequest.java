@@ -4,7 +4,8 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
-public record UpdatePromotionRequest(
+public record PromotionRequest(
+        String type,
         String name,
         String description,
         String discountType,

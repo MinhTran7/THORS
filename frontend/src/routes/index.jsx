@@ -56,9 +56,9 @@ import EditPromotionPage from 'features/promotion/EditPromotionPage';
 import ReturnsPage from 'features/returns/ReturnsPage';
 import FacebookPOSPage from 'features/facebook/FacebookPOSPage';
 // Customer Addresses
-import CustomerAddressPage from 'features/customer/CustomerAddressPage';
-import AddAddressPage from 'features/customer/AddAddressPage';
-import EditAddressPage from 'features/customer/EditAddressPage';
+import CustomerAddressPage from 'features/shippingaddress/CustomerAddressPage';
+import AddAddressPage from 'features/shippingaddress/AddAddressPage';
+import EditAddressPage from 'features/shippingaddress/EditAddressPage';
 // Số đo cơ thể (gợi ý size / thử đồ ảo)
 import BodyProfilePage from 'features/fitting/BodyProfilePage';
 import TryOnHistoryPage from 'features/tryon/TryOnHistoryPage';

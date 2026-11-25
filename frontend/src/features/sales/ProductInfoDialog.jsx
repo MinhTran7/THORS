@@ -13,7 +13,10 @@ const desktopOnly = { display: { xs: 'none', md: 'block' } };
 
 function Tag({ children, bg = '#F1F5F9', color = '#475569' }) {
   return (
-    <Box component="span" sx={{ px: 1, py: 0.25, borderRadius: 10, bgcolor: bg, color, fontSize: 11.5, fontWeight: 700, whiteSpace: 'nowrap' }}>
+    <Box
+      component="span"
+      sx={{ px: 1, py: 0.25, borderRadius: 10, bgcolor: bg, color, fontSize: 11.5, fontWeight: 700, whiteSpace: 'nowrap' }}
+    >
       {children}
     </Box>
   );
@@ -63,7 +66,10 @@ export default function ProductInfoDialog({ line, onClose }) {
   const product = data?.product;
   const variants = data?.variants || [];
   const images = data?.images?.length ? data.images.map((i) => i.imageUrl) : [line?.image].filter(Boolean);
-  const prices = variants.map((v) => v.price).filter((p) => p != null).map(Number);
+  const prices = variants
+    .map((v) => v.price)
+    .filter((p) => p != null)
+    .map(Number);
   const minPrice = Math.min(...prices);
   const maxPrice = Math.max(...prices);
   const salePriceOf = (v) => (salePrices[v.detailId] != null ? Number(salePrices[v.detailId]) : Number(v.price));
@@ -74,6 +80,7 @@ export default function ProductInfoDialog({ line, onClose }) {
 
   return (
     <Dialog
+      className="pos-no-effects"
       open={Boolean(line)}
       onClose={onClose}
       fullWidth
@@ -111,7 +118,12 @@ export default function ProductInfoDialog({ line, onClose }) {
                   }}
                 >
                   {images.length ? (
-                    <Box component="img" src={images[imageIndex]} alt={product.productName} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <Box
+                      component="img"
+                      src={images[imageIndex]}
+                      alt={product.productName}
+                      sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
                   ) : (
                     <ShoppingCartOutlined style={{ fontSize: 36, color: '#CBD5E1' }} />
                   )}
@@ -152,7 +164,11 @@ export default function ProductInfoDialog({ line, onClose }) {
                 <Typography sx={{ fontSize: 22, fontWeight: 800, lineHeight: 1.3, mt: 1.25 }}>{product.productName}</Typography>
                 {product.sku && <Typography sx={{ fontSize: 12.5, color: '#94A3B8', mt: 0.25 }}>SKU: {product.sku}</Typography>}
                 <Box sx={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: 1, mt: 1.5 }}>
-                  {onSale && <Typography sx={{ fontSize: 14, color: '#94A3B8', textDecoration: 'line-through' }}>{range(minPrice, maxPrice)}</Typography>}
+                  {onSale && (
+                    <Typography sx={{ fontSize: 14, color: '#94A3B8', textDecoration: 'line-through' }}>
+                      {range(minPrice, maxPrice)}
+                    </Typography>
+                  )}
                   <Typography sx={{ fontSize: 24, fontWeight: 800, color: '#0E7490' }}>
                     {!prices.length ? 'Chưa có giá' : onSale ? range(Math.min(...sales), Math.max(...sales)) : range(minPrice, maxPrice)}
                   </Typography>
@@ -219,14 +235,18 @@ export default function ProductInfoDialog({ line, onClose }) {
                         </Tag>
                       )}
                     </Box>
-                    <Typography sx={{ ...desktopOnly, fontSize: 12.5, color: '#64748B', wordBreak: 'break-all' }}>{stock?.barcode || v.code || '—'}</Typography>
+                    <Typography sx={{ ...desktopOnly, fontSize: 12.5, color: '#64748B', wordBreak: 'break-all' }}>
+                      {stock?.barcode || v.code || '—'}
+                    </Typography>
                     <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.75, whiteSpace: 'nowrap' }}>
                       {v.price != null && salePriceOf(v) < Number(v.price) && (
                         <Typography sx={{ fontSize: 11.5, color: '#94A3B8', textDecoration: 'line-through' }}>{money(v.price)}</Typography>
                       )}
                       <Typography sx={{ fontSize: 13, fontWeight: 700 }}>{v.price == null ? '—' : money(salePriceOf(v))}</Typography>
                     </Box>
-                    <Typography sx={{ ...desktopOnly, fontSize: 13, textAlign: 'right' }}>{num(stock?.stock_quantity ?? v.stockQuantity)}</Typography>
+                    <Typography sx={{ ...desktopOnly, fontSize: 13, textAlign: 'right' }}>
+                      {num(stock?.stock_quantity ?? v.stockQuantity)}
+                    </Typography>
                     <Typography sx={{ fontSize: 13, fontWeight: 800, textAlign: 'right', color: available > 0 ? '#0F172A' : '#EF4444' }}>
                       {num(available)}
                     </Typography>

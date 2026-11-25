@@ -24,6 +24,7 @@ function validate(form, province, ward) {
   const name = form.recipientName.trim();
   const detail = form.addressDetail.trim();
   if (name.length < 2 || name.length > 100) errors.recipientName = 'Họ và tên người nhận phải từ 2 đến 100 ký tự.';
+  else if (!/^[\p{L}\p{M} ]+$/u.test(name)) errors.recipientName = 'Họ và tên người nhận chỉ được gồm chữ cái và khoảng trắng.';
   if (!/^0\d{9}$/.test(form.phone)) errors.phone = 'Số điện thoại phải gồm 10 chữ số và bắt đầu bằng số 0.';
   if (!province) errors.provinceCode = 'Vui lòng chọn Tỉnh/Thành phố.';
   if (!ward) errors.wardCode = 'Vui lòng chọn Phường/Xã.';
@@ -31,7 +32,9 @@ function validate(form, province, ward) {
   return errors;
 }
 
-function Field({ label, error, children, ...props }) {
+const helperTextSlot = { formHelperText: { sx: { mx: 0.5, fontSize: 12 } } };
+
+function Field({ label, error, children, htmlInput, ...props }) {
   return (
     <Box>
       <Typography sx={{ fontSize: 14, fontWeight: 700, color: '#374151', mb: 0.75 }}>{label}</Typography>
@@ -40,7 +43,7 @@ function Field({ label, error, children, ...props }) {
         size="small"
         error={Boolean(error)}
         helperText={error}
-        FormHelperTextProps={{ sx: { mx: 0.5, fontSize: 12 } }}
+        slotProps={{ ...helperTextSlot, htmlInput }}
         sx={inputSx(error)}
         {...props}
       >
@@ -50,7 +53,7 @@ function Field({ label, error, children, ...props }) {
   );
 }
 
-export default function AddressForm({ title, subtitle, submitLabel, initial, lockDefault = false, onSubmit }) {
+export default function AddressForm({ title, submitLabel, initial, lockDefault = false, onSubmit }) {
   const navigate = useNavigate();
   const [form, setForm] = useState({ ...EMPTY, ...initial });
   const [provinces, setProvinces] = useState([]);
@@ -165,7 +168,7 @@ export default function AddressForm({ title, subtitle, submitLabel, initial, loc
             value={form.phone}
             onChange={(e) => change('phone', e.target.value.replace(/\D/g, '').slice(0, 10))}
             error={errors.phone}
-            inputProps={{ inputMode: 'numeric' }}
+            htmlInput={{ inputMode: 'numeric' }}
           />
         </Box>
 
@@ -196,7 +199,7 @@ export default function AddressForm({ title, subtitle, submitLabel, initial, loc
                   placeholder="Chọn hoặc gõ tìm Tỉnh/Thành phố"
                   error={Boolean(errors.provinceCode)}
                   helperText={errors.provinceCode}
-                  FormHelperTextProps={{ sx: { mx: 0.5, fontSize: 12 } }}
+                  slotProps={{ ...params.slotProps, ...helperTextSlot }}
                   sx={inputSx(errors.provinceCode)}
                 />
               )}
@@ -227,7 +230,7 @@ export default function AddressForm({ title, subtitle, submitLabel, initial, loc
                   placeholder={form.provinceCode ? 'Chọn hoặc gõ tìm Phường/Xã' : 'Chọn Tỉnh/Thành phố trước'}
                   error={Boolean(errors.wardCode)}
                   helperText={errors.wardCode}
-                  FormHelperTextProps={{ sx: { mx: 0.5, fontSize: 12 } }}
+                  slotProps={{ ...params.slotProps, ...helperTextSlot }}
                   sx={inputSx(errors.wardCode)}
                 />
               )}

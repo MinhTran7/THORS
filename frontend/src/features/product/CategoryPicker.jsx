@@ -4,7 +4,7 @@ import { Autocomplete, Box, TextField, Typography } from '@mui/material';
 import { SearchOutlined } from '@ant-design/icons';
 
 import { categoryFullName, targetGroupLabel } from '../../services/categoryService';
-import { C } from '../customer/theme';
+import { C } from '../shippingaddress/theme';
 
 // Màu nhãn đối tượng (cùng màu với trang Danh mục)
 const TARGET_TONE = {

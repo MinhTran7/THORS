@@ -269,6 +269,8 @@ public class OrderService {
         var p = orders.findPayableForUpdate(orderId).orElse(null);
         if (p == null || "PAID".equalsIgnoreCase(p.paymentStatus())) return;
         orders.markOnlinePaid(orderId);
+        // Đơn tại quầy: thu ngân tự thấy bill, không gửi thông báo
+        if ("In-Store".equals(p.orderType())) return;
 
         String number = p.orderNumber();
         switch (p.orderStatus()) {

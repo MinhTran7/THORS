@@ -12,24 +12,25 @@ public class PromotionMapper implements RowMapper<Promotion> {
 
     @Override
     public Promotion mapRow(ResultSet rs, int rowNum) throws SQLException {
-        Timestamp startTimestamp = rs.getTimestamp("start_date");
-        Timestamp endTimestamp = rs.getTimestamp("end_date");
+        Timestamp start = rs.getTimestamp("start_date");
+        Timestamp end = rs.getTimestamp("end_date");
 
         return new Promotion(
                 rs.getInt("promotion_id"),
+                rs.getString("promotion_type"),
                 rs.getString("name"),
                 rs.getString("description"),
-                rs.getBigDecimal("discount_value"),
-                startTimestamp == null ? null : startTimestamp.toLocalDateTime(),
-                endTimestamp == null ? null : endTimestamp.toLocalDateTime(),
-                rs.getString("status"),
-                rs.getObject("created_by", Integer.class),
                 rs.getString("discount_type"),
+                rs.getBigDecimal("discount_value"),
                 rs.getBigDecimal("min_order_value"),
                 rs.getObject("usage_limit", Integer.class),
+                rs.getInt("used_count"),
                 rs.getString("apply_scope"),
                 List.of(),
-                rs.getInt("used_count")
+                start == null ? null : start.toLocalDateTime(),
+                end == null ? null : end.toLocalDateTime(),
+                rs.getString("status"),
+                rs.getObject("created_by", Integer.class)
         );
     }
 }

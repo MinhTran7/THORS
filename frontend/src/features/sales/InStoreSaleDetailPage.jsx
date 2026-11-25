@@ -15,16 +15,11 @@ import {
   TableRow,
   Typography
 } from '@mui/material';
-import {
-  ArrowLeftOutlined,
-  CreditCardOutlined,
-  DollarOutlined,
-  PictureOutlined,
-  PrinterOutlined
-} from '@ant-design/icons';
+import { ArrowLeftOutlined, CreditCardOutlined, DollarOutlined, PictureOutlined, PrinterOutlined } from '@ant-design/icons';
 import { api } from '../../services/http';
 import { useCrumbs } from '../../layouts/crumbs';
 import ReceiptDialog from './ReceiptDialog';
+import { isCashMethod, money, splitDateTime, toReceiptItems } from './salesFormat';
 
 const C = {
   text: '#0F172A',
@@ -42,22 +37,6 @@ const C = {
   creamText: '#713F12'
 };
 
-function isCashMethod(method) {
-  return !method || method === 'CASH';
-}
-
-const money = (value) => `${Number(value || 0).toLocaleString('vi-VN')} đ`;
-
-function formatDetailDate(dateStr) {
-  if (!dateStr) return { date: '—', time: '' };
-  const d = new Date(dateStr);
-  const pad = (n) => String(n).padStart(2, '0');
-  return {
-    date: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`,
-    time: `${pad(d.getHours())}:${pad(d.getMinutes())}`
-  };
-}
-
 export default function InStoreSaleDetailPage() {
   const { orderId } = useParams();
   const navigate = useNavigate();
@@ -65,29 +44,18 @@ export default function InStoreSaleDetailPage() {
 
   useCrumbs(['Bán hàng tại quầy', 'Danh sách hóa đơn', 'Chi tiết hóa đơn']);
 
-  const { data, error, isLoading } = useSWR(
-    orderId ? `/sales/in-store/${orderId}` : null,
-    () => api(`/sales/in-store/${orderId}`)
-  );
+  const { data, error, isLoading } = useSWR(orderId ? `/sales/in-store/${orderId}` : null, () => api(`/sales/in-store/${orderId}`));
 
   const isCash = isCashMethod(data?.paymentMethod);
-  const { date, time } = formatDetailDate(data?.orderDate);
+  const { date, time } = splitDateTime(data?.orderDate);
 
   const items = data?.items || [];
 
-  const cartItems = items.map((item) => ({
-    key: item.orderItemId,
-    name: item.productName || 'Sản phẩm',
-    size: item.size,
-    color: item.color,
-    price: Number(item.unitPrice || 0),
-    quantity: item.quantity
-  }));
+  const cartItems = toReceiptItems(items);
 
   const saleData = data
     ? {
         invoiceNumber: data.invoiceNumber,
-        orderNumber: data.orderNumber,
         itemsAmount: data.subtotal,
         discountAmount: data.discountAmount,
         totalAmount: data.totalAmount,
@@ -100,9 +68,7 @@ export default function InStoreSaleDetailPage() {
     return (
       <Box sx={{ py: 10, textAlign: 'center' }}>
         <CircularProgress size={38} sx={{ color: C.cyan }} />
-        <Typography sx={{ mt: 2, color: C.muted, fontSize: 13.5 }}>
-          Đang tải thông tin chi tiết hóa đơn...
-        </Typography>
+        <Typography sx={{ mt: 2, color: C.muted, fontSize: 13.5 }}>Đang tải thông tin chi tiết hóa đơn...</Typography>
       </Box>
     );
   }
@@ -198,19 +164,13 @@ export default function InStoreSaleDetailPage() {
         >
           {/* Mã hóa đơn */}
           <Box>
-            <Typography sx={{ fontSize: 13, fontWeight: 500, color: C.muted, mb: 0.75 }}>
-              Mã hóa đơn
-            </Typography>
-            <Typography sx={{ fontSize: 14.5, fontWeight: 700, color: C.text }}>
-              {data.invoiceNumber || data.orderNumber}
-            </Typography>
+            <Typography sx={{ fontSize: 13, fontWeight: 500, color: C.muted, mb: 0.75 }}>Mã hóa đơn</Typography>
+            <Typography sx={{ fontSize: 14.5, fontWeight: 700, color: C.text }}>{data.invoiceNumber || data.orderNumber}</Typography>
           </Box>
 
           {/* Thời gian */}
           <Box>
-            <Typography sx={{ fontSize: 13, fontWeight: 500, color: C.muted, mb: 0.75 }}>
-              Thời gian
-            </Typography>
+            <Typography sx={{ fontSize: 13, fontWeight: 500, color: C.muted, mb: 0.75 }}>Thời gian</Typography>
             <Typography sx={{ fontSize: 14.5, fontWeight: 700, color: C.text }}>
               {date} · {time}
             </Typography>
@@ -218,22 +178,14 @@ export default function InStoreSaleDetailPage() {
 
           {/* Thu ngân */}
           <Box>
-            <Typography sx={{ fontSize: 13, fontWeight: 500, color: C.muted, mb: 0.75 }}>
-              Thu ngân
-            </Typography>
-            <Typography sx={{ fontSize: 14.5, fontWeight: 700, color: C.text }}>
-              {data.sellerName || '—'}
-            </Typography>
-            <Typography sx={{ fontSize: 12, color: C.subtle, mt: 0.25 }}>
-              Nhân viên bán hàng
-            </Typography>
+            <Typography sx={{ fontSize: 13, fontWeight: 500, color: C.muted, mb: 0.75 }}>Thu ngân</Typography>
+            <Typography sx={{ fontSize: 14.5, fontWeight: 700, color: C.text }}>{data.sellerName || '—'}</Typography>
+            <Typography sx={{ fontSize: 12, color: C.subtle, mt: 0.25 }}>Nhân viên bán hàng</Typography>
           </Box>
 
           {/* Phương thức - Trả về màu cũ chuẩn */}
           <Box>
-            <Typography sx={{ fontSize: 13, fontWeight: 500, color: C.muted, mb: 0.75 }}>
-              Phương thức
-            </Typography>
+            <Typography sx={{ fontSize: 13, fontWeight: 500, color: C.muted, mb: 0.75 }}>Phương thức</Typography>
             <Box
               sx={{
                 display: 'inline-flex',
@@ -249,11 +201,7 @@ export default function InStoreSaleDetailPage() {
                 letterSpacing: '0.01em'
               }}
             >
-              {isCash ? (
-                <DollarOutlined style={{ fontSize: 12 }} />
-              ) : (
-                <CreditCardOutlined style={{ fontSize: 12 }} />
-              )}
+              {isCash ? <DollarOutlined style={{ fontSize: 12 }} /> : <CreditCardOutlined style={{ fontSize: 12 }} />}
               <span>{isCash ? 'Tiền mặt' : 'Chuyển khoản'}</span>
             </Box>
           </Box>
@@ -271,18 +219,14 @@ export default function InStoreSaleDetailPage() {
         }}
       >
         <Box sx={{ p: 3, pb: 2 }}>
-          <Typography sx={{ fontSize: 16, fontWeight: 700, color: C.text }}>
-            Sản phẩm đã mua
-          </Typography>
+          <Typography sx={{ fontSize: 16, fontWeight: 700, color: C.text }}>Sản phẩm đã mua</Typography>
         </Box>
 
         <Box sx={{ overflowX: 'auto' }}>
           <Table>
             <TableHead>
               <TableRow sx={{ '& th': { borderBottom: `1px solid ${C.borderLight}`, py: 1.5 } }}>
-                <TableCell sx={{ color: C.muted, fontSize: 12.5, fontWeight: 500, pl: 3 }}>
-                  Sản phẩm
-                </TableCell>
+                <TableCell sx={{ color: C.muted, fontSize: 12.5, fontWeight: 500, pl: 3 }}>Sản phẩm</TableCell>
                 <TableCell sx={{ color: C.muted, fontSize: 12.5, fontWeight: 500 }} align="center">
                   Số lượng
                 </TableCell>
@@ -315,7 +259,7 @@ export default function InStoreSaleDetailPage() {
                   >
                     {/* Sản phẩm */}
                     <TableCell sx={{ pl: 3 }}>
-                      <Stack direction="row" spacing={2} alignItems="center">
+                      <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
                         <Box
                           sx={{
                             width: 48,
@@ -342,35 +286,25 @@ export default function InStoreSaleDetailPage() {
                           )}
                         </Box>
                         <Box>
-                          <Typography sx={{ fontSize: 14, fontWeight: 700, color: C.text }}>
-                            {item.productName || 'Sản phẩm'}
-                          </Typography>
-                          <Typography sx={{ fontSize: 12.5, color: C.muted, mt: 0.25 }}>
-                            {variantText}
-                          </Typography>
+                          <Typography sx={{ fontSize: 14, fontWeight: 700, color: C.text }}>{item.productName || 'Sản phẩm'}</Typography>
+                          <Typography sx={{ fontSize: 12.5, color: C.muted, mt: 0.25 }}>{variantText}</Typography>
                         </Box>
                       </Stack>
                     </TableCell>
 
                     {/* Số lượng */}
                     <TableCell align="center">
-                      <Typography sx={{ fontSize: 14, color: C.text, fontWeight: 500 }}>
-                        {item.quantity}
-                      </Typography>
+                      <Typography sx={{ fontSize: 14, color: C.text, fontWeight: 500 }}>{item.quantity}</Typography>
                     </TableCell>
 
                     {/* Đơn giá */}
                     <TableCell align="right">
-                      <Typography sx={{ fontSize: 14, color: C.text }}>
-                        {money(item.unitPrice)}
-                      </Typography>
+                      <Typography sx={{ fontSize: 14, color: C.text }}>{money(item.unitPrice)}</Typography>
                     </TableCell>
 
                     {/* Thành tiền */}
                     <TableCell align="right" sx={{ pr: 3 }}>
-                      <Typography sx={{ fontSize: 14, fontWeight: 600, color: C.text }}>
-                        {money(item.totalPrice)}
-                      </Typography>
+                      <Typography sx={{ fontSize: 14, fontWeight: 600, color: C.text }}>{money(item.totalPrice)}</Typography>
                     </TableCell>
                   </TableRow>
                 );
@@ -389,41 +323,27 @@ export default function InStoreSaleDetailPage() {
           p: 3
         }}
       >
-        <Typography sx={{ fontSize: 16, fontWeight: 700, color: C.text, mb: 2.5 }}>
-          Tổng kết hóa đơn
-        </Typography>
+        <Typography sx={{ fontSize: 16, fontWeight: 700, color: C.text, mb: 2.5 }}>Tổng kết hóa đơn</Typography>
 
         <Stack spacing={1.5}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Typography sx={{ fontSize: 14, color: C.muted }}>
-              Tổng tiền hàng
-            </Typography>
-            <Typography sx={{ fontSize: 14, fontWeight: 600, color: C.text }}>
-              {money(data.subtotal)}
-            </Typography>
+            <Typography sx={{ fontSize: 14, color: C.muted }}>Tổng tiền hàng</Typography>
+            <Typography sx={{ fontSize: 14, fontWeight: 600, color: C.text }}>{money(data.subtotal)}</Typography>
           </Box>
 
           {Number(data.discountAmount || 0) > 0 && (
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Typography sx={{ fontSize: 14, color: C.muted }}>
-                Giảm giá hóa đơn
-              </Typography>
-              <Typography sx={{ fontSize: 14, fontWeight: 600, color: C.text }}>
-                -{money(data.discountAmount)}
-              </Typography>
+              <Typography sx={{ fontSize: 14, color: C.muted }}>Giảm giá hóa đơn</Typography>
+              <Typography sx={{ fontSize: 14, fontWeight: 600, color: C.text }}>-{money(data.discountAmount)}</Typography>
             </Box>
           )}
 
           <Divider sx={{ borderColor: C.borderLight, my: 1 }} />
 
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Typography sx={{ fontSize: 16, fontWeight: 700, color: C.text }}>
-              Tổng thanh toán
-            </Typography>
+            <Typography sx={{ fontSize: 16, fontWeight: 700, color: C.text }}>Tổng thanh toán</Typography>
 
-            <Typography sx={{ fontSize: 24, fontWeight: 900, color: C.text }}>
-              {money(data.totalAmount)}
-            </Typography>
+            <Typography sx={{ fontSize: 24, fontWeight: 900, color: C.text }}>{money(data.totalAmount)}</Typography>
           </Box>
         </Stack>
       </Card>
@@ -434,7 +354,6 @@ export default function InStoreSaleDetailPage() {
         onClose={() => setReceiptOpen(false)}
         saleData={saleData}
         cartItems={cartItems}
-        customerName={data?.customerName || ''}
         sellerName={data?.sellerName || ''}
         completedAt={data?.orderDate}
         closeText="Đóng"

@@ -31,7 +31,6 @@ export default function EditAddressPage() {
   return (
     <AddressForm
       title="Sửa địa chỉ giao hàng"
-      subtitle="Cập nhật thông tin nhận hàng của bạn."
       submitLabel="Lưu thay đổi"
       initial={{
         recipientName: address.recipientName,

@@ -33,7 +33,6 @@ export default function ReceiptDialog({
   onClose,
   saleData,
   cartItems = [],
-  customerName = '',
   sellerName = '',
   completedAt,
   closeText = 'Bán đơn mới',
@@ -42,14 +41,9 @@ export default function ReceiptDialog({
 }) {
   if (!saleData) return null;
 
-  const displayCustomer = customerName.trim() || 'Khách mua tại quầy';
   const displaySeller = sellerName.trim() || '—';
-  const received = receivedAmount ?? saleData.receivedAmount ?? (saleData.paymentMethod === 'CASH' ? saleData.totalAmount : 0);
-  const change = changeAmount ?? saleData.changeAmount ?? 0;
-
-  function handlePrint() {
-    window.print();
-  }
+  const received = receivedAmount ?? (saleData.paymentMethod === 'CASH' ? saleData.totalAmount : 0);
+  const change = changeAmount ?? 0;
 
   return (
     <>
@@ -104,17 +98,20 @@ export default function ReceiptDialog({
       `}</style>
 
       <Dialog
+        className="pos-no-effects"
         open={open}
         onClose={onClose}
         fullWidth
         maxWidth="xs"
-        PaperProps={{
-          sx: {
-            width: '100%',
-            maxWidth: 420,
-            m: 1.5,
-            borderRadius: 3,
-            boxShadow: '0 8px 32px rgba(32,45,66,0.14)'
+        slotProps={{
+          paper: {
+            sx: {
+              width: '100%',
+              maxWidth: 420,
+              m: 1.5,
+              borderRadius: 3,
+              boxShadow: '0 8px 32px rgba(32,45,66,0.14)'
+            }
           }
         }}
       >
@@ -142,7 +139,7 @@ export default function ReceiptDialog({
               <ReceiptRow label="Số hóa đơn" value={saleData.invoiceNumber} />
               <ReceiptRow label="Thời gian" value={formatDateTime(completedAt)} />
               <ReceiptRow label="Thu ngân" value={displaySeller} />
-              <ReceiptRow label="Khách hàng" value={displayCustomer} />
+              <ReceiptRow label="Khách hàng" value="Khách mua tại quầy" />
             </Stack>
 
             <Divider sx={{ borderStyle: 'dashed', borderColor: C.border, mb: 1.25 }} />
@@ -205,7 +202,7 @@ export default function ReceiptDialog({
               )}
               <ReceiptRow
                 label="Trạng thái"
-                value={saleData.paymentStatus === 'PAID' || saleData.paymentStatus === 'SUCCESS' ? 'Đã thanh toán' : saleData.paymentStatus}
+                value={saleData.paymentStatus === 'PAID' ? 'Đã thanh toán' : saleData.paymentStatus}
               />
             </Stack>
 
@@ -229,14 +226,14 @@ export default function ReceiptDialog({
           <Button
             variant="contained"
             startIcon={<PrinterOutlined />}
-            onClick={handlePrint}
+            onClick={() => window.print()}
             sx={{
               ...buttonSx,
               flex: 1,
               py: 1,
               bgcolor: C.text,
               color: '#fff',
-              '&:hover': { bgcolor: '#2C3E55' }
+              '&:hover': { bgcolor: C.text }
             }}
           >
             In hóa đơn
@@ -252,7 +249,7 @@ export default function ReceiptDialog({
               py: 1,
               bgcolor: C.main,
               color: C.text,
-              '&:hover': { bgcolor: '#6BDCE7' }
+              '&:hover': { bgcolor: C.main }
             }}
           >
             {closeText}

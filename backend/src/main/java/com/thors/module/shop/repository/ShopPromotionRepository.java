@@ -35,7 +35,7 @@ public class ShopPromotionRepository {
         INNER JOIN product_detail pd
             ON pd.product_id = p.product_id AND pd.status = 'ACTIVE' AND pd.online_sales_enabled = 1
         WHERE pr.status = 'ACTIVE'
-          AND COALESCE(pr.min_order_value, 0) = 0
+          AND pr.promotion_type = 'PRODUCT_DISCOUNT'
           AND pr.start_date <= ?
           AND pr.end_date > ?
         GROUP BY p.product_id, p.product_name, c.category_name,

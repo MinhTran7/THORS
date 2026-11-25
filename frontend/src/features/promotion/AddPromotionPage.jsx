@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { createPromotion } from 'services/promotionService';
 import { getProducts } from 'services/productService';
 import { useCrumbs } from '../../layouts/crumbs';
-import PromotionForm, { emptyPromotion, isActive, KIND, productRows } from './PromotionForm';
+import PromotionForm, { emptyPromotion } from './PromotionForm';
+import { isActive, KIND, productRows } from './promotionFormat';
 
 export default function AddPromotionPage({ kind = 'PRODUCT' }) {
   const navigate = useNavigate();

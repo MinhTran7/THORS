@@ -50,7 +50,6 @@ public class ShippingAddressService {
         ShippingAddressRequest data = validate(request);
         addresses.update(userId, addressId, data);
         if (Boolean.TRUE.equals(data.isDefault())) {
-            addresses.clearDefault(userId);
             addresses.setDefault(userId, addressId);
         }
         return ShippingAddressResponse.from(find(userId, addressId));
@@ -84,9 +83,6 @@ public class ShippingAddressService {
         if (!phone.matches("0\\d{9}")) {
             throw new ApiException(400, "PHONE_INVALID", "Số điện thoại phải gồm 10 chữ số và bắt đầu bằng số 0.");
         }
-        if ((r.latitude() == null) != (r.longitude() == null)) {
-            throw new ApiException(400, "COORDINATES_INVALID", "Tọa độ bản đồ không hợp lệ.");
-        }
         return new ShippingAddressRequest(
                 text(r.recipientName(), "Họ và tên người nhận", 2, 100),
                 phone,
@@ -95,8 +91,6 @@ public class ShippingAddressService {
                 text(r.wardCode(), "Phường/Xã", 1, 20),
                 text(r.wardName(), "Phường/Xã", 1, 100),
                 text(r.addressDetail(), "Số nhà, tên đường", 2, 255),
-                r.latitude(),
-                r.longitude(),
                 r.isDefault());
     }
 

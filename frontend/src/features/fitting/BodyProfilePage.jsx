@@ -13,7 +13,7 @@ import {
 } from '@mui/material';
 import { useCrumbs } from 'layouts/crumbs';
 import { StoreAccountShell } from 'features/account/components/StoreAccount';
-import { C, cardSx, outlineButtonSx, primaryButtonSx } from 'features/customer/theme';
+import { C, cardSx, outlineButtonSx, primaryButtonSx } from 'features/shippingaddress/theme';
 import { deleteBodyProfile, getBodyProfile, saveBodyProfile } from './api';
 import StyleProfileCard from 'features/outfit/StyleProfileCard';
 

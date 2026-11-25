@@ -17,19 +17,13 @@ import {
   Tooltip,
   Typography
 } from '@mui/material';
-import {
-  CreditCardOutlined,
-  DollarOutlined,
-  EyeOutlined,
-  SearchOutlined,
-  ShoppingCartOutlined
-} from '@ant-design/icons';
+import { CreditCardOutlined, DollarOutlined, EyeOutlined, SearchOutlined, ShoppingCartOutlined } from '@ant-design/icons';
 import { FilterResetButton, Pager } from 'features/account/components/Blocks';
 import { api } from '../../services/http';
 import { useCrumbs } from '../../layouts/crumbs';
 import { useDebounced } from '../account/hooks';
+import { isCashMethod, money, splitDateTime } from './salesFormat';
 
-// Bảng màu chuẩn theo yêu cầu: chỉ dùng cyan #8EECF5 và cream #FFF7AE kết hợp nền/viền trung tính
 const C = {
   text: '#1E293B',
   muted: '#64748B',
@@ -43,22 +37,6 @@ const C = {
 };
 
 const PAGE_SIZE = 8;
-
-function isCashMethod(method) {
-  return !method || method === 'CASH';
-}
-
-const money = (value) => `${Number(value || 0).toLocaleString('vi-VN')} đ`;
-
-function formatReceiptDate(dateStr) {
-  if (!dateStr) return { date: '—', time: '' };
-  const d = new Date(dateStr);
-  const pad = (n) => String(n).padStart(2, '0');
-  return {
-    date: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`,
-    time: `${pad(d.getHours())}:${pad(d.getMinutes())}`
-  };
-}
 
 function buildQuery(params = {}) {
   const search = new URLSearchParams();
@@ -93,11 +71,7 @@ export default function InStoreSalesHistoryPage() {
   const debouncedSearch = useDebounced(q.trim(), 350);
 
   // Lấy danh sách thu ngân để phục vụ bộ lọc
-  const { data: sellersData } = useSWR(
-    '/sales/in-store/sellers',
-    () => api('/sales/in-store/sellers'),
-    { revalidateOnFocus: false }
-  );
+  const { data: sellersData } = useSWR('/sales/in-store/sellers', () => api('/sales/in-store/sellers'), { revalidateOnFocus: false });
   const sellers = sellersData || [];
 
   const params = {
@@ -114,11 +88,7 @@ export default function InStoreSalesHistoryPage() {
   const dateError = fromDate && toDate && fromDate > toDate ? 'Từ ngày không được sau đến ngày.' : '';
   const swrKey = dateError ? null : `/sales/in-store${queryStr}`;
 
-  const { data, error, isLoading } = useSWR(
-    swrKey,
-    (url) => api(url),
-    { keepPreviousData: true, revalidateOnFocus: false }
-  );
+  const { data, error, isLoading } = useSWR(swrKey, (url) => api(url), { keepPreviousData: true, revalidateOnFocus: false });
 
   const items = dateError ? [] : (data?.items ?? []);
   const total = dateError ? 0 : (data?.total ?? 0);
@@ -178,21 +148,21 @@ export default function InStoreSalesHistoryPage() {
       >
         {/* Tìm kiếm theo mã hóa đơn */}
         <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>
-            Tìm kiếm hóa đơn
-          </Typography>
+          <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>Tìm kiếm hóa đơn</Typography>
           <TextField
             fullWidth
             size="small"
             placeholder="Tìm theo mã hóa đơn..."
             value={q}
             onChange={(e) => handleSearchChange(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchOutlined style={{ color: '#94A3B8', fontSize: 16 }} />
-                </InputAdornment>
-              )
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchOutlined style={{ color: '#94A3B8', fontSize: 16 }} />
+                  </InputAdornment>
+                )
+              }
             }}
             sx={{
               '& .MuiOutlinedInput-root': {
@@ -209,9 +179,7 @@ export default function InStoreSalesHistoryPage() {
 
         {/* Lọc theo thu ngân */}
         <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>
-            Thu ngân
-          </Typography>
+          <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>Thu ngân</Typography>
           <Select
             fullWidth
             size="small"
@@ -247,9 +215,7 @@ export default function InStoreSalesHistoryPage() {
 
         {/* Lọc theo phương thức thanh toán */}
         <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>
-            Phương thức
-          </Typography>
+          <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>Phương thức</Typography>
           <Select
             fullWidth
             size="small"
@@ -283,18 +249,13 @@ export default function InStoreSalesHistoryPage() {
 
         {/* Từ ngày - Chặn tuyệt đối ngày tương lai */}
         <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>
-            Từ ngày
-          </Typography>
+          <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>Từ ngày</Typography>
           <TextField
             fullWidth
             size="small"
             type="date"
             value={fromDate}
             onChange={(e) => handleFromDateChange(e.target.value)}
-            inputProps={{
-              max: toDate && toDate < today ? toDate : today
-            }}
             slotProps={{
               htmlInput: {
                 max: toDate && toDate < today ? toDate : today
@@ -315,19 +276,13 @@ export default function InStoreSalesHistoryPage() {
 
         {/* Đến ngày - Chặn tuyệt đối ngày tương lai */}
         <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>
-            Đến ngày
-          </Typography>
+          <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>Đến ngày</Typography>
           <TextField
             fullWidth
             size="small"
             type="date"
             value={toDate}
             onChange={(e) => handleToDateChange(e.target.value)}
-            inputProps={{
-              min: fromDate || undefined,
-              max: today
-            }}
             slotProps={{
               htmlInput: {
                 min: fromDate || undefined,
@@ -370,8 +325,21 @@ export default function InStoreSalesHistoryPage() {
         <Box sx={{ overflowX: 'auto' }}>
           <Table size="medium" sx={{ tableLayout: 'fixed', minWidth: 820 }}>
             <TableHead>
-              <TableRow sx={{ '& th': { borderBottom: `1px solid ${C.border}`, py: 1.75, bgcolor: '#F8FAFC', color: '#475569', fontSize: 13, fontWeight: 600 } }}>
-                <TableCell align="center" sx={{ width: 72 }}>STT</TableCell>
+              <TableRow
+                sx={{
+                  '& th': {
+                    borderBottom: `1px solid ${C.border}`,
+                    py: 1.75,
+                    bgcolor: '#F8FAFC',
+                    color: '#475569',
+                    fontSize: 13,
+                    fontWeight: 600
+                  }
+                }}
+              >
+                <TableCell align="center" sx={{ width: 72 }}>
+                  STT
+                </TableCell>
                 <TableCell>Mã hóa đơn</TableCell>
                 <TableCell>Thời gian</TableCell>
                 <TableCell>Thu ngân</TableCell>
@@ -386,18 +354,14 @@ export default function InStoreSalesHistoryPage() {
                 <TableRow>
                   <TableCell colSpan={7} sx={{ py: 8, textAlign: 'center' }}>
                     <CircularProgress size={32} sx={{ color: C.cyan }} />
-                    <Typography sx={{ mt: 1.5, color: C.muted, fontSize: 13 }}>
-                      Đang tải danh sách hóa đơn...
-                    </Typography>
+                    <Typography sx={{ mt: 1.5, color: C.muted, fontSize: 13 }}>Đang tải danh sách hóa đơn...</Typography>
                   </TableCell>
                 </TableRow>
               ) : !items.length && (dateError || error) ? null : !items.length ? (
                 <TableRow>
                   <TableCell colSpan={7} sx={{ py: 8, textAlign: 'center' }}>
                     <ShoppingCartOutlined style={{ fontSize: 36, color: '#CBD5E1' }} />
-                    <Typography sx={{ mt: 1, fontSize: 14, fontWeight: 700, color: C.text }}>
-                      Chưa có hóa đơn nào
-                    </Typography>
+                    <Typography sx={{ mt: 1, fontSize: 14, fontWeight: 700, color: C.text }}>Chưa có hóa đơn nào</Typography>
                     <Typography sx={{ fontSize: 12, color: C.muted, mt: 0.5 }}>
                       Các hóa đơn bán hàng trực tiếp tại quầy sẽ xuất hiện ở đây.
                     </Typography>
@@ -406,7 +370,7 @@ export default function InStoreSalesHistoryPage() {
               ) : (
                 items.map((sale, i) => {
                   const isCash = isCashMethod(sale.paymentMethod);
-                  const { date, time } = formatReceiptDate(sale.orderDate);
+                  const { date, time } = splitDateTime(sale.orderDate);
 
                   return (
                     <TableRow
@@ -430,29 +394,21 @@ export default function InStoreSalesHistoryPage() {
 
                       {/* Thời gian */}
                       <TableCell>
-                        <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text }}>
-                          {date}
-                        </Typography>
-                        <Typography sx={{ fontSize: 11.5, color: '#94A3B8' }}>
-                          {time}
-                        </Typography>
+                        <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text }}>{date}</Typography>
+                        <Typography sx={{ fontSize: 11.5, color: '#94A3B8' }}>{time}</Typography>
                       </TableCell>
 
                       {/* Thu ngân */}
                       <TableCell>
-                        <Typography sx={{ fontSize: 13, color: C.text, fontWeight: 500 }}>
-                          {sale.sellerName || '—'}
-                        </Typography>
+                        <Typography sx={{ fontSize: 13, color: C.text, fontWeight: 500 }}>{sale.sellerName || '—'}</Typography>
                       </TableCell>
 
                       {/* Tổng tiền */}
                       <TableCell>
-                        <Typography sx={{ fontWeight: 800, fontSize: 14, color: C.text }}>
-                          {money(sale.totalAmount)}
-                        </Typography>
+                        <Typography sx={{ fontWeight: 800, fontSize: 14, color: C.text }}>{money(sale.totalAmount)}</Typography>
                       </TableCell>
 
-                      {/* Phương thức - Dùng chuẩn màu cyan #8EECF5 và cream #FFF7AE */}
+                      {/* Phương thức */}
                       <TableCell>
                         <Box
                           sx={{
@@ -469,11 +425,7 @@ export default function InStoreSalesHistoryPage() {
                             letterSpacing: '0.01em'
                           }}
                         >
-                          {isCash ? (
-                            <DollarOutlined style={{ fontSize: 12 }} />
-                          ) : (
-                            <CreditCardOutlined style={{ fontSize: 12 }} />
-                          )}
+                          {isCash ? <DollarOutlined style={{ fontSize: 12 }} /> : <CreditCardOutlined style={{ fontSize: 12 }} />}
                           <span>{isCash ? 'Tiền mặt' : 'Chuyển khoản'}</span>
                         </Box>
                       </TableCell>
@@ -505,7 +457,15 @@ export default function InStoreSalesHistoryPage() {
           </Table>
         </Box>
 
-        <Pager page={page} totalPages={totalPages} total={total} size={PAGE_SIZE} noun="hóa đơn" onPage={setPage} sx={{ borderTop: `1px solid ${C.borderLight}` }} />
+        <Pager
+          page={page}
+          totalPages={totalPages}
+          total={total}
+          size={PAGE_SIZE}
+          noun="hóa đơn"
+          onPage={setPage}
+          sx={{ borderTop: `1px solid ${C.borderLight}` }}
+        />
       </Box>
     </Box>
   );

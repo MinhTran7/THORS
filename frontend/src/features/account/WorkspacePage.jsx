@@ -42,7 +42,7 @@ import {
 
 import { useAuth } from 'features/auth/AuthProvider';
 import { getDashboardSummary } from '../../services/dashboardService';
-import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../customer/theme';
+import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../shippingaddress/theme';
 
 // Màu bổ sung theo Design System (PromotionPage.jsx)
 const T = {

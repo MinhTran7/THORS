@@ -18,7 +18,7 @@ import {
   Typography
 } from '@mui/material';
 import { getProducts } from 'services/productService';
-import { C, cardSx, outlineButtonSx, primaryButtonSx } from 'features/customer/theme';
+import { C, cardSx, outlineButtonSx, primaryButtonSx } from 'features/shippingaddress/theme';
 import { applySizeChartToCategory, copySizeChart, getSizeChart, getStandardSizeChart, saveSizeChart } from './api';
 
 // Các cặp số đo trong bảng size (khớp cột product_size_chart)
