@@ -16,6 +16,7 @@ const ROUTE_CRUMBS = [
   ['/orders/:id', ['Đơn hàng', 'Chi tiết đơn hàng']],
   ['/addresses', ['Tài khoản', 'Địa chỉ của tôi']],
   ['/body-profile', ['Tài khoản', 'Số đo của tôi']],
+  ['/try-on-history', ['Tài khoản', 'Ảnh mặc thử của tôi']],
   ['/outfit', ['Phối đồ cho bạn']],
   ['/accounts', ['Tài khoản']],
   ['/system-log', ['Nhật ký hệ thống']],

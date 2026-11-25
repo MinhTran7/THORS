@@ -343,7 +343,8 @@ function StoreHeader({ categories }) {
         // Đơn hàng nằm ngay trên header; thông báo xem ở chuông, khuyến mãi ở menu "Khuyến mãi"
         ['/profile', 'Tài khoản của tôi'],
         ['/addresses', 'Địa chỉ giao hàng'],
-        ['/body-profile', 'Số đo của tôi']
+        ['/body-profile', 'Số đo của tôi'],
+        ['/try-on-history', 'Ảnh mặc thử của tôi']
       ]
     : [
         ['/workspace', 'Trang quản lý'],

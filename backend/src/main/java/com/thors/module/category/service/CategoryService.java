@@ -13,6 +13,7 @@ import java.util.Set;
 import org.springframework.dao.DataIntegrityViolationException;
 import com.thors.common.ApiException;
 import com.thors.module.category.dto.UpdateCategoryRequest;
+import com.thors.module.category.dto.TransferCategoryProductsRequest;
 
 /**
  * Danh mục nhiều cấp (không giới hạn): danh mục gốc (vd "Giày") → con (vd "Giày nữ") → con của con (vd "Giày cao gót").
@@ -51,8 +52,9 @@ public class CategoryService {
     }
 
 
+    /** Tạo danh mục, trả về danh mục vừa tạo (có categoryId) cho POST /api/categories. */
     @Transactional
-    public void createCategory(CreateCategoryRequest request) {
+    public Category createCategory(CreateCategoryRequest request) {
 
         // 1. Kiểm tra dữ liệu gửi lên
         if (request == null) {
@@ -88,13 +90,14 @@ public class CategoryService {
             validateParent(parentId, null);
         }
 
-        // 6. Lưu danh mục
+        // 6. Lưu danh mục, lấy categoryId tự tăng
+        int categoryId;
         if (parentId == null && targetGroup == null) {
-            categoryRepository.insert(categoryName, description);
+            categoryId = categoryRepository.insert(categoryName, description);
         } else {
             requireHierarchySupport();
             try {
-                categoryRepository.insert(categoryName, description, parentId, targetGroup);
+                categoryId = categoryRepository.insert(categoryName, description, parentId, targetGroup);
             } catch (DataIntegrityViolationException e) {
                 throw customTargetUnavailable(targetGroup, e);
             }
@@ -104,6 +107,19 @@ public class CategoryService {
         if (icon != null) {
             categoryRepository.updateIconByName(categoryName, icon);
         }
+
+        // 8. Đọc lại dòng vừa tạo (có sẵn parentName, icon mặc định...); không đọc được thì dựng từ dữ liệu đã lưu
+        return categoryRepository.findById(categoryId).orElseGet(() -> {
+            Category category = new Category();
+            category.setCategoryId(categoryId);
+            category.setCategoryName(categoryName);
+            category.setDescription(description);
+            category.setStatus("ACTIVE");
+            category.setParentId(parentId);
+            category.setTargetGroup(targetGroup);
+            category.setIcon(icon);
+            return category;
+        });
     }
 
 
@@ -254,6 +270,56 @@ public class CategoryService {
                     "Không tìm thấy danh mục."
             );
         }
+    }
+
+    /**
+     * Chuyển toàn bộ sản phẩm gắn trực tiếp vào danh mục nguồn sang một danh mục lá đang hoạt động
+     * (dùng khi danh mục có sản phẩm rồi mới được thêm danh mục con -> sản phẩm bị "kẹt" ở danh mục cha).
+     */
+    @Transactional
+    public Map<String, Object> transferProducts(int sourceCategoryId, TransferCategoryProductsRequest request) {
+        if (request == null || request.getTargetCategoryId() == null) {
+            throw new ApiException(400, "TARGET_CATEGORY_REQUIRED", "Vui lòng chọn danh mục đích.");
+        }
+
+        int targetCategoryId = request.getTargetCategoryId();
+        if (sourceCategoryId == targetCategoryId) {
+            throw new ApiException(400, "CANNOT_TRANSFER_TO_SAME_CATEGORY",
+                    "Danh mục đích phải khác danh mục hiện tại.");
+        }
+
+        // 1. Danh mục nguồn
+        categoryRepository.findById(sourceCategoryId)
+                .orElseThrow(() -> new ApiException(404, "CATEGORY_NOT_FOUND", "Không tìm thấy danh mục nguồn."));
+
+        // 2. Danh mục đích: đang hoạt động và là danh mục lá (không có danh mục con)
+        Category target = categoryRepository.findById(targetCategoryId)
+                .orElseThrow(() -> new ApiException(404, "TARGET_CATEGORY_NOT_FOUND", "Không tìm thấy danh mục đích."));
+
+        if (!"ACTIVE".equals(target.getStatus())) {
+            throw new ApiException(400, "TARGET_CATEGORY_INACTIVE",
+                    "Danh mục đích \"" + target.getCategoryName() + "\" đang ngưng hoạt động.");
+        }
+
+        if (categoryRepository.countChildren(targetCategoryId) > 0) {
+            throw new ApiException(400, "TARGET_CATEGORY_HAS_CHILDREN",
+                    "Danh mục \"" + target.getCategoryName()
+                            + "\" là danh mục cha. Hãy chọn một danh mục con (danh mục lá).");
+        }
+
+        // 3. Chuyển
+        int movedCount = categoryRepository.transferProducts(sourceCategoryId, targetCategoryId);
+        if (movedCount == 0) {
+            throw new ApiException(409, "NO_PRODUCTS_TO_TRANSFER",
+                    "Danh mục này không còn sản phẩm nào để chuyển.");
+        }
+
+        return Map.of(
+                "movedCount", movedCount,
+                "sourceCategoryId", sourceCategoryId,
+                "targetCategoryId", targetCategoryId,
+                "targetCategoryName", target.getCategoryName()
+        );
     }
 
     // ==========================================

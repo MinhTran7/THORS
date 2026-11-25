@@ -36,6 +36,10 @@ public class CategoryMapper implements RowMapper<Category> {
         if (hasColumn(meta, "child_count")) {
             category.setChildCount(rs.getInt("child_count"));
         }
+        // Số sản phẩm gắn trực tiếp (trang Danh mục khỏi phải tải toàn bộ sản phẩm về để đếm)
+        if (hasColumn(meta, "product_count")) {
+            category.setProductCount(rs.getInt("product_count"));
+        }
         // Cột icon chỉ có khi đã chạy migration 2026-11-11_category_icon.sql
         if (hasColumn(meta, "icon")) {
             category.setIcon(rs.getString("icon"));

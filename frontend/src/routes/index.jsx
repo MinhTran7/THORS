@@ -61,6 +61,7 @@ import AddAddressPage from 'features/customer/AddAddressPage';
 import EditAddressPage from 'features/customer/EditAddressPage';
 // Số đo cơ thể (gợi ý size / thử đồ ảo)
 import BodyProfilePage from 'features/fitting/BodyProfilePage';
+import TryOnHistoryPage from 'features/tryon/TryOnHistoryPage';
 import OutfitPage from 'features/outfit/OutfitPage';
 
 // Shop management
@@ -141,7 +142,9 @@ export default createBrowserRouter([
               { path: '/addresses', element: <CustomerAddressPage /> },
               { path: '/addresses/new', element: <AddAddressPage /> },
               { path: '/addresses/:id/edit', element: <EditAddressPage /> },
-              { path: '/body-profile', element: <BodyProfilePage /> }
+              { path: '/body-profile', element: <BodyProfilePage /> },
+              // Ảnh mặc thử bằng AI đã tạo (module tryon)
+              { path: '/try-on-history', element: <TryOnHistoryPage /> }
             ]
           },
           {

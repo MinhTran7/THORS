@@ -3,6 +3,9 @@ import { api } from 'services/http';
 // Cửa hàng: danh sách dịp / phong cách + phối đồ
 export const getOutfitOptions = () => api('/shop/outfits/options');
 export const suggestOutfits = (body) => api('/shop/outfits/suggest', { method: 'POST', body });
+// "Đổi món": các món thay thế cho một vai trò (TOP / BOTTOM / DRESS / SHOES) để khách tự chọn
+export const outfitAlternatives = (outfit, role, currentProductId) =>
+  api('/shop/outfits/alternatives', { method: 'POST', body: { outfit, role, currentProductId } });
 
 // Quản trị: thẻ dịp mặc / phong cách của sản phẩm
 export const getProductStyle = (productId) => api(`/products/${productId}/style`);

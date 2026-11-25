@@ -132,9 +132,9 @@ public class SecurityConfig {
                                                 .requestMatchers("/api/dashboard/**")
                                                 .hasAnyRole("OWNER", "FAMILY_MEMBER")
                                                 // Xem danh sách/chi tiết sản phẩm quản trị (gồm sản phẩm ẩn, tồn thật):
-                                                // Owner, Family Member (POS, Facebook, khuyến mãi). Khách dùng /api/shop/**
+                                                // Owner, Family Member, Staff (POS, Facebook, khuyến mãi, tra cứu kho). Khách dùng /api/shop/**
                                                 .requestMatchers(HttpMethod.GET, "/api/products", "/api/products/**")
-                                                .hasAnyRole("OWNER", "FAMILY_MEMBER")
+                                                .hasAnyRole("OWNER", "FAMILY_MEMBER", "STAFF")
                                                 // Tạo danh mục: cả Family Member (hộp thoại tạo nhanh khi lập phiếu kho)
                                                 .requestMatchers(HttpMethod.POST, "/api/categories")
                                                 .hasAnyRole("OWNER", "FAMILY_MEMBER")

@@ -15,6 +15,9 @@ public class Category {
     private String targetGroup;
     // Số danh mục con (chỉ có ý nghĩa với danh mục gốc)
     private int childCount;
+
+    /** Số sản phẩm gắn trực tiếp vào danh mục (đếm bằng SQL, không gồm danh mục con). */
+    private int productCount;
     // Khóa icon tự chọn (null = icon mặc định); cần migration 2026-11-11_category_icon.sql
     private String icon;
 
@@ -83,6 +86,14 @@ public class Category {
 
     public void setChildCount(int childCount) {
         this.childCount = childCount;
+    }
+
+    public int getProductCount() {
+        return productCount;
+    }
+
+    public void setProductCount(int productCount) {
+        this.productCount = productCount;
     }
 
     public String getIcon() {

@@ -32,6 +32,7 @@ const CUSTOMER_STOREFRONT_PATHS = [
   '/addresses/new',
   '/addresses/:id/edit',
   '/body-profile',
+  '/try-on-history',
   '/promotions'
 ];
 

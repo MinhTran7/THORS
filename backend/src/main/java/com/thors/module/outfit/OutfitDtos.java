@@ -43,6 +43,26 @@ public final class OutfitDtos {
             String sizeNote) {
     }
 
+    /**
+     * "Đổi món": khách tự chọn món thay thế cho một vai trò trong bộ đang xem.
+     *
+     * @param outfit điều kiện phối đồ như lúc gợi ý; keepDetailIds = các món còn lại của bộ
+     * @param role vai trò cần đổi: TOP, BOTTOM, DRESS, SHOES
+     * @param currentProductId món đang mặc ở vai trò đó (không hiện lại trong danh sách)
+     */
+    public record AlternativesRequest(OutfitRequest outfit, String role, Integer currentProductId) {
+    }
+
+    /**
+     * Một món thay thế.
+     *
+     * @param newTotal tổng tiền cả bộ nếu chọn món này
+     * @param withinBudget còn trong ngân sách không (vượt thì vẫn hiện để khách cân nhắc)
+     * @param matchesOccasion hợp dịp đang chọn
+     */
+    public record Alternative(OutfitItem item, long newTotal, boolean withinBudget, boolean matchesOccasion) {
+    }
+
     /** Một bộ: các món, tổng tiền, tiền còn dư so với ngân sách, lý do gợi ý. */
     public record OutfitView(List<OutfitItem> items, long total, long remaining, List<String> reasons) {
     }
