@@ -9,14 +9,22 @@ import { api, post } from 'services/http';
 import { useAuth } from '../AuthProvider';
 import { safeReturn } from '../validation';
 export default function VerifyPage() {
-  const [context, setContext] = useState(null);
-  const [seconds, setSeconds] = useState(60);
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  // Đến từ trang đăng ký: dùng luôn kết quả bước 1.22, không gọi lại /otp/context.
+  const passed = location.state?.challenge || null;
+  const [context, setContext] = useState(passed);
+  const [seconds, setSeconds] = useState(passed ? passed.resendSeconds : 60);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
   const { reload } = useAuth();
   useEffect(() => {
+    if (passed) {
+      // Xóa dữ liệu mang theo khỏi lịch sử: F5 sẽ hỏi lại server cho đúng đồng hồ đếm ngược.
+      navigate(location.pathname + location.search, { replace: true, state: null });
+      return;
+    }
+    // F5, hoặc mở từ đăng nhập / quên mật khẩu: hỏi server thông tin lần gửi mã đang lưu trong session.
     api('/auth/otp/context')
       .then((c) => {
         setContext(c);

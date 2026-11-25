@@ -191,32 +191,6 @@ try {
           unheld_pending: [],
           incoming: [{ order_id: 5, order_code: 'PD00005', supplier: 'NCC A', ordered: 90, received: 80, remaining: 10 }]
         });
-      if (endpoint === '/api/warehouse/units') {
-        const unit = (seq, status, extra) => ({
-          unit_id: seq,
-          serial_code: `TH000006-${String(seq).padStart(4, '0')}`,
-          seq,
-          status,
-          detail_id: 6,
-          product_name: 'Áo baby doll',
-          color: 'Trắng',
-          size: 'M',
-          ...extra
-        });
-        const all = [
-          unit(1, 'SOLD', { order_id: 60, order_number: 'ORD-1', out_at: '2026-11-10T08:00:00' }),
-          unit(2, 'IN_STOCK', { location: 'B2', in_receipt_id: 6, printed_at: '2026-11-12T08:00:00' }),
-          unit(3, 'IN_STOCK', { location: null })
-        ];
-        const status = new URL(request.url()).searchParams.get('status');
-        return json({
-          units: all.filter((u) => !status || u.status === status),
-          truncated: false,
-          counts: { IN_STOCK: 2, SOLD: 1 },
-          unprinted: 1
-        });
-      }
-      if (endpoint === '/api/warehouse/units/printed') return json({ updated: request.postDataJSON().unitIds.length });
       if (endpoint === '/api/warehouse/inventory/6/threshold') return json({ detail_id: 6, min_stock_quantity: request.postDataJSON().min });
       if (endpoint === '/api/warehouse/history/6')
         return json({
@@ -321,20 +295,13 @@ try {
   await page.waitForFunction(() => true);
   await delay(300);
   assert.deepEqual(calls.find((c) => c.endpoint === '/api/warehouse/inventory/6/threshold')?.body, { min: 0 }, 'threshold 0 is sent as 0, not cleared');
-  // Mã từng chiếc: serial trong kho, lọc theo trạng thái, in lại tem chưa in.
-  await detail.getByRole('tab', { name: /Mã từng chiếc/ }).click();
-  await detail.getByText('TH000006-0002').waitFor();
-  await detail.getByText('Chưa xếp').waitFor();
-  assert.equal(await detail.getByText('TH000006-0001').count(), 0, 'đang lọc Trong kho');
-  assert.ok(calls.some((c) => c.endpoint === '/api/warehouse/units' && c.query.status === 'IN_STOCK' && c.query.detail === '6'));
-  await detail.getByRole('button', { name: 'In tem chưa in (1)' }).click();
-  const unitPrint = page.getByRole('dialog', { name: 'In tem serial (mỗi chiếc một tem)' });
-  await unitPrint.getByText('TH000006-0003', { exact: true }).waitFor();
-  await unitPrint.getByRole('button', { name: 'Đóng', exact: true }).click();
-  await unitPrint.waitFor({ state: 'hidden' });
-  await detail.getByRole('button', { name: 'Đã bán (1)' }).click();
-  await detail.getByRole('link', { name: 'ORD-1' }).waitFor();
-  await page.screenshot({ path: path.join(artifacts, 'inventory-units.png'), fullPage: true });
+  // Mỗi biến thể một mã chung: In tem mở hộp thoại in tem mã vạch (N chiếc = N tem giống nhau), không còn tab mã từng chiếc.
+  assert.equal(await detail.getByRole('tab', { name: /Mã từng chiếc/ }).count(), 0);
+  await detail.getByRole('button', { name: 'In tem', exact: true }).click();
+  const labelPrint = page.getByRole('dialog', { name: 'In tem mã vạch' });
+  await labelPrint.getByText('TH000006', { exact: true }).waitFor();
+  await labelPrint.getByRole('button', { name: 'Đóng', exact: true }).click();
+  await labelPrint.waitFor({ state: 'hidden' });
   await detail.getByRole('tab', { name: /Đơn giữ/ }).click();
   await detail.getByText('ORD-1').waitFor();
   await detail.getByText('PD00005').waitFor();

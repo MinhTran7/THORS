@@ -90,6 +90,13 @@ export const updateCategory = (categoryId, data) => {
   });
 };
 
+// Chuyển toàn bộ sản phẩm gắn trực tiếp của danh mục nguồn sang một danh mục lá
+export const transferProducts = (sourceCategoryId, targetCategoryId) => {
+  return post(`/categories/${sourceCategoryId}/transfer-products`, {
+    targetCategoryId: Number(targetCategoryId)
+  });
+};
+
 //status category
 export const changeCategoryStatus = (categoryId, status) => {
   return api(`/categories/${categoryId}/status`, {

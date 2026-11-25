@@ -7,6 +7,7 @@ import com.thors.module.fitting.dto.SizeRecommendation;
 import com.thors.module.fitting.repository.SizeChartRepository;
 import com.thors.module.fitting.service.SizeGuideService;
 import com.thors.module.outfit.OutfitComposer.Candidate;
+import com.thors.module.outfit.OutfitDtos.Alternative;
 import com.thors.module.outfit.OutfitDtos.OutfitItem;
 import com.thors.module.outfit.OutfitDtos.OutfitRequest;
 import com.thors.module.outfit.OutfitDtos.OutfitResponse;
@@ -36,6 +37,8 @@ public class OutfitService {
     private static final long MIN_BUDGET = 50_000;
     private static final long MAX_BUDGET = 100_000_000;
     private static final int MAX_OUTFITS = 5;
+    /** Số món thay thế tối đa cho khách chọn khi "Đổi món". */
+    private static final int MAX_ALTERNATIVES = 12;
 
     private final OutfitRepository repo;
     private final ShopRepository shop;
@@ -49,8 +52,60 @@ public class OutfitService {
         this.sizes = sizes;
     }
 
+    /** Các món đã lọc (còn hàng, đúng giới tính, size, màu) + món khách đang giữ + phong cách thích. */
+    private record Pool(List<Candidate> candidates, Map<Role, Candidate> locked, Set<String> liked, boolean usedBody) {
+    }
+
     /** @param actor khách đang đăng nhập (null = khách vãng lai) */
     public OutfitResponse suggest(OutfitRequest r, Account actor) {
+        Pool pool = pool(r, actor);
+        List<Candidate> candidates = pool.candidates();
+        Map<Role, Candidate> locked = pool.locked();
+        List<OutfitComposer.Outfit> outfits = OutfitComposer.compose(candidates, r.occasion(), pool.liked(), r.budget(),
+                locked, MAX_OUTFITS);
+        boolean usedBody = pool.usedBody();
+        if (outfits.isEmpty()) {
+            long cheapest = OutfitComposer.cheapestTotal(candidates, locked);
+            String message = cheapest < 0
+                    ? "Cửa hàng chưa có đủ sản phẩm phù hợp để phối một bộ (cần áo + quần, hoặc đầm)."
+                    : cheapest > r.budget()
+                            ? "Chưa có bộ nào trong ngân sách " + vnd(r.budget()) + ". Bộ rẻ nhất khoảng " + vnd(cheapest) + "."
+                            : "Chưa tìm được bộ phù hợp, hãy thử dịp hoặc ngân sách khác.";
+            return new OutfitResponse(List.of(), message, usedBody);
+        }
+        return new OutfitResponse(outfits.stream().map(o -> view(o, r, usedBody)).toList(), null, usedBody);
+    }
+
+    /**
+     * "Đổi món": các món khách có thể chọn thay cho một vai trò (áo / quần / đầm / giày) trong bộ đang xem,
+     * điểm cao nhất trước. keepDetailIds = các món còn lại của bộ (giữ nguyên).
+     *
+     * @param role vai trò cần đổi (TOP, BOTTOM, DRESS, SHOES)
+     * @param currentProductId món đang mặc ở vai trò đó (không đưa vào danh sách)
+     */
+    public List<Alternative> alternatives(OutfitRequest r, String role, Integer currentProductId, Account actor) {
+        Role wanted;
+        try {
+            wanted = Role.valueOf(role == null ? "" : role);
+        } catch (IllegalArgumentException e) {
+            throw invalid("Món cần đổi không hợp lệ.");
+        }
+        Pool pool = pool(r, actor);
+        long keptTotal = pool.locked().entrySet().stream()
+                .filter(e -> e.getKey() != wanted)
+                .mapToLong(e -> e.getValue().price()).sum();
+        return pool.candidates().stream()
+                .filter(c -> c.role() == wanted)
+                .filter(c -> currentProductId == null || c.productId() != currentProductId)
+                .sorted(Comparator.comparingDouble((Candidate c) -> -OutfitComposer.itemScore(c, r.occasion(), pool.liked()))
+                        .thenComparingLong(Candidate::price))
+                .limit(MAX_ALTERNATIVES)
+                .map(c -> new Alternative(item(c, pool.usedBody()), keptTotal + c.price(), keptTotal + c.price() <= r.budget(),
+                        c.occasions().contains(r.occasion())))
+                .toList();
+    }
+
+    private Pool pool(OutfitRequest r, Account actor) {
         if (r == null || r.occasion() == null || !OutfitTags.OCCASIONS.containsKey(r.occasion())) {
             throw invalid("Vui lòng chọn dịp mặc.");
         }
@@ -127,20 +182,12 @@ public class OutfitService {
             if (pick.isEmpty()) continue;
             candidates.add(candidate(p, image, role, pick.get(), occasions, tags, confidence));
         }
+        return new Pool(candidates, locked, liked, body != null);
+    }
 
-        List<OutfitComposer.Outfit> outfits = OutfitComposer.compose(candidates, r.occasion(), liked, r.budget(), locked,
-                MAX_OUTFITS);
-        boolean usedBody = body != null;
-        if (outfits.isEmpty()) {
-            long cheapest = OutfitComposer.cheapestTotal(candidates, locked);
-            String message = cheapest < 0
-                    ? "Cửa hàng chưa có đủ sản phẩm phù hợp để phối một bộ (cần áo + quần, hoặc đầm)."
-                    : cheapest > r.budget()
-                            ? "Chưa có bộ nào trong ngân sách " + vnd(r.budget()) + ". Bộ rẻ nhất khoảng " + vnd(cheapest) + "."
-                            : "Chưa tìm được bộ phù hợp, hãy thử dịp hoặc ngân sách khác.";
-            return new OutfitResponse(List.of(), message, usedBody);
-        }
-        return new OutfitResponse(outfits.stream().map(o -> view(o, r, usedBody)).toList(), null, usedBody);
+    private static OutfitItem item(Candidate c, boolean usedBody) {
+        return new OutfitItem(c.role().name(), OutfitTags.ROLE_LABELS.get(c.role()), c.productId(), c.productName(),
+                c.imageUrl(), c.detailId(), c.size(), c.color(), c.price(), sizeNote(c, usedBody));
     }
 
     private static boolean genderAllows(String gender, String target) {
@@ -162,9 +209,7 @@ public class OutfitService {
     }
 
     private static OutfitView view(OutfitComposer.Outfit o, OutfitRequest r, boolean usedBody) {
-        List<OutfitItem> items = o.items().stream().map(c -> new OutfitItem(c.role().name(),
-                OutfitTags.ROLE_LABELS.get(c.role()), c.productId(), c.productName(), c.imageUrl(), c.detailId(), c.size(),
-                c.color(), c.price(), sizeNote(c, usedBody))).toList();
+        List<OutfitItem> items = o.items().stream().map(c -> item(c, usedBody)).toList();
 
         List<String> reasons = new ArrayList<>();
         long matched = o.items().stream().filter(c -> c.occasions().contains(r.occasion())).count();

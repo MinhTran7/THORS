@@ -89,13 +89,19 @@ function normalizeAddress(a) {
 
 const fullAddress = (a) => [a.detail, a.ward, a.province].filter(Boolean).join(', ');
 
+// Mỗi tài khoản lưu tối đa 5 địa chỉ (khớp backend AddressService / ShippingAddressService)
+const MAX_ADDRESSES = 5;
+
 function validateAddress(f) {
   const e = {};
   if (!f.receiverName.trim()) e.receiverName = 'Vui lòng nhập họ tên người nhận';
+  else if (f.receiverName.trim().length < 2) e.receiverName = 'Họ tên cần ít nhất 2 ký tự';
   if (!/^(0|\+84)\d{9}$/.test(f.receiverPhone.trim())) e.receiverPhone = 'Số điện thoại không hợp lệ';
   if (!f.province) e.province = 'Vui lòng chọn tỉnh / thành phố';
   if (!f.ward) e.ward = 'Vui lòng chọn phường / xã';
   if (!f.address.trim()) e.address = 'Vui lòng nhập địa chỉ cụ thể';
+  // Khớp ràng buộc bảng shipping_address: địa chỉ cụ thể ít nhất 2 ký tự (vd. "12 Lê Lợi")
+  else if (f.address.trim().length < 2) e.address = 'Địa chỉ cụ thể cần ít nhất 2 ký tự (số nhà, tên đường)';
   return e;
 }
 
@@ -252,13 +258,24 @@ export default function CheckoutPage() {
   const [openAddressDialog, setOpenAddressDialog] = useState(false);
   const [isCreatingAddress, setIsCreatingAddress] = useState(false);
   const [savingAddress, setSavingAddress] = useState(false);
+  // Lỗi lưu địa chỉ mới: hiện trong hộp thoại địa chỉ, đóng hộp thoại là xoá (không hiện cạnh nút Đặt hàng)
+  const [addressError, setAddressError] = useState('');
+
+  const closeAddressDialog = () => {
+    if (savingAddress) return;
+    setOpenAddressDialog(false);
+    setIsCreatingAddress(false);
+    setAddressError('');
+  };
 
   const handleSaveNewAddress = async () => {
     const found = validateAddress(addr);
     setErrors(found);
     if (Object.keys(found).length) return;
 
+    setAddressError('');
     setSavingAddress(true);
+    setAddressError('');
     try {
       const payload = {
         recipientName: addr.receiverName.trim(),
@@ -283,7 +300,7 @@ export default function CheckoutPage() {
       setIsCreatingAddress(false);
       setOpenAddressDialog(false);
     } catch (e) {
-      setSubmitError(e.message || 'Không thể lưu địa chỉ');
+      setAddressError(e.message || 'Không thể lưu địa chỉ');
     } finally {
       setSavingAddress(false);
     }
@@ -406,7 +423,8 @@ export default function CheckoutPage() {
         };
         if (saveAddress) {
           
-          const saved = await api('/addresses', { method: 'POST', body: { ...fields, isDefault: addresses.length === 0 } });
+          // Lưu không được (vd. đã đủ 5 địa chỉ) thì vẫn đặt hàng bằng địa chỉ vừa nhập, chỉ là không lưu lại
+          const saved = await api('/addresses', { method: 'POST', body: { ...fields, isDefault: addresses.length === 0 } }).catch(() => null);
           addressPart = saved?.id != null ? { shippingAddressId: saved.id } : { shippingAddress: fields };
         } else {
           addressPart = { shippingAddress: fields };
@@ -1009,10 +1027,7 @@ export default function CheckoutPage() {
       </Dialog>
       <Dialog
         open={openAddressDialog}
-        onClose={() => {
-          setOpenAddressDialog(false);
-          setIsCreatingAddress(false);
-        }}
+        onClose={closeAddressDialog}
         maxWidth="xs"
         fullWidth
         PaperProps={{
@@ -1036,21 +1051,16 @@ export default function CheckoutPage() {
               {isCreatingAddress ? 'Thêm địa chỉ mới' : 'Địa chỉ nhận hàng'}
             </Typography>
           </Stack>
-          <IconButton
-            size="small"
-            onClick={() => {
-              setOpenAddressDialog(false);
-              setIsCreatingAddress(false);
-            }}
-            sx={{ color: '#94A3B8' }}
-          >
+          <IconButton size="small" onClick={closeAddressDialog} sx={{ color: '#94A3B8' }}>
             <CloseOutlined style={{ fontSize: 14 }} />
           </IconButton>
         </DialogTitle>
 
         <DialogContent sx={{ p: 2, px: 2.5 }}>
           {isCreatingAddress ? (
-            newAddressForm
+            <>
+              {newAddressForm}
+            </>
           ) : addresses.length === 0 ? (
             <Box sx={{ textAlign: 'center', py: 4 }}>
               <Typography sx={{ fontSize: 14, color: '#6B7280' }}>
@@ -1124,6 +1134,12 @@ export default function CheckoutPage() {
           )}
         </DialogContent>
 
+        {isCreatingAddress && addressError && (
+          <Alert severity="error" sx={{ mx: 2, mb: 1.5 }}>
+            {addressError}
+          </Alert>
+        )}
+
         <DialogActions sx={{ p: 1.5, px: 2, borderTop: '1px solid #F1F5F9' }}>
           {isCreatingAddress ? (
             <Button
@@ -1148,11 +1164,21 @@ export default function CheckoutPage() {
               {savingAddress ? 'Đang lưu...' : 'Hoàn thành'}
             </Button>
           ) : (
+            <Box sx={{ width: '100%' }}>
+            {addresses.length >= MAX_ADDRESSES && (
+              <Typography sx={{ fontSize: 13, color: '#8A2B2B', textAlign: 'center', mb: 1 }}>
+                Bạn đã lưu đủ {MAX_ADDRESSES} địa chỉ. Xóa bớt ở trang Địa chỉ giao hàng để thêm địa chỉ mới.
+              </Typography>
+            )}
             <Button
               fullWidth
               variant="contained"
               disableRipple
-              onClick={() => setIsCreatingAddress(true)}
+              disabled={addresses.length >= MAX_ADDRESSES}
+              onClick={() => {
+                setAddressError('');
+                setIsCreatingAddress(true);
+              }}
               sx={{
                 bgcolor: '#8A2B2B',
                 color: '#FFFFFF',
@@ -1167,12 +1193,14 @@ export default function CheckoutPage() {
                 justifyContent: 'center',
                 gap: 0.75,
                 '&:hover': { bgcolor: '#6E1F1F', boxShadow: 'none !important' },
-                '&:active': { bgcolor: '#5A1A1A', boxShadow: 'none !important' }
+                '&:active': { bgcolor: '#5A1A1A', boxShadow: 'none !important' },
+                '&.Mui-disabled': { bgcolor: '#D9C3C3', color: '#FFFFFF' }
               }}
             >
               <PlusOutlined style={{ fontSize: 14 }} />
               <span>Thêm địa chỉ mới</span>
             </Button>
+            </Box>
           )}
         </DialogActions>
       </Dialog>

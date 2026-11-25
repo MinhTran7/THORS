@@ -158,9 +158,11 @@ public class ProductController {
             IllegalArgumentException ex
     ) {
 
+        // Cùng định dạng lỗi chung của hệ thống: { code, message }
         return ResponseEntity.badRequest()
                 .body(Map.of(
-                        "message", ex.getMessage()
+                        "code", "VALIDATION_ERROR",
+                        "message", ex.getMessage() != null ? ex.getMessage() : "Dữ liệu sản phẩm không hợp lệ."
                 ));
     }
 

@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import { useLocation, useParams, useSearchParams } from 'react-router-dom';
 import useSWR, { useSWRConfig } from 'swr';
 import {
   Alert,
@@ -36,7 +36,7 @@ import { CUSTOMER_ACTIONS, OWNER_ACTIONS, carrierLabel, ownerActionsFor } from '
 import AddressNotFoundDialog, { ADDRESS_NOT_FOUND, INVALID_ADDRESS_REASON } from './AddressNotFoundDialog';
 import DeliveryChoice from './DeliveryChoice';
 import { ghnReady } from './GhnAddressFields';
-import { formatVnd, orderStatusMeta, paymentMethodLabel, paymentStatusMeta, preparationMeta, shipmentStatusLabel } from './constants';
+import { customerActionsFor, formatVnd, orderStatusMeta, orderPaymentMeta, paymentMethodLabel, preparationMeta, shipmentStatusLabel, withinReturnWindow } from './constants';
 import PayOSPaymentModal from './components/PayOSPaymentModal';
 import RefundAccountForm, { initialRefundAccount, validateRefundAccount } from './components/RefundAccountForm';
 import { generateVietQrUrl } from 'utils/vietqr';
@@ -323,13 +323,14 @@ function StoreRow({ label, children, strong = false }) {
 }
 
 function CustomerView({ order, status, actions, busy, onAction, actionError, onPayNow, payLoading, payError, onOpenReturn, back, onSaveRefund }) {
-  const payment = paymentStatusMeta(order.paymentStatus);
+  const payment = orderPaymentMeta(order);
   const closed = CLOSED.includes(order.orderStatus);
   const completed = COMPLETED_STEPS[order.orderStatus] ?? 0;
   const shipment = order.shipment;
   const times = [order.orderDate, order.confirmedAt, shipment?.pickedUpAt, shipment?.deliveredAt, null];
   const hint = customerHint(order);
-  const canReturn = ['DELIVERED', 'COMPLETED'].includes(order.orderStatus);
+  // Chỉ được yêu cầu trả hàng trong 7 ngày kể từ lúc giao thành công
+  const canReturn = withinReturnWindow(order);
   const canPay = order.paymentMethod === 'ONLINE' && order.paymentStatus !== 'PAID' && !closed;
 
   return (
@@ -523,7 +524,7 @@ function CustomerView({ order, status, actions, busy, onAction, actionError, onP
 /* ------------------------------------------------------------------ Chủ shop và người xử lý đơn */
 
 function StaffView({ order, status, actions, busy, onAction, actionError, back, onPayNow, payLoading, payError, onMarkRefunded, refundBusy, canRefund, onSaveRefund }) {
-  const payment = paymentStatusMeta(order.paymentStatus);
+  const payment = orderPaymentMeta(order);
   const prep = order.preparationStatus && order.preparationStatus !== 'NOT_STARTED' ? preparationMeta(order.preparationStatus) : null;
   const staffView = Boolean(order.customer);
   const shipment = order.shipment;
@@ -764,8 +765,7 @@ export default function OrderDetailPage() {
   const [dialog, setDialog] = useState(null); // thao tác đang chờ nhập lý do hoặc chọn hình thức giao
   const [reason, setReason] = useState('');
   const [carrier, setCarrier] = useState('SELF');
-  const [ghn, setGhn] = useState(null); // { provinceId, districtId, wardCode, weightG } khi gửi GHN
-  const [addressBlocked, setAddressBlocked] = useState(false); // không tìm thấy địa chỉ giao -> không bàn giao
+  const [ghn, setGhn] = useState(null); // { provinceId, wardId, weightG } khi gửi GHN
   const [addressAlert, setAddressAlert] = useState(null); // { order, message } khi backend báo không tìm thấy địa chỉ
 
   const [payModalOpen, setPayModalOpen] = useState(false);
@@ -779,6 +779,14 @@ export default function OrderDetailPage() {
   const proofRequired = useDeliveryProofRequired(isStore);
 
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
+  // Bấm "TRẢ HÀNG" ở danh sách đơn: mở sẵn hộp thoại yêu cầu trả hàng một lần (nếu còn trong hạn)
+  const location = useLocation();
+  const autoReturn = useRef(Boolean(location.state?.openReturn));
+  useEffect(() => {
+    if (!autoReturn.current || !order) return;
+    autoReturn.current = false;
+    if (account.role === 'CUSTOMER' && withinReturnWindow(order)) setReturnDialogOpen(true);
+  }, [order, account.role]);
   const [refundBusy, setRefundBusy] = useState(false);
   // Tài khoản nhận hoàn khi khách hủy đơn đã thanh toán (null = không cần)
   const [refundForm, setRefundForm] = useState(null);
@@ -833,7 +841,7 @@ export default function OrderDetailPage() {
   const isCustomer = account.role === 'CUSTOMER';
   const status = orderStatusMeta(order.orderStatus);
   const actions = isCustomer
-    ? (CUSTOMER_ACTIONS[order.orderStatus] ?? [])
+    ? customerActionsFor(order, CUSTOMER_ACTIONS)
     : isStore
       ? ownerActionsFor(order)
       : [];
@@ -868,6 +876,13 @@ export default function OrderDetailPage() {
     }
   };
 
+  // Đóng hộp thoại thao tác: lỗi hiện trong hộp thoại cũng xoá luôn, không hiện lại trên trang
+  const closeDialog = () => {
+    if (busy) return;
+    setDialog(null);
+    setActionError('');
+  };
+
   // Từ hộp thoại "Không tìm thấy địa chỉ": mở luồng từ chối đơn, điền sẵn lý do địa chỉ không hợp lệ
   const rejectForInvalidAddress = () => {
     const reject = (OWNER_ACTIONS[order.orderStatus] ?? []).find((a) => a.to === 'REJECTED');
@@ -891,7 +906,6 @@ export default function OrderDetailPage() {
       setReason('');
       setCarrier('SELF');
       setGhn(null);
-      setAddressBlocked(false);
       setDialog(action);
     } else {
       run(action);
@@ -959,7 +973,7 @@ export default function OrderDetailPage() {
 
       <Dialog
         open={Boolean(dialog)}
-        onClose={() => !busy && setDialog(null)}
+        onClose={closeDialog}
         fullWidth
         maxWidth="xs"
         slotProps={isCustomer ? { paper: { sx: { ...storeDialogPaperSx, ...storeInputsSx, '& .MuiButton-root': { borderRadius: '14px', fontFamily: SANS, textTransform: 'none', fontWeight: 700 } } } } : undefined}
@@ -974,7 +988,6 @@ export default function OrderDetailPage() {
               onChange={setCarrier}
               ghn={ghn}
               onGhnChange={setGhn}
-              onBlockedChange={setAddressBlocked}
             />
           ) : (
             <>
@@ -1015,14 +1028,14 @@ export default function OrderDetailPage() {
           )}
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button disabled={busy} onClick={() => setDialog(null)}>
+          <Button disabled={busy} onClick={closeDialog}>
             Quay lại
           </Button>
           <Button
             variant="contained"
             color={dialog?.askCarrier ? 'primary' : 'error'}
             disableElevation
-            disabled={busy || (dialog?.askCarrier && (addressBlocked || (carrier === 'GHN' && !ghnReady(ghn))))}
+            disabled={busy || (dialog?.askCarrier && carrier === 'GHN' && !ghnReady(ghn))}
             onClick={() => run(dialog, reason, carrier)}
           >
             {busy ? 'Đang xử lý...' : 'Xác nhận'}

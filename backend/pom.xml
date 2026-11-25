@@ -16,6 +16,9 @@
   <dependency><groupId>com.h2database</groupId><artifactId>h2</artifactId><scope>test</scope></dependency>
   <!-- Cloudinary SDK - Product Image Upload -->
   <dependency><groupId>com.cloudinary</groupId><artifactId>cloudinary-http5</artifactId><version>2.3.0</version></dependency>
+  <!-- Tìm sản phẩm bằng ảnh: chạy mô hình AI (ONNX) trên CPU + đọc ảnh WEBP. ORT 1.18.0: bản mới hơn cần Visual C++ Runtime mới trên Windows -->
+  <dependency><groupId>com.microsoft.onnxruntime</groupId><artifactId>onnxruntime</artifactId><version>1.18.0</version></dependency>
+  <dependency><groupId>com.twelvemonkeys.imageio</groupId><artifactId>imageio-webp</artifactId><version>3.12.0</version></dependency>
  </dependencies>
 
  <build><plugins><plugin><groupId>org.springframework.boot</groupId><artifactId>spring-boot-maven-plugin</artifactId></plugin></plugins></build>

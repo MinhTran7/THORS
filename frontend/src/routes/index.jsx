@@ -55,12 +55,15 @@ import EditPromotionPage from 'features/promotion/EditPromotionPage';
 // Returns Management (Đổi trả / Hoàn hàng)
 import ReturnsPage from 'features/returns/ReturnsPage';
 import FacebookPOSPage from 'features/facebook/FacebookPOSPage';
+import StoreChatPage from 'features/chat/StoreChatPage';
+import ChatSettingsPage from 'features/chat/ChatSettingsPage';
 // Customer Addresses
 import CustomerAddressPage from 'features/shippingaddress/CustomerAddressPage';
 import AddAddressPage from 'features/shippingaddress/AddAddressPage';
 import EditAddressPage from 'features/shippingaddress/EditAddressPage';
 // Số đo cơ thể (gợi ý size / thử đồ ảo)
 import BodyProfilePage from 'features/fitting/BodyProfilePage';
+import TryOnHistoryPage from 'features/tryon/TryOnHistoryPage';
 import OutfitPage from 'features/outfit/OutfitPage';
 
 // Shop management
@@ -141,7 +144,9 @@ export default createBrowserRouter([
               { path: '/addresses', element: <CustomerAddressPage /> },
               { path: '/addresses/new', element: <AddAddressPage /> },
               { path: '/addresses/:id/edit', element: <EditAddressPage /> },
-              { path: '/body-profile', element: <BodyProfilePage /> }
+              { path: '/body-profile', element: <BodyProfilePage /> },
+              // Ảnh mặc thử bằng AI đã tạo (module tryon)
+              { path: '/try-on-history', element: <TryOnHistoryPage /> }
             ]
           },
           {
@@ -168,7 +173,9 @@ export default createBrowserRouter([
               { path: '/in-store-sales', element: <InStoreSalesPage /> },
               { path: '/in-store-sales/history', element: <InStoreSalesHistoryPage /> },
               { path: '/in-store-sales/history/:orderId', element: <InStoreSaleDetailPage /> },
-              { path: '/facebook', element: <FacebookPOSPage /> }
+              { path: '/facebook', element: <FacebookPOSPage /> },
+              // Tin nhắn khách gửi qua "Liên hệ người bán"
+              { path: '/messages', element: <StoreChatPage /> }
             ]
           },
           {
@@ -178,6 +185,8 @@ export default createBrowserRouter([
               { path: '/family/new', element: <FamilyFormPage /> },
               { path: '/family/:id', element: <FamilyDetailPage /> },
               { path: '/family/:id/edit', element: <FamilyFormPage /> },
+              // Tin nhắn > Cài đặt tin nhắn tự động (chỉ chủ cửa hàng)
+              { path: '/messages/settings', element: <ChatSettingsPage /> },
               // Category, Product & Returns (của DongNV)
               { path: '/categories', element: <CategoryPage /> },
               { path: '/products', element: <ProductPage /> },

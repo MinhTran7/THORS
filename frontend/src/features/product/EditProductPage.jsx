@@ -49,6 +49,7 @@ import {
 import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../shippingaddress/theme';
 import { formatPriceInput, parsePriceInput } from './priceInput';
 import ProductDescriptionFields from './ProductDescriptionFields';
+import ImageCropDialog from './ImageCropDialog';
 import { getImageColors, sameColor, setImageColor } from './productDescription';
 
 const inputSx = (hasError) => ({
@@ -350,6 +351,9 @@ export default function EditProductPage() {
     }
   };
 
+  // Ảnh vừa chọn đang chờ căn chỉnh (hộp thoại cắt ảnh)
+  const [cropFiles, setCropFiles] = useState(null);
+
   const handlePickImages = (event) => {
     const files = Array.from(event.target.files || []);
     // Cho phép chọn lại cùng một file ở lần sau
@@ -373,7 +377,17 @@ export default function EditProductPage() {
       return;
     }
 
-    runImageAction(() => addProductImages(productId, files));
+    setCropFiles(files);
+  };
+
+  const handleCropped = (cropped) => {
+    setCropFiles(null);
+    const tooLarge = cropped.find((file) => file.size > MAX_IMAGE_SIZE);
+    if (tooLarge) {
+      setImageError(`Ảnh "${tooLarge.name}" vượt quá 5MB.`);
+      return;
+    }
+    runImageAction(() => addProductImages(productId, cropped));
   };
 
   const handleDeleteImage = (imageId) => {
@@ -976,6 +990,7 @@ export default function EditProductPage() {
           </Stack>
         </Grid>
       </Grid>
+      <ImageCropDialog files={cropFiles} onDone={handleCropped} onCancel={() => setCropFiles(null)} />
     </Box>
   );
 }

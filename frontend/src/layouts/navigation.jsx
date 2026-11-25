@@ -14,6 +14,7 @@ import {
   IdcardOutlined,
   ImportOutlined,
   InboxOutlined,
+  MessageOutlined,
   MobileOutlined,
   PercentageOutlined,
   PieChartOutlined,
@@ -31,6 +32,7 @@ import {
   UnorderedListOutlined,
   UserOutlined,
   ColumnHeightOutlined,
+  CameraOutlined,
   WarningOutlined
 } from '@ant-design/icons';
 
@@ -57,6 +59,8 @@ const OWNER_MENU = [
       { to: '/in-store-sales', label: 'Bán tại quầy', icon: <ShopOutlined /> },
       { to: '/in-store-sales/history', label: 'Đơn hàng tại quầy', icon: <FileDoneOutlined /> },
       { to: '/orders', label: 'Đơn hàng online', icon: <MobileOutlined /> },
+      // Tin khách nhắn qua "Liên hệ người bán"; ThorsLayout hiện số cuộc trò chuyện có tin chưa đọc
+      { to: '/messages', label: 'Tin nhắn', icon: <MessageOutlined />, chatBadge: true },
       { to: '/returns', label: 'Đổi trả', icon: <SwapOutlined /> },
       { to: '/warehouse/defects', label: 'Xử lý hàng lỗi', icon: <WarningOutlined /> }
     ]
@@ -123,6 +127,7 @@ export const NAVIGATION = {
     { to: '/orders', label: 'Đơn hàng', icon: <ShoppingOutlined /> },
     { to: '/addresses', label: 'Địa chỉ của tôi', icon: <EnvironmentOutlined /> },
     { to: '/body-profile', label: 'Số đo của tôi', icon: <ColumnHeightOutlined /> },
+    { to: '/try-on-history', label: 'Ảnh mặc thử', icon: <CameraOutlined /> },
     profile
   ]
 };

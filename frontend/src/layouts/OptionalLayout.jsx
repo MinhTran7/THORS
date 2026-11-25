@@ -3,6 +3,7 @@ import { CircularProgress, Stack } from '@mui/material';
 import { useAuth } from 'features/auth/AuthProvider';
 import ThorsLayout from './ThorsLayout';
 import StorefrontLayout from './StorefrontLayout';
+import CustomerChatWidget from 'features/chat/CustomerChatWidget';
 
 // Các trang mua sắm của khách dùng chung giao diện cửa hàng (header + footer kiểu thời trang)
 const STOREFRONT_PATHS = [
@@ -32,6 +33,7 @@ const CUSTOMER_STOREFRONT_PATHS = [
   '/addresses/new',
   '/addresses/:id/edit',
   '/body-profile',
+  '/try-on-history',
   '/promotions'
 ];
 
@@ -52,7 +54,20 @@ export default function OptionalLayout() {
       </Stack>
     );
   }
-  if (STOREFRONT_PATHS.some((path) => matchPath(path, pathname))) return <StorefrontLayout />;
-  if (account?.role === 'CUSTOMER' && CUSTOMER_STOREFRONT_PATHS.some((path) => matchPath(path, pathname))) return <StorefrontLayout />;
-  return account ? <ThorsLayout /> : <Outlet />;
+  const layout = STOREFRONT_PATHS.some((path) => matchPath(path, pathname)) ? (
+    <StorefrontLayout />
+  ) : account?.role === 'CUSTOMER' && CUSTOMER_STOREFRONT_PATHS.some((path) => matchPath(path, pathname)) ? (
+    <StorefrontLayout />
+  ) : account ? (
+    <ThorsLayout />
+  ) : (
+    <Outlet />
+  );
+  // Khách hàng đã đăng nhập: nút chat "Liên hệ người bán" nổi ở góc phải dưới trên mọi trang
+  return (
+    <>
+      {layout}
+      {account?.role === 'CUSTOMER' && <CustomerChatWidget />}
+    </>
+  );
 }

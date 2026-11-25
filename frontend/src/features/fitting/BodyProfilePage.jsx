@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Box,
   Button,
@@ -16,10 +16,6 @@ import { StoreAccountShell } from 'features/account/components/StoreAccount';
 import { C, cardSx, outlineButtonSx, primaryButtonSx } from 'features/shippingaddress/theme';
 import { deleteBodyProfile, getBodyProfile, saveBodyProfile } from './api';
 import StyleProfileCard from 'features/outfit/StyleProfileCard';
-import { garmentsFor } from './avatar/garments';
-
-// Thư viện 3D khá nặng: chỉ tải khi mở trang này (không làm chậm trang cửa hàng)
-const AvatarViewer = lazy(() => import('./avatar/AvatarViewer'));
 
 // Khoảng hợp lệ: giống hệt BodyProfileService (backend) để báo lỗi ngay khi gõ, không phải đợi máy chủ
 const FIELDS = [
@@ -92,7 +88,7 @@ function validate(form) {
   return errors;
 }
 
-/** Khách nhập / sửa / xóa số đo cơ thể (dùng cho gợi ý size và avatar 3D ở các phase sau). */
+/** Khách nhập / sửa / xóa số đo cơ thể (dùng cho gợi ý size và phối đồ). */
 export default function BodyProfilePage() {
   useCrumbs(['Tài khoản', 'Số đo của tôi']);
   const [form, setForm] = useState(EMPTY);
@@ -102,10 +98,13 @@ export default function BodyProfilePage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
   const [confirmDelete, setConfirmDelete] = useState(false);
-  // Áo 3D đang mặc thử trên hình xem trước (id trong garments.js, '' = không mặc)
-  const [tryOnId, setTryOnId] = useState('');
-  const tryOnChoices = garmentsFor(form.gender);
-  const tryOn = tryOnChoices.find((g) => g.id === tryOnId) ?? null;
+  // Lỗi xóa số đo: hiện trong hộp thoại xác nhận, đóng hộp thoại là xoá
+  const [deleteError, setDeleteError] = useState('');
+  const closeConfirm = () => {
+    if (saving) return;
+    setConfirmDelete(false);
+    setDeleteError('');
+  };
 
   const fill = (p) => setForm(p ? Object.fromEntries(Object.keys(EMPTY).map((k) => [k, p[k] ?? ''])) : EMPTY);
 
@@ -146,6 +145,7 @@ export default function BodyProfilePage() {
 
   const remove = async () => {
     setSaving(true);
+    setDeleteError('');
     try {
       await deleteBodyProfile();
       setSaved(null);
@@ -153,7 +153,7 @@ export default function BodyProfilePage() {
       setConfirmDelete(false);
       setMessage({ type: 'success', text: 'Đã xóa số đo.' });
     } catch (e) {
-      setMessage({ type: 'error', text: e.message || 'Không xóa được số đo.' });
+      setDeleteError(e.message || 'Không xóa được số đo.');
     } finally {
       setSaving(false);
     }
@@ -169,7 +169,7 @@ export default function BodyProfilePage() {
         <Box
           sx={{
             display: 'grid',
-            gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 640px) minmax(280px, 1fr)' },
+            gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 640px)' },
             gap: 3,
             alignItems: 'start'
           }}
@@ -218,56 +218,20 @@ export default function BodyProfilePage() {
               )}
             </Box>
           </Box>
-
-          {/* Hình 3D xem trước: đổi dáng ngay khi gõ số đo (chưa cần bấm Lưu) */}
-          <Box
-            sx={{
-              ...cardSx,
-              height: { xs: 420, md: 560 },
-              overflow: 'hidden',
-              position: 'relative',
-              background: 'linear-gradient(180deg, #F7F5F2 0%, #ECE8E2 100%)'
-            }}
-          >
-            <Suspense fallback={null}>
-              <AvatarViewer profile={form} garment={tryOn} />
-            </Suspense>
-            {/* Mặc thử áo 3D (chỉ hiện khi có áo cho người mẫu giới tính này) */}
-            {tryOnChoices.length > 0 && (
-              <Box sx={{ position: 'absolute', top: 12, left: 12, right: 12, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                {[{ id: '', name: 'Không mặc áo' }, ...tryOnChoices].map((g) => (
-                  <Button
-                    key={g.id || 'none'}
-                    size="small"
-                    onClick={() => setTryOnId(g.id)}
-                    sx={{
-                      ...outlineButtonSx,
-                      height: 32,
-                      px: 1.5,
-                      fontSize: 13,
-                      bgcolor: '#fff',
-                      ...(tryOnId === g.id && { bgcolor: C.cyan, borderColor: C.cyan, color: C.cyanInk })
-                    }}
-                  >
-                    {g.id ? `Mặc thử: ${g.name}` : g.name}
-                  </Button>
-                ))}
-              </Box>
-            )}
-          </Box>
         </Box>
       )}
 
       {/* Hồ sơ phong cách cho phối đồ (module outfit) */}
       {!loading && <StyleProfileCard hasBodyProfile={Boolean(saved)} />}
 
-      <Dialog open={confirmDelete} onClose={() => !saving && setConfirmDelete(false)} maxWidth="xs" fullWidth>
+      <Dialog open={confirmDelete} onClose={closeConfirm} maxWidth="xs" fullWidth>
         <DialogTitle sx={{ fontWeight: 800 }}>Xóa số đo?</DialogTitle>
         <DialogContent>
           <Typography sx={{ color: C.muted, fontSize: 14 }}>Bạn sẽ không nhận được gợi ý size cho đến khi nhập lại.</Typography>
+          {deleteError && <Typography sx={{ mt: 1.5, fontSize: 13.5, fontWeight: 600, color: C.error }}>{deleteError}</Typography>}
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5 }}>
-          <Button onClick={() => setConfirmDelete(false)} disabled={saving} sx={outlineButtonSx}>
+          <Button onClick={closeConfirm} disabled={saving} sx={outlineButtonSx}>
             Quay lại
           </Button>
           <Button

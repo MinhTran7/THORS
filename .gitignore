@@ -11,4 +11,3 @@ backend/target/
 .DS_Store
 .idea/
 .vscode/
-scripts/avatar-optimize/node_modules/

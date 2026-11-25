@@ -11,8 +11,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import com.thors.module.category.dto.UpdateCategoryStatusRequest;
+import com.thors.module.category.dto.TransferCategoryProductsRequest;
 import org.springframework.web.bind.annotation.PatchMapping;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/categories")
@@ -32,14 +34,15 @@ public class CategoryController {
 
     // 2. Add Category
     @PostMapping
-    public ResponseEntity<Void> createCategory(
+    public ResponseEntity<Category> createCategory(
             @RequestBody CreateCategoryRequest request) {
 
-        categoryService.createCategory(request);
+        Category created = categoryService.createCategory(request);
 
+        // 201 kèm danh mục vừa tạo (có categoryId) - khỏi phải tải lại danh sách để tìm theo tên
         return ResponseEntity
                 .status(HttpStatus.CREATED)
-                .build();
+                .body(created);
     }
 
     // 3. Update Category
@@ -64,6 +67,15 @@ public class CategoryController {
         );
 
         return ResponseEntity.ok().build();
+    }
+
+    // Chuyển toàn bộ sản phẩm gắn trực tiếp sang một danh mục lá (chỉ OWNER - SecurityConfig: POST /api/categories/**)
+    @PostMapping("/{categoryId}/transfer-products")
+    public ResponseEntity<Map<String, Object>> transferProducts(
+            @PathVariable int categoryId,
+            @RequestBody TransferCategoryProductsRequest request) {
+
+        return ResponseEntity.ok(categoryService.transferProducts(categoryId, request));
     }
 
 }

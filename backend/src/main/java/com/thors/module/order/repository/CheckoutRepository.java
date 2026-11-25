@@ -21,6 +21,12 @@ public class CheckoutRepository {
         this.jdbcTemplate = jdbcTemplate;
     }
 
+    /**
+     * Biến thể + số lượng còn bán được = tồn kho − phần đang giữ cho các đơn chưa xuất kho
+     * (order_item.reserved_quantity &gt; 0, cùng cách tính với màn hình Tồn kho).
+     * FOR UPDATE: khóa dòng biến thể tới hết transaction đặt hàng, để hai khách đặt cùng lúc
+     * không cùng lấy được món cuối cùng.
+     */
     public Map<String, Object> findDetailForOrder(int detailId) {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
             SELECT
@@ -34,9 +40,8 @@ public class CheckoutRepository {
                     pd.stock_quantity - COALESCE((
                         SELECT SUM(oi.reserved_quantity)
                         FROM order_item oi
-                        INNER JOIN orders o ON o.order_id = oi.order_id
                         WHERE oi.detail_id = pd.detail_id
-                          AND o.stock_hold_status IN ('TEMPORARY', 'PAID')
+                          AND oi.reserved_quantity > 0
                     ), 0),
                     0
                 ) AS stock,
@@ -46,6 +51,7 @@ public class CheckoutRepository {
             FROM product_detail pd
             INNER JOIN product p ON p.product_id = pd.product_id
             WHERE pd.detail_id = ?
+            FOR UPDATE
             """, detailId);
         return rows.isEmpty() ? null : rows.get(0);
     }
@@ -102,14 +108,20 @@ public class CheckoutRepository {
         return key == null ? 0 : key.intValue();
     }
 
+    /**
+     * Thêm dòng đơn (giá sau khuyến mãi, giá gốc, khuyến mãi đã áp dụng) và GIỮ luôn số hàng đó
+     * (reserved_quantity = quantity) để khách khác không mua được.
+     * Phần giữ tự về 0 khi: chủ shop xác nhận (trừ kho thật), đơn bị hủy / từ chối, hoặc hết hạn thanh toán
+     * 10 phút (OrderRepository.transition / markStockDeducted).
+     */
     public void insertItem(int orderId, int detailId, int quantity, SalePrice price,
                            String productName, String size, String color) {
         jdbcTemplate.update("""
             INSERT INTO order_item
                 (order_id, detail_id, quantity, unit_price, original_price, promotion_id,
                  product_name_snapshot, size_snapshot, color_snapshot, reserved_quantity)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, orderId, detailId, quantity, price.price(), price.originalPrice(), price.promotionId(),
-                productName, size, color);
+                productName, size, color, quantity);
     }
 }

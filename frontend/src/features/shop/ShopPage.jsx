@@ -326,6 +326,7 @@ export function ProductCard({ product, promo, sx }) {
         ...sx
       }}
     >
+      {/* Khung ảnh 4:5 (khớp khung cắt khi chủ shop tải ảnh lên) */}
       <Box sx={{ position: 'relative', aspectRatio: '4 / 5', overflow: 'hidden' }}>
         <ProductPhoto src={product.imageUrl} name={product.productName} zoomOnHover fit="contain" />
         {/* Góc trái: "MỚI" cho sản phẩm mới; góc phải: hết hàng hoặc % giảm giá */}

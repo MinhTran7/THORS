@@ -22,9 +22,8 @@ public class CartRepository {
                 pd.stock_quantity - COALESCE((
                     SELECT SUM(oi.reserved_quantity)
                     FROM order_item oi
-                    INNER JOIN orders o ON o.order_id = oi.order_id
                     WHERE oi.detail_id = pd.detail_id
-                      AND o.stock_hold_status IN ('TEMPORARY', 'PAID')
+                      AND oi.reserved_quantity > 0
                 ), 0),
                 0
             ) AS stock,
@@ -72,9 +71,8 @@ public class CartRepository {
                 pd.stock_quantity - COALESCE((
                     SELECT SUM(oi.reserved_quantity)
                     FROM order_item oi
-                    INNER JOIN orders o ON o.order_id = oi.order_id
                     WHERE oi.detail_id = pd.detail_id
-                      AND o.stock_hold_status IN ('TEMPORARY', 'PAID')
+                      AND oi.reserved_quantity > 0
                 ), 0),
                 0
             ) AS stock,

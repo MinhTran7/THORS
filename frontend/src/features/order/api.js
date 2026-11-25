@@ -14,11 +14,9 @@ export const ordersApi = {
   detail: (id) => api(`/orders/${id}`),
   // Số đơn theo từng trạng thái, để hiện số trên các tab
   counts: () => api('/orders/counts'),
-  // Chỉ dùng khi test: tạo một đơn online mẫu và phát thông báo
-  createSample: () => api('/orders/test-sample', { method: 'POST' }),
   // Owner: xác nhận / từ chối / giao / hoàn tất. Customer: hủy đơn.
   // carrier chỉ dùng khi chuyển sang SHIPPING: SELF (tự giao) hoặc mã đơn vị vận chuyển
-  // ghn (chỉ khi carrier = GHN): { districtId, wardCode, weightG } theo danh mục GHN
+  // ghn (chỉ khi carrier = GHN): { provinceId, wardId, weightG } theo danh mục mới (2 cấp) của GHN
   // refund (khách hủy đơn đã thanh toán online): { bankBin, bankName, accountNumber, accountName }
   changeStatus: (id, status, reason, carrier, ghn, refund) =>
     api(
@@ -26,7 +24,7 @@ export const ordersApi = {
         status,
         reason,
         carrier,
-        ...(carrier === 'GHN' && ghn ? { ghnDistrictId: ghn.districtId, ghnWardCode: ghn.wardCode, weightG: ghn.weightG } : {}),
+        ...(carrier === 'GHN' && ghn ? { ghnProvinceId: ghn.provinceId, ghnWardId: ghn.wardId, weightG: ghn.weightG } : {}),
         ...(refund
           ? {
               refundBankBin: refund.bankBin,
@@ -59,12 +57,11 @@ export const ordersApi = {
   checkPayOSStatus: (orderId) => api(`/payment/payos/status/${orderId}`)
 };
 
-// Danh mục địa chỉ của GHN (3 cấp kiểu cũ: Tỉnh > Quận/Huyện > Phường/Xã), mỗi mục { id, name }
+// Danh mục địa chỉ của GHN theo địa giới mới 2 cấp (Tỉnh > Phường/Xã), mỗi mục { id, name }
 export const ghnApi = {
   provinces: () => api('/ghn/provinces'),
-  districts: (provinceId) => api(`/ghn/districts${query({ provinceId })}`),
-  wards: (districtId) => api(`/ghn/wards${query({ districtId })}`),
-  // Gợi ý Tỉnh / Quận / Phường theo GHN cho địa chỉ của đơn: { provinceId, districtId, wardCode, candidates }
+  wards: (provinceId) => api(`/ghn/wards${query({ provinceId })}`),
+  // Gợi ý Tỉnh / Phường theo GHN cho địa chỉ của đơn: { provinceId, wardId } (có thể null)
   suggest: (orderId) => api(`/ghn/suggest${query({ orderId })}`)
 };
 

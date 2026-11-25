@@ -11,6 +11,7 @@ import { aboutLines, useWebsiteSettings } from 'features/website/websiteSettings
 import StoreSearch from 'features/shop/StoreSearch';
 import StoreNotificationBell from 'features/notification/StoreNotificationBell';
 import { ThorsLogo } from 'features/auth/components/ShopAuthArt';
+import ImageSearchButton from 'features/imagesearch/ImageSearchButton';
 import { C, FONT_URL, LOGO_FONT, SANS, Icon, container, iconBtnSx, linkSx } from 'features/shop/storeTheme';
 
 /**
@@ -295,6 +296,8 @@ function StoreHeader({ categories }) {
   useEffect(() => {
     if (!searchOpen) return undefined;
     const onDown = (e) => {
+      // Bấm trong hộp thoại mở từ thanh tìm kiếm (vd tìm bằng ảnh) thì không đóng, kẻo hộp thoại mất theo
+      if (e.target.closest?.('.MuiDialog-root')) return;
       if (!searchBoxRef.current?.contains(e.target)) setSearchOpen(false);
     };
     document.addEventListener('pointerdown', onDown);
@@ -343,7 +346,8 @@ function StoreHeader({ categories }) {
         // Đơn hàng nằm ngay trên header; thông báo xem ở chuông, khuyến mãi ở menu "Khuyến mãi"
         ['/profile', 'Tài khoản của tôi'],
         ['/addresses', 'Địa chỉ giao hàng'],
-        ['/body-profile', 'Số đo của tôi']
+        ['/body-profile', 'Số đo của tôi'],
+        ['/try-on-history', 'Ảnh mặc thử của tôi']
       ]
     : [
         ['/workspace', 'Trang quản lý'],
@@ -478,6 +482,7 @@ function StoreHeader({ categories }) {
               <path d="M20 20l-4-4" />
             </Icon>
           </Box>
+          <ImageSearchButton />
 
           {isCustomer && <StoreNotificationBell />}
 
