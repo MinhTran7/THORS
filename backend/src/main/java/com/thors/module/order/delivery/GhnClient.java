@@ -279,6 +279,29 @@ public class GhnClient {
         return new Tracking(status, data.path("updated_date").asText(null), reason);
     }
 
+    /** Một mốc trong hành trình vận đơn: trạng thái GHN (ví dụ "picked") và thời điểm (chuỗi ISO, UTC). */
+    public record Step(String status, String time) {}
+
+    /** Hành trình vận đơn (lịch sử trạng thái trong trường log của API chi tiết đơn), cũ trước mới sau. */
+    public List<Step> journey(String orderCode) {
+        return parseJourney(call(HttpMethod.POST, "/v2/shipping-order/detail", Map.of("order_code", orderCode), true));
+    }
+
+    /** Đọc data.log (mảng, hoặc một object khi chỉ có một mốc); bỏ mốc không có trạng thái. */
+    public static List<Step> parseJourney(JsonNode data) {
+        List<Step> steps = new ArrayList<>();
+        if (data == null) return steps;
+        JsonNode logs = data.path("log");
+        if (logs.isObject()) logs = new ObjectMapper().createArrayNode().add(logs);
+        for (JsonNode entry : logs) {
+            String status = entry.path("status").asText("").trim();
+            if (!status.isEmpty()) steps.add(new Step(status, entry.path("updated_date").asText("")));
+        }
+        // Chuỗi ISO cùng múi giờ UTC: so chuỗi là đúng thứ tự thời gian
+        steps.sort(java.util.Comparator.comparing(Step::time));
+        return steps;
+    }
+
     /** Hủy vận đơn (chỉ được khi GHN chưa lấy hàng). */
     public void cancel(String orderCode) {
         call(HttpMethod.POST, "/v2/switch-status/cancel", Map.of("order_codes", List.of(orderCode)), true);

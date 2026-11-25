@@ -384,31 +384,43 @@ public class ChatRepository {
     /** Một đơn gần đây của khách cho trợ lý AI: không có SĐT / địa chỉ / tên người nhận. */
     public record RecentOrder(
             int id, String orderNumber, String status, LocalDateTime orderDate, long totalAmount, String carrier,
-            String trackingNumber, LocalDateTime deliveredAt, String cancelReason, String items) {}
+            String trackingNumber, LocalDateTime deliveredAt, String cancelReason, String items,
+            String shipmentStatus, LocalDateTime shipmentUpdatedAt) {}
+
+    private static final String RECENT_ORDER_SELECT =
+            "SELECT o.order_id, o.order_number, o.order_status, o.order_date, o.total_amount, o.shipping_carrier,"
+                    + " o.tracking_number, o.shipment_delivered_at, o.cancel_reason, o.shipment_status, o.shipment_updated_at,"
+                    + " (SELECT GROUP_CONCAT(CONCAT(oi.product_name_snapshot, ' (', COALESCE(oi.size_snapshot, ''), ' ',"
+                    + "   COALESCE(oi.color_snapshot, ''), ') x', oi.quantity) ORDER BY oi.order_item_id SEPARATOR '; ')"
+                    + "   FROM order_item oi WHERE oi.order_id = o.order_id) AS items"
+                    + " FROM orders o WHERE o.user_id = ? AND o.order_type = 'Online'";
+
+    private static RecentOrder recentOrder(ResultSet rs) throws SQLException {
+        return new RecentOrder(
+                rs.getInt("order_id"),
+                rs.getString("order_number"),
+                rs.getString("order_status"),
+                time(rs, "order_date"),
+                rs.getLong("total_amount"),
+                rs.getString("shipping_carrier"),
+                rs.getString("tracking_number"),
+                time(rs, "shipment_delivered_at"),
+                rs.getString("cancel_reason"),
+                rs.getString("items"),
+                rs.getString("shipment_status"),
+                time(rs, "shipment_updated_at"));
+    }
 
     public List<RecentOrder> recentOrders(int customerId, int limit) {
         return db.query(
-                "SELECT o.order_id, o.order_number, o.order_status, o.order_date, o.total_amount, o.shipping_carrier,"
-                        + " o.tracking_number, o.shipment_delivered_at, o.cancel_reason,"
-                        + " (SELECT GROUP_CONCAT(CONCAT(oi.product_name_snapshot, ' (', COALESCE(oi.size_snapshot, ''), ' ',"
-                        + "   COALESCE(oi.color_snapshot, ''), ') x', oi.quantity) ORDER BY oi.order_item_id SEPARATOR '; ')"
-                        + "   FROM order_item oi WHERE oi.order_id = o.order_id) AS items"
-                        + " FROM orders o WHERE o.user_id = ? AND o.order_type = 'Online'"
-                        + " ORDER BY o.order_date DESC LIMIT ?",
-                (rs, i) ->
-                        new RecentOrder(
-                                rs.getInt("order_id"),
-                                rs.getString("order_number"),
-                                rs.getString("order_status"),
-                                time(rs, "order_date"),
-                                rs.getLong("total_amount"),
-                                rs.getString("shipping_carrier"),
-                                rs.getString("tracking_number"),
-                                time(rs, "shipment_delivered_at"),
-                                rs.getString("cancel_reason"),
-                                rs.getString("items")),
-                customerId,
-                limit);
+                RECENT_ORDER_SELECT + " ORDER BY o.order_date DESC LIMIT ?", (rs, i) -> recentOrder(rs), customerId, limit);
+    }
+
+    /** Đơn online có mã orderNumber CỦA CHÍNH khách customerId; đơn của người khác trả empty như không có. */
+    public Optional<RecentOrder> ownOrder(int customerId, String orderNumber) {
+        return db.query(RECENT_ORDER_SELECT + " AND o.order_number = ?", (rs, i) -> recentOrder(rs), customerId, orderNumber)
+                .stream()
+                .findFirst();
     }
 
     public List<ActiveOrder> activeOrders(int customerId, int limit) {

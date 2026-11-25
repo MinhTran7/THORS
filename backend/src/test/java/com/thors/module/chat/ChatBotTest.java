@@ -46,7 +46,7 @@ class ChatBotTest {
         settings = mock(ChatAutoReply.class);
         gemini = mock(GeminiClient.class);
         shop = mock(ShopRepository.class);
-        bot = new ChatBot(repo, settings, gemini, shop);
+        bot = new ChatBot(repo, settings, gemini, shop, mock(ChatKnowledge.class), mock(com.thors.module.order.delivery.GhnClient.class));
         when(gemini.configured()).thenReturn(true);
         when(gemini.json()).thenReturn(json);
         when(settings.botMode()).thenReturn(ChatAutoReply.BOT_AWAY);
