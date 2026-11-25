@@ -4,6 +4,7 @@ import { Box } from '@mui/material';
 import { api } from 'services/http';
 import { categoryTree, money, priceText } from './ShopCommon';
 import { C, Icon, focusRing } from './storeTheme';
+import ImageSearchButton from 'features/imagesearch/ImageSearchButton';
 
 /**
  * Thanh tìm kiếm trên header cửa hàng (kiểu Santino):
@@ -274,6 +275,9 @@ export default function StoreSearch({ categories = [], initialQuery = '', autoFo
             '&::-webkit-search-cancel-button': { display: 'none' }
           }}
         />
+
+        {/* Tìm bằng ảnh (chỉ hiện khi backend bật tính năng) */}
+        <ImageSearchButton sx={{ flexShrink: 0, width: 44, height: 44, borderRadius: '50%', mr: 0.5, '&:hover': { bgcolor: '#E4E0DA' } }} />
 
         <Box
           component="button"
