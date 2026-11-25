@@ -15,7 +15,7 @@ import {
   Typography
 } from '@mui/material';
 import { api } from 'services/http';
-import { docCode, number, unitStatusLabel, variantLabel, when } from './model';
+import { number, variantLabel } from './model';
 
 function cameraError(error) {
   if (error.name === 'NotAllowedError' || error.name === 'SecurityError')
@@ -201,23 +201,10 @@ export default function BarcodeScannerDialog({ onClose, scanRequest }) {
               )}
               <Typography variant="h5">{variantLabel(result.variant)}</Typography>
               <Typography>{result.variant.barcode}</Typography>
-              {result.unit && (
-                <Alert severity={result.unit.status === 'IN_STOCK' ? 'success' : 'warning'} icon={false}>
-                  <b>Chiếc {result.unit.serial_code}</b>: {unitStatusLabel[result.unit.status] || result.unit.status}
-                  {result.unit.status === 'IN_STOCK' && ` · ${result.unit.location || 'chưa xếp vị trí'}`}
-                  {result.unit.in_receipt_id
-                    ? ` · nhập theo ${docCode({ receipt_type: 'RECEIPT', receipt_id: result.unit.in_receipt_id })}`
-                    : ' · hàng tồn trước khi có serial'}
-                  {result.unit.order_number && ` · bán ở đơn ${result.unit.order_number}`}
-                  {result.unit.out_receipt_id &&
-                    ` · trả NCC theo ${docCode({ receipt_type: 'SUPPLIER_RETURN', receipt_id: result.unit.out_receipt_id })}`}
-                  {result.unit.out_at && ` (${when(result.unit.out_at)})`}
-                </Alert>
-              )}
-              {result.unit?.defect_id && (
+              {Number(result.variant.defective_quantity) > 0 && (
                 <Alert severity="error" icon={false}>
-                  <b>Đang báo lỗi:</b> {result.unit.defect_types}
-                  {result.unit.defect_description ? ` — ${result.unit.defect_description}` : ''}
+                  <b>Đang báo lỗi: {number(result.variant.defective_quantity)} chiếc</b> — chưa bán được cho tới khi sửa xong, trả nhà cung
+                  cấp hoặc bỏ hẳn (Bán hàng → Xử lý hàng lỗi).
                 </Alert>
               )}
               <Typography>

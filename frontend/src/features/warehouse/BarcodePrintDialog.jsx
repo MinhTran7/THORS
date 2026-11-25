@@ -78,28 +78,17 @@ const SHOW_FIELDS = [
   ['showShop', 'Tên cửa hàng']
 ];
 
-/** Serial labels grouped by variant for the table: one row per variant, not one per piece. */
-function groupUnits(units) {
-  const groups = new Map();
-  for (const u of units) {
-    const g = groups.get(u.detail_id) || { ...u, units: [] };
-    g.units.push(u);
-    groups.set(u.detail_id, g);
-  }
-  return [...groups.values()];
-}
-
 /**
- * Print barcode labels for one or more variants. Variants without a code are listed but not printed
- * (the owner creates codes on the Tồn kho page first). Template and display options are remembered
- * per browser.
- * serial: `variants` are pieces (unitLabel(...)), one label each; onPrinted(items) runs after a print/PDF.
+ * Print barcode labels for one or more variants. Each variant has one shared code: N pieces = N identical
+ * labels (spare labels are fine). Variants without a code are listed but not printed (the owner creates
+ * codes on the Tồn kho page first). Template and display options are remembered per browser.
+ * `labels` (optional) = starting number of labels per variant, instead of the unplaced stock.
  */
-export default function BarcodePrintDialog({ variants, onClose, serial = false, onPrinted, header }) {
-  const [items, setItems] = useState(() => (serial ? variants : variants.filter((v) => v.barcode)));
-  const missing = useMemo(() => (serial ? [] : variants.filter((v) => !v.barcode)), [variants, serial]);
+export default function BarcodePrintDialog({ variants, onClose, header }) {
+  const [items, setItems] = useState(() => variants.filter((v) => v.barcode));
+  const missing = useMemo(() => variants.filter((v) => !v.barcode), [variants]);
   const [quantities, setQuantities] = useState(() =>
-    Object.fromEntries(variants.map((v) => [labelKey(v), serial ? 1 : defaultQuantity(v)]))
+    Object.fromEntries(variants.map((v) => [labelKey(v), v.labels ?? defaultQuantity(v)]))
   );
   const [options, setOptionsState] = useState(loadOptions);
   const [error, setError] = useState('');
@@ -130,21 +119,17 @@ export default function BarcodePrintDialog({ variants, onClose, serial = false, 
   }
   const template = templateOf(options.template);
   const sheets = template.kind === 'roll' ? Math.ceil(total / template.cols) : 0;
-  // Serial: a few sample labels are enough (each piece only differs by its number).
-  const shown = useMemo(() => (serial ? items.slice(0, 4) : items), [serial, items]);
-  const preview = useMemo(() => previewDocument(shown, options), [shown, options]);
+  const preview = useMemo(() => previewDocument(items, options), [items, options]);
   const previewHeight = Math.min(
     260,
-    28 + Math.ceil(shown.length / Math.max(1, Math.floor(700 / (template.w * 3.8 + 12)))) * (template.h * 3.8 + 12)
+    28 + Math.ceil(items.length / Math.max(1, Math.floor(700 / (template.w * 3.8 + 12)))) * (template.h * 3.8 + 12)
   );
-  const groups = useMemo(() => (serial ? groupUnits(items) : []), [serial, items]);
 
   const runAction = async (action, fn) => {
     setError('');
     setBusyAction(action);
     try {
       await fn(items, quantities, options);
-      await onPrinted?.(items);
     } catch (err) {
       setError(err.message || 'Không tạo được bản in. Vui lòng thử lại.');
     } finally {
@@ -154,7 +139,7 @@ export default function BarcodePrintDialog({ variants, onClose, serial = false, 
 
   return (
     <Dialog open onClose={() => !printing && onClose()} fullWidth maxWidth="md">
-      <DialogTitle>{serial ? 'In tem serial (mỗi chiếc một tem)' : 'In tem mã vạch'}</DialogTitle>
+      <DialogTitle>In tem mã vạch</DialogTitle>
       <DialogContent dividers>
         <Stack spacing={2.5}>
           {header}
@@ -172,60 +157,16 @@ export default function BarcodePrintDialog({ variants, onClose, serial = false, 
               spacing={1}
               sx={{ mb: 1, alignItems: { sm: 'center' }, justifyContent: 'space-between' }}
             >
-              <Typography variant="subtitle1">{serial ? '1. Các chiếc cần in tem' : '1. Số lượng tem'}</Typography>
-              {!serial && (
-                <ButtonGroup size="small" variant="outlined" disabled={!items.length}>
-                  {FILL_MODES.map(([key, label, fn]) => (
-                    <Button key={key} onClick={() => fill(fn)}>
-                      {label}
-                    </Button>
-                  ))}
-                </ButtonGroup>
-              )}
+              <Typography variant="subtitle1">1. Số lượng tem (mỗi chiếc một tem, các tem cùng mã giống nhau)</Typography>
+              <ButtonGroup size="small" variant="outlined" disabled={!items.length}>
+                {FILL_MODES.map(([key, label, fn]) => (
+                  <Button key={key} onClick={() => fill(fn)}>
+                    {label}
+                  </Button>
+                ))}
+              </ButtonGroup>
             </Stack>
-            {serial && items.length > 0 ? (
-              <Box sx={{ overflowX: 'auto', border: 1, borderColor: 'divider', borderRadius: 1 }}>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Hàng hóa</TableCell>
-                      <TableCell>Mã serial</TableCell>
-                      <TableCell align="right">Số tem</TableCell>
-                      <TableCell sx={{ width: 40 }} />
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {groups.map((g) => (
-                      <TableRow key={g.detail_id}>
-                        <TableCell>
-                          <Typography variant="subtitle2">{g.product_name}</Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {g.color} · Size {g.size}
-                          </Typography>
-                        </TableCell>
-                        <TableCell sx={{ fontFamily: 'monospace' }}>
-                          {g.units.length === 1 ? g.units[0].serial_code : `${g.units[0].serial_code} … ${g.units.at(-1).serial_code}`}
-                        </TableCell>
-                        <TableCell align="right">{number(g.units.length)}</TableCell>
-                        <TableCell>
-                          {groups.length > 1 && (
-                            <Tooltip title="Bỏ khỏi lần in này">
-                              <IconButton
-                                size="small"
-                                aria-label={`Bỏ ${g.product_name} ${g.color} ${g.size}`}
-                                onClick={() => setItems((previous) => previous.filter((x) => x.detail_id !== g.detail_id))}
-                              >
-                                <CloseOutlined />
-                              </IconButton>
-                            </Tooltip>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </Box>
-            ) : items.length ? (
+            {items.length ? (
               <Box sx={{ overflowX: 'auto', border: 1, borderColor: 'divider', borderRadius: 1 }}>
                 <Table size="small">
                   <TableHead>
@@ -298,7 +239,7 @@ export default function BarcodePrintDialog({ variants, onClose, serial = false, 
                 </Table>
               </Box>
             ) : (
-              <Alert severity="info">{serial ? 'Không có chiếc nào cần in tem.' : 'Không có biến thể nào có mã vạch để in.'}</Alert>
+              <Alert severity="info">Không có biến thể nào có mã vạch để in.</Alert>
             )}
           </Box>
 
@@ -370,7 +311,7 @@ export default function BarcodePrintDialog({ variants, onClose, serial = false, 
           {items.length > 0 && (
             <Box>
               <Typography variant="subtitle1" sx={{ mb: 1 }}>
-                {serial ? 'Xem trước (kích thước thật, vài tem đầu)' : 'Xem trước (kích thước thật, mỗi biến thể một mẫu)'}
+                Xem trước (kích thước thật, mỗi biến thể một mẫu)
               </Typography>
               <Box
                 component="iframe"

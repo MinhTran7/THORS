@@ -10,7 +10,7 @@ import com.thors.module.order.delivery.GhnShippingService;
 import com.thors.module.order.repository.OrderRepository;
 import com.thors.module.order.repository.OrderRepository.Payable;
 import com.thors.module.order.service.OrderService;
-import com.thors.module.warehouse.WarehouseStore;
+import com.thors.module.warehouse.repository.WarehouseStore;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

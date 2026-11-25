@@ -1,4 +1,4 @@
-package com.thors.module.warehouse;
+package com.thors.module.warehouse.service;
 
 import static org.junit.jupiter.api.Assertions.*;
 

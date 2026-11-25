@@ -1,9 +1,13 @@
-package com.thors.module.warehouse;
+package com.thors.module.warehouse.service;
 
-import static com.thors.module.warehouse.WarehouseStore.*;
+import com.thors.module.warehouse.repository.WarehouseStore;
+import com.thors.module.warehouse.util.RackGeometry;
+
+import static com.thors.module.warehouse.repository.WarehouseStore.*;
 
 import com.thors.module.account.entity.Account;
-import com.thors.module.warehouse.WarehouseRequests.*;
+import com.thors.module.warehouse.dto.WarehouseRequests;
+import com.thors.module.warehouse.dto.WarehouseRequests.*;
 import java.math.BigDecimal;
 import java.util.*;
 import org.springframework.stereotype.Service;
@@ -527,20 +531,6 @@ ORDER BY p.product_name,d.color,d.size
             }
         }
 
-        s.units().sync(r.detailId());
-        if (s.units().ready()) {
-            // Chỉ chuyển chiếc đã dán tem và quét xác nhận.
-            var name = s.one(
-                    "SELECT p.product_name,d.color,d.size FROM product_detail d JOIN product p ON p.product_id=d.product_id"
-                            + " WHERE d.detail_id=?",
-                    r.detailId());
-            s.units().requireConfirmed(
-                    r.detailId(),
-                    r.fromLocationId(),
-                    r.quantity(),
-                    name.get("product_name") + " · " + name.get("color") + " · " + name.get("size"),
-                    r.fromLocationId() == null ? "hàng chưa xếp" : "vị trí nguồn");
-        }
         Integer destination = null;
 
         if (r.toShelfId() != null) {
@@ -614,7 +604,6 @@ ORDER BY p.product_name,d.color,d.size
                     r.fromLocationId());
         }
 
-        s.units().sync(r.detailId()); // tổng tồn không đổi: chỉ chuyển serial giữa các ô
         int id = s.insert("""
 INSERT INTO stock_adjustment(detail_id,quantity_change,reason,adjusted_by,movement_type,movement_quantity,source_location_id,destination_location_id,idempotency_key)
 VALUES(?,0,'Sắp xếp vị trí kho',?,'MOVE',?,?,?,?)

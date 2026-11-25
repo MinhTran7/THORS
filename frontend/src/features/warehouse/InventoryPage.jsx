@@ -9,7 +9,7 @@ import { useWarehouse } from './WarehouseContext';
 import { ActionDialog, DataTable, Metrics, Title } from './components';
 import { money, number, stockStateColor, stockStateLabel, tierName, variantLabel } from './model';
 import { exportSheet } from './excelWorkbook';
-import SerialPrintDialog from './SerialPrintDialog';
+import BarcodePrintDialog from './BarcodePrintDialog';
 import BarcodeScannerDialog from './BarcodeScannerDialog';
 import useBarcodeScanner from './useBarcodeScanner';
 import InventoryDetail from './InventoryDetail';
@@ -56,10 +56,6 @@ function exportColumns(owner) {
       : [])
   ];
 }
-
-// Hàng đang đặt chưa về: tem serial được in khi kiểm hàng ở phiếu nhập, không in ở Tồn kho.
-const INCOMING_TIP =
-  'Hàng đang đặt, chưa về kho nên chưa có chiếc nào để in tem. Khi hàng về: Nhập hàng → Phiếu nhập hàng → mở phiếu “Chờ kiểm hàng” → In tem, dán và quét từng chiếc.';
 
 export default function InventoryPage() {
   const { owner, data: snapshot, reload: reloadWarehouse } = useWarehouse();
@@ -508,17 +504,15 @@ export default function InventoryPage() {
                 label: '',
                 render: (r) => {
                   if (r._kind === 'product') {
-                    // Tem serial: mỗi chiếc trong kho một tem (không cần mã vạch biến thể).
-                    const printable = r.variants.filter((v) => Number(v.stock_quantity) > 0);
+                    // Mỗi biến thể một mã chung: in N tem giống nhau cho N chiếc.
+                    const printable = r.variants.filter((v) => v.barcode);
                     return (
                       <Stack direction="row" spacing={0.5} sx={{ justifyContent: 'flex-end' }}>
                         <Tooltip
                           title={
                             printable.length
-                              ? `In tem serial cho ${number(r.stock_quantity)} chiếc trong kho`
-                              : Number(r.incoming_quantity) > 0
-                                ? INCOMING_TIP
-                                : 'Sản phẩm đang hết hàng, không có chiếc nào để in tem'
+                              ? `In tem ${number(printable.length)} biến thể của sản phẩm này`
+                              : 'Chưa biến thể nào có mã vạch'
                           }
                         >
                           <span>
@@ -545,19 +539,13 @@ export default function InventoryPage() {
                   return (
                     <Stack direction="row" spacing={0.5} sx={{ justifyContent: 'flex-end' }}>
                       <Tooltip
-                        title={
-                          Number(r.stock_quantity) > 0
-                            ? `In tem serial cho ${number(r.stock_quantity)} chiếc trong kho`
-                            : Number(r.incoming_quantity) > 0
-                              ? INCOMING_TIP
-                              : 'Đang hết hàng, không có chiếc nào để in tem'
-                        }
+                        title={r.barcode ? `In tem ${r.barcode}` : 'Chưa có mã vạch — mở Sửa sản phẩm và lưu lại để hệ thống tự gán mã'}
                       >
                         <span>
                           <Button
                             size="small"
                             variant="outlined"
-                            disabled={!(Number(r.stock_quantity) > 0)}
+                            disabled={!r.barcode}
                             onClick={(e) => (e.stopPropagation(), setPrinting([r]))}
                             sx={{ whiteSpace: 'nowrap' }}
                           >
@@ -595,7 +583,7 @@ export default function InventoryPage() {
           }}
         />
       )}
-      {printing && <SerialPrintDialog variants={printing} onClose={() => setPrinting(null)} />}
+      {printing && <BarcodePrintDialog variants={printing} onClose={() => setPrinting(null)} />}
       {scanning && (
         <BarcodeScannerDialog
           scanRequest={scanRequest}

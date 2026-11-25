@@ -1,6 +1,8 @@
-package com.thors.module.warehouse;
+package com.thors.module.warehouse.service;
 
-import static com.thors.module.warehouse.WarehouseStore.num;
+import com.thors.module.warehouse.repository.WarehouseStore;
+
+import static com.thors.module.warehouse.repository.WarehouseStore.num;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

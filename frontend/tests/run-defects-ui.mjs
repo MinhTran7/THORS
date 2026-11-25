@@ -1,5 +1,5 @@
-// UI smoke test for Bán hàng → Xử lý hàng lỗi (quét serial, ghi lỗi, sửa xong / bỏ hẳn, mẫu lỗi) with a mocked API.
-// Backend rules (stock unchanged on report, discard takes the piece off its shelf…) are in WarehouseDefectsTest.
+// UI smoke test for Bán hàng → Xử lý hàng lỗi (quét mã chung + số chiếc lỗi, ghi lỗi, sửa xong / bỏ hẳn, mẫu lỗi) with a mocked API.
+// Backend rules (stock unchanged on report, defects never exceed stock…) are in WarehouseDefectsTest.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdtemp } from 'node:fs/promises';
@@ -13,15 +13,17 @@ const frontend = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const artifacts = await mkdtemp(path.join(tmpdir(), 'thors-defects-'));
 const baseURL = 'http://127.0.0.1:4183';
 
-const variant = { detail_id: 51, product_id: 24, product_name: 'Áo Hooldy', color: 'Nâu kem', size: 'L', barcode: 'TH000051', stock_quantity: 20 };
-const unit = (seq, extra) => ({
-  unit_id: seq,
-  serial_code: `TH000051-${String(seq).padStart(4, '0')}`,
-  status: 'IN_STOCK',
+const variant = {
   detail_id: 51,
-  location: null,
-  ...extra
-});
+  product_id: 24,
+  product_name: 'Áo Hooldy',
+  color: 'Nâu kem',
+  size: 'L',
+  barcode: 'TH000051',
+  stock_quantity: 20,
+  defective_quantity: 1
+};
+const soldOut = { ...variant, detail_id: 52, barcode: 'TH000052', size: 'XL', stock_quantity: 0, defective_quantity: 0 };
 
 const server = spawn(process.execPath, [path.join(frontend, 'node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', '4183'], {
   cwd: frontend,
@@ -45,8 +47,8 @@ try {
       defects: [
         {
           defect_id: 7,
-          unit_id: 9,
-          serial_code: 'TH000051-0009',
+          unit_id: 7,
+          barcode: 'TH000051',
           product_name: 'Áo Hooldy',
           color: 'Nâu kem',
           size: 'L',
@@ -56,8 +58,7 @@ try {
           source: 'WAREHOUSE',
           photo_keys: [],
           status: 'OPEN',
-          unit_status: 'IN_STOCK',
-          location: 'A1',
+          location: null,
           reporter_name: 'Người nhà',
           reported_at: '2026-11-16T09:00:00'
         }
@@ -86,19 +87,21 @@ try {
         return json({ items: state.defects.filter((d) => st === 'ALL' || d.status === st), counts });
       }
       if (endpoint === '/api/warehouse/defects' && request.method() === 'POST') {
-        state.defects.unshift({
-          ...state.defects[0],
-          defect_id: 8,
-          serial_code: body.serial,
+        const created = Array.from({ length: body.quantity }, (_, k) => ({
+          ...state.defects.at(-1),
+          defect_id: 8 + k,
+          unit_id: 8 + k,
+          barcode: body.code,
           types: body.types,
           defect_types: body.types.join(', '),
           description: body.description,
           source: body.source,
-          location: null,
+          status: 'OPEN',
           reporter_name: 'Test',
           reported_at: '2026-11-17T09:00:00'
-        });
-        return json(state.defects[0]);
+        }));
+        state.defects.unshift(...created);
+        return json({ code: body.code, quantity: body.quantity, open: 1 + body.quantity, items: created });
       }
       const resolve = endpoint.match(/^\/api\/warehouse\/defects\/(\d+)\/(fix|discard)$/);
       if (resolve) {
@@ -110,8 +113,7 @@ try {
       if (endpoint === '/api/warehouse/barcodes/lookup') {
         const code = url.searchParams.get('code');
         if (code === 'TH000051') return json({ variant, locations: [] });
-        if (code === 'TH000051-0003') return json({ variant, locations: [], unit: unit(3) });
-        if (code === 'TH000051-0001') return json({ variant, locations: [], unit: unit(1, { status: 'SOLD' }) });
+        if (code === 'TH000052') return json({ variant: soldOut, locations: [] });
         return json({ code: 'BARCODE_NOT_FOUND', message: 'Không tìm thấy hàng hóa có mã vạch này.' }, 404);
       }
       throw new Error(`Unexpected API call: ${request.method()} ${endpoint}`);
@@ -121,7 +123,7 @@ try {
     return { context, page, calls, state };
   }
 
-  // Owner: menu entry, variant code refused, report a defect on the exact piece, fix / discard, add a defect type.
+  // Owner: menu entry, scan the shared code, report 2 defective pieces, fix / discard, add a defect type.
   const owner = await open('OWNER');
   {
     const { page, calls } = owner;
@@ -129,18 +131,23 @@ try {
     await page.getByRole('link', { name: 'Xử lý hàng lỗi' }).waitFor(); // menu Bán hàng
     await page.getByText('Vết ố ở tay áo').waitFor();
     const box = page.getByRole('textbox', { name: 'Mã tem hàng lỗi' });
-    await box.fill('th000051');
+    await box.fill('TH000052');
     await box.press('Enter');
-    await page.getByText('TH000051 là mã biến thể', { exact: false }).waitFor();
-    await box.fill('TH000051-0001');
+    await page.getByText('không còn hàng trong kho', { exact: false }).waitFor();
+    await box.fill('TH999999');
     await box.press('Enter');
-    await page.getByText('không còn trong kho (Đã bán)', { exact: false }).waitFor();
+    await page.getByText('Không tìm thấy hàng hóa có mã vạch này.').waitFor();
     // Máy quét USB: gõ nhanh ở bất kỳ đâu trên trang
     await page.getByRole('heading', { name: 'Xử lý hàng lỗi' }).click();
-    await page.keyboard.type('TH000051-0003', { delay: 5 });
+    await page.keyboard.type('th000051', { delay: 5 });
     await page.keyboard.press('Enter');
     await page.getByText('Áo Hooldy · Nâu kem · L').first().waitFor();
+    await page.getByText('tồn 20 · đang báo lỗi 1', { exact: false }).waitFor();
     assert.equal(await page.getByRole('button', { name: 'Ghi lỗi', exact: true }).isDisabled(), true, 'chưa chọn lỗi');
+    const qty = page.getByRole('spinbutton', { name: 'Số chiếc lỗi' });
+    await qty.fill('20');
+    await page.getByText('Tối đa 19 chiếc', { exact: false }).waitFor();
+    await qty.fill('2');
     await page.getByRole('button', { name: 'Rách' }).click();
     await page.getByRole('button', { name: 'Bung chỉ' }).click();
     // Chủ cửa hàng gõ thêm lỗi chưa có sẵn
@@ -151,27 +158,30 @@ try {
     await page.getByLabel('Mô tả thêm (không bắt buộc)').fill('Rách gấu áo');
     await page.screenshot({ path: path.join(artifacts, 'defect-form.png'), fullPage: true });
     await page.getByRole('button', { name: 'Ghi lỗi', exact: true }).click();
-    await page.getByText('Đã ghi lỗi cho chiếc TH000051-0003. Tồn kho không đổi.').waitFor();
+    await page.getByText('Đã ghi lỗi 2 chiếc TH000051 (Áo Hooldy · Nâu kem · L). Tồn kho không đổi.').waitFor();
     assert.deepEqual(calls.find((c) => c.endpoint === '/api/warehouse/defects' && c.method === 'POST')?.body, {
-      serial: 'TH000051-0003',
+      code: 'TH000051',
+      quantity: 2,
       types: ['Rách', 'Bung chỉ', 'Thủng lỗ'],
       description: 'Rách gấu áo',
       source: 'WAREHOUSE',
       photoKeys: []
     });
-    await page.getByText('Rách gấu áo').waitFor();
+    assert.equal(await page.getByText('Rách gấu áo').count(), 2, 'mỗi chiếc lỗi một dòng');
+    await page.screenshot({ path: path.join(artifacts, 'defect-list.png'), fullPage: true });
     // Sửa xong chiếc bị ố
-    await page.getByRole('row', { name: /TH000051-0009/ }).getByRole('button', { name: 'Sửa xong' }).click();
-    await page.getByRole('dialog', { name: 'Sửa xong TH000051-0009' }).getByRole('button', { name: 'Xác nhận' }).click();
-    await page.getByText('TH000051-0009 đã sửa xong.').waitFor();
-    // Bỏ hẳn chiếc rách: cần lý do
-    await page.getByRole('row', { name: /TH000051-0003/ }).getByRole('button', { name: 'Bỏ hẳn' }).click();
-    const discard = page.getByRole('dialog', { name: 'Bỏ hẳn TH000051-0003' });
+    await page.getByRole('row', { name: /Vết ố ở tay áo/ }).getByRole('button', { name: 'Sửa xong' }).click();
+    await page.getByRole('dialog', { name: 'Sửa xong 1 chiếc TH000051' }).getByRole('button', { name: 'Xác nhận' }).click();
+    await page.getByText('1 chiếc TH000051 đã sửa xong.').waitFor();
+    assert.ok(calls.some((c) => c.endpoint === '/api/warehouse/defects/7/fix'));
+    // Bỏ hẳn một chiếc rách: cần lý do
+    await page.getByRole('row', { name: /Rách gấu áo/ }).first().getByRole('button', { name: 'Bỏ hẳn' }).click();
+    const discard = page.getByRole('dialog', { name: 'Bỏ hẳn 1 chiếc TH000051' });
     await discard.getByText('tồn kho giảm 1', { exact: false }).waitFor();
     assert.equal(await discard.getByRole('button', { name: 'Xác nhận' }).isDisabled(), true, 'lý do bắt buộc');
     await discard.getByLabel('Lý do').fill('Rách không sửa được');
     await discard.getByRole('button', { name: 'Xác nhận' }).click();
-    await page.getByText('Đã bỏ TH000051-0003, tồn giảm 1.').waitFor();
+    await page.getByText('Đã bỏ 1 chiếc TH000051, tồn giảm 1.').waitFor();
     assert.ok(calls.some((c) => c.endpoint === '/api/warehouse/defects/8/discard' && c.body.note === 'Rách không sửa được'));
     await owner.context.close();
   }
@@ -183,7 +193,7 @@ try {
     await page.getByText('Vết ố ở tay áo').waitFor();
     await page.getByRole('button', { name: 'Sửa xong' }).waitFor();
     assert.equal(await page.getByRole('button', { name: 'Bỏ hẳn' }).count(), 0);
-    await page.getByRole('textbox', { name: 'Mã tem hàng lỗi' }).fill('TH000051-0003');
+    await page.getByRole('textbox', { name: 'Mã tem hàng lỗi' }).fill('TH000051');
     await page.getByRole('textbox', { name: 'Mã tem hàng lỗi' }).press('Enter');
     await page.getByRole('button', { name: 'Rách' }).waitFor();
     assert.equal(await page.getByLabel('Lỗi khác (chủ cửa hàng gõ thêm)').count(), 0, 'người nhà chỉ chọn lỗi có sẵn');

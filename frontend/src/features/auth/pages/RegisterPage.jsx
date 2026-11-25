@@ -17,8 +17,9 @@ export default function RegisterPage() {
         schema={registerSchema}
         submitLabel="Đăng ký và nhận OTP"
         onSubmit={async (v) => {
-          await post('/auth/register', v);
-          navigate('/auth/verify');
+          // 1.22: server trả sẵn email đã che + thời gian gửi lại → mang sang trang nhập mã, khỏi hỏi lại.
+          const challenge = await post('/auth/register', v);
+          navigate('/auth/verify', { state: { challenge } });
         }}
       >
         {(form) => (
