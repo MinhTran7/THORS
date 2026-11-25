@@ -5,7 +5,6 @@ import static org.mockito.Mockito.*;
 
 import com.thors.module.notification.service.NotificationPublisher;
 import com.thors.module.notification.service.NotificationTypes;
-import com.thors.module.order.delivery.DeliveryService;
 import com.thors.module.order.delivery.GhnShippingService;
 import com.thors.module.order.repository.OrderRepository;
 import com.thors.module.order.repository.OrderRepository.Payable;
@@ -30,13 +29,14 @@ class OrderPaymentNotificationTest {
                         orders,
                         notifications,
                         mock(GhnShippingService.class),
-                        mock(DeliveryService.class),
-                        mock(WarehouseStore.class));
+                        mock(WarehouseStore.class),
+                        mock(com.thors.module.order.service.OrderMailService.class));
+        when(orders.isCustomerAccount(5)).thenReturn(true);
     }
 
     private void order(String status, String payment) {
         when(orders.findPayableForUpdate(10))
-                .thenReturn(Optional.of(new Payable(10, 5, "ORD-10", status, payment)));
+                .thenReturn(Optional.of(new Payable(10, 5, "ORD-10", "Online", status, payment)));
     }
 
     @Test
@@ -80,6 +80,36 @@ class OrderPaymentNotificationTest {
                         eq(NotificationTypes.ENTITY_ORDER), eq(10));
         verify(notifications, never())
                 .toRole(anyString(), anyString(), eq("Có đơn hàng online mới"), anyString(), anyString(), anyInt());
+        // Chỉ Owner bấm được "Đã hoàn tiền" nên người nhà không nhận
+        verify(notifications, never())
+                .toRole(eq("FAMILY_MEMBER"), anyString(), anyString(), anyString(), anyString(), anyInt());
+    }
+
+    @Test
+    void facebookOrderDoesNotNotifyStaffAsCustomer() {
+        // Đơn Facebook gắn tài khoản nhân viên (user 5 không phải khách hàng)
+        when(orders.isCustomerAccount(5)).thenReturn(false);
+        order("AWAITING_PAYMENT", "UNPAID");
+
+        service.onOnlinePaymentPaid(10);
+
+        verify(notifications, never()).toUser(anyInt(), anyString(), anyString(), anyString(), anyString(), anyInt());
+        verify(notifications)
+                .toRole(eq("OWNER"), anyString(), eq("Có đơn hàng online mới"), anyString(), anyString(), eq(10));
+    }
+
+    @Test
+    void facebookOrderCreatedNotifiesOtherStoreMembersOnly() {
+        when(orders.storeUserIds()).thenReturn(java.util.List.of(1, 2, 3));
+        var creator =
+                new com.thors.module.account.entity.Account(
+                        2, "FAMILY_MEMBER", "Lan", null, null, null, null, null, "ACTIVE", null, null, null, 0, null);
+
+        service.notifyFacebookOrderCreated(creator, 10, "ORD-10");
+
+        verify(notifications)
+                .toUsers(eq(java.util.List.of(1, 3)), eq(NotificationTypes.ORDER_STATUS), eq("Có đơn hàng Facebook mới"),
+                        contains("Lan"), eq(NotificationTypes.ENTITY_ORDER), eq(10));
     }
 
     @Test

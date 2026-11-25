@@ -19,6 +19,7 @@ import {
 import { DownOutlined, PictureOutlined, SaveOutlined, SearchOutlined } from '@ant-design/icons';
 import { categoryFullName, getCategories, sortCategoriesAsTree } from 'services/categoryService';
 import { getActiveProductPromotions, overlaps } from 'services/promotionService';
+import { formatDate, KIND, priceRange, productRows, salePrice, toInputDateTime } from './promotionFormat';
 
 const C = {
   text: '#202D42',
@@ -42,9 +43,10 @@ const fieldSx = {
     borderRadius: 2.5,
     fontSize: 14,
     '&, &.Mui-focused, &.Mui-error.Mui-focused': { boxShadow: 'none' },
-    '& fieldset, &:hover fieldset, &.Mui-focused fieldset, &.Mui-error fieldset, &.Mui-error:hover fieldset, &.Mui-error.Mui-focused fieldset': {
-      border: `1px solid ${C.border}`
-    }
+    '& fieldset, &:hover fieldset, &.Mui-focused fieldset, &.Mui-error fieldset, &.Mui-error:hover fieldset, &.Mui-error.Mui-focused fieldset':
+      {
+        border: `1px solid ${C.border}`
+      }
   },
   '& .MuiFormHelperText-root': { mx: 0.5, fontSize: 12 },
   '& .MuiInputLabel-root': { fontSize: 13.5 },
@@ -62,28 +64,19 @@ export const emptyPromotion = {
   usageLimit: '',
   startDate: '',
   endDate: '',
-  applyScope: 'SELECTED',
+  allProducts: false,
   productIds: []
-};
-
-// Hai loại: khuyến mãi sản phẩm và giảm giá đơn hàng
-export const kindOf = (p) => (Number(p?.minOrderValue) > 0 ? 'ORDER' : 'PRODUCT');
-export const KIND = {
-  PRODUCT: { base: '/promotions', title: 'Khuyến mãi sản phẩm', name: 'khuyến mãi sản phẩm' },
-  ORDER: { base: '/order-discounts', title: 'Giảm giá đơn hàng', name: 'giảm giá đơn hàng' }
-};
-
-// Lý do không sửa được: đang diễn ra hoặc đã kết thúc
-export const lockMessage = (p) => {
-  const now = new Date();
-  if (new Date(p.endDate) <= now) return 'Khuyến mãi đã kết thúc nên không thể chỉnh sửa hay bật lại.';
-  if (new Date(p.startDate) <= now) return 'Khuyến mãi đang diễn ra nên không thể chỉnh sửa.';
-  return '';
 };
 
 export function NoticeDialog({ message, onClose }) {
   return (
-    <Dialog open={Boolean(message)} onClose={onClose} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 3.5, border: `1px solid ${C.border}`, p: 1 } }}>
+    <Dialog
+      open={Boolean(message)}
+      onClose={onClose}
+      maxWidth="xs"
+      fullWidth
+      slotProps={{ paper: { sx: { borderRadius: 3.5, border: `1px solid ${C.border}`, p: 1 } } }}
+    >
       <DialogTitle sx={{ color: C.text, fontWeight: 700, fontSize: 17, pb: 1 }}>Không thể thực hiện</DialogTitle>
       <DialogContent>
         <Typography sx={{ fontSize: 13.5, color: C.muted, lineHeight: 1.6 }}>{message}</Typography>
@@ -92,7 +85,15 @@ export function NoticeDialog({ message, onClose }) {
         <Button
           variant="contained"
           onClick={onClose}
-          sx={{ bgcolor: '#8EECF5', color: C.text, boxShadow: 'none', textTransform: 'none', fontWeight: 700, borderRadius: 2, '&:hover': { bgcolor: '#76E5EF', boxShadow: 'none' } }}
+          sx={{
+            bgcolor: '#8EECF5',
+            color: C.text,
+            boxShadow: 'none',
+            textTransform: 'none',
+            fontWeight: 700,
+            borderRadius: 2,
+            '&:hover': { bgcolor: '#76E5EF', boxShadow: 'none' }
+          }}
         >
           Đã hiểu
         </Button>
@@ -101,44 +102,75 @@ export function NoticeDialog({ message, onClose }) {
   );
 }
 
-export const productRows = (res) => (Array.isArray(res) ? res : res?.content ?? res?.data ?? []);
-export const isActive = (p) => p.status === 'ACTIVE';
+// Hộp xác nhận bật/tắt, kết thúc sớm, xóa (confirm lấy từ promotionActions)
+export function ConfirmDialog({ confirm, working, onCancel, onConfirm }) {
+  return (
+    <Dialog
+      open={Boolean(confirm)}
+      onClose={() => !working && onCancel()}
+      maxWidth="xs"
+      fullWidth
+      slotProps={{ paper: { sx: { borderRadius: 3.5, border: `1px solid ${C.border}`, p: 1 } } }}
+    >
+      <DialogTitle sx={{ color: C.text, fontWeight: 700, fontSize: 17, pb: 1 }}>{confirm?.title}</DialogTitle>
+      <DialogContent>
+        <Typography sx={{ fontSize: 13.5, color: C.muted }}>
+          {confirm?.message} <strong style={{ color: C.text }}>{confirm?.promotion.name}</strong>?
+        </Typography>
+        {confirm?.warning && (
+          <Alert severity="warning" sx={{ mt: 1.5, fontSize: 13, borderRadius: 2 }}>
+            {confirm.warning}
+          </Alert>
+        )}
+      </DialogContent>
+      <DialogActions sx={{ p: 2, pt: 1 }}>
+        <Button onClick={onCancel} disabled={working} sx={{ color: C.muted, textTransform: 'none', fontSize: 13.5, borderRadius: 2 }}>
+          Hủy
+        </Button>
+        <Button
+          variant="contained"
+          onClick={onConfirm}
+          disabled={working}
+          sx={{
+            bgcolor: '#8EECF5',
+            color: C.text,
+            boxShadow: 'none',
+            textTransform: 'none',
+            fontWeight: 700,
+            fontSize: 13.5,
+            borderRadius: 2,
+            px: 2.5,
+            '&:hover': { bgcolor: '#76E5EF', boxShadow: 'none' }
+          }}
+        >
+          {working ? 'Đang xử lý...' : 'Xác nhận'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
 
-const money = (value) => `${Number(value || 0).toLocaleString('vi-VN')} đ`;
-const getProductId = (product) => Number(product.productId ?? product.id);
-const getProductName = (product) => product.productName || product.name || 'Sản phẩm chưa có tên';
-const getProductImage = (product) => product.primaryImageUrl || product.imageUrl || product.thumbnailUrl || product.image || '';
-const priceRange = ({ minPrice, maxPrice }) => {
-  if (minPrice == null && maxPrice == null) return 'Chưa có giá';
-  if (minPrice == null || maxPrice == null || Number(minPrice) === Number(maxPrice)) return money(minPrice ?? maxPrice);
-  return `${Number(minPrice).toLocaleString('vi-VN')} – ${money(maxPrice)}`;
-};
-const columns = { xs: '28px 44px minmax(0, 1fr) 120px', md: '28px 44px minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 0.8fr) minmax(0, 1.2fr)' };
+const getProductId = (product) => Number(product.productId);
+const getProductName = (product) => product.productName || 'Sản phẩm chưa có tên';
+const getProductImage = (product) => product.primaryImageUrl || '';
+const columns = { xs: '28px 44px minmax(0, 1fr) 120px', md: '28px 44px minmax(0, 2fr) minmax(0, 0.6fr) minmax(0, 1fr) minmax(0, 1fr)' };
 const headSx = { fontSize: 11.5, fontWeight: 700, color: C.subtle, textTransform: 'uppercase', letterSpacing: 0.4 };
 const desktop = { display: { xs: 'none', md: 'block' } };
 
+function validateUsage(form, errors) {
+  if (!form.usageLimit) errors.usageLimit = 'Vui lòng nhập giới hạn lượt dùng.';
+  else if (Number(form.usageLimit) < Math.max(1, Number(form.usedCount || 0)))
+    errors.usageLimit =
+      form.usedCount > 0 ? `Không được nhỏ hơn số lượt đã dùng (${form.usedCount}).` : 'Giới hạn lượt dùng phải từ 1 trở lên.';
+}
 
-const fromPromotion = (p) => ({
-  name: p.name,
-  description: p.description,
-  discountType: p.discountType,
-  discountValue: p.discountValue,
-  minOrderValue: Number(p.minOrderValue) > 0 ? p.minOrderValue : '',
-  usageLimit: p.usageLimit,
-  usedCount: p.usedCount,
-  startDate: p.startDate,
-  endDate: p.endDate,
-  allProducts: p.applyScope !== 'SELECTED',
-  productIds: p.productIds
-});
-
-const nowInput = () => {
-  const now = new Date();
-  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-  return now.toISOString().slice(0, 16);
-};
-
-const dateText = (value) => new Date(value).toLocaleDateString('vi-VN');
+function validateAdjust(form, initial) {
+  const errors = {};
+  if (!form.endDate) errors.endDate = 'Vui lòng chọn thời gian kết thúc.';
+  else if (form.endDate < initial.endDate) errors.endDate = 'Chỉ được gia hạn, thời gian kết thúc mới phải sau thời gian cũ.';
+  if (form.kind === 'ORDER') validateUsage(form, errors);
+  return errors;
+}
 
 function validate(form, minStart, originalStart) {
   const errors = {};
@@ -157,9 +189,7 @@ function validate(form, minStart, originalStart) {
   if (form.kind === 'ORDER') {
     if (!(minOrder > 0)) errors.minOrderValue = 'Vui lòng nhập giá trị đơn tối thiểu.';
     else if (form.discountType === 'FIXED' && value >= minOrder) errors.discountValue = 'Số tiền giảm phải nhỏ hơn giá trị đơn tối thiểu.';
-    if (!form.usageLimit) errors.usageLimit = 'Vui lòng nhập giới hạn lượt dùng.';
-    else if (Number(form.usageLimit) < Math.max(1, Number(form.usedCount || 0)))
-      errors.usageLimit = form.usedCount > 0 ? `Không được nhỏ hơn số lượt đã dùng (${form.usedCount}).` : 'Giới hạn lượt dùng phải từ 1 trở lên.';
+    validateUsage(form, errors);
   }
   if (form.kind === 'PRODUCT' && !form.allProducts && !form.productIds.length) errors.productIds = 'Vui lòng chọn ít nhất một sản phẩm.';
   return errors;
@@ -170,9 +200,7 @@ function Section({ title, description, children }) {
     <Box sx={{ '& + &': { borderTop: `1px solid ${C.border}`, pt: 3, mt: 3 } }}>
       <Typography sx={{ fontSize: 16, fontWeight: 800, color: C.text }}>{title}</Typography>
       {description && <Typography sx={{ fontSize: 12.5, color: C.muted, mt: 0.25 }}>{description}</Typography>}
-      <Box sx={{ mt: 2, minWidth: 0 }}>
-        {children}
-      </Box>
+      <Box sx={{ mt: 2, minWidth: 0 }}>{children}</Box>
     </Box>
   );
 }
@@ -201,21 +229,22 @@ function Pill({ active, children, onClick }) {
   );
 }
 
-function Segmented({ value, options, onChange }) {
+function Segmented({ value, options, onChange, disabled }) {
   return (
-    <Box sx={{ display: 'inline-flex', p: 0.5, borderRadius: 2.5, bgcolor: '#F1F5F9' }}>
+    <Box sx={{ display: 'inline-flex', p: 0.5, borderRadius: 2.5, bgcolor: '#F1F5F9', opacity: disabled ? 0.6 : 1 }}>
       {options.map(([key, label]) => (
         <Box
           key={key}
           component="button"
           type="button"
+          disabled={disabled}
           onClick={() => onChange(key)}
           sx={{
             px: 2,
             py: 0.75,
             border: 0,
             borderRadius: 2,
-            cursor: 'pointer',
+            cursor: disabled ? 'default' : 'pointer',
             fontFamily: 'inherit',
             fontSize: 13,
             fontWeight: 700,
@@ -231,10 +260,11 @@ function Segmented({ value, options, onChange }) {
   );
 }
 
-function MoneyField({ label, value, onChange, error, hint, suffix = 'đ' }) {
+function MoneyField({ label, value, onChange, error, hint, disabled, suffix = 'đ' }) {
   return (
     <TextField
       label={label}
+      disabled={disabled}
       error={Boolean(error)}
       helperText={error || hint}
       value={value === '' ? '' : suffix === 'đ' ? Number(value).toLocaleString('vi-VN') : value}
@@ -246,7 +276,7 @@ function MoneyField({ label, value, onChange, error, hint, suffix = 'đ' }) {
   );
 }
 
-function ProductPicker({ products, loading, all, selected, busy, onChange }) {
+function ProductPicker({ products, loading, all, selected, busy, discount, onChange }) {
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('ALL');
   const [categories, setCategories] = useState([]);
@@ -257,10 +287,15 @@ function ProductPicker({ products, loading, all, selected, busy, onChange }) {
       .catch(() => setCategories([]));
   }, []);
 
-  const categoryName = (product) => {
-    const found = categories.find((c) => String(c.categoryId) === String(product.categoryId));
-    return found ? categoryFullName(found) : product.categoryName || 'Chưa phân loại';
-  };
+  const categoryName = (product) =>
+    categories.find((c) => String(c.categoryId) === String(product.categoryId))?.categoryName ?? product.categoryName;
+  const saleRange = ({ minPrice, maxPrice }) =>
+    Number(discount.value) > 0 && minPrice != null
+      ? priceRange({
+          minPrice: salePrice(minPrice, discount.type, discount.value),
+          maxPrice: salePrice(maxPrice ?? minPrice, discount.type, discount.value)
+        })
+      : '—';
   const parentOf = useMemo(() => new Map(categories.map((c) => [String(c.categoryId), String(c.parentId ?? '')])), [categories]);
   const [expanded, setExpanded] = useState('');
   const groups = useMemo(
@@ -287,7 +322,17 @@ function ProductPicker({ products, loading, all, selected, busy, onChange }) {
         <ListSubheader key={`group-${id}`} sx={{ position: 'static', p: 0, '&:hover': { bgcolor: '#F8FAFC' } }}>
           <Box
             onClick={() => setExpanded(open ? '' : id)}
-            sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2, cursor: 'pointer', fontSize: 13.5, fontWeight: 600, color: C.text, lineHeight: '40px' }}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              px: 2,
+              cursor: 'pointer',
+              fontSize: 13.5,
+              fontWeight: 600,
+              color: C.text,
+              lineHeight: '40px'
+            }}
           >
             {root.categoryName}
             <DownOutlined style={{ fontSize: 10, color: C.subtle, transform: open ? 'rotate(180deg)' : 'none' }} />
@@ -313,7 +358,14 @@ function ProductPicker({ products, loading, all, selected, busy, onChange }) {
     return products.filter((p) => {
       const id = String(p.categoryId);
       const inCategory = category === 'ALL' || id === category || parentOf.get(id) === category;
-      return inCategory && [getProductName(p), p.sku].some((v) => String(v || '').toLocaleLowerCase('vi-VN').includes(keyword));
+      return (
+        inCategory &&
+        [getProductName(p), p.sku].some((v) =>
+          String(v || '')
+            .toLocaleLowerCase('vi-VN')
+            .includes(keyword)
+        )
+      );
     });
   }, [products, search, category, parentOf]);
   const current = all ? products.map(getProductId) : selected;
@@ -370,22 +422,44 @@ function ProductPicker({ products, loading, all, selected, busy, onChange }) {
 
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
         <Box onClick={toggleVisible} sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-          <Checkbox readOnly disableRipple size="small" checked={allVisibleChecked} sx={{ p: 0.5, '&:hover': { bgcolor: 'transparent' }, '&.Mui-checked': { color: C.check } }} />
+          <Checkbox
+            readOnly
+            disableRipple
+            size="small"
+            checked={allVisibleChecked}
+            sx={{ p: 0.5, '&:hover': { bgcolor: 'transparent' }, '&.Mui-checked': { color: C.check } }}
+          />
           <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: C.muted }}>Chọn tất cả</Typography>
         </Box>
         <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: current.length ? C.accent : C.subtle }}>
-          {products.length > 0 && current.length === products.length ? `Tất cả ${products.length} sản phẩm` : `Đã chọn ${current.length} sản phẩm`}
+          {products.length > 0 && current.length === products.length
+            ? `Tất cả ${products.length} sản phẩm`
+            : `Đã chọn ${current.length} sản phẩm`}
         </Typography>
       </Box>
 
       <Box sx={{ maxHeight: 420, overflowY: 'auto', border: `1px solid ${C.border}`, borderRadius: 2.5 }}>
-        <Box sx={{ display: 'grid', gridTemplateColumns: columns, gap: 1.5, alignItems: 'center', px: 1.25, py: 1, bgcolor: '#F8FAFC', borderBottom: `1px solid ${C.border}`, position: 'sticky', top: 0, zIndex: 1 }}>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: columns,
+            gap: 1.5,
+            alignItems: 'center',
+            px: 1.25,
+            py: 1,
+            bgcolor: '#F8FAFC',
+            borderBottom: `1px solid ${C.border}`,
+            position: 'sticky',
+            top: 0,
+            zIndex: 1
+          }}
+        >
           <Box />
           <Box />
           <Typography sx={headSx}>Sản phẩm</Typography>
-          <Typography sx={{ ...headSx, ...desktop }}>Danh mục</Typography>
           <Typography sx={{ ...headSx, ...desktop, textAlign: 'center' }}>Tồn kho</Typography>
           <Typography sx={{ ...headSx, textAlign: 'right' }}>Giá bán</Typography>
+          <Typography sx={{ ...headSx, ...desktop, textAlign: 'right' }}>Giá sau giảm</Typography>
         </Box>
         {loading ? (
           <Box sx={{ py: 4, textAlign: 'center' }}>
@@ -417,7 +491,14 @@ function ProductPicker({ products, loading, all, selected, busy, onChange }) {
                   '&:last-of-type': { borderBottom: 0 }
                 }}
               >
-                <Checkbox readOnly disableRipple size="small" checked={checked} disabled={blocked} sx={{ p: 0.5, '&:hover': { bgcolor: 'transparent' }, '&.Mui-checked': { color: C.check } }} />
+                <Checkbox
+                  readOnly
+                  disableRipple
+                  size="small"
+                  checked={checked}
+                  disabled={blocked}
+                  sx={{ p: 0.5, '&:hover': { bgcolor: 'transparent' }, '&.Mui-checked': { color: C.check } }}
+                />
                 <Box
                   sx={{
                     width: 40,
@@ -442,16 +523,20 @@ function ProductPicker({ products, loading, all, selected, busy, onChange }) {
                     {getProductName(product)}
                   </Typography>
                   <Typography noWrap sx={{ fontSize: 12, color: busy[id] ? C.accent : C.muted }}>
-                    {busy[id] ? `Đang thuộc KM “${busy[id].name}” (${dateText(busy[id].startDate)} – ${dateText(busy[id].endDate)})` : product.sku || '—'}
+                    {busy[id]
+                      ? `Đang thuộc KM “${busy[id].name}” (${formatDate(busy[id].startDate)} – ${formatDate(busy[id].endDate)})`
+                      : [product.sku, categoryName(product)].filter(Boolean).join(' · ') || '—'}
                   </Typography>
                 </Box>
-                <Typography noWrap sx={{ ...desktop, fontSize: 13, color: C.muted }}>
-                  {categoryName(product)}
-                </Typography>
-                <Typography sx={{ ...desktop, fontSize: 13, textAlign: 'center', color: Number(product.totalStock) > 0 ? C.text : C.error }}>
+                <Typography
+                  sx={{ ...desktop, fontSize: 13, textAlign: 'center', color: Number(product.totalStock) > 0 ? C.text : C.error }}
+                >
                   {Number(product.totalStock || 0).toLocaleString('vi-VN')}
                 </Typography>
                 <Typography sx={{ fontSize: 13, fontWeight: 700, color: C.text, textAlign: 'right' }}>{priceRange(product)}</Typography>
+                <Typography sx={{ ...desktop, fontSize: 13, fontWeight: 700, color: C.accent, textAlign: 'right' }}>
+                  {saleRange(product)}
+                </Typography>
               </Box>
             );
           })
@@ -461,12 +546,23 @@ function ProductPicker({ products, loading, all, selected, busy, onChange }) {
   );
 }
 
-export default function PromotionForm({ kind, title, promotionId, initial, products, productsLoading, submitLabel, onSubmit, onCancel }) {
-  const [form, setForm] = useState(() => ({ ...fromPromotion(initial), kind }));
+export default function PromotionForm({
+  kind,
+  title,
+  promotionId,
+  initial,
+  products,
+  productsLoading,
+  submitLabel,
+  adjustOnly,
+  onSubmit,
+  onCancel
+}) {
+  const [form, setForm] = useState(() => ({ ...initial, kind }));
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [minStart] = useState(nowInput);
+  const [minStart] = useState(() => toInputDateTime());
   const [others, setOthers] = useState([]);
 
   useEffect(() => {
@@ -485,7 +581,7 @@ export default function PromotionForm({ kind, title, promotionId, initial, produ
   const busy = useMemo(() => {
     if (form.kind !== 'PRODUCT' || !form.startDate || !form.endDate) return {};
     return others
-      .filter((p) => overlaps(p, form))
+      .filter((p) => overlaps(p, { startDate: form.startDate, endDate: form.endDate }))
       .reduce((map, p) => {
         (p.applyScope === 'SELECTED' ? p.productIds.map(Number) : products.map(getProductId)).forEach((id) => {
           map[id] = map[id] || p;
@@ -496,9 +592,12 @@ export default function PromotionForm({ kind, title, promotionId, initial, produ
 
   const conflicts = (allSelected ? products.map(getProductId) : form.productIds).filter((id) => busy[id]);
   const conflictError = conflicts.length
-    ? `“${getProductName(products.find((p) => getProductId(p) === conflicts[0]) || {})}”${conflicts.length > 1 ? ` và ${conflicts.length - 1} sản phẩm khác` : ''} đang thuộc khuyến mãi “${busy[conflicts[0]].name}” (${dateText(busy[conflicts[0]].startDate)} – ${dateText(busy[conflicts[0]].endDate)}).`
+    ? `“${getProductName(products.find((p) => getProductId(p) === conflicts[0]) || {})}”${conflicts.length > 1 ? ` và ${conflicts.length - 1} sản phẩm khác` : ''} đang thuộc khuyến mãi “${busy[conflicts[0]].name}” (${formatDate(busy[conflicts[0]].startDate)} – ${formatDate(busy[conflicts[0]].endDate)}).`
     : '';
-  const check = () => ({ ...validate(form, minStart, initial.startDate), ...(form.kind === 'PRODUCT' && conflictError && { productIds: conflictError }) });
+  const check = () => ({
+    ...(adjustOnly ? validateAdjust(form, initial) : validate(form, minStart, initial.startDate)),
+    ...(form.kind === 'PRODUCT' && conflictError && { productIds: conflictError })
+  });
   const errors = submitted ? check() : {};
 
   const formRef = useRef(null);
@@ -516,6 +615,7 @@ export default function PromotionForm({ kind, title, promotionId, initial, produ
     setSaving(true);
     try {
       await onSubmit({
+        type: KIND[kind].type,
         name: form.name.trim(),
         description: form.description,
         discountType: form.discountType,
@@ -537,8 +637,18 @@ export default function PromotionForm({ kind, title, promotionId, initial, produ
     <Box component="form" ref={formRef} noValidate onSubmit={handleSubmit} sx={{ color: C.text, pb: 4 }}>
       <Typography sx={{ mb: 3, fontSize: { xs: 22, sm: 28 }, fontWeight: 800 }}>{title}</Typography>
 
-      <Snackbar open={Boolean(error)} autoHideDuration={5000} onClose={() => setError('')} anchorOrigin={{ vertical: 'top', horizontal: 'right' }} sx={{ mt: 7 }}>
-        <Alert severity="error" onClose={() => setError('')} sx={{ bgcolor: '#FFFFFF', border: `1px solid ${C.border}`, borderLeft: '5px solid #EF4444', fontWeight: 600, fontSize: 13 }}>
+      <Snackbar
+        open={Boolean(error)}
+        autoHideDuration={5000}
+        onClose={() => setError('')}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+        sx={{ mt: 7 }}
+      >
+        <Alert
+          severity="error"
+          onClose={() => setError('')}
+          sx={{ bgcolor: '#FFFFFF', border: `1px solid ${C.border}`, borderLeft: '5px solid #EF4444', fontWeight: 600, fontSize: 13 }}
+        >
           {error}
         </Alert>
       </Snackbar>
@@ -549,6 +659,7 @@ export default function PromotionForm({ kind, title, promotionId, initial, produ
             label="Tên chương trình"
             value={form.name}
             onChange={(e) => set({ name: e.target.value })}
+            disabled={adjustOnly}
             error={Boolean(errors.name)}
             helperText={errors.name || ' '}
             fullWidth
@@ -559,6 +670,7 @@ export default function PromotionForm({ kind, title, promotionId, initial, produ
             label="Mô tả (không bắt buộc)"
             value={form.description}
             onChange={(e) => set({ description: e.target.value })}
+            disabled={adjustOnly}
             multiline
             minRows={2}
             fullWidth
@@ -571,9 +683,13 @@ export default function PromotionForm({ kind, title, promotionId, initial, produ
               type="datetime-local"
               value={form.startDate}
               onChange={(e) => set({ startDate: e.target.value })}
+              disabled={adjustOnly}
               error={Boolean(errors.startDate)}
               helperText={errors.startDate}
-              slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: initial.startDate && initial.startDate < minStart ? undefined : minStart } }}
+              slotProps={{
+                inputLabel: { shrink: true },
+                htmlInput: { min: initial.startDate && initial.startDate < minStart ? undefined : minStart }
+              }}
               sx={fieldSx}
             />
             <TextField
@@ -583,7 +699,7 @@ export default function PromotionForm({ kind, title, promotionId, initial, produ
               onChange={(e) => set({ endDate: e.target.value })}
               error={Boolean(errors.endDate)}
               helperText={errors.endDate}
-              slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: form.startDate || minStart } }}
+              slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: adjustOnly ? initial.endDate : form.startDate || minStart } }}
               sx={fieldSx}
             />
           </Box>
@@ -597,6 +713,7 @@ export default function PromotionForm({ kind, title, promotionId, initial, produ
               ['FIXED', 'Số tiền']
             ]}
             onChange={(discountType) => set({ discountType, discountValue: '' })}
+            disabled={adjustOnly}
           />
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: form.kind === 'ORDER' ? '1fr 1fr' : '1fr' }, gap: 2, mt: 2 }}>
             <Box>
@@ -605,9 +722,10 @@ export default function PromotionForm({ kind, title, promotionId, initial, produ
                 value={form.discountValue}
                 suffix={isPercent ? '%' : 'đ'}
                 error={errors.discountValue}
+                disabled={adjustOnly}
                 onChange={(discountValue) => set({ discountValue })}
               />
-              {isPercent && (
+              {isPercent && !adjustOnly && (
                 <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mt: 1.25 }}>
                   {PERCENT_PRESETS.map((v) => (
                     <Pill key={v} active={Number(form.discountValue) === v} onClick={() => set({ discountValue: String(v) })}>
@@ -618,7 +736,13 @@ export default function PromotionForm({ kind, title, promotionId, initial, produ
               )}
             </Box>
             {form.kind === 'ORDER' && (
-              <MoneyField label="Cho đơn hàng từ" value={form.minOrderValue} error={errors.minOrderValue} onChange={(minOrderValue) => set({ minOrderValue })} />
+              <MoneyField
+                label="Cho đơn hàng từ"
+                value={form.minOrderValue}
+                error={errors.minOrderValue}
+                disabled={adjustOnly}
+                onChange={(minOrderValue) => set({ minOrderValue })}
+              />
             )}
           </Box>
         </Section>
@@ -640,14 +764,17 @@ export default function PromotionForm({ kind, title, promotionId, initial, produ
 
         {form.kind === 'PRODUCT' && (
           <Section title="Sản phẩm được giảm" description="Chọn sản phẩm được giảm, tick “Chọn tất cả” để áp dụng cho toàn bộ cửa hàng.">
-            <ProductPicker
-              products={products}
-              loading={productsLoading}
-              all={form.allProducts}
-              selected={form.productIds}
-              busy={busy}
-              onChange={set}
-            />
+            <Box aria-disabled={adjustOnly} sx={adjustOnly ? { pointerEvents: 'none', opacity: 0.6 } : undefined}>
+              <ProductPicker
+                products={products}
+                loading={productsLoading}
+                all={form.allProducts}
+                selected={form.productIds}
+                busy={busy}
+                discount={{ type: form.discountType, value: form.discountValue }}
+                onChange={set}
+              />
+            </Box>
             {errors.productIds && (
               <Typography data-error sx={{ mt: 1, mx: 0.5, fontSize: 12, color: C.error }}>
                 {errors.productIds}
@@ -657,7 +784,12 @@ export default function PromotionForm({ kind, title, promotionId, initial, produ
         )}
 
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1.5, mt: 3, pt: 2.5, borderTop: `1px solid ${C.border}` }}>
-          <Button onClick={onCancel} disabled={saving} disableRipple sx={{ color: C.muted, borderRadius: 2.5, textTransform: 'none', px: 2.5, '&:hover': { bgcolor: 'transparent' } }}>
+          <Button
+            onClick={onCancel}
+            disabled={saving}
+            disableRipple
+            sx={{ color: C.muted, borderRadius: 2.5, textTransform: 'none', px: 2.5, '&:hover': { bgcolor: 'transparent' } }}
+          >
             Hủy
           </Button>
           <Button
@@ -665,7 +797,17 @@ export default function PromotionForm({ kind, title, promotionId, initial, produ
             variant="contained"
             disabled={saving}
             startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <SaveOutlined />}
-            sx={{ minWidth: 170, bgcolor: C.main, color: C.dark, fontWeight: 700, borderRadius: 2.5, py: 1.1, boxShadow: 'none', textTransform: 'none', '&:hover': { bgcolor: C.main, boxShadow: 'none' } }}
+            sx={{
+              minWidth: 170,
+              bgcolor: C.main,
+              color: C.dark,
+              fontWeight: 700,
+              borderRadius: 2.5,
+              py: 1.1,
+              boxShadow: 'none',
+              textTransform: 'none',
+              '&:hover': { bgcolor: C.main, boxShadow: 'none' }
+            }}
           >
             {saving ? 'Đang lưu...' : submitLabel}
           </Button>

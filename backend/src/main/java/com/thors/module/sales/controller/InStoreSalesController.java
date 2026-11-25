@@ -6,6 +6,7 @@ import com.thors.module.sales.dto.InStoreSalePageResponse;
 import com.thors.module.sales.dto.InStoreSaleResponse;
 import com.thors.module.sales.dto.PriceRange;
 import com.thors.module.sales.dto.SellerOption;
+import com.thors.module.sales.dto.VariantSale;
 import com.thors.module.sales.service.InStoreSalesService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -18,7 +19,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -66,23 +66,12 @@ public class InStoreSalesController {
     }
 
     @GetMapping("/prices/{productId}")
-    public ResponseEntity<Map<Integer, BigDecimal>> salePrices(@PathVariable int productId) {
-        return ResponseEntity.ok(salesService.salePrices(productId));
+    public ResponseEntity<Map<Integer, VariantSale>> variantSales(@PathVariable int productId) {
+        return ResponseEntity.ok(salesService.variantSales(productId));
     }
 
     @GetMapping("/{orderId}")
     public ResponseEntity<InStoreSaleDetailResponse> getSaleDetail(@PathVariable int orderId) {
         return ResponseEntity.ok(salesService.getSaleDetail(orderId));
-    }
-
-    @PostMapping("/{orderId}/complete")
-    public ResponseEntity<InStoreSaleResponse> completeTransfer(@PathVariable int orderId) {
-        return ResponseEntity.ok(salesService.completeTransfer(orderId));
-    }
-
-    @PostMapping("/{orderId}/cancel")
-    public ResponseEntity<Void> cancelTransfer(@PathVariable int orderId) {
-        salesService.cancelTransfer(orderId);
-        return ResponseEntity.noContent().build();
     }
 }

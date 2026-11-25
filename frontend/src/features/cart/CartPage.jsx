@@ -1,12 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, post } from 'services/http';
 import { checkoutFromCart } from './checkout';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { colorHex } from 'features/shop/ShopCommon';
+import { forgetProductDetail, loadProductDetail, productIdOf, productLink, resolveProductId } from './cartProduct';
 /**
  * Giỏ hàng THORS (kiểu Shopee), nối API backend:
  *  GET  /api/cart                      xem giỏ
  *  PUT  /api/cart/items/{id}           đổi số lượng
  *  POST /api/cart/items/batch-delete   xóa một hoặc nhiều món
+ *  Đổi màu / size = thêm phân loại mới (POST /api/cart/items, cùng số lượng) rồi xóa dòng cũ.
+ *  Bấm ảnh hoặc tên sản phẩm -> trang chi tiết, mở sẵn đúng màu + size.
  * `api` và `post` từ services/http đã tự gửi CSRF token và cookie đăng nhập.
  */
 
@@ -17,8 +21,10 @@ const toUi = (r) => ({
   id: r.cartItemId,
   name: r.productName,
   variant: `Size ${r.size} · ${r.color}`,
-  originalPrice: Number(r.price),
-  price: Number(r.salePrice ?? r.price),
+  productId: productIdOf(r),
+  size: r.size,
+  color: r.color,
+  price: Number(r.price),
   qty: Number(r.quantity),
   stock: Number(r.stock),
   imageUrl: r.imageUrl,
@@ -27,6 +33,149 @@ const toUi = (r) => ({
 
 // Chỉ mua được khi còn bán online, còn hàng và số lượng không vượt tồn
 const canBuy = (i) => i.available && i.stock > 0 && i.qty <= i.stock;
+const sameVariant = (a, b) => a.name === b.name && a.size === b.size && a.color === b.color;
+
+/**
+ * Ô đổi phân loại ngay trong giỏ: bấm "Size XL · Đen ▾" -> chọn màu (chấm tròn) và size -> Cập nhật.
+ * Phân loại hết hàng thì mờ đi, không chọn được.
+ */
+function VariantPicker({ item, productId, onApply }) {
+  const ref = useRef(null);
+  const [open, setOpen] = useState(false);
+  const [variants, setVariants] = useState(null);
+  const [failed, setFailed] = useState(false);
+  const [color, setColor] = useState(item.color);
+  const [size, setSize] = useState(item.size);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (e) => !ref.current?.contains(e.target) && setOpen(false);
+    const onKey = (e) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const show = () => {
+    setColor(item.color);
+    setSize(item.size);
+    setFailed(false);
+    setOpen(true);
+    if (!productId) return;
+    loadProductDetail(productId)
+      .then((d) => setVariants(d.variants || []))
+      .catch(() => setFailed(true));
+  };
+
+  const list = variants || [];
+  const colors = [...new Set(list.map((v) => v.color))];
+  const sizes = [...new Set(list.map((v) => v.size))];
+  const find = (s, c) => list.find((v) => v.size === s && v.color === c);
+  const colorOff = (c) => !list.some((v) => v.color === c && v.stock > 0);
+  const sizeOff = (s) => !(find(s, color)?.stock > 0);
+  const chosen = find(size, color);
+  const unchanged = size === item.size && color === item.color;
+
+  const pickColor = (c) => {
+    setColor(c);
+    // Size đang chọn không có ở màu mới -> chọn size đầu tiên còn hàng
+    if (!(find(size, c)?.stock > 0)) setSize(list.find((v) => v.color === c && v.stock > 0)?.size ?? size);
+  };
+
+  const apply = async () => {
+    if (!chosen || unchanged) return setOpen(false);
+    setSaving(true);
+    const ok = await onApply(item, chosen);
+    setSaving(false);
+    if (ok) setOpen(false);
+  };
+
+  return (
+    <div className="thc-vwrap" ref={ref}>
+      <button
+        type="button"
+        className="thc-variant thc-vbtn"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => (open ? setOpen(false) : show())}
+      >
+        Phân loại: {item.variant}
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+          <path d={open ? 'M6 15l6-6 6 6' : 'M6 9l6 6 6-6'} />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="thc-vpop" role="dialog" aria-label={`Đổi phân loại ${item.name}`}>
+          {!productId || failed ? (
+            <p className="thc-vmsg">Không tải được phân loại của sản phẩm này.</p>
+          ) : !variants ? (
+            <p className="thc-vmsg">Đang tải...</p>
+          ) : (
+            <>
+              <div className="thc-vlabel">
+                Màu sắc: <b>{color}</b>
+              </div>
+              <div className="thc-swatches" role="radiogroup" aria-label="Màu sắc">
+                {colors.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    role="radio"
+                    aria-checked={c === color}
+                    aria-label={c}
+                    title={c}
+                    disabled={colorOff(c)}
+                    className={`thc-swatch${c === color ? ' on' : ''}${colorOff(c) ? ' off' : ''}`}
+                    onClick={() => pickColor(c)}
+                  >
+                    <span style={{ background: colorHex(c) || '#D6D2CC' }} />
+                  </button>
+                ))}
+              </div>
+              <div className="thc-vlabel">Kích cỡ</div>
+              <div className="thc-sizes" role="radiogroup" aria-label="Kích cỡ">
+                {sizes.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    role="radio"
+                    aria-checked={s === size}
+                    disabled={sizeOff(s)}
+                    className={`thc-size${s === size ? ' on' : ''}`}
+                    onClick={() => setSize(s)}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+              {chosen && chosen.stock < item.qty && (
+                <p className="thc-vwarn">Phân loại này chỉ còn {chosen.stock} sản phẩm, số lượng sẽ được giảm.</p>
+              )}
+              <div className="thc-vactions">
+                <button type="button" className="thc-btn" onClick={() => setOpen(false)} disabled={saving}>
+                  Trở lại
+                </button>
+                <button
+                  type="button"
+                  className="thc-btn thc-btn-primary"
+                  onClick={apply}
+                  disabled={saving || !chosen || !(chosen.stock > 0) || unchanged}
+                >
+                  {saving ? 'Đang lưu...' : 'Xác nhận'}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function CartPage({ onCheckout }) {
     const navigate = useNavigate();
@@ -37,15 +186,18 @@ export default function CartPage({ onCheckout }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  const load = useCallback(async (keepSelection) => {
+  const load = useCallback(async (keepSelection, alsoSelect) => {
     try {
       const data = await api('/cart');
       const list = (data.items || []).map(toUi);
       setItems(list);
       // Mới vào giỏ hàng: chưa tick sản phẩm nào, khách tự chọn món muốn mua.
       // Tải lại sau khi đổi số lượng / xóa: giữ nguyên các món đang tick.
+      // alsoSelect: tick thêm món vừa đổi phân loại (dòng mới có mã khác dòng cũ)
       setSelected((prev) =>
-        keepSelection ? new Set(list.filter((i) => canBuy(i) && prev.has(i.id)).map((i) => i.id)) : new Set()
+        keepSelection
+          ? new Set(list.filter((i) => canBuy(i) && (prev.has(i.id) || (alsoSelect && sameVariant(i, alsoSelect)))).map((i) => i.id))
+          : new Set()
       );
     } catch (e) {
       setError(e.message);
@@ -57,6 +209,38 @@ export default function CartPage({ onCheckout }) {
   useEffect(() => {
     load(false);
   }, [load]);
+
+  // Mã sản phẩm của từng món (API giỏ chưa có thì tìm theo tên) để mở trang chi tiết và đổi phân loại
+  const [productIds, setProductIds] = useState(() => new Map());
+  useEffect(() => {
+    let alive = true;
+    items.forEach((item) => {
+      if (productIds.has(item.name)) return;
+      resolveProductId(item).then((id) => alive && setProductIds((prev) => new Map(prev).set(item.name, id)));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [items, productIds]);
+  const productIdFor = (item) => item.productId ?? productIds.get(item.name) ?? null;
+
+  // Đổi màu / size: thêm phân loại mới với cùng số lượng (không vượt tồn kho) rồi xóa dòng cũ
+  const changeVariant = async (item, variant) => {
+    setError('');
+    try {
+      const quantity = Math.max(1, Math.min(item.qty, Number(variant.stock)));
+      await post('/cart/items', { detailId: variant.detailId, quantity });
+      await post('/cart/items/batch-delete', { cartItemIds: [item.id] });
+      forgetProductDetail(productIdFor(item));
+      window.dispatchEvent(new Event('thors:cart-changed'));
+      await load(true, selected.has(item.id) ? { name: item.name, size: variant.size, color: variant.color } : null);
+      return true;
+    } catch (e) {
+      setError(e.message || 'Chưa đổi được phân loại. Vui lòng thử lại.');
+      await load(true);
+      return false;
+    }
+  };
 
   const buyable = items.filter(canBuy);
   const allChecked = buyable.length > 0 && buyable.every((i) => selected.has(i.id));
@@ -141,7 +325,10 @@ export default function CartPage({ onCheckout }) {
                 <input type="checkbox" checked={allChecked} onChange={toggleAll} aria-label="Chọn tất cả" />
                 <span />
               </label>
-              <span>Sản phẩm</span>
+              {/* Ô chọn tất cả ở đầu bảng: chưa chọn hết thì ghi "Sản phẩm", chọn hết thì ghi "Chọn tất cả (N)" */}
+              <span className={allChecked ? 'thc-all-on' : undefined}>
+                {allChecked ? `Chọn tất cả (${buyable.length})` : 'Sản phẩm'}
+              </span>
               <span className="thc-c">Đơn giá</span>
               <span className="thc-c">Số lượng</span>
               <span className="thc-c">Thành tiền</span>
@@ -150,6 +337,8 @@ export default function CartPage({ onCheckout }) {
 
             {items.map((item) => {
               const ok = canBuy(item);
+              const pid = productIdFor(item);
+              const href = pid ? productLink(pid, { color: item.color, size: item.size }) : null;
               return (
                 <div className={`thc-row${ok ? '' : ' thc-row-off'}`} key={item.id}>
                   <label className="thc-check">
@@ -164,12 +353,28 @@ export default function CartPage({ onCheckout }) {
                   </label>
 
                   <div className="thc-prod">
-                    <div className="thc-thumb" aria-hidden="true">
-                      {item.imageUrl ? <img src={item.imageUrl} alt="" /> : item.name.charAt(0)}
-                    </div>
-                    <div>
-                      <div className="thc-name">{item.name}</div>
-                      <div className="thc-variant">{item.variant}</div>
+                    {href ? (
+                      <Link to={href} className="thc-thumb" tabIndex={-1} aria-hidden="true">
+                        {item.imageUrl ? <img src={item.imageUrl} alt="" /> : item.name.charAt(0)}
+                      </Link>
+                    ) : (
+                      <div className="thc-thumb" aria-hidden="true">
+                        {item.imageUrl ? <img src={item.imageUrl} alt="" /> : item.name.charAt(0)}
+                      </div>
+                    )}
+                    <div className="thc-info">
+                      {href ? (
+                        <Link to={href} className="thc-name thc-name-link">
+                          {item.name}
+                        </Link>
+                      ) : (
+                        <div className="thc-name">{item.name}</div>
+                      )}
+                      {item.available ? (
+                        <VariantPicker item={item} productId={pid} onApply={changeVariant} />
+                      ) : (
+                        <div className="thc-variant">{item.variant}</div>
+                      )}
                       {!item.available && <div className="thc-bad">Ngừng bán online</div>}
                       {item.available && item.stock === 0 && <div className="thc-bad">Hết hàng</div>}
                       {item.available && item.stock > 0 && item.qty > item.stock && (
@@ -179,10 +384,7 @@ export default function CartPage({ onCheckout }) {
                     </div>
                   </div>
 
-                  <div className="thc-c thc-price" data-label="Đơn giá">
-                    {item.price < item.originalPrice && <s className="thc-old">{money(item.originalPrice)}</s>}
-                    {money(item.price)}
-                  </div>
+                  <div className="thc-c thc-price" data-label="Đơn giá">{money(item.price)}</div>
 
                   <div className="thc-c" data-label="Số lượng">
                     <div className="thc-qty">
@@ -217,17 +419,12 @@ export default function CartPage({ onCheckout }) {
             })}
 
             <div className="thc-listfoot">
-              <label className="thc-check">
-                <input type="checkbox" checked={allChecked} onChange={toggleAll} aria-label="Chọn tất cả" />
-                <span />
-              </label>
-              <span>Chọn tất cả ({buyable.length})</span>
               <button
                 className="thc-link-danger"
                 disabled={picked.length === 0}
                 onClick={() => setConfirmIds(picked.map((i) => i.id))}
               >
-                Xóa các mục đã chọn
+                Xóa các sản phẩm đã chọn
               </button>
             </div>
           </section>
@@ -297,15 +494,39 @@ background:var(--bg);padding:8px 0 28px;min-height:100%;box-sizing:border-box}
 padding:16px 20px;border-bottom:1px solid var(--line)}
 .thc-row-head{font-size:13px;color:var(--mute);padding:12px 20px;background:#FAF8F5}
 .thc-c{text-align:center}
+.thc-all-on{color:var(--ink);font-weight:600}
 .thc-prod{display:flex;gap:14px;align-items:center;min-width:0}
 .thc-thumb{flex:none;position:relative;width:64px;height:80px;overflow:hidden;background:var(--sand);
 display:grid;place-items:center;font-size:24px;font-weight:700;color:#B5AFA6}
 .thc-name{font-weight:600;font-size:15px;line-height:1.35}
 .thc-variant{font-size:13px;color:var(--mute);margin-top:2px}
+.thc-info{min-width:0}
+a.thc-thumb{text-decoration:none}
+.thc-name-link{display:block;color:var(--ink);text-decoration:none}
+.thc-name-link:hover{color:var(--accent);text-decoration:underline;text-underline-offset:3px}
+.thc-vwrap{position:relative;display:inline-block}
+.thc .thc-vbtn{display:inline-flex;align-items:center;gap:6px;border:0;background:none;padding:2px 0;color:var(--mute);text-align:left;font-size:13px}
+.thc .thc-vbtn:hover{color:var(--ink)}
+.thc-vpop{position:absolute;top:calc(100% + 8px);left:0;z-index:30;width:300px;max-width:calc(100vw - 48px);background:#fff;
+border:1px solid var(--line);box-shadow:0 14px 36px rgba(0,0,0,.14);padding:16px}
+.thc-vlabel{font-size:13px;color:var(--mute);margin-bottom:8px}
+.thc-vlabel b{color:var(--ink);font-weight:600}
+.thc-swatches{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px}
+.thc .thc-swatch{position:relative;width:34px;height:34px;padding:3px;border-radius:50%;border:1.5px solid transparent;background:#fff}
+.thc .thc-swatch span{display:block;width:100%;height:100%;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(0,0,0,.15)}
+.thc .thc-swatch.on{border-color:var(--ink)}
+.thc .thc-swatch.off::after{content:'';position:absolute;left:50%;top:4px;bottom:4px;width:1.5px;background:var(--mute);transform:rotate(45deg)}
+.thc-sizes{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.thc .thc-size{min-width:44px;height:36px;padding:0 10px;border:1px solid var(--line);background:#fff;color:var(--ink);font-size:14px}
+.thc .thc-size:hover:not(:disabled){border-color:var(--ink)}
+.thc .thc-size.on{border-color:var(--accent);background:var(--accent);color:#fff}
+.thc-vwarn{margin:0 0 12px;font-size:12.5px;color:var(--red)}
+.thc-vmsg{margin:0;font-size:14px;color:var(--mute)}
+.thc-vactions{display:flex;gap:8px;justify-content:flex-end}
+.thc .thc-vactions .thc-btn{padding:8px 14px;font-size:13px}
 .thc-low{display:inline-block;margin-top:6px;font-size:12px;background:var(--warn);border:1px solid var(--warn-l);
 padding:2px 8px}
 .thc-price{font-size:14px;color:var(--mute)}
-.thc-old{display:block;font-size:12.5px;opacity:.7}
 .thc-sub{font-weight:700;color:var(--ink)}
 .thc-qty{display:inline-flex;border:1px solid var(--line);overflow:hidden;background:#fff}
 .thc-qty button{width:32px;height:34px;border:0;background:#fff;font-size:17px;color:var(--ink)}

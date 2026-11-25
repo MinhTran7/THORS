@@ -6,11 +6,10 @@ public record InStoreSaleResponse(
         int orderId,
         String orderNumber,
         String invoiceNumber,
-        String orderStatus,
         String paymentStatus,
         String paymentMethod,
         BigDecimal itemsAmount,
         BigDecimal discountAmount,
         BigDecimal totalAmount
 ) {
-}
+}

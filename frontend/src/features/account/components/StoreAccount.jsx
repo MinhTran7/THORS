@@ -57,7 +57,7 @@ export function StoreCrumb({ back, current }) {
         {back.label}
       </Box>
       <RightOutlined style={{ fontSize: 11, color: '#64748B', margin: '0 2px' }} />
-      <Box component="span" sx={{ color: '#D7428B', fontWeight: 700 }}>
+      <Box component="span" aria-current="page" sx={{ color: '#1E293B', fontWeight: 600 }}>
         {current}
       </Box>
     </Box>

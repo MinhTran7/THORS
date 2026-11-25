@@ -1,5 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Box, Button, CircularProgress, ClickAwayListener, Dialog, IconButton, InputAdornment, Snackbar, TextField, Typography, useMediaQuery } from '@mui/material';
+import {
+  Alert,
+  Box,
+  Button,
+  CircularProgress,
+  ClickAwayListener,
+  Dialog,
+  GlobalStyles,
+  IconButton,
+  InputAdornment,
+  Snackbar,
+  TextField,
+  Typography,
+  useMediaQuery
+} from '@mui/material';
 import {
   SearchOutlined,
   ScanOutlined,
@@ -24,22 +38,43 @@ import CameraScanDialog from '../warehouse/CameraScanDialog';
 import { useCrumbs } from '../../layouts/crumbs';
 import ReceiptDialog from './ReceiptDialog';
 import ProductInfoDialog from './ProductInfoDialog';
-import TransferQrDialog from './TransferQrDialog';
+import { money, toReceiptItems } from './salesFormat';
 
-const money = (value) => `${Number(value || 0).toLocaleString('vi-VN')} đ`;
 const priceRangeText = (min, max) =>
-  min == null ? 'Liên hệ' : max == null || Number(min) === Number(max) ? money(min) : `${Number(min).toLocaleString('vi-VN')}–${Number(max).toLocaleString('vi-VN')} đ`;
+  min == null
+    ? 'Liên hệ'
+    : max == null || Number(min) === Number(max)
+      ? money(min)
+      : `${Number(min).toLocaleString('vi-VN')}–${Number(max).toLocaleString('vi-VN')} đ`;
 const formatNumberInput = (val) => {
-  const digits = String(val ?? '').replace(/\D/g, '').slice(0, 12);
+  const digits = String(val ?? '')
+    .replace(/\D/g, '')
+    .slice(0, 12);
   return digits ? Number(digits).toLocaleString('vi-VN') : '';
 };
 const isActive = (value) => String(value ?? '').toUpperCase() === 'ACTIVE';
-const getId = (p) => p?.productId ?? p?.id;
-const getVariantId = (v) => v?.detailId ?? v?.variantId ?? v?.id;
-const getStock = (v) => Number(v?.stockQuantity ?? v?.stock ?? 0);
-const getPrice = (v) => Number(v?.price ?? v?.salePrice ?? v?.sale_price ?? 0);
-const getList = (data) => (Array.isArray(data) ? data : (data?.content ?? data?.data ?? []));
-const getProductStock = (p) => Number(p?.stockQuantity ?? p?.totalStock ?? p?.stock ?? p?.quantity ?? 0);
+const getId = (p) => p?.productId;
+const getVariantId = (v) => v?.detailId;
+const getStock = (v) => Number(v?.stockQuantity ?? 0);
+const getPrice = (v) => Number(v?.price ?? 0);
+const getProductStock = (p) => Number(p?.totalStock ?? 0);
+// Giá sau khuyến mãi và số còn bán được của từng biến thể: { [detailId]: { price, available } }
+const salePricesOf = (productId) => api(`/sales/in-store/prices/${productId}`).catch(() => ({}));
+const NO_EFFECTS = 'pos-no-effects';
+const noEffectStyles = {
+  [`.${NO_EFFECTS} .MuiButtonBase-root, .${NO_EFFECTS} .MuiButtonBase-root::after`]: { transition: 'none !important' },
+  [`.${NO_EFFECTS} .MuiButton-root:active::after`]: { opacity: '0 !important' },
+  [`.${NO_EFFECTS} .MuiIconButton-root:hover, .${NO_EFFECTS} .MuiButton-text:hover`]: { backgroundColor: 'transparent !important' }
+};
+const blankOrder = (id, label) => ({
+  id,
+  label,
+  cart: [],
+  payment: 'Cash',
+  discount: '',
+  discountType: 'amount',
+  customerPaid: ''
+});
 
 export default function InStoreSalesPage() {
   const { account } = useAuth();
@@ -64,20 +99,16 @@ export default function InStoreSalesPage() {
   const [loading, setLoading] = useState(true);
   const [addingId, setAddingId] = useState(null);
   const [infoLine, setInfoLine] = useState(null);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
 
   // Quản lý nhiều tab hóa đơn chờ kiểu Sapo
-  const [orders, setOrders] = useState([
-    {
-      id: 1,
-      label: 'Hóa đơn 1',
-      cart: [],
-      payment: 'Cash',
-      discount: '',
-      discountType: 'amount',
-      customerPaid: ''
-    }
-  ]);
+  const [orders, setOrders] = useState([blankOrder(1, 'Hóa đơn 1')]);
   const [activeOrderId, setActiveOrderId] = useState(1);
+  const ordersRef = useRef(orders);
+  ordersRef.current = orders;
 
   const activeOrder = useMemo(() => {
     return orders.find((o) => o.id === activeOrderId) || orders[0] || {};
@@ -92,10 +123,21 @@ export default function InStoreSalesPage() {
     setOrders((prev) => prev.map((o) => ({ ...o, cart: o.cart.map((line) => (line.key === key ? { ...line, stock } : line)) })));
   }
 
+  // Đóng một hóa đơn; hết hóa đơn thì mở hóa đơn trống mới
+  function removeTab(id) {
+    const fresh = blankOrder(Date.now(), 'Hóa đơn 1');
+    const rest = ordersRef.current.filter((o) => o.id !== id);
+    setOrders((prev) => {
+      const left = prev.filter((o) => o.id !== id);
+      return left.length ? left : [fresh];
+    });
+    setActiveOrderId((cur) => (cur !== id ? cur : (rest[rest.length - 1]?.id ?? fresh.id)));
+  }
+
   function updateActiveOrder(patchOrFn) {
     setOrders((prev) =>
       prev.map((ord) => {
-        if (ord.id !== activeOrderId) return ord;
+        if (ord.id !== activeOrder.id) return ord;
         return typeof patchOrFn === 'function' ? patchOrFn(ord) : { ...ord, ...patchOrFn };
       })
     );
@@ -151,16 +193,7 @@ export default function InStoreSalesPage() {
     let nextNum = 1;
     while (existingNums.includes(nextNum)) nextNum++;
 
-    const newOrder = {
-      id: newId,
-      label: `Hóa đơn ${nextNum}`,
-      cart: [],
-      payment: 'Cash',
-      discount: '',
-      discountType: 'amount',
-      customerPaid: ''
-    };
-    setOrders((prev) => [...prev, newOrder]);
+    setOrders((prev) => [...prev, blankOrder(newId, `Hóa đơn ${nextNum}`)]);
     setActiveOrderId(newId);
     setError('');
   }
@@ -176,9 +209,7 @@ export default function InStoreSalesPage() {
       cancelInvoice();
       return;
     }
-    const next = orders.filter((o) => o.id !== id);
-    setOrders((prev) => prev.filter((o) => o.id !== id));
-    if (activeOrder.id === id) setActiveOrderId(next[next.length - 1].id);
+    removeTab(id);
   }
 
   // Modal chọn biến thể sản phẩm
@@ -189,30 +220,16 @@ export default function InStoreSalesPage() {
   const [selectedColor, setSelectedColor] = useState('');
   const [variantQuantity, setVariantQuantity] = useState(1);
   const [loadingVariants, setLoadingVariants] = useState(false);
-
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const submittingRef = useRef(false);
+  const [variantQtyDraft, setVariantQtyDraft] = useState(null);
+  const [editingKey, setEditingKey] = useState(null);
 
   // Modal hóa đơn sau thanh toán
-  const [receiptOpen, setReceiptOpen] = useState(false);
-  const [completedSale, setCompletedSale] = useState(null);
-  const [completedCart, setCompletedCart] = useState([]);
-  const [completedAt, setCompletedAt] = useState(null);
-  const [completedPayment, setCompletedPayment] = useState({ received: 0, change: 0 });
-
-  // Đơn đang giữ hàng chờ chuyển khoản (popup QR)
-  const [transferSale, setTransferSale] = useState(null);
+  // completed: { sale, cart, at, received, change }
+  const [completed, setCompleted] = useState(null);
+  const receiptOpen = Boolean(completed);
 
   useEffect(() => {
-    loadPriceRanges();
-    getProducts()
-      .then((res) => {
-        setProducts(getList(res?.data ?? res).filter((p) => isActive(p.status)));
-      })
-      .catch((err) => setError(err.message || 'Không thể tải danh sách sản phẩm.'))
-      .finally(() => setLoading(false));
+    reloadProducts((err) => setError(err.message || 'Không thể tải danh sách sản phẩm.')).finally(() => setLoading(false));
   }, []);
 
   // Khoảng giá gốc và giá sau khuyến mãi cho ô tìm kiếm
@@ -224,7 +241,13 @@ export default function InStoreSalesPage() {
 
   const visibleProducts = useMemo(() => {
     const keyword = search.trim().toLowerCase();
-    return products.filter((p) => [p.productName, p.sku].some((value) => String(value || '').toLowerCase().includes(keyword)));
+    return products.filter((p) =>
+      [p.productName, p.sku].some((value) =>
+        String(value || '')
+          .toLowerCase()
+          .includes(keyword)
+      )
+    );
   }, [products, search]);
 
   const sizes = useMemo(() => [...new Set(variants.map((v) => String(v.size ?? '')).filter(Boolean))], [variants]);
@@ -263,16 +286,9 @@ export default function InStoreSalesPage() {
     setVariantDialogOpen(true);
 
     try {
-      const [res, salePrices] = await Promise.all([
-        getProductById(id),
-        api(`/sales/in-store/prices/${id}`).catch(() => ({}))
-      ]);
-      const data = res?.data ?? res;
-      const detail = data?.data ?? data;
-      const item = detail?.product ?? detail;
-      const rawVariants = detail?.variants ?? item?.variants ?? detail?.productVariants ?? item?.productVariants ?? [];
-
-      const activeVariants = Array.isArray(rawVariants) ? rawVariants.filter((v) => isActive(v.status)) : [];
+      const [detail, sales] = await Promise.all([getProductById(id), salePricesOf(id)]);
+      const item = detail.product;
+      const activeVariants = detail.variants.filter((v) => isActive(v.status));
 
       if (!activeVariants.length) {
         setVariantDialogOpen(false);
@@ -280,18 +296,16 @@ export default function InStoreSalesPage() {
         return;
       }
 
-      const image =
-        detail?.images?.[0]?.imageUrl ||
-        item?.images?.[0]?.imageUrl ||
-        product.primaryImageUrl ||
-        product.imageUrl ||
-        product.thumbnailUrl ||
-        product.mainImageUrl ||
-        '';
+      const image = detail.images[0]?.imageUrl || product.primaryImageUrl || '';
 
-      // Giá sau khuyến mãi sản phẩm, giữ giá gốc để gạch ngang
       setVariantProduct({ ...product, ...item, productId: id, image });
-      setVariants(activeVariants.map((v) => ({ ...v, originalPrice: getPrice(v), price: salePrices[getVariantId(v)] ?? getPrice(v) })));
+      // Số lượng còn bán được đã trừ hàng giữ cho đơn khác
+      setVariants(
+        activeVariants.map((v) => {
+          const sale = sales[getVariantId(v)];
+          return { ...v, originalPrice: getPrice(v), price: sale?.price ?? getPrice(v), stockQuantity: sale?.available ?? getStock(v) };
+        })
+      );
       setSelectedSize(line ? String(line.size ?? '') : '');
       setSelectedColor(line ? String(line.color ?? '') : '');
       setVariantQuantity(line ? line.quantity : 1);
@@ -317,9 +331,6 @@ export default function InStoreSalesPage() {
     setSelectedColor('');
     setVariantQuantity(1);
   }
-
-  const [variantQtyDraft, setVariantQtyDraft] = useState(null);
-  const [editingKey, setEditingKey] = useState(null);
 
   const variantKey = selectedVariant ? `${getId(variantProduct)}-${getVariantId(selectedVariant)}` : '';
   const inCartQty = selectedVariant ? (cart.find((line) => line.key === variantKey && line.key !== editingKey)?.quantity ?? 0) : 0;
@@ -407,9 +418,10 @@ export default function InStoreSalesPage() {
     setSuccess('');
     try {
       const line = await scanToCartLine(code);
-      const salePrices = await api(`/sales/in-store/prices/${line.productId}`).catch(() => ({}));
+      const sale = (await salePricesOf(line.productId))[line.variantId];
       line.originalPrice = line.price;
-      line.price = Number(salePrices[line.variantId] ?? line.price);
+      line.price = Number(sale?.price ?? line.price);
+      line.stock = sale?.available ?? line.stock;
       syncStock(line.key, line.stock);
       const inThis = cartRef.current.find((item) => item.key === line.key)?.quantity ?? 0;
       const others = otherTabsQty(line.key);
@@ -436,7 +448,7 @@ export default function InStoreSalesPage() {
   }
 
   // Máy quét cắm vào là dùng: bóp cò ở bất kỳ đâu trên trang (trừ khi đang mở hộp thoại khác).
-  useBarcodeScanner(addScanned, !variantDialogOpen && !receiptOpen && !discountOpen && !cameraOpen && !transferSale);
+  useBarcodeScanner(addScanned, !variantDialogOpen && !receiptOpen && !discountOpen && !cameraOpen);
 
   function updateQuantity(key, delta) {
     setCart((current) =>
@@ -470,7 +482,9 @@ export default function InStoreSalesPage() {
     const others = otherTabsQty(line.key);
     const max = Math.max(1, line.stock - others);
     if (qty > max)
-      setError(`${line.name} · ${line.color} · ${line.size}: chỉ còn ${line.stock} trong kho${others ? `, hóa đơn chờ khác đang giữ ${others}` : ''}.`);
+      setError(
+        `${line.name} · ${line.color} · ${line.size}: chỉ còn ${line.stock} trong kho${others ? `, hóa đơn chờ khác đang giữ ${others}` : ''}.`
+      );
     setCart((current) => current.map((item) => (item.key === line.key ? { ...item, quantity: Math.min(qty, max) } : item)));
   }
 
@@ -501,6 +515,7 @@ export default function InStoreSalesPage() {
     submittingRef.current = true;
     setSubmitting(true);
 
+    const tabId = activeOrder.id;
     try {
       const result = await api('/sales/in-store', {
         method: 'POST',
@@ -510,18 +525,15 @@ export default function InStoreSalesPage() {
             quantity: line.quantity
           })),
           discountAmount: discountValue,
-          paymentMethod: method === 'Cash' ? 'CASH' : 'BANK_TRANSFER'
+          paymentMethod: method === 'Cash' ? 'CASH' : 'BANK_TRANSFER',
+          expectedSubtotal: subtotal
         }
       });
 
-      if (result.orderStatus === 'AWAITING_PAYMENT') {
-        setPayment('Bank transfer');
-        setTransferSale(result);
-        return;
-      }
-
-      await finishSale(result, method);
+      const received = method === 'Cash' && rawPaidNumber > 0 ? rawPaidNumber : Number(result.totalAmount ?? total);
+      await finishSale(result, tabId, received, method === 'Cash' ? changeAmount : 0);
     } catch (err) {
+      if (err.code === 'PRICE_CHANGED') await refreshCartPrices(tabId);
       setError(err.message || 'Không thể tạo đơn hàng. Vui lòng thử lại.');
     } finally {
       submittingRef.current = false;
@@ -529,56 +541,46 @@ export default function InStoreSalesPage() {
     }
   }
 
-  // Hiện hóa đơn, đóng tab vừa bán và tải lại tồn kho
-  async function finishSale(result, method) {
+  // Hiện hóa đơn, đóng hóa đơn vừa bán và tải lại tồn kho
+  async function finishSale(result, tabId, received, change) {
     const detail = await api(`/sales/in-store/${result.orderId}`).catch(() => null);
-    const soldItems = detail?.items?.map((item) => ({
-      key: item.orderItemId,
-      name: item.productName,
-      size: item.size ?? '',
-      color: item.color ?? '',
-      quantity: item.quantity,
-      price: Number(item.unitPrice)
-    }));
+    const soldItems = toReceiptItems(detail?.items);
 
-    setCompletedSale(result);
-    setCompletedCart(soldItems?.length ? soldItems : [...cart]);
-    setCompletedAt(new Date());
-    setCompletedPayment({
-      received: method === 'Cash' && rawPaidNumber > 0 ? rawPaidNumber : Number(result.totalAmount ?? total),
-      change: method === 'Cash' ? changeAmount : 0
+    setCompleted({
+      sale: result,
+      cart: soldItems.length ? soldItems : (ordersRef.current.find((o) => o.id === tabId)?.cart ?? []),
+      at: new Date(),
+      received,
+      change
     });
-    setReceiptOpen(true);
-
-    const soldId = activeOrder.id;
-    const remaining = orders.filter((o) => o.id !== soldId);
-    const fresh = { id: Date.now(), label: 'Hóa đơn 1', cart: [], payment: 'Cash', discount: '', discountType: 'amount', customerPaid: '' };
-    setOrders((prev) => (remaining.length ? prev.filter((o) => o.id !== soldId) : [fresh]));
-    setActiveOrderId(remaining.length ? remaining[0].id : fresh.id);
-
+    removeTab(tabId);
     reloadProducts();
   }
 
-  function reloadProducts() {
+  // Lấy lại giá sau khuyến mãi và số lượng còn bán được cho các sản phẩm trong hóa đơn
+  async function refreshCartPrices(tabId) {
+    const ids = [...new Set((ordersRef.current.find((o) => o.id === tabId)?.cart ?? []).map((line) => line.productId))];
+    const sales = Object.assign({}, ...(await Promise.all(ids.map(salePricesOf))));
+    setOrders((prev) =>
+      prev.map((o) =>
+        o.id !== tabId
+          ? o
+          : {
+              ...o,
+              cart: o.cart.map((line) => {
+                const sale = sales[line.variantId];
+                return sale ? { ...line, price: Number(sale.price), stock: sale.available } : line;
+              })
+            }
+      )
+    );
+  }
+
+  function reloadProducts(onError = () => {}) {
     loadPriceRanges();
-    getProducts()
-      .then((res) => {
-        setProducts(getList(res?.data ?? res).filter((p) => isActive(p.status)));
-      })
-      .catch(() => {});
-  }
-
-  function handleTransferPaid(result) {
-    setTransferSale(null);
-    finishSale(result, 'Bank transfer');
-  }
-
-  // Bỏ giữ hàng: quay về tiền mặt, giỏ hàng vẫn sửa được
-  function handleTransferCancelled(message) {
-    setTransferSale(null);
-    setPayment('Cash');
-    if (message) setError(message);
-    reloadProducts();
+    return getProducts()
+      .then((res) => setProducts(res.filter((p) => isActive(p.status))))
+      .catch(onError);
   }
 
   function cancelInvoice() {
@@ -596,16 +598,9 @@ export default function InStoreSalesPage() {
     setSuccess('Đã hủy hóa đơn.');
   }
 
-  function handleReceiptClose() {
-    setReceiptOpen(false);
-    setCompletedSale(null);
-    setCompletedCart([]);
-    setCompletedAt(null);
-    setCompletedPayment({ received: 0, change: 0 });
-  }
-
   return (
     <Box
+      className={NO_EFFECTS}
       sx={{
         maxWidth: 1600,
         mx: 'auto',
@@ -634,7 +629,7 @@ export default function InStoreSalesPage() {
                 <TextField
                   fullWidth
                   size="small"
-                  placeholder="Tìm theo tên sản phẩm hoặc mã SKU"
+                  placeholder="Tìm theo tên sản phẩm hoặc mã sản phẩm"
                   inputRef={searchInputRef}
                   value={search}
                   onFocus={() => setSearchOpen(true)}
@@ -655,23 +650,23 @@ export default function InStoreSalesPage() {
                   }}
                   slotProps={{
                     input: {
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <SearchOutlined style={{ color: '#94A3B8', fontSize: 16 }} />
-                      </InputAdornment>
-                    ),
-                    endAdornment: (
-                      <InputAdornment position="end">
-                        <IconButton
-                          size="small"
-                          aria-label="Quét mã bằng camera"
-                          title="Có máy quét: cứ bóp cò là thêm vào hóa đơn. Không có máy quét: bấm để quét bằng camera."
-                          onClick={() => setCameraOpen(true)}
-                        >
-                          <ScanOutlined style={{ color: '#64748B', fontSize: 18 }} />
-                        </IconButton>
-                      </InputAdornment>
-                    )
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <SearchOutlined style={{ color: '#94A3B8', fontSize: 16 }} />
+                        </InputAdornment>
+                      ),
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton
+                            size="small"
+                            aria-label="Quét mã bằng camera"
+                            title="Có máy quét: cứ bóp cò là thêm vào hóa đơn. Không có máy quét: bấm để quét bằng camera."
+                            onClick={() => setCameraOpen(true)}
+                          >
+                            <ScanOutlined style={{ color: '#64748B', fontSize: 18 }} />
+                          </IconButton>
+                        </InputAdornment>
+                      )
                     }
                   }}
                   sx={{
@@ -679,8 +674,7 @@ export default function InStoreSalesPage() {
                     '& .MuiOutlinedInput-root': {
                       borderRadius: 2.5,
                       height: 42,
-                      '& fieldset': { borderColor: '#E2E8F0' },
-                      '&:hover fieldset': { borderColor: '#8EECF5' },
+                      '& fieldset, &:hover fieldset': { borderColor: '#E2E8F0' },
                       '&.Mui-focused fieldset': { borderColor: '#8EECF5' }
                     }
                   }}
@@ -741,8 +735,7 @@ export default function InStoreSalesPage() {
                               px: 1.5,
                               py: 1,
                               cursor: 'pointer',
-                              opacity: isOut ? 0.55 : 1,
-                              '&:hover': { bgcolor: '#F0FDFF' }
+                              opacity: isOut ? 0.55 : 1
                             }}
                           >
                             <Box
@@ -760,14 +753,26 @@ export default function InStoreSalesPage() {
                               }}
                             >
                               {image ? (
-                                <Box component="img" src={image} alt={product.productName} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                <Box
+                                  component="img"
+                                  src={image}
+                                  alt={product.productName}
+                                  sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                />
                               ) : (
                                 <ShoppingCartOutlined style={{ fontSize: 16, color: '#CBD5E1' }} />
                               )}
                             </Box>
                             <Box sx={{ flex: 1, minWidth: 0 }}>
                               <Typography
-                                sx={{ fontSize: 13, fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                                sx={{
+                                  fontSize: 13,
+                                  fontWeight: 700,
+                                  color: '#0F172A',
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis'
+                                }}
                               >
                                 {product.productName}
                               </Typography>
@@ -776,7 +781,9 @@ export default function InStoreSalesPage() {
                             <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
                               <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'flex-end', gap: 0.75 }}>
                                 {onSale && (
-                                  <Typography sx={{ fontSize: 11.5, color: '#94A3B8', textDecoration: 'line-through' }}>{priceText}</Typography>
+                                  <Typography sx={{ fontSize: 11.5, color: '#94A3B8', textDecoration: 'line-through' }}>
+                                    {priceText}
+                                  </Typography>
                                 )}
                                 <Typography sx={{ fontSize: 13, fontWeight: 800, color: '#0F172A' }}>
                                   {onSale ? priceRangeText(range.saleMin, range.saleMax) : priceText}
@@ -813,145 +820,156 @@ export default function InStoreSalesPage() {
               '&::-webkit-scrollbar': { display: 'none' }
             }}
           >
-          {/* Danh sách món hàng trong giỏ */}
-          <Box
-            sx={{
-              flex: '1 0 auto',
-              minHeight: { xs: 240, lg: 0 },
-              display: 'flex',
-              flexDirection: 'column'
-            }}
-          >
-            {!cart.length ? (
-              <Box
-                sx={{
-                  flex: 1,
-                  minHeight: { xs: 240, lg: 0 },
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  bgcolor: '#F8FAFC',
-                  borderRadius: 2.5,
-                  p: 2,
-                  textAlign: 'center'
-                }}
-              >
-                <ShoppingCartOutlined style={{ fontSize: 30, color: '#CBD5E1', marginBottom: 8 }} />
-                <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#475569' }}>Chưa có sản phẩm nào</Typography>
-                <Typography sx={{ fontSize: 11.5, color: '#94A3B8', mt: 0.25 }}>Tìm và chọn sản phẩm ở thanh tìm kiếm để thêm vào hóa đơn</Typography>
-              </Box>
-            ) : (
-              cart.map((line, index) => (
-                <Box key={line.key} sx={{ py: 1.25, borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', gap: 1.25 }}>
-                  <Typography sx={{ width: 22, fontSize: 12.5, fontWeight: 700, color: '#94A3B8', textAlign: 'center', flexShrink: 0 }}>
-                    {index + 1}
+            {/* Danh sách món hàng trong giỏ */}
+            <Box
+              sx={{
+                flex: '1 0 auto',
+                minHeight: { xs: 240, lg: 0 },
+                display: 'flex',
+                flexDirection: 'column'
+              }}
+            >
+              {!cart.length ? (
+                <Box
+                  sx={{
+                    flex: 1,
+                    minHeight: { xs: 240, lg: 0 },
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    bgcolor: '#F8FAFC',
+                    borderRadius: 2.5,
+                    p: 2,
+                    textAlign: 'center'
+                  }}
+                >
+                  <ShoppingCartOutlined style={{ fontSize: 30, color: '#CBD5E1', marginBottom: 8 }} />
+                  <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#475569' }}>Chưa có sản phẩm nào</Typography>
+                  <Typography sx={{ fontSize: 11.5, color: '#94A3B8', mt: 0.25 }}>
+                    Tìm và chọn sản phẩm ở thanh tìm kiếm để thêm vào hóa đơn
                   </Typography>
+                </Box>
+              ) : (
+                cart.map((line, index) => (
                   <Box
-                    component="img"
-                    src={line.image || ''}
-                    alt={line.name}
-                    onClick={() => setInfoLine(line)}
+                    key={line.key}
                     sx={{
-                      cursor: 'pointer',
-                      width: 44,
-                      height: 44,
-                      borderRadius: 2,
-                      objectFit: 'cover',
-                      bgcolor: '#F8FAFC',
-                      flexShrink: 0,
-                      border: '1px solid #E2E8F0',
-                      transition: 'border-color .15s',
-                      '&:hover': { borderColor: '#8EECF5' }
-                    }}
-                  />
-                  <Box
-                    onClick={() => addProduct({ productId: line.productId, productName: line.name, primaryImageUrl: line.image }, line)}
-                    sx={{ flex: 1, minWidth: 0, cursor: 'pointer' }}
-                  >
-                    <Typography
-                      sx={{
-                        fontSize: 13,
-                        fontWeight: 700,
-                        color: '#0F172A',
-                        lineHeight: 1.3,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap'
-                      }}
-                    >
-                      {line.name}
-                    </Typography>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.25, flexWrap: 'wrap' }}>
-                      {(line.size || line.color) && (
-                        <Typography sx={{ fontSize: 11.5, color: '#64748B' }}>
-                          {[line.size, line.color].filter(Boolean).join(' · ')}
-                        </Typography>
-                      )}
-                      {(line.size || line.color) && <Typography sx={{ fontSize: 11.5, color: '#CBD5E1' }}>•</Typography>}
-                      {line.originalPrice > line.price && (
-                        <Typography sx={{ fontSize: 11.5, color: '#94A3B8', textDecoration: 'line-through' }}>{money(line.originalPrice)}</Typography>
-                      )}
-                      <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: '#475569' }}>{money(line.price)}</Typography>
-                    </Box>
-                  </Box>
-                  <Box
-                    sx={{
-                      display: 'inline-flex',
+                      py: 1.25,
+                      borderBottom: '1px solid #F1F5F9',
+                      display: 'flex',
                       alignItems: 'center',
-                      flexShrink: 0
+                      gap: 1.25
                     }}
                   >
-                    <IconButton size="small" onClick={() => updateQuantity(line.key, -1)} sx={{ p: 0.5 }}>
-                      <MinusOutlined style={{ fontSize: 10, color: '#475569' }} />
-                    </IconButton>
+                    <Typography sx={{ width: 22, fontSize: 12.5, fontWeight: 700, color: '#94A3B8', textAlign: 'center', flexShrink: 0 }}>
+                      {index + 1}
+                    </Typography>
                     <Box
-                      component="input"
-                      type="text"
-                      inputMode="numeric"
-                      value={qtyDraft[line.key] ?? line.quantity}
-                      onFocus={(e) => e.target.select()}
-                      onChange={(e) => {
-                        const val = e.target.value.replace(/\D/g, '').slice(0, 5);
-                        setQtyDraft((prev) => ({ ...prev, [line.key]: val }));
-                      }}
-                      onBlur={() => commitQuantity(line)}
-                      onKeyDown={(e) => e.key === 'Enter' && e.target.blur()}
+                      component="img"
+                      src={line.image || undefined}
+                      alt={line.name}
+                      onClick={() => setInfoLine(line)}
                       sx={{
-                        width: 32,
-                        textAlign: 'center',
-                        fontSize: 13,
-                        fontWeight: 700,
-                        color: '#0F172A',
-                        border: 'none',
-                        outline: 'none',
-                        bgcolor: 'transparent',
-                        p: 0
+                        cursor: 'pointer',
+                        width: 44,
+                        height: 44,
+                        borderRadius: 2,
+                        objectFit: 'cover',
+                        bgcolor: '#F8FAFC',
+                        flexShrink: 0,
+                        border: '1px solid #E2E8F0'
                       }}
                     />
+                    <Box
+                      onClick={() => addProduct({ productId: line.productId, productName: line.name, primaryImageUrl: line.image }, line)}
+                      sx={{ flex: 1, minWidth: 0, cursor: 'pointer' }}
+                    >
+                      <Typography
+                        sx={{
+                          fontSize: 13,
+                          fontWeight: 700,
+                          color: '#0F172A',
+                          lineHeight: 1.3,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {line.name}
+                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.25, flexWrap: 'wrap' }}>
+                        {(line.size || line.color) && (
+                          <Typography sx={{ fontSize: 11.5, color: '#64748B' }}>
+                            {[line.size, line.color].filter(Boolean).join(' · ')}
+                          </Typography>
+                        )}
+                        {(line.size || line.color) && <Typography sx={{ fontSize: 11.5, color: '#CBD5E1' }}>•</Typography>}
+                        {line.originalPrice > line.price && (
+                          <Typography sx={{ fontSize: 11.5, color: '#94A3B8', textDecoration: 'line-through' }}>
+                            {money(line.originalPrice)}
+                          </Typography>
+                        )}
+                        <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: '#475569' }}>{money(line.price)}</Typography>
+                      </Box>
+                    </Box>
+                    <Box
+                      sx={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        flexShrink: 0
+                      }}
+                    >
+                      <IconButton size="small" onClick={() => updateQuantity(line.key, -1)} sx={{ p: 0.5 }}>
+                        <MinusOutlined style={{ fontSize: 10, color: '#475569' }} />
+                      </IconButton>
+                      <Box
+                        component="input"
+                        type="text"
+                        inputMode="numeric"
+                        value={qtyDraft[line.key] ?? line.quantity}
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/\D/g, '').slice(0, 5);
+                          setQtyDraft((prev) => ({ ...prev, [line.key]: val }));
+                        }}
+                        onBlur={() => commitQuantity(line)}
+                        onKeyDown={(e) => e.key === 'Enter' && e.target.blur()}
+                        sx={{
+                          width: 32,
+                          textAlign: 'center',
+                          fontSize: 13,
+                          fontWeight: 700,
+                          color: '#0F172A',
+                          border: 'none',
+                          outline: 'none',
+                          bgcolor: 'transparent',
+                          p: 0
+                        }}
+                      />
+                      <IconButton
+                        size="small"
+                        disabled={line.quantity >= line.stock - otherTabsQty(line.key)}
+                        onClick={() => updateQuantity(line.key, 1)}
+                        sx={{ p: 0.5 }}
+                      >
+                        <PlusOutlined style={{ fontSize: 10, color: '#475569' }} />
+                      </IconButton>
+                    </Box>
+                    <Typography sx={{ minWidth: 90, textAlign: 'right', fontSize: 13.5, fontWeight: 700, color: '#0F172A', flexShrink: 0 }}>
+                      {money(line.price * line.quantity)}
+                    </Typography>
                     <IconButton
                       size="small"
-                      disabled={line.quantity >= line.stock - otherTabsQty(line.key)}
-                      onClick={() => updateQuantity(line.key, 1)}
-                      sx={{ p: 0.5 }}
+                      onClick={() => setCart((prev) => prev.filter((item) => item.key !== line.key))}
+                      sx={{ p: 0.5, color: '#94A3B8', flexShrink: 0 }}
                     >
-                      <PlusOutlined style={{ fontSize: 10, color: '#475569' }} />
+                      <CloseOutlined style={{ fontSize: 11 }} />
                     </IconButton>
                   </Box>
-                  <Typography sx={{ minWidth: 90, textAlign: 'right', fontSize: 13.5, fontWeight: 700, color: '#0F172A', flexShrink: 0 }}>
-                    {money(line.price * line.quantity)}
-                  </Typography>
-                  <IconButton
-                    size="small"
-                    onClick={() => setCart((prev) => prev.filter((item) => item.key !== line.key))}
-                    sx={{ p: 0.5, color: '#94A3B8', flexShrink: 0, '&:hover': { color: '#EF4444' } }}
-                  >
-                    <CloseOutlined style={{ fontSize: 11 }} />
-                  </IconButton>
-                </Box>
-              ))
-            )}
-          </Box>
+                ))
+              )}
+            </Box>
           </Box>
         </Box>
 
@@ -965,6 +983,9 @@ export default function InStoreSalesPage() {
             py: 1.5,
             boxShadow: '0 1px 4px rgba(0,0,0,0.03)',
             minHeight: 0,
+            alignSelf: 'start',
+            maxHeight: '100%',
+            overflowY: 'auto',
             display: 'flex',
             flexDirection: 'column',
             '& > *': { flexShrink: 0 }
@@ -973,7 +994,7 @@ export default function InStoreSalesPage() {
           {/* Thanh danh sách tab hóa đơn chờ kiểu Sapo */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5, overflowX: 'auto', pb: 0.25 }}>
             {orders.map((ord) => {
-              const isActiveTab = ord.id === activeOrderId;
+              const isActiveTab = ord.id === activeOrder.id;
 
               return (
                 <Box
@@ -995,12 +1016,7 @@ export default function InStoreSalesPage() {
                     fontSize: 12,
                     whiteSpace: 'nowrap',
                     userSelect: 'none',
-                    boxSizing: 'border-box',
-                    transition: 'background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease',
-                    '&:hover': {
-                      bgcolor: isActiveTab ? '#FEF9C3' : '#E2E8F0',
-                      color: '#0F172A'
-                    }
+                    boxSizing: 'border-box'
                   }}
                 >
                   <span>{ord.label}</span>
@@ -1017,8 +1033,7 @@ export default function InStoreSalesPage() {
                         borderRadius: 99,
                         fontSize: 11,
                         color: '#94A3B8',
-                        ml: 0.25,
-                        '&:hover': { bgcolor: '#FEE2E2', color: '#EF4444' }
+                        ml: 0.25
                       }}
                       title="Đóng hóa đơn này"
                     >
@@ -1049,13 +1064,7 @@ export default function InStoreSalesPage() {
                 fontSize: 15,
                 fontWeight: 700,
                 flexShrink: 0,
-                outline: 'none',
-                transition: 'all 0.15s ease',
-                '&:hover': {
-                  borderColor: '#0F172A',
-                  color: '#0F172A',
-                  bgcolor: '#F8FAFC'
-                }
+                outline: 'none'
               }}
             >
               +
@@ -1090,162 +1099,149 @@ export default function InStoreSalesPage() {
               flexDirection: 'column'
             }}
           >
-          {/* Tổng tiền hàng & Giảm giá */}
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, py: 0.75, borderTop: '1px solid #F1F5F9' }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Typography sx={{ fontSize: 13, color: '#64748B' }}>Tổng tiền hàng</Typography>
-              <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: '#0F172A' }}>{money(subtotal)}</Typography>
-            </Box>
-
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                <Typography sx={{ fontSize: 13, color: '#64748B' }}>
-                  Giảm giá{discountType === 'percent' && discountNumber > 0 ? ` (${discountNumber}%)` : ''}
-                </Typography>
-                <IconButton
-                  size="small"
-                  onClick={openDiscount}
-                  sx={{ p: 0.25, color: '#64748B', '&:hover': { color: '#0F172A' } }}
-                >
-                  <EditOutlined style={{ fontSize: 12 }} />
-                </IconButton>
-              </Box>
-              <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: discountValue > 0 ? '#10B981' : '#0F172A' }}>
-                {discountValue > 0 ? `-${money(discountValue)}` : '-0 đ'}
-              </Typography>
-            </Box>
-
-            {/* Tổng phải trả */}
-            <Box
-              sx={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                pt: 0.5,
-                mt: 0.25,
-                borderTop: '1px dashed #E2E8F0'
-              }}
-            >
-              <Typography sx={{ fontSize: 14.5, fontWeight: 800, color: '#0F172A' }}>Tổng phải trả</Typography>
-              <Typography sx={{ fontSize: 20, fontWeight: 800, color: '#0F172A' }}>{money(total)}</Typography>
-            </Box>
-          </Box>
-
-          {/* Phương thức thanh toán */}
-          <Box sx={{ mt: 0.75 }}>
-            <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: '#334155', mb: 0.5 }}>Phương thức thanh toán</Typography>
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
-              <Box
-                component="button"
-                type="button"
-                onClick={() => setPayment('Cash')}
-                sx={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 1,
-                  fontFamily: 'inherit',
-                  bgcolor: payment === 'Cash' ? '#FEF9C3' : '#FFFFFF',
-                  border: `1.5px solid ${payment === 'Cash' ? '#FDE047' : '#E2E8F0'}`,
-                  color: payment === 'Cash' ? '#854D0E' : '#475569',
-                  fontWeight: 700,
-                  fontSize: 13,
-                  height: 34,
-                  borderRadius: 2.5,
-                  cursor: 'pointer',
-                  boxShadow: 'none',
-                  outline: 'none',
-                  transition: 'none',
-                  WebkitTapHighlightColor: 'transparent',
-                  userSelect: 'none',
-                  '&:hover': {
-                    bgcolor: payment === 'Cash' ? '#FEF9C3' : '#F8FAFC'
-                  }
-                }}
-              >
-                <DollarOutlined />
-                <span>Tiền mặt</span>
+            {/* Tổng tiền hàng & Giảm giá */}
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, py: 0.75, borderTop: '1px solid #F1F5F9' }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography sx={{ fontSize: 13, color: '#64748B' }}>Tổng tiền hàng</Typography>
+                <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: '#0F172A' }}>{money(subtotal)}</Typography>
               </Box>
 
-              <Box
-                component="button"
-                type="button"
-                onClick={() => completeSale('Bank transfer')}
-                disabled={submitting || Boolean(transferSale)}
-                sx={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 1,
-                  fontFamily: 'inherit',
-                  bgcolor: payment === 'Bank transfer' ? '#FEF9C3' : '#FFFFFF',
-                  border: `1.5px solid ${payment === 'Bank transfer' ? '#FDE047' : '#E2E8F0'}`,
-                  color: payment === 'Bank transfer' ? '#854D0E' : '#475569',
-                  fontWeight: 700,
-                  fontSize: 13,
-                  height: 34,
-                  borderRadius: 2.5,
-                  cursor: 'pointer',
-                  boxShadow: 'none',
-                  outline: 'none',
-                  transition: 'none',
-                  WebkitTapHighlightColor: 'transparent',
-                  userSelect: 'none',
-                  '&:hover': {
-                    bgcolor: payment === 'Bank transfer' ? '#FEF9C3' : '#F8FAFC'
-                  }
-                }}
-              >
-                <BankOutlined />
-                <span>Chuyển khoản</span>
-              </Box>
-            </Box>
-            {payment === 'Cash' && (
-              <Box sx={{ mt: 0.75, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Typography sx={{ fontSize: 13, color: '#64748B', fontWeight: 600 }}>Tiền khách trả</Typography>
-                  <TextField
-                    size="small"
-                    inputMode="numeric"
-                    placeholder={total > 0 ? Number(total).toLocaleString('vi-VN') : '0'}
-                    value={customerPaid}
-                    onChange={(e) => setCustomerPaid(formatNumberInput(e.target.value))}
-                    InputProps={{
-                      endAdornment: <InputAdornment position="end">đ</InputAdornment>
-                    }}
-                    sx={{
-                      width: 140,
-                      '& .MuiOutlinedInput-root': {
-                        borderRadius: 2,
-                        height: 32,
-                        fontSize: 13,
-                        fontWeight: 700
-                      },
-                      '& input': { textAlign: 'right', py: 0.5 }
-                    }}
-                  />
-                </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Typography sx={{ fontSize: 13, color: '#64748B', fontWeight: 600 }}>Tiền trả lại khách</Typography>
-                  <Typography sx={{ fontSize: 14, fontWeight: 800, color: changeAmount > 0 ? '#10B981' : '#0F172A' }}>
-                    {money(changeAmount)}
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                  <Typography sx={{ fontSize: 13, color: '#64748B' }}>
+                    Giảm giá{discountType === 'percent' && discountNumber > 0 ? ` (${discountNumber}%)` : ''}
                   </Typography>
+                  <IconButton size="small" onClick={openDiscount} sx={{ p: 0.25, color: '#64748B' }}>
+                    <EditOutlined style={{ fontSize: 12 }} />
+                  </IconButton>
+                </Box>
+                <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: discountValue > 0 ? '#10B981' : '#0F172A' }}>
+                  {discountValue > 0 ? `-${money(discountValue)}` : '-0 đ'}
+                </Typography>
+              </Box>
+
+              {/* Tổng phải trả */}
+              <Box
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  pt: 0.5,
+                  mt: 0.25,
+                  borderTop: '1px dashed #E2E8F0'
+                }}
+              >
+                <Typography sx={{ fontSize: 14.5, fontWeight: 800, color: '#0F172A' }}>Tổng phải trả</Typography>
+                <Typography sx={{ fontSize: 20, fontWeight: 800, color: '#0F172A' }}>{money(total)}</Typography>
+              </Box>
+            </Box>
+
+            {/* Phương thức thanh toán */}
+            <Box sx={{ mt: 0.75 }}>
+              <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: '#334155', mb: 0.5 }}>Phương thức thanh toán</Typography>
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
+                <Box
+                  component="button"
+                  type="button"
+                  onClick={() => setPayment('Cash')}
+                  sx={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 1,
+                    fontFamily: 'inherit',
+                    bgcolor: payment === 'Cash' ? '#FEF9C3' : '#FFFFFF',
+                    border: `1.5px solid ${payment === 'Cash' ? '#FDE047' : '#E2E8F0'}`,
+                    color: payment === 'Cash' ? '#854D0E' : '#475569',
+                    fontWeight: 700,
+                    fontSize: 13,
+                    height: 34,
+                    borderRadius: 2.5,
+                    cursor: 'pointer',
+                    boxShadow: 'none',
+                    outline: 'none',
+                    WebkitTapHighlightColor: 'transparent',
+                    userSelect: 'none'
+                  }}
+                >
+                  <DollarOutlined />
+                  <span>Tiền mặt</span>
+                </Box>
+
+                <Box
+                  component="button"
+                  type="button"
+                  onClick={() => setPayment('Bank transfer')}
+                  sx={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 1,
+                    fontFamily: 'inherit',
+                    bgcolor: payment === 'Bank transfer' ? '#FEF9C3' : '#FFFFFF',
+                    border: `1.5px solid ${payment === 'Bank transfer' ? '#FDE047' : '#E2E8F0'}`,
+                    color: payment === 'Bank transfer' ? '#854D0E' : '#475569',
+                    fontWeight: 700,
+                    fontSize: 13,
+                    height: 34,
+                    borderRadius: 2.5,
+                    cursor: 'pointer',
+                    boxShadow: 'none',
+                    outline: 'none',
+                    WebkitTapHighlightColor: 'transparent',
+                    userSelect: 'none'
+                  }}
+                >
+                  <BankOutlined />
+                  <span>Chuyển khoản</span>
                 </Box>
               </Box>
-            )}
+              {payment === 'Cash' && (
+                <Box sx={{ mt: 0.75, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Typography sx={{ fontSize: 13, color: '#64748B', fontWeight: 600 }}>Tiền khách trả</Typography>
+                    <TextField
+                      size="small"
+                      placeholder={total > 0 ? Number(total).toLocaleString('vi-VN') : '0'}
+                      value={customerPaid}
+                      onChange={(e) => setCustomerPaid(formatNumberInput(e.target.value))}
+                      slotProps={{
+                        input: { endAdornment: <InputAdornment position="end">đ</InputAdornment> },
+                        htmlInput: { inputMode: 'numeric' }
+                      }}
+                      sx={{
+                        width: 140,
+                        '& .MuiOutlinedInput-root': {
+                          borderRadius: 2,
+                          height: 32,
+                          fontSize: 13,
+                          fontWeight: 700
+                        },
+                        '& input': { textAlign: 'right', py: 0.5 }
+                      }}
+                    />
+                  </Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Typography sx={{ fontSize: 13, color: '#64748B', fontWeight: 600 }}>Tiền trả lại khách</Typography>
+                    <Typography sx={{ fontSize: 14, fontWeight: 800, color: changeAmount > 0 ? '#10B981' : '#0F172A' }}>
+                      {money(changeAmount)}
+                    </Typography>
+                  </Box>
+                </Box>
+              )}
+            </Box>
           </Box>
 
-          </Box>
-
-          <Box sx={{ mt: 'auto', pt: 1 }}>
+          <Box sx={{ mt: 5 }}>
             <Button
               fullWidth
               variant="contained"
-              onClick={() => completeSale('Cash')}
+              onClick={() => completeSale(payment)}
               disabled={submitting}
               startIcon={!submitting && <CheckOutlined />}
               sx={{
                 bgcolor: '#8EECF5',
+                '&:hover': { bgcolor: '#8EECF5' },
                 color: '#0F172A',
                 fontWeight: 800,
                 fontSize: 13.5,
@@ -1253,10 +1249,6 @@ export default function InStoreSalesPage() {
                 borderRadius: 2.5,
                 textTransform: 'none',
                 boxShadow: 'none',
-                '&:hover': {
-                  bgcolor: '#76DCED',
-                  boxShadow: '0 2px 10px rgba(142, 236, 245, 0.45)'
-                },
                 '&.Mui-disabled': {
                   bgcolor: '#E2E8F0',
                   color: '#94A3B8'
@@ -1270,13 +1262,13 @@ export default function InStoreSalesPage() {
               <Button
                 size="small"
                 onClick={cancelInvoice}
+                disabled={submitting}
                 startIcon={<DeleteOutlined style={{ fontSize: 12 }} />}
                 sx={{
                   color: '#64748B',
                   fontSize: 12,
                   fontWeight: 600,
-                  textTransform: 'none',
-                  '&:hover': { color: '#EF4444', bgcolor: 'transparent' }
+                  textTransform: 'none'
                 }}
               >
                 Hủy hóa đơn
@@ -1287,13 +1279,15 @@ export default function InStoreSalesPage() {
       </Box>
 
       {/* ─── MODAL CHỌN BIẾN THỂ SẢN PHẨM (ẢNH 2) ─── */}
+      <GlobalStyles styles={noEffectStyles} />
       <Dialog
+        className={NO_EFFECTS}
         open={variantDialogOpen}
         onClose={closeDialog}
-        TransitionProps={{ onExited: resetDialog }}
         fullWidth
         maxWidth="sm"
         slotProps={{
+          transition: { onExited: resetDialog },
           paper: {
             sx: {
               maxWidth: 500,
@@ -1333,7 +1327,7 @@ export default function InStoreSalesPage() {
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                   <Box
                     component="img"
-                    src={variantProduct?.image || ''}
+                    src={variantProduct?.image || undefined}
                     alt={variantProduct?.productName}
                     sx={{
                       width: 58,
@@ -1402,13 +1396,7 @@ export default function InStoreSalesPage() {
                           border: isSelected ? '1.5px solid #64748B' : '1.5px solid #E2E8F0',
                           cursor: hasStock ? 'pointer' : 'not-allowed',
                           opacity: hasStock ? 1 : 0.4,
-                          outline: 'none',
-                          transition: 'none',
-                          '&:hover': hasStock
-                            ? {
-                                borderColor: isSelected ? '#64748B' : '#94A3B8'
-                              }
-                            : {}
+                          outline: 'none'
                         }}
                       >
                         {size}
@@ -1449,13 +1437,7 @@ export default function InStoreSalesPage() {
                           border: isSelected ? '1.5px solid #64748B' : '1.5px solid #E2E8F0',
                           cursor: inStock ? 'pointer' : 'not-allowed',
                           opacity: inStock ? 1 : 0.4,
-                          outline: 'none',
-                          transition: 'none',
-                          '&:hover': inStock
-                            ? {
-                                borderColor: isSelected ? '#64748B' : '#94A3B8'
-                              }
-                            : {}
+                          outline: 'none'
                         }}
                       >
                         {color}
@@ -1536,7 +1518,9 @@ export default function InStoreSalesPage() {
                             {money(selectedVariant.originalPrice * variantQuantity)}
                           </Typography>
                         )
-                      : originalRange && <Typography sx={{ fontSize: 12, color: '#94A3B8', textDecoration: 'line-through' }}>{originalRange}</Typography>}
+                      : originalRange && (
+                          <Typography sx={{ fontSize: 12, color: '#94A3B8', textDecoration: 'line-through' }}>{originalRange}</Typography>
+                        )}
                     <Typography sx={{ fontSize: 17, fontWeight: 800, color: '#0F172A' }}>
                       {selectedVariant ? money(getPrice(selectedVariant) * variantQuantity) : priceRange}
                     </Typography>
@@ -1556,8 +1540,7 @@ export default function InStoreSalesPage() {
                       height: 30,
                       px: 1.5,
                       borderRadius: 1.5,
-                      textTransform: 'none',
-                      '&:hover': { bgcolor: '#F8FAFC' }
+                      textTransform: 'none'
                     }}
                   >
                     Hủy
@@ -1571,6 +1554,7 @@ export default function InStoreSalesPage() {
                     startIcon={<PlusOutlined style={{ fontSize: 10 }} />}
                     sx={{
                       bgcolor: '#8EECF5',
+                      '&:hover': { bgcolor: '#8EECF5' },
                       color: '#0F172A',
                       fontWeight: 700,
                       fontSize: 11.5,
@@ -1579,10 +1563,6 @@ export default function InStoreSalesPage() {
                       borderRadius: 1.5,
                       textTransform: 'none',
                       boxShadow: 'none',
-                      '&:hover': {
-                        bgcolor: '#76DCED',
-                        boxShadow: '0 2px 8px rgba(142, 236, 245, 0.4)'
-                      },
                       '&.Mui-disabled': {
                         bgcolor: '#E2E8F0',
                         color: '#94A3B8'
@@ -1600,6 +1580,7 @@ export default function InStoreSalesPage() {
 
       {/* ─── POPUP GIẢM GIÁ ─── */}
       <Dialog
+        className={NO_EFFECTS}
         open={discountOpen}
         onClose={() => setDiscountOpen(false)}
         fullWidth
@@ -1661,8 +1642,10 @@ export default function InStoreSalesPage() {
                 ? `= ${money(Math.round((subtotal * Math.min(100, Number(draftValue))) / 100))}`
                 : `Tổng tiền hàng: ${money(subtotal)}`)
             }
-            inputProps={{ inputMode: 'numeric' }}
-            InputProps={{ endAdornment: <InputAdornment position="end">{draftType === 'percent' ? '%' : 'đ'}</InputAdornment> }}
+            slotProps={{
+              input: { endAdornment: <InputAdornment position="end">{draftType === 'percent' ? '%' : 'đ'}</InputAdornment> },
+              htmlInput: { inputMode: 'numeric' }
+            }}
             sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, height: 40 } }}
           />
 
@@ -1678,8 +1661,7 @@ export default function InStoreSalesPage() {
                 height: 34,
                 px: 2,
                 borderRadius: 1.5,
-                textTransform: 'none',
-                '&:hover': { bgcolor: '#F8FAFC' }
+                textTransform: 'none'
               }}
             >
               Hủy
@@ -1690,6 +1672,7 @@ export default function InStoreSalesPage() {
               onClick={applyDiscount}
               sx={{
                 bgcolor: '#8EECF5',
+                '&:hover': { bgcolor: '#8EECF5' },
                 color: '#0F172A',
                 fontWeight: 700,
                 fontSize: 12.5,
@@ -1697,8 +1680,7 @@ export default function InStoreSalesPage() {
                 px: 2,
                 borderRadius: 1.5,
                 textTransform: 'none',
-                boxShadow: 'none',
-                '&:hover': { bgcolor: '#76DCED', boxShadow: 'none' }
+                boxShadow: 'none'
               }}
             >
               Áp dụng
@@ -1712,7 +1694,7 @@ export default function InStoreSalesPage() {
       <Snackbar
         open={Boolean(error || success)}
         autoHideDuration={5000}
-        onClose={(e, reason) => {
+        onClose={(_, reason) => {
           if (reason === 'clickaway') return;
           setError('');
           setSuccess('');
@@ -1736,18 +1718,17 @@ export default function InStoreSalesPage() {
       {/* Modal Hóa đơn sau thanh toán */}
       <ReceiptDialog
         open={receiptOpen}
-        onClose={handleReceiptClose}
-        saleData={completedSale}
-        cartItems={completedCart}
+        onClose={() => setCompleted(null)}
+        saleData={completed?.sale}
+        cartItems={completed?.cart}
         sellerName={account?.fullName ?? ''}
-        completedAt={completedAt}
-        receivedAmount={completedPayment.received}
-        changeAmount={completedPayment.change}
+        completedAt={completed?.at}
+        receivedAmount={completed?.received}
+        changeAmount={completed?.change}
       />
 
       <ProductInfoDialog line={infoLine} onClose={() => setInfoLine(null)} />
 
-      <TransferQrDialog sale={transferSale} onPaid={handleTransferPaid} onCancelled={handleTransferCancelled} />
     </Box>
   );
 }

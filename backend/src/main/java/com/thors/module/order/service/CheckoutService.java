@@ -121,6 +121,9 @@ public class CheckoutService {
             if (promo.usageLimit() != null && promotionRepository.countUsage(promo.promotionId()) >= promo.usageLimit()) {
                 throw new IllegalArgumentException("Khuyến mãi đã hết lượt sử dụng.");
             }
+            if (promotionRepository.hasUsed(promo.promotionId(), userId)) {
+                throw new IllegalArgumentException("Bạn đã sử dụng mã giảm giá này rồi.");
+            }
             if (itemsAmount.compareTo(promo.minOrderValue()) < 0) {
                 throw new IllegalArgumentException("Đơn hàng chưa đạt giá trị tối thiểu để áp dụng khuyến mãi.");
             }

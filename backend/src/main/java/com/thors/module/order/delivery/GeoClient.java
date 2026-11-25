@@ -13,7 +13,6 @@ import java.util.Optional;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientException;
@@ -21,28 +20,13 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
 /**
- * Đổi địa chỉ thành tọa độ, tọa độ thành địa chỉ, và tính quãng đường giao hàng.
- *
- * <ul>
- *   <li>Có Goong REST key: dùng Goong (dữ liệu địa chỉ Việt Nam tốt nhất).
- *   <li>Chưa có key: dùng OpenStreetMap miễn phí (Nominatim tìm địa chỉ, OSRM tính đường). Chỉ để test
- *       khi phát triển: Nominatim giới hạn 1 lượt/giây, server OSRM công khai chỉ dành cho demo.
- *   <li>Goong lỗi (key chưa kích hoạt, hết hạn mức, mất mạng...) hoặc không ra kết quả: tự chuyển sang
- *       OpenStreetMap.
- *   <li>Mọi cách đều lỗi: quãng đường ước tính theo đường thẳng × 1,3.
- * </ul>
+ * Đổi địa chỉ thành tọa độ bằng OpenStreetMap (Nominatim, miễn phí, giới hạn 1 lượt/giây). Hiện chỉ module
+ * Facebook dùng: kiểm tra địa chỉ trước khi tạo đơn và lưu tọa độ của đơn.
  */
 @Component
 public class GeoClient {
     private static final Logger log = LoggerFactory.getLogger(GeoClient.class);
-    private static final String GOONG = "https://rsapi.goong.io";
     private static final String NOMINATIM = "https://nominatim.openstreetmap.org";
-    private static final String OSRM = "https://router.project-osrm.org";
-
-    /** Đường bộ thường dài hơn đường thẳng khoảng 30%, dùng khi không lấy được quãng đường thật. */
-    private static final double ROAD_FACTOR = 1.3;
-
-    public record LatLng(double lat, double lng) {}
 
     /**
      * Mức chính xác của kết quả tìm địa chỉ.
@@ -87,27 +71,16 @@ public class GeoClient {
     private static final Set<String> GENERIC_WORDS_PLAIN =
             GENERIC_WORDS.stream().map(GeoClient::normalize).collect(java.util.stream.Collectors.toSet());
 
-    /** Quãng đường tính bằng mét; approximate = true nghĩa là ước tính theo đường thẳng. */
-    public record Route(int meters, boolean approximate) {}
-
     private final RestTemplate http;
-    private final String apiKey;
     private long lastNominatimCall = 0;
 
-    public GeoClient(RestTemplateBuilder builder, @Value("${thors.shipping.goong-api-key:}") String apiKey) {
+    public GeoClient(RestTemplateBuilder builder) {
         this.http =
                 builder.setConnectTimeout(Duration.ofSeconds(3))
                         .setReadTimeout(Duration.ofSeconds(6))
                         // Nominatim yêu cầu User-Agent nhận diện được ứng dụng
                         .defaultHeader("User-Agent", "thors-backend/1.0 (dev test)")
                         .build();
-        this.apiKey = apiKey == null ? "" : apiKey.trim();
-        if (this.apiKey.isEmpty())
-            log.info("Chưa có Goong API key: dùng OpenStreetMap (chỉ phù hợp để test)");
-    }
-
-    private boolean useGoong() {
-        return !apiKey.isEmpty();
     }
 
     // ------------------------------------------------------------------ Địa chỉ -> tọa độ
@@ -137,26 +110,9 @@ public class GeoClient {
         Optional<Parts> parts = Parts.parse(address);
         if (parts.isPresent()) return structuredLookup(parts.get());
         // Địa chỉ không theo định dạng trên (đơn mẫu, dữ liệu cũ): tìm theo cả chuỗi như trước
-        if (useGoong()) {
-            List<Place> found = goongSearch(address, 1);
-            if (found != null && !found.isEmpty()) return new Lookup(Optional.of(found.get(0)), false);
-            log.info("Goong không trả kết quả tìm địa chỉ, chuyển sang OpenStreetMap");
-        }
         List<Place> found = osmSearchLoose(address, 1);
         if (found == null) return new Lookup(Optional.empty(), true);
         return new Lookup(found.stream().findFirst(), false);
-    }
-
-    /** Tìm địa chỉ theo chữ khách gõ, trả về tối đa {@code limit} kết quả (lỗi dịch vụ coi như không có). */
-    public List<Place> search(String address, int limit) {
-        if (address == null || address.isBlank()) return List.of();
-        if (useGoong()) {
-            List<Place> found = goongSearch(address, limit);
-            if (found != null && !found.isEmpty()) return found;
-            log.info("Goong không trả kết quả tìm địa chỉ, chuyển sang OpenStreetMap");
-        }
-        List<Place> found = osmSearchLoose(address, limit);
-        return found == null ? List.of() : found;
     }
 
     // ------------------------------------------------------------------ Tìm theo từng phần địa chỉ
@@ -183,7 +139,7 @@ public class GeoClient {
         }
     }
 
-    /** Một kết quả thô từ dịch vụ bản đồ; rank = place_rank của Nominatim, -1 nếu là Goong. */
+    /** Một kết quả thô từ Nominatim; rank = place_rank. */
     private record Hit(String name, double lat, double lng, int rank) {}
 
     /**
@@ -191,13 +147,6 @@ public class GeoClient {
      * là STREET, không thì AREA. Không có kết quả nào trong đúng Phường/Xã + Tỉnh đó: không tìm thấy.
      */
     private Lookup structuredLookup(Parts p) {
-        if (useGoong()) {
-            List<Hit> hits = goongHits(p.full(), 5);
-            Place best = hits == null ? null : pick(p, hits, true);
-            if (best != null) return found(best);
-            log.info("Goong không tìm được địa chỉ trong đúng phường/xã, chuyển sang OpenStreetMap");
-        }
-
         Place best = null;
         boolean error = false;
 
@@ -257,23 +206,23 @@ public class GeoClient {
 
     /**
      * Kết quả tốt nhất nằm trong đúng Phường/Xã + Tỉnh: ưu tiên khớp số nhà, rồi tên đường, rồi chỉ phường.
-     * Khớp số nhà: kết quả là một địa điểm cụ thể (rank 30, hoặc từ Goong) và có đủ các số trong địa chỉ.
+     * Khớp số nhà: kết quả là một địa điểm cụ thể (rank 30) và có đủ các số trong địa chỉ.
      */
     private static Place pick(Parts p, List<Hit> hits, boolean streetAllowed) {
         Place best = null;
         for (Hit h : hits) {
             // Chỉ tới tỉnh/quốc gia: bỏ. Không dùng OSM_AREA_RANK ở đây vì sau sáp nhập 2025, OSM xếp
             // Phường/Xã ở rank 12; việc kết quả nằm đúng phường đã được inArea kiểm tra
-            if (h.rank() >= 0 && h.rank() < OSM_WARD_MIN_RANK) continue;
+            if (h.rank() < OSM_WARD_MIN_RANK) continue;
             if (!inArea(p, h.name())) continue;
             boolean street =
                     streetAllowed
-                            && (h.rank() < 0 || h.rank() >= OSM_STREET_RANK)
+                            && h.rank() >= OSM_STREET_RANK
                             && hasMeaningfulWords(p.detail())
                             && matches(p.detail(), h.name());
             Precision precision = Precision.AREA;
             if (street) {
-                boolean place = h.rank() < 0 || h.rank() >= OSM_HOUSE_RANK;
+                boolean place = h.rank() >= OSM_HOUSE_RANK;
                 // Khớp địa điểm cụ thể: đúng số nhà, hoặc khách ghi tên địa điểm không kèm số
                 // ("trường đại học Đại Nam") và kết quả chính là địa điểm đó
                 boolean exact =
@@ -310,7 +259,7 @@ public class GeoClient {
     /** Kết quả là đoạn đường mang mã số đó ("ĐT.72", "QL.6") nằm đúng Phường/Xã + Tỉnh. */
     private static Place pickRoad(Parts p, List<Hit> hits, String number) {
         for (Hit h : hits) {
-            if (h.rank() >= 0 && h.rank() < OSM_STREET_RANK) continue;
+            if (h.rank() < OSM_STREET_RANK) continue;
             if (!inArea(p, h.name())) continue;
             String first = normalize(h.name().split(",")[0]); // "ĐT.72" -> "dt 72"
             if (first.matches("(dt|ql|tl|duong tinh|tinh lo|quoc lo) " + normalize(number)))
@@ -352,32 +301,6 @@ public class GeoClient {
     }
 
     // ------------------------------------------------------------------ Gọi dịch vụ bản đồ
-
-    /** Kết quả thô của Goong; null nếu gọi bị lỗi. */
-    private List<Hit> goongHits(String text, int limit) {
-        List<Hit> out = new ArrayList<>();
-        try {
-            URI uri =
-                    UriComponentsBuilder.fromUriString(GOONG + "/geocode")
-                            .queryParam("address", text)
-                            .queryParam("api_key", apiKey)
-                            .encode()
-                            .build()
-                            .toUri();
-            JsonNode body = http.getForObject(uri, JsonNode.class);
-            if (body == null) return out;
-            for (JsonNode r : body.path("results")) {
-                JsonNode loc = r.path("geometry").path("location");
-                if (!loc.has("lat") || !loc.has("lng")) continue;
-                out.add(new Hit(r.path("formatted_address").asText(""), loc.get("lat").asDouble(), loc.get("lng").asDouble(), -1));
-                if (out.size() >= limit) break;
-            }
-        } catch (RestClientException e) {
-            log.warn("Goong geocode lỗi: {}", e.getClass().getSimpleName());
-            return null;
-        }
-        return out;
-    }
 
     /** Kết quả thô của Nominatim (tìm theo chữ); null nếu gọi bị lỗi. */
     private List<Hit> osmHits(String text, int limit) {
@@ -425,23 +348,6 @@ public class GeoClient {
 
     // ------------------------------------------------------------------ Tìm theo cả chuỗi (địa chỉ không theo định dạng)
 
-    /** Trả về null nếu gọi Goong bị lỗi. */
-    private List<Place> goongSearch(String address, int limit) {
-        List<Hit> hits = goongHits(address, limit);
-        if (hits == null) return null;
-        List<Place> out = new ArrayList<>();
-        for (Hit h : hits) {
-            // Goong luôn trả về kết quả "gần giống nhất" kể cả với địa chỉ bịa, nên phải tự so chữ
-            Precision precision = goongPrecision(address, h.name());
-            if (precision == null) {
-                log.info("Goong trả kết quả không khớp địa chỉ, bỏ qua: {}", h.name());
-                continue;
-            }
-            out.add(new Place(h.name(), h.lat(), h.lng(), precision));
-        }
-        return out;
-    }
-
     /**
      * OpenStreetMap thường không tìm được số nhà ở Việt Nam, nên nếu không ra kết quả thì bỏ dần phần
      * đầu địa chỉ ("123 Đường X, Phường Y, Hà Nội" -> "Phường Y, Hà Nội" -> "Hà Nội") để ít nhất lấy được
@@ -485,122 +391,7 @@ public class GeoClient {
         return out;
     }
 
-    // ------------------------------------------------------------------ Tọa độ -> địa chỉ
-
-    /** Đổi tọa độ khách ghim trên bản đồ thành địa chỉ dạng chữ. */
-    public Optional<String> reverse(double lat, double lng) {
-        if (useGoong()) {
-            Optional<String> found = goongReverse(lat, lng);
-            if (found.isPresent()) return found;
-            log.info("Goong không đổi được tọa độ thành địa chỉ, chuyển sang OpenStreetMap");
-        }
-        return osmReverse(lat, lng);
-    }
-
-    private Optional<String> goongReverse(double lat, double lng) {
-        try {
-            URI uri =
-                    UriComponentsBuilder.fromUriString(GOONG + "/Geocode")
-                            .queryParam("latlng", lat + "," + lng)
-                            .queryParam("api_key", apiKey)
-                            .encode()
-                            .build()
-                            .toUri();
-            JsonNode body = http.getForObject(uri, JsonNode.class);
-            String text = body == null ? "" : body.path("results").path(0).path("formatted_address").asText("");
-            return text.isBlank() ? Optional.empty() : Optional.of(text);
-        } catch (RestClientException e) {
-            log.warn("Goong reverse geocode lỗi: {}", e.getClass().getSimpleName());
-            return Optional.empty();
-        }
-    }
-
-    private Optional<String> osmReverse(double lat, double lng) {
-        try {
-            waitForNominatim();
-            URI uri =
-                    UriComponentsBuilder.fromUriString(NOMINATIM + "/reverse")
-                            .queryParam("lat", lat)
-                            .queryParam("lon", lng)
-                            .queryParam("format", "jsonv2")
-                            .queryParam("accept-language", "vi")
-                            .encode()
-                            .build()
-                            .toUri();
-            JsonNode body = http.getForObject(uri, JsonNode.class);
-            String text = body == null ? "" : body.path("display_name").asText("");
-            return text.isBlank() ? Optional.empty() : Optional.of(text);
-        } catch (RestClientException e) {
-            log.warn("Nominatim reverse lỗi: {}", e.getClass().getSimpleName());
-            return Optional.empty();
-        }
-    }
-
-    // ------------------------------------------------------------------ Quãng đường
-
-    /** Quãng đường đi từ {@code from} tới {@code to}; lỗi thì ước tính theo đường thẳng. */
-    public Route route(LatLng from, LatLng to) {
-        Optional<Integer> meters = Optional.empty();
-        if (useGoong()) {
-            meters = goongRoute(from, to);
-            if (meters.isEmpty()) log.info("Goong không tính được quãng đường, chuyển sang OSRM");
-        }
-        if (meters.isEmpty()) meters = osrmRoute(from, to);
-        return meters
-                .map(m -> new Route(m, false))
-                .orElseGet(() -> new Route((int) Math.round(straightLineMeters(from, to) * ROAD_FACTOR), true));
-    }
-
-    private Optional<Integer> goongRoute(LatLng from, LatLng to) {
-        try {
-            URI uri =
-                    UriComponentsBuilder.fromUriString(GOONG + "/DistanceMatrix")
-                            .queryParam("origins", from.lat() + "," + from.lng())
-                            .queryParam("destinations", to.lat() + "," + to.lng())
-                            .queryParam("vehicle", "bike")
-                            .queryParam("api_key", apiKey)
-                            .encode()
-                            .build()
-                            .toUri();
-            JsonNode body = http.getForObject(uri, JsonNode.class);
-            JsonNode distance = body == null ? null : body.path("rows").path(0).path("elements").path(0).path("distance");
-            if (distance != null && distance.has("value")) return Optional.of(distance.get("value").asInt());
-        } catch (RestClientException e) {
-            log.warn("Goong DistanceMatrix lỗi: {}", e.getClass().getSimpleName());
-        }
-        return Optional.empty();
-    }
-
-    /** OSRM nhận tọa độ theo thứ tự kinh độ,vĩ độ. */
-    private Optional<Integer> osrmRoute(LatLng from, LatLng to) {
-        try {
-            URI uri =
-                    URI.create(
-                            OSRM + "/route/v1/driving/" + from.lng() + "," + from.lat() + ";" + to.lng() + ","
-                                    + to.lat() + "?overview=false");
-            JsonNode body = http.getForObject(uri, JsonNode.class);
-            if (body != null && "Ok".equals(body.path("code").asText()) && body.path("routes").path(0).has("distance"))
-                return Optional.of((int) Math.round(body.path("routes").path(0).get("distance").asDouble()));
-        } catch (RestClientException e) {
-            log.warn("OSRM lỗi: {}", e.getClass().getSimpleName());
-        }
-        return Optional.empty();
-    }
-
     // ------------------------------------------------------------------ So khớp chữ
-
-    /**
-     * Mức khớp giữa địa chỉ khách nhập và địa chỉ Goong trả về. Phần đầu địa chỉ (trước dấu phẩy đầu tiên)
-     * là số nhà / tên đường; các phần giữa là phường, quận; phần cuối là tỉnh/thành phố (không tính).
-     * Trả về null nếu không khớp cả tên đường lẫn phường/quận.
-     */
-    static Precision goongPrecision(String input, String found) {
-        String[] parts = input.split(",");
-        if (parts.length > 0 && hasMeaningfulWords(parts[0]) && matches(parts[0], found)) return Precision.STREET;
-        for (int i = 1; i < parts.length - 1; i++)
-            if (hasMeaningfulWords(parts[i]) && matches(parts[i], found)) return Precision.AREA;
-        return null;
-    }
 
     /**
      * Mọi từ có nghĩa (bỏ số và từ chung chung như "đường", "phường") của {@code text} đều có trong
@@ -655,18 +446,6 @@ public class GeoClient {
     static String normalize(String s) {
         String noMarks = Normalizer.normalize(s == null ? "" : s, Normalizer.Form.NFD).replaceAll("\\p{M}", "");
         return noMarks.replace('đ', 'd').replace('Đ', 'D').toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", " ").trim();
-    }
-
-    /** Khoảng cách đường thẳng trên mặt cầu (công thức haversine). */
-    static double straightLineMeters(LatLng a, LatLng b) {
-        double r = 6_371_000;
-        double dLat = Math.toRadians(b.lat() - a.lat());
-        double dLng = Math.toRadians(b.lng() - a.lng());
-        double h =
-                Math.sin(dLat / 2) * Math.sin(dLat / 2)
-                        + Math.cos(Math.toRadians(a.lat())) * Math.cos(Math.toRadians(b.lat()))
-                        * Math.sin(dLng / 2) * Math.sin(dLng / 2);
-        return 2 * r * Math.asin(Math.sqrt(h));
     }
 
     /** Nominatim chỉ cho tối đa 1 lượt/giây. */

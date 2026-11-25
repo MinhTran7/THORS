@@ -53,7 +53,8 @@ public class ReturnRepository {
                 tracking_number,
                 shipment_status,
                 order_date,
-                total_amount
+                total_amount,
+                shipment_delivered_at
             FROM orders
             WHERE order_number = ?
             """;
@@ -78,6 +79,8 @@ public class ReturnRepository {
                     Timestamp ts = rs.getTimestamp("order_date");
                     res.setOrderDate(ts != null ? ts.toLocalDateTime() : null);
                     res.setTotalAmount(rs.getBigDecimal("total_amount"));
+                    // Giữ nguyên giờ UTC trong DB (getTimestamp().toLocalDateTime() đổi sang giờ máy, lệch 7 tiếng)
+                    res.setDeliveredAt(rs.getObject("shipment_delivered_at", java.time.LocalDateTime.class));
                     return res;
                 },
                 orderNumber

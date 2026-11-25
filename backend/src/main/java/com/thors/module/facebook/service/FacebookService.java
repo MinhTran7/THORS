@@ -15,6 +15,7 @@ import java.io.PrintWriter;
 import com.thors.common.ApiException;
 import com.thors.module.account.entity.Account;
 import com.thors.module.order.delivery.GeoClient;
+import com.thors.module.order.service.OrderService;
 import com.thors.security.SessionAccess;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -52,16 +53,21 @@ public class FacebookService {
     private final RestTemplate restTemplate = new RestTemplate();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    // Dịch vụ bản đồ (Goong / OpenStreetMap) dùng chung với luồng xác nhận đơn online
+    // Dịch vụ bản đồ (OpenStreetMap) dùng chung với luồng xác nhận đơn online
     private final GeoClient geo;
+
+    // Gửi thông báo đơn mới cho những người xử lý đơn khác của cửa hàng
+    private final OrderService orderService;
 
     public FacebookService(
             @Autowired(required = false) JdbcTemplate jdbc,
             @Autowired(required = false) SessionAccess sessionAccess,
-            @Autowired(required = false) GeoClient geo) {
+            @Autowired(required = false) GeoClient geo,
+            @Autowired(required = false) OrderService orderService) {
         this.jdbc = jdbc;
         this.sessionAccess = sessionAccess;
         this.geo = geo;
+        this.orderService = orderService;
     }
 
     // ==========================================
@@ -800,6 +806,8 @@ public class FacebookService {
 
         log.info("==> Đã tạo đơn hàng Facebook #{} ({}) cho khách: {} - Tổng tiền: {}",
                 orderId, orderNumber, customerName, totalAmount);
+
+        if (orderService != null) orderService.notifyFacebookOrderCreated(actor, orderId, orderNumber);
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("orderId", orderId);

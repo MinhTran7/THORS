@@ -25,7 +25,7 @@ import { money, priceText } from './ShopCommon';
 import { C, SERIF, Icon, btnSx, container, eyebrowSx, focusRing, iconBtnSx } from './storeTheme';
 
 /**
- * Banner lớn đầu trang chủ. Slide đầu là voucher / khuyến mãi mới nhất (prop voucher, nếu có),
+ * Banner lớn đầu trang chủ. Slide đầu là mã giảm giá đơn hàng mới nhất (prop voucher, nếu có),
  * sau đó tự chuyển slide mỗi 5 giây, xen kẽ:
  *   hàng mới về -> hàng đang khuyến mãi -> hàng mới về -> ...
  * Dữ liệu: GET /api/shop/products?sort=newest và GET /api/shop/promotions.
@@ -273,30 +273,21 @@ const discountText = (p) => {
   return v >= 1000 ? `${Math.round(v / 1000)}K` : money(v);
 };
 
-// Voucher đang chạy mới nhất; không có voucher thì lấy chương trình khuyến mãi sản phẩm đầu tiên
-export const latestVoucher = (promos, vouchers) => {
+// Mã giảm giá đơn hàng đang chạy mới nhất; không có thì không hiện slide voucher
+export const latestVoucher = (vouchers) => {
   const now = new Date();
-  const active = vouchers.filter((v) => (!v.status || v.status === 'ACTIVE') && new Date(v.startDate) <= now && now <= new Date(v.endDate));
-  if (active.length > 0) {
-    const v = active.reduce((a, b) => (b.promotionId > a.promotionId ? b : a));
-    const note = [
-      Number(v.minOrderValue) > 0 && `Đơn từ ${money(v.minOrderValue)}`,
-      v.applyScope === 'ALL' ? 'Toàn shop' : 'Một số sản phẩm',
-      `Đến ${new Date(v.endDate).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}`
-    ];
-    return { ...v, note: note.filter(Boolean).join(' · ') };
-  }
-  const p = promos[0];
-  if (!p) return null;
-  const count = promos.filter((x) => x.promotionName === p.promotionName).length;
-  return { ...p, name: p.promotionName, note: count > 1 ? `Áp dụng cho ${count} sản phẩm` : p.productName };
+  const active = vouchers.filter((v) => new Date(v.startDate) <= now && now <= new Date(v.endDate));
+  if (!active.length) return null;
+  const v = active.reduce((a, b) => (b.promotionId > a.promotionId ? b : a));
+  const end = new Date(v.endDate).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+  return { ...v, note: `Đơn từ ${money(v.minOrderValue)} · Đến ${end}` };
 };
 
 function RiseLine({ children, size, spacing, delay }) {
   return (
     <Box
       component="span"
-      sx={{ display: 'block', overflow: 'hidden', pt: '.16em', fontSize: size, letterSpacing: `${spacing} !important` }}
+      sx={{ display: 'block', overflow: 'hidden', pt: '.4em', mt: '-.24em', fontSize: size, letterSpacing: `${spacing} !important` }}
     >
       <Box
         component="span"

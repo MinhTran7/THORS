@@ -40,9 +40,10 @@ import {
   isAssignableCategory,
   sortCategoriesAsTree
 } from '../../services/categoryService';
-import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../customer/theme';
+import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../shippingaddress/theme';
 import CategoryPicker from './CategoryPicker';
 import ProductDescriptionFields from './ProductDescriptionFields';
+import ImageCropDialog from './ImageCropDialog';
 import { formatPriceInput, parsePriceInput } from './priceInput';
 
 const MAX_IMAGES = 10;
@@ -293,6 +294,24 @@ export default function AddProductPage() {
   // IMAGE ACTIONS
   // ==========================================
 
+  // Ảnh vừa chọn đang chờ căn chỉnh (hộp thoại cắt ảnh)
+  const [cropFiles, setCropFiles] = useState(null);
+
+  function handleCropped(cropped) {
+    setCropFiles(null);
+    const tooLarge = cropped.find((file) => file.size > MAX_IMAGE_SIZE);
+    if (tooLarge) {
+      setError(`Hình ảnh "${tooLarge.name}" vượt quá dung lượng cho phép (tối đa 5 MB).`);
+      return;
+    }
+    const newImages = cropped.map((file) => ({
+      id: crypto.randomUUID(),
+      file,
+      preview: URL.createObjectURL(file)
+    }));
+    setImages((current) => [...current, ...newImages]);
+  }
+
   function handleSelectImages(event) {
     setError('');
 
@@ -326,16 +345,7 @@ export default function AddProductPage() {
       }
     }
 
-    const newImages = files.map((file) => ({
-      id: crypto.randomUUID(),
-      file,
-      preview: URL.createObjectURL(file)
-    }));
-
-    setImages((current) => [
-      ...current,
-      ...newImages
-    ]);
+    setCropFiles(files);
   }
 
   function removeImage(imageId) {
@@ -1173,6 +1183,7 @@ export default function AddProductPage() {
           </Box>
         </CardContent>
       </Card>
+      <ImageCropDialog files={cropFiles} onDone={handleCropped} onCancel={() => setCropFiles(null)} />
     </Box>
   );
 }

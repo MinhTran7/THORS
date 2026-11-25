@@ -3,7 +3,7 @@ import { Link as RouterLink } from 'react-router-dom';
 import { Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, Typography } from '@mui/material';
 import { useCrumbs } from 'layouts/crumbs';
 import { StoreAccountShell } from 'features/account/components/StoreAccount';
-import { C, cardSx, outlineButtonSx, primaryButtonSx } from 'features/customer/theme';
+import { C, cardSx, outlineButtonSx, primaryButtonSx } from 'features/shippingaddress/theme';
 import { deleteMyTryOnPhotos, getTryOnHistory } from './api';
 
 const MODE_LABELS = { MODEL: 'Người mẫu', GENERATE: 'AI tạo người mẫu', PHOTO: 'Ảnh của bạn' };

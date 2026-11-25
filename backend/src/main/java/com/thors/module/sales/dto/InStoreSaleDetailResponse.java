@@ -9,19 +9,16 @@ public record InStoreSaleDetailResponse(
         String orderNumber,
         String invoiceNumber,
         LocalDateTime orderDate,
-        String customerName,
         String sellerName,
         BigDecimal subtotal,
         BigDecimal discountAmount,
         BigDecimal totalAmount,
         String paymentMethod,
         String paymentStatus,
-        String orderStatus,
         List<SaleItemDetail> items
 ) {
     public record SaleItemDetail(
             int orderItemId,
-            Integer detailId,
             String productName,
             String size,
             String color,

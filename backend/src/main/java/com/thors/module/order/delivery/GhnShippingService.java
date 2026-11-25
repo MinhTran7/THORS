@@ -38,10 +38,10 @@ public class GhnShippingService {
      * thái hoặc đã có vận đơn) thì hủy lại vận đơn vừa tạo để không có vận đơn mồ côi trên GHN.
      *
      * @param weightG cân nặng Owner nhập; null thì dùng cân nặng đã lưu ở đơn hoặc mặc định
-     * @param districtId Quận/Huyện theo GHN Owner chọn; null thì dùng mã đã lưu ở đơn
-     * @param wardCode Phường/Xã theo GHN Owner chọn; null thì dùng mã đã lưu ở đơn
+     * @param provinceId Tỉnh/Thành theo danh mục mới của GHN Owner chọn
+     * @param wardId Phường/Xã theo danh mục mới của GHN Owner chọn (phải thuộc tỉnh đã chọn)
      */
-    public Created ship(int orderId, String from, Integer weightG, Integer districtId, String wardCode) {
+    public Created ship(int orderId, String from, Integer weightG, Integer provinceId, Integer wardId) {
         ShipInput in =
                 orders.findShipInput(orderId)
                         .orElseThrow(() -> new ApiException(404, "ORDER_NOT_FOUND", "Không tìm thấy đơn hàng."));
@@ -49,23 +49,21 @@ public class GhnShippingService {
         if (blank(in.name()) || blank(in.phone()) || blank(in.address()))
             throw new ApiException(400, "GHN_ADDRESS", "Đơn thiếu tên, số điện thoại hoặc địa chỉ người nhận.");
 
-        int district;
-        String ward;
-        if (districtId != null || !blank(wardCode)) {
-            if (districtId == null || blank(wardCode))
-                throw new ApiException(400, "GHN_ADDRESS", "Vui lòng chọn đủ Quận/Huyện và Phường/Xã theo GHN.");
-            district = districtId;
-            ward = wardCode.trim();
-            // Chặn mã gửi lên sai hoặc phường/xã không thuộc quận/huyện đã chọn
-            if (ghn.wards(district).stream().noneMatch(w -> w.id().equals(ward)))
-                throw new ApiException(400, "GHN_ADDRESS", "Phường/Xã không thuộc Quận/Huyện đã chọn.");
-        } else if (in.districtId() != null && !blank(in.wardCode())) {
-            district = in.districtId();
-            ward = in.wardCode();
-        } else {
-            throw new ApiException(
-                    400, "GHN_ADDRESS", "Vui lòng chọn Quận/Huyện và Phường/Xã theo GHN cho địa chỉ giao.");
-        }
+        if (provinceId == null || wardId == null)
+            throw new ApiException(400, "GHN_ADDRESS", "Vui lòng chọn Tỉnh/Thành và Phường/Xã theo GHN cho địa chỉ giao.");
+        // Chặn mã gửi lên sai hoặc phường/xã không thuộc tỉnh đã chọn; GHN nhận theo tên nên lấy tên chuẩn
+        String province =
+                ghn.provinces().stream()
+                        .filter(p -> p.id().equals(String.valueOf(provinceId)))
+                        .findFirst()
+                        .orElseThrow(() -> new ApiException(400, "GHN_ADDRESS", "Tỉnh/Thành không có trong danh mục GHN."))
+                        .name();
+        String ward =
+                ghn.wards(provinceId).stream()
+                        .filter(w -> w.id().equals(String.valueOf(wardId)))
+                        .findFirst()
+                        .orElseThrow(() -> new ApiException(400, "GHN_ADDRESS", "Phường/Xã không thuộc Tỉnh/Thành đã chọn."))
+                        .name();
 
         int weight = weightG != null ? weightG : in.weightG() != null ? in.weightG() : defaultWeightG;
         if (weight <= 0 || weight > MAX_WEIGHT_G)
@@ -88,7 +86,7 @@ public class GhnShippingService {
                                 in.name(),
                                 in.phone(),
                                 in.address(),
-                                district,
+                                province,
                                 ward,
                                 cod,
                                 weight,
@@ -107,7 +105,7 @@ public class GhnShippingService {
                             created.totalFee(),
                             cod,
                             weight,
-                            district,
+                            province,
                             ward);
         } catch (RuntimeException e) {
             cancelQuietly(created.orderCode());

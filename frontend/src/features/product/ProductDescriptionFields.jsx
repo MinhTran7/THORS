@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Box, TextField, Typography } from '@mui/material';
-import { C } from '../customer/theme';
+import { C } from '../shippingaddress/theme';
 import {
   HIGHLIGHTS,
   HighlightIcon,

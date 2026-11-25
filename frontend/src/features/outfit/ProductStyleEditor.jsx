@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Box, Button, Card, Chip, Typography } from '@mui/material';
-import { C, cardSx, primaryButtonSx } from 'features/customer/theme';
+import { C, cardSx, primaryButtonSx } from 'features/shippingaddress/theme';
 import { getOutfitOptions, getProductStyle, saveProductStyle } from './api';
 
 const chipSx = (on) => ({

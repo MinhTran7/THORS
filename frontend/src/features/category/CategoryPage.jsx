@@ -62,7 +62,7 @@ import {
   descendantIds
 } from 'services/categoryService';
 
-import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../customer/theme';
+import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../shippingaddress/theme';
 
 const PAGE_SIZE = 5;
 

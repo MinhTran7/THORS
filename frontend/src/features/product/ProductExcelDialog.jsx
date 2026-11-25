@@ -35,7 +35,7 @@ import {
   WarningOutlined
 } from '@ant-design/icons';
 import { createProductsBatch } from '../../services/productService';
-import { C, outlineButtonSx, primaryButtonSx } from '../customer/theme';
+import { C, outlineButtonSx, primaryButtonSx } from '../shippingaddress/theme';
 
 const COLORS = {
   text: '#1E293B',

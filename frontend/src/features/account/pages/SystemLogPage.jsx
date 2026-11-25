@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import useSWR from 'swr';
-import { Box, IconButton, Table, TableBody, TableCell, TableHead, TableRow, TextField, Tooltip, Typography } from '@mui/material';
+import { Box, IconButton, Table, TableBody, TableCell, TableHead, TableRow, Tooltip, Typography } from '@mui/material';
 import { Stack } from '../components/Flex';
 import { CheckCircleOutlined, CloseCircleOutlined, DownloadOutlined, FileTextOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useCrumbs } from 'layouts/crumbs';
@@ -13,7 +13,9 @@ import { brand, cardSx, fs } from '../tokens';
 import { OutlineButton } from '../components/Brand';
 import { StatusPill } from '../components/Chips';
 import {
+  DateRangeFilter,
   EmptyRow,
+  FilterResetButton,
   FilterSelect,
   PageHeader,
   Pager,
@@ -50,35 +52,21 @@ const STATUS_OPTIONS = [
   ...Object.entries(LOG_STATUS).map(([value, meta]) => ({ value, label: meta.label }))
 ];
 
-const RANGE_OPTIONS = [
-  { value: '7d', label: '7 ngày qua' },
-  { value: '30d', label: '30 ngày qua' },
-  { value: 'all', label: 'Tất cả thời gian' },
-  { value: 'custom', label: 'Tùy chọn ngày…' }
-];
-
 const daysAgo = (n) => {
   const today = new Date();
   return toYmd(new Date(today.getFullYear(), today.getMonth(), today.getDate() - n));
 };
 
-// "N ngày qua" tính cả hôm nay. Chuỗi rỗng = không giới hạn phía đó.
-function presetRange(preset) {
-  if (preset === '7d') return { from: daysAgo(6), to: daysAgo(0) };
-  if (preset === '30d') return { from: daysAgo(29), to: daysAgo(0) };
-  return { from: '', to: '' };
-}
+// Mặc định xem 7 ngày qua (tính cả hôm nay); "Bỏ lọc" đưa về khoảng này.
+const defaultRange = () => ({ from: daysAgo(6), to: daysAgo(0) });
 
 const dmy = (ymd) => ymd.split('-').reverse().join('/');
 
-function rangeCaption(preset, from, to) {
-  if (preset === 'custom') {
-    if (from && to) return `Từ ${dmy(from)} đến ${dmy(to)}`;
-    if (from) return `Từ ${dmy(from)} đến nay`;
-    if (to) return `Đến hết ${dmy(to)}`;
-    return 'Toàn bộ lịch sử';
-  }
-  return preset === 'all' ? 'Toàn bộ lịch sử' : `Trong ${RANGE_OPTIONS.find((o) => o.value === preset).label}`;
+function rangeCaption(from, to) {
+  if (from && to) return from === to ? `Trong ngày ${dmy(from)}` : `Từ ${dmy(from)} đến ${dmy(to)}`;
+  if (from) return `Từ ${dmy(from)} đến nay`;
+  if (to) return `Đến hết ${dmy(to)}`;
+  return 'Toàn bộ lịch sử';
 }
 
 // Hàng thấp hơn mặc định để một trang 10 dòng đỡ phải cuộn.
@@ -100,11 +88,9 @@ export default function SystemLogPage() {
   const [toast, showToast] = useToast();
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('');
-  const [preset, setPreset] = useState('7d');
-  // Chỉ dùng khi chọn "Tùy chọn ngày…"; các mốc nhanh tính lại mỗi lần render nên qua nửa đêm vẫn đúng.
-  const [customFrom, setCustomFrom] = useState('');
-  const [customTo, setCustomTo] = useState('');
-  const { from, to } = preset === 'custom' ? { from: customFrom, to: customTo } : presetRange(preset);
+  // Khoảng ngày yyyy-MM-dd; chuỗi rỗng = không giới hạn phía đó
+  const [range, setRange] = useState(defaultRange);
+  const { from, to } = range;
   const [page, setPage] = useState(0);
   const [exporting, setExporting] = useState(false);
   const [refreshedAt, setRefreshedAt] = useState(null);
@@ -128,18 +114,18 @@ export default function SystemLogPage() {
     setPage(0);
   };
 
-  // Chuyển sang "Tùy chọn ngày…" thì giữ nguyên khoảng đang xem làm điểm bắt đầu để sửa tiếp.
-  const choosePreset = (value) => {
-    if (value === 'custom' && preset !== 'custom') {
-      setCustomFrom(from);
-      setCustomTo(to);
-    }
-    filter(setPreset)(value);
+  const initial = defaultRange();
+  const isDefault = !q && !status && from === initial.from && to === initial.to;
+  const resetFilters = () => {
+    setQ('');
+    setStatus('');
+    setRange(defaultRange());
+    setPage(0);
   };
 
   const stats = summary.data;
   const successRate = stats && stats.events > 0 ? Math.round((stats.successful / stats.events) * 100) : 100;
-  const caption = rangeCaption(preset, from, to);
+  const caption = rangeCaption(from, to);
 
   async function exportCsv() {
     setExporting(true);
@@ -165,20 +151,6 @@ export default function SystemLogPage() {
   }
 
   const items = list.data?.items ?? [];
-  const dateField = (label, value, setter) => (
-    <TextField
-      type="date"
-      size="small"
-      label={label}
-      value={value}
-      onChange={(event) => filter(setter)(event.target.value)}
-      slotProps={{ inputLabel: { shrink: true } }}
-      sx={{
-        minWidth: 170,
-        '& .MuiOutlinedInput-root': { bgcolor: brand.surface, borderRadius: '10px', fontSize: fs.body, '& fieldset': { borderColor: brand.line } }
-      }}
-    />
-  );
 
   return (
     <Box>
@@ -210,18 +182,13 @@ export default function SystemLogPage() {
         />
       </StatRow>
 
-      <Toolbar>
+      <Toolbar alignEnd>
         <Box sx={{ flex: 1 }}>
           <SearchField placeholder="Tìm người dùng, hành động hoặc địa chỉ IP" value={q} onChange={filter(setQ)} />
         </Box>
         <FilterSelect label="Lọc theo trạng thái" value={status} onChange={filter(setStatus)} options={STATUS_OPTIONS} minWidth={180} />
-        <FilterSelect label="Khoảng thời gian" value={preset} onChange={choosePreset} options={RANGE_OPTIONS} minWidth={170} />
-        {preset === 'custom' && (
-          <>
-            {dateField('Từ ngày', customFrom, setCustomFrom)}
-            {dateField('Đến ngày', customTo, setCustomTo)}
-          </>
-        )}
+        <DateRangeFilter from={from} to={to} height={40} onChange={filter(setRange)} />
+        <FilterResetButton onClick={resetFilters} disabled={isDefault} height={40} />
       </Toolbar>
 
       <Box sx={{ ...cardSx, overflow: 'hidden' }}>
