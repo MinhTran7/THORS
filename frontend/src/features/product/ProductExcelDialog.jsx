@@ -509,6 +509,9 @@ export default function ProductExcelDialog({ open, onClose, categories = [], onS
                 <Table size="small" stickyHeader>
                   <TableHead>
                     <TableRow>
+                      <TableCell align="center" sx={{ fontWeight: 700, bgcolor: '#F4F6F8', width: 56 }}>
+                        STT
+                      </TableCell>
                       <TableCell sx={{ fontWeight: 700, bgcolor: '#F4F6F8', width: 64 }}>Ảnh</TableCell>
                       <TableCell sx={{ fontWeight: 700, bgcolor: '#F4F6F8' }}>Tên sản phẩm</TableCell>
                       <TableCell sx={{ fontWeight: 700, bgcolor: '#F4F6F8' }}>Danh mục</TableCell>
@@ -519,13 +522,16 @@ export default function ProductExcelDialog({ open, onClose, categories = [], onS
                   <TableBody>
                     {groupedProducts.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={5} align="center" sx={{ py: 3, color: COLORS.muted }}>
+                        <TableCell colSpan={6} align="center" sx={{ py: 3, color: COLORS.muted }}>
                           Không có sản phẩm hợp lệ nào để tạo.
                         </TableCell>
                       </TableRow>
                     ) : (
                       groupedProducts.map((p, idx) => (
                         <TableRow key={idx} hover>
+                          <TableCell align="center" sx={{ color: COLORS.muted }}>
+                            {idx + 1}
+                          </TableCell>
                           <TableCell>
                             {p.imageUrl ? (
                               <Box
@@ -591,6 +597,10 @@ export default function ProductExcelDialog({ open, onClose, categories = [], onS
                 <Table size="small" stickyHeader>
                   <TableHead>
                     <TableRow>
+                      <TableCell align="center" sx={{ fontWeight: 700, bgcolor: '#F4F6F8', width: 56 }}>
+                        STT
+                      </TableCell>
+                      {/* Dòng = số dòng trong file Excel, để tìm lại dòng lỗi */}
                       <TableCell sx={{ fontWeight: 700, bgcolor: '#F4F6F8', width: 55 }}>Dòng</TableCell>
                       <TableCell sx={{ fontWeight: 700, bgcolor: '#F4F6F8', width: 55 }}>Ảnh</TableCell>
                       <TableCell sx={{ fontWeight: 700, bgcolor: '#F4F6F8' }}>Danh mục</TableCell>
@@ -604,6 +614,9 @@ export default function ProductExcelDialog({ open, onClose, categories = [], onS
                   <TableBody>
                     {parsedRows.map((r, idx) => (
                       <TableRow key={idx} sx={{ bgcolor: r.isValid ? 'inherit' : '#FFF2F0' }}>
+                        <TableCell align="center" sx={{ color: COLORS.muted }}>
+                          {idx + 1}
+                        </TableCell>
                         <TableCell>{r.rowNum}</TableCell>
                         <TableCell>
                           {r.imageUrl ? (

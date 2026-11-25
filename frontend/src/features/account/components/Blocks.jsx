@@ -3,6 +3,7 @@ import { Box, Button, IconButton, InputAdornment, MenuItem, TableCell, TableRow,
 import { Stack } from './Flex';
 import { ArrowLeftOutlined, InfoCircleOutlined, LeftOutlined, RightOutlined, SearchOutlined } from '@ant-design/icons';
 import { brand, cardSx, fs } from '../tokens';
+import { PAGE_TYPE, pageSubtitleSx, pageTitleSx } from 'themes/pageType';
 
 export function PageHeader({ back, title, subtitle, action }) {
   return (
@@ -19,10 +20,10 @@ export function PageHeader({ back, title, subtitle, action }) {
       )}
       <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'flex-start' }} spacing={2}>
         <Box>
-          <Typography variant="h3" sx={{ color: brand.ink, fontWeight: 800, letterSpacing: '-0.5px', fontSize: fs.pageTitle }}>
+          <Typography variant="h3" sx={{ ...pageTitleSx, color: brand.ink }}>
             {title}
           </Typography>
-          {subtitle && <Typography sx={{ color: brand.muted, mt: 0.75, fontSize: fs.body }}>{subtitle}</Typography>}
+          {subtitle && <Typography sx={{ ...pageSubtitleSx, color: brand.muted, mt: 0.75 }}>{subtitle}</Typography>}
         </Box>
         {action}
       </Stack>
@@ -231,14 +232,14 @@ export function FilterResetButton({ onClick, disabled, height = 44 }) {
 
 export const headCellSx = {
   color: brand.muted,
-  fontSize: fs.caption,
+  fontSize: PAGE_TYPE.th,
   fontWeight: 600,
   py: 1.5,
   bgcolor: '#FAFAF6',
   borderBottom: `1px solid ${brand.line}`
 };
 
-export const bodyCellSx = { py: 1.5, borderBottom: `1px solid ${brand.line}` };
+export const bodyCellSx = { py: 1.5, fontSize: PAGE_TYPE.td, borderBottom: `1px solid ${brand.line}` };
 
 // Luôn có trang đầu và trang cuối; các trang ở giữa bị lược thì thay bằng "…" (kiểu chuỗi "gap-n").
 function pageItems(page, totalPages) {

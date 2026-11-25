@@ -171,6 +171,9 @@ export default function BarcodePrintDialog({ variants, onClose, header }) {
                 <Table size="small">
                   <TableHead>
                     <TableRow>
+                      <TableCell align="center" sx={{ width: 56 }}>
+                        STT
+                      </TableCell>
                       <TableCell>Hàng hóa</TableCell>
                       <TableCell>Mã vạch</TableCell>
                       <TableCell align="right">Tồn / Chưa xếp</TableCell>
@@ -181,8 +184,11 @@ export default function BarcodePrintDialog({ variants, onClose, header }) {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {items.map((v) => (
+                    {items.map((v, i) => (
                       <TableRow key={v.detail_id}>
+                        <TableCell align="center" sx={{ color: 'text.secondary' }}>
+                          {i + 1}
+                        </TableCell>
                         <TableCell>
                           <Typography variant="subtitle2">{v.product_name}</Typography>
                           <Typography variant="caption" color="text.secondary">

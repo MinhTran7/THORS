@@ -29,6 +29,7 @@ import { useAuth } from 'features/auth/AuthProvider';
 import CustomerPromotionPage from './CustomerPromotionPage';
 import { ConfirmDialog, NoticeDialog } from './PromotionForm';
 import { deleteAction, endEarlyAction, toggleAction } from './promotionActions';
+import { PAGE_TYPE, pageTitleSx } from 'themes/pageType';
 import { useCrumbs } from '../../layouts/crumbs';
 import {
   discountText,
@@ -256,7 +257,7 @@ function OwnerPromotionView({ kind }) {
     <Box sx={{ color: C.text, pb: 4 }}>
       {/* ─── TIÊU ĐỀ TRÊN CÙNG: DANH SÁCH KHUYẾN MÃI ─── */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5 }}>
-        <Typography variant="h3" sx={{ fontWeight: 800, color: C.text }}>
+        <Typography variant="h3" sx={{ ...pageTitleSx, color: C.text }}>
           {title}
         </Typography>
         <Button
@@ -434,7 +435,7 @@ function OwnerPromotionView({ kind }) {
                   '& th': {
                     bgcolor: C.surface,
                     color: C.muted,
-                    fontSize: 12,
+                    fontSize: PAGE_TYPE.th,
                     fontWeight: 700,
                     textTransform: 'uppercase',
                     letterSpacing: 0.5,
@@ -444,7 +445,7 @@ function OwnerPromotionView({ kind }) {
                   '& td': {
                     borderColor: C.borderLight,
                     py: 2,
-                    fontSize: 13.5,
+                    fontSize: PAGE_TYPE.td,
                     color: C.text
                   }
                 }}
@@ -482,13 +483,13 @@ function OwnerPromotionView({ kind }) {
                           </TableCell>
                           {/* Tên khuyến mãi */}
                           <TableCell>
-                            <Typography sx={{ fontWeight: 800, color: C.text, fontSize: 13.5, overflowWrap: 'anywhere' }}>
+                            <Typography sx={{ fontWeight: 800, color: C.text, fontSize: PAGE_TYPE.td, overflowWrap: 'anywhere' }}>
                               {promotion.name}
                             </Typography>
                             {promotion.description && (
                               <Typography
                                 sx={{
-                                  fontSize: 12,
+                                  fontSize: PAGE_TYPE.tdSub,
                                   color: '#94A3B8',
                                   mt: 0.25,
                                   display: '-webkit-box',
@@ -503,13 +504,13 @@ function OwnerPromotionView({ kind }) {
                           </TableCell>
 
                           <TableCell>
-                            <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: C.text }}>{discountText(promotion)}</Typography>
+                            <Typography sx={{ fontSize: PAGE_TYPE.td, fontWeight: 600, color: C.text }}>{discountText(promotion)}</Typography>
                           </TableCell>
 
                           {/* Thời gian */}
                           <TableCell>
-                            <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text }}>{formatDateTime(promotion.startDate)}</Typography>
-                            <Typography sx={{ fontSize: 11.5, color: '#94A3B8' }}>đến {formatDateTime(promotion.endDate)}</Typography>
+                            <Typography sx={{ fontSize: PAGE_TYPE.td, fontWeight: 600, color: C.text }}>{formatDateTime(promotion.startDate)}</Typography>
+                            <Typography sx={{ fontSize: PAGE_TYPE.tdSub, color: '#94A3B8' }}>đến {formatDateTime(promotion.endDate)}</Typography>
                             <Box sx={{ pt: 0.35 }}>
                               <Box
                                 sx={{
@@ -530,8 +531,8 @@ function OwnerPromotionView({ kind }) {
 
                           {kind === 'ORDER' && (
                             <TableCell>
-                              <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text }}>Đơn hàng online</Typography>
-                              <Typography sx={{ fontSize: 11.5, color: '#94A3B8' }}>Đơn từ {money(promotion.minOrderValue)}</Typography>
+                              <Typography sx={{ fontSize: PAGE_TYPE.td, fontWeight: 600, color: C.text }}>Đơn hàng online</Typography>
+                              <Typography sx={{ fontSize: PAGE_TYPE.tdSub, color: '#94A3B8' }}>Đơn từ {money(promotion.minOrderValue)}</Typography>
                             </TableCell>
                           )}
 

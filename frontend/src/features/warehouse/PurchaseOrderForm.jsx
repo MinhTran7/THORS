@@ -313,6 +313,9 @@ export default function PurchaseOrderForm({ document, onClose }) {
               <Table size="small">
                 <TableHead>
                   <TableRow>
+                    <TableCell align="center" sx={{ width: 56 }}>
+                      STT
+                    </TableCell>
                     <TableCell>Sản phẩm · màu · size</TableCell>
                     <TableCell align="right">Tồn hiện tại</TableCell>
                     <TableCell align="right">Đang đặt từ NCC này</TableCell>
@@ -329,6 +332,9 @@ export default function PurchaseOrderForm({ document, onClose }) {
                     const isNew = created.some((c) => c.detail_id === item.detailId);
                     return (
                       <TableRow key={item.detailId}>
+                        <TableCell align="center" sx={{ color: 'text.secondary' }}>
+                          {idx + 1}
+                        </TableCell>
                         <TableCell>
                           {label}
                           {isNew && (
@@ -367,7 +373,7 @@ export default function PurchaseOrderForm({ document, onClose }) {
                   })}
                   {!items.length && (
                     <TableRow>
-                      <TableCell colSpan={7} sx={{ py: 3, color: 'text.secondary' }}>
+                      <TableCell colSpan={8} sx={{ py: 3, color: 'text.secondary' }}>
                         {owner
                           ? 'Chưa có hàng. Tích chọn ở bảng trên, nhập Excel hoặc tạo nhanh hàng mới.'
                           : 'Chưa có hàng. Tích chọn ở bảng trên hoặc nhập Excel. Hàng chưa có trong hệ thống: ghi vào ghi chú.'}

@@ -10,14 +10,14 @@ import {
   DialogContent,
   DialogTitle,
   InputAdornment,
-  ListSubheader,
-  MenuItem,
   Snackbar,
   TextField,
   Typography
 } from '@mui/material';
-import { DownOutlined, PictureOutlined, SaveOutlined, SearchOutlined } from '@ant-design/icons';
-import { categoryFullName, getCategories, sortCategoriesAsTree } from 'services/categoryService';
+import { PictureOutlined, SaveOutlined, SearchOutlined } from '@ant-design/icons';
+import { getCategories, sortCategoriesAsTree } from 'services/categoryService';
+import CategoryTreeSelect from 'components/CategoryTreeSelect';
+import { pageTitleSx } from 'themes/pageType';
 import { getActiveProductPromotions, overlaps } from 'services/promotionService';
 import { formatDate, KIND, priceRange, productRows, salePrice, toInputDateTime } from './promotionFormat';
 
@@ -297,67 +297,15 @@ function ProductPicker({ products, loading, all, selected, busy, discount, onCha
         })
       : '—';
   const parentOf = useMemo(() => new Map(categories.map((c) => [String(c.categoryId), String(c.parentId ?? '')])), [categories]);
-  const [expanded, setExpanded] = useState('');
-  const groups = useMemo(
-    () =>
-      categories
-        .filter((c) => !c.parentId)
-        .map((root) => ({ root, children: categories.filter((c) => String(c.parentId) === String(root.categoryId)) })),
-    [categories]
-  );
-  const categoryOptions = [
-    <MenuItem key="ALL" value="ALL" sx={{ fontSize: 13.5 }}>
-      Tất cả danh mục
-    </MenuItem>,
-    ...groups.flatMap(({ root, children }) => {
-      const id = String(root.categoryId);
-      if (!children.length)
-        return [
-          <MenuItem key={id} value={id} sx={{ fontSize: 13.5, fontWeight: 600 }}>
-            {root.categoryName}
-          </MenuItem>
-        ];
-      const open = expanded === id;
-      return [
-        <ListSubheader key={`group-${id}`} sx={{ position: 'static', p: 0, '&:hover': { bgcolor: '#F8FAFC' } }}>
-          <Box
-            onClick={() => setExpanded(open ? '' : id)}
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              px: 2,
-              cursor: 'pointer',
-              fontSize: 13.5,
-              fontWeight: 600,
-              color: C.text,
-              lineHeight: '40px'
-            }}
-          >
-            {root.categoryName}
-            <DownOutlined style={{ fontSize: 10, color: C.subtle, transform: open ? 'rotate(180deg)' : 'none' }} />
-          </Box>
-        </ListSubheader>,
-        ...(open
-          ? [root, ...children].map((c) => (
-              <MenuItem key={c.categoryId} value={String(c.categoryId)} sx={{ pl: 4, fontSize: 13.5 }}>
-                {c === root ? `Tất cả ${root.categoryName}` : c.categoryName}
-              </MenuItem>
-            ))
-          : [])
-      ];
-    })
-  ];
-  const categoryLabel = (value) => {
-    if (value === 'ALL') return 'Tất cả danh mục';
-    const found = categories.find((c) => String(c.categoryId) === value);
-    return found ? categoryFullName(found) : '';
+  // Sản phẩm thuộc danh mục đang lọc hoặc bất kỳ danh mục con, cháu nào của nó
+  const inBranch = (id, branch) => {
+    for (let cur = id, depth = 0; cur && depth < 50; cur = parentOf.get(cur), depth++) if (cur === branch) return true;
+    return false;
   };
   const visible = useMemo(() => {
     const keyword = search.trim().toLocaleLowerCase('vi-VN');
     return products.filter((p) => {
-      const id = String(p.categoryId);
-      const inCategory = category === 'ALL' || id === category || parentOf.get(id) === category;
+      const inCategory = category === 'ALL' || inBranch(String(p.categoryId ?? ''), category);
       return (
         inCategory &&
         [getProductName(p), p.sku].some((v) =>
@@ -396,28 +344,13 @@ function ProductPicker({ products, loading, all, selected, busy, discount, onCha
           }}
           sx={fieldSx}
         />
-        <TextField
-          select
-          size="small"
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-          slotProps={{
-            select: {
-              renderValue: categoryLabel,
-              onOpen: () => setExpanded(parentOf.get(category) || category),
-              MenuProps: {
-                variant: 'menu',
-                anchorOrigin: { vertical: 'bottom', horizontal: 'left' },
-                transformOrigin: { vertical: 'top', horizontal: 'left' },
-                slotProps: { paper: { sx: { mt: 0.5, maxHeight: 320 } } }
-              }
-            }
-          }}
-          sx={fieldSx}
-        >
-          {categoryOptions}
-          {!categoryOptions.some((o) => o.props.value === category) && <MenuItem value={category} sx={{ display: 'none' }} />}
-        </TextField>
+        {/* Cây danh mục giống ô danh mục ở trang khách: bấm tên để lọc, bấm mũi tên để xem danh mục con */}
+        <CategoryTreeSelect
+          categories={categories}
+          value={category === 'ALL' ? '' : category}
+          onChange={(id) => setCategory(id || 'ALL')}
+          sx={{ width: '100%', minWidth: 0, borderColor: C.border, borderRadius: 2.5, fontSize: 14 }}
+        />
       </Box>
 
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
@@ -635,7 +568,9 @@ export default function PromotionForm({
 
   return (
     <Box component="form" ref={formRef} noValidate onSubmit={handleSubmit} sx={{ color: C.text, pb: 4 }}>
-      <Typography sx={{ mb: 3, fontSize: { xs: 22, sm: 28 }, fontWeight: 800 }}>{title}</Typography>
+      <Typography variant="h3" sx={{ ...pageTitleSx, mb: 3 }}>
+        {title}
+      </Typography>
 
       <Snackbar
         open={Boolean(error)}

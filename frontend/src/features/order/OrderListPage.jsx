@@ -48,6 +48,7 @@ import {
   Pager,
   Toolbar
 } from 'features/account/components/Blocks';
+import { PAGE_TYPE } from 'themes/pageType';
 import { LIVE_SWR, ordersApi, refreshAllOrders } from './api';
 import { CUSTOMER_ACTIONS, OWNER_ACTIONS, ownerActionSlots } from './orderActions';
 import { DeliveryProofDialog, useDeliveryProofRequired } from './components/DeliveryProof';
@@ -931,7 +932,7 @@ export default function OrderListPage() {
           <Table size="medium" sx={{ minWidth: 960 }}>
             <TableHead>
               <TableRow
-                sx={{ '& th': { borderBottom: '1px solid #E2E8F0', py: 1.75, bgcolor: '#F8FAFC', color: '#475569', fontSize: 13, fontWeight: 600 } }}
+                sx={{ '& th': { borderBottom: '1px solid #E2E8F0', py: 1.75, bgcolor: '#F8FAFC', color: '#475569', fontSize: PAGE_TYPE.th, fontWeight: 600 } }}
               >
                 <TableCell align="center" sx={{ width: 64 }}>
                   STT
@@ -957,30 +958,30 @@ export default function OrderListPage() {
                     hover
                     sx={{ '&:hover': { bgcolor: '#FAFCFE' }, '& td': { borderBottom: '1px solid #F1F5F9', py: 2 } }}
                   >
-                    <TableCell align="center" sx={{ fontSize: 13, color: '#64748B' }}>
+                    <TableCell align="center" sx={{ fontSize: PAGE_TYPE.td, color: '#64748B' }}>
                       {page * PAGE_SIZE + i + 1}
                     </TableCell>
 
                     {/* Mã đơn hàng */}
                     <TableCell>
-                      <Typography sx={{ fontWeight: 800, fontSize: 13.5, color: '#1E293B' }}>{order.orderNumber}</Typography>
+                      <Typography sx={{ fontWeight: 800, fontSize: PAGE_TYPE.td, color: '#1E293B' }}>{order.orderNumber}</Typography>
                     </TableCell>
 
                     {/* Thời gian đặt */}
                     <TableCell>
-                      <Typography sx={{ fontSize: 13, fontWeight: 600, color: '#1E293B' }}>{formatDate(order.orderDate)}</Typography>
-                      <Typography sx={{ fontSize: 11.5, color: '#94A3B8' }}>{formatTime(order.orderDate)}</Typography>
+                      <Typography sx={{ fontSize: PAGE_TYPE.td, fontWeight: 600, color: '#1E293B' }}>{formatDate(order.orderDate)}</Typography>
+                      <Typography sx={{ fontSize: PAGE_TYPE.tdSub, color: '#94A3B8' }}>{formatTime(order.orderDate)}</Typography>
                     </TableCell>
 
                     {/* Người nhận */}
                     <TableCell>
-                      <Typography sx={{ fontSize: 13, fontWeight: 600, color: '#1E293B' }}>{order.deliveryName || '—'}</Typography>
-                      <Typography sx={{ fontSize: 11.5, color: '#94A3B8' }}>{order.deliveryPhone || '—'}</Typography>
+                      <Typography sx={{ fontSize: PAGE_TYPE.td, fontWeight: 600, color: '#1E293B' }}>{order.deliveryName || '—'}</Typography>
+                      <Typography sx={{ fontSize: PAGE_TYPE.tdSub, color: '#94A3B8' }}>{order.deliveryPhone || '—'}</Typography>
                     </TableCell>
 
                     {/* Tổng tiền */}
                     <TableCell>
-                      <Typography sx={{ fontWeight: 800, fontSize: 14, color: '#1E293B', whiteSpace: 'nowrap' }}>
+                      <Typography sx={{ fontWeight: 800, fontSize: PAGE_TYPE.td, color: '#1E293B', whiteSpace: 'nowrap' }}>
                         {formatVnd(order.totalAmount)}
                       </Typography>
                     </TableCell>

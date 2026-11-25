@@ -1,8 +1,11 @@
 // ==============================|| OVERRIDES - TABLE CELL ||============================== //
 
+import { PAGE_TYPE } from 'themes/pageType';
+
+// Cỡ chữ bảng lấy từ PAGE_TYPE để mọi trang quản lý đều nhau (tiêu đề cột 13px, nội dung 13.5px)
 export default function TableCell(theme) {
   const commonCell = {
-    fontSize: '0.75rem',
+    fontSize: PAGE_TYPE.th,
     textTransform: 'uppercase',
     '&:not(:last-of-type)': {
       backgroundImage: `linear-gradient(${theme.vars.palette.divider}, ${theme.vars.palette.divider})`,
@@ -19,7 +22,7 @@ export default function TableCell(theme) {
       styleOverrides: {
         root: ({ ownerState }) => {
           const baseStyle = {
-            fontSize: '0.875rem',
+            fontSize: PAGE_TYPE.td,
             padding: 12,
             borderColor: theme.vars.palette.divider
           };

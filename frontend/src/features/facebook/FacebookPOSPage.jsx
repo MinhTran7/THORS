@@ -47,6 +47,7 @@ import { api } from '../../services/http';
 import { useAuth } from '../auth/AuthProvider';
 import { useCrumbs } from '../../layouts/crumbs';
 import { brand } from '../account/tokens';
+import { pageSubtitleSx, pageTitleSx } from 'themes/pageType';
 import ShippingAddressFields from './ShippingAddressFields';
 import { composeAddress, findPhoneInText, normalizePhone, parseAddressText, stripPhones } from './addressParser';
 
@@ -919,7 +920,7 @@ export default function FacebookPOSPage() {
       >
         <Box>
           <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
-            <Typography variant="h4" sx={{ fontWeight: 800, color: C.text, fontSize: 22 }}>
+            <Typography variant="h3" sx={{ ...pageTitleSx, color: C.text }}>
               Bán Hàng Qua Facebook (Social POS)
             </Typography>
             <Chip
@@ -935,7 +936,7 @@ export default function FacebookPOSPage() {
               }}
             />
           </Stack>
-          <Typography variant="caption" sx={{ color: C.muted }}>
+          <Typography sx={{ ...pageSubtitleSx, color: C.muted, mt: 0.5 }}>
             Đồng bộ tin nhắn Messenger • Chốt đơn giữ hàng, chủ shop xác nhận mới trừ kho • Tự động gửi link thanh toán PayOS
           </Typography>
         </Box>

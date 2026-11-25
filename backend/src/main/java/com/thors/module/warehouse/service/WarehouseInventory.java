@@ -374,13 +374,13 @@ public class WarehouseInventory {
             throw new ApiException(400, "INVENTORY_FILTER", "Số ngày không bán phải từ 1 đến 3650.");
         String key = WarehouseOrders.searchKey(q);
         var everything = s.migrated(() -> rows(a, null));
+        var branch = s.categoryBranch(categoryId); // danh mục cha: gồm cả hàng của danh mục con, cháu
         var base = new ArrayList<Map<String, Object>>();
         for (var r : everything) {
             if (!matches(r, key)) continue;
             if (color != null && !color.isBlank() && !color.equals(r.get("color"))) continue;
             if (size != null && !size.isBlank() && !size.equals(r.get("size"))) continue;
-            if (categoryId != null && !Objects.equals(categoryId, r.get("category_id") == null ? null : num(r, "category_id")))
-                continue;
+            if (!WarehouseStore.inCategoryBranch(branch, r)) continue;
             if (shelfId != null) {
                 @SuppressWarnings("unchecked")
                 var places = (List<Map<String, Object>>) r.get("locations");
@@ -450,9 +450,7 @@ public class WarehouseInventory {
                 "colors",
                 everything.stream().map(r -> (String) r.get("color")).distinct().sorted().toList());
         result.put("sizes", everything.stream().map(r -> (String) r.get("size")).distinct().sorted().toList());
-        result.put(
-                "categories",
-                s.jdbc().queryForList("SELECT category_id,category_name FROM category ORDER BY category_name"));
+        result.put("categories", s.categoryOptions());
         return result;
     }
 
@@ -760,6 +758,7 @@ public class WarehouseInventory {
         }
         var costs = showCost ? replay(start, end) : Map.<Integer, Cost[]>of();
         String key = WarehouseOrders.searchKey(q);
+        var branch = s.categoryBranch(categoryId); // danh mục cha: gồm cả hàng của danh mục con, cháu
         var items = new ArrayList<Map<String, Object>>();
         var totals = new LinkedHashMap<String, Object>();
         String[] inTypes = {"RECEIPT", "RESTOCK", "ADJUSTMENT"};
@@ -786,8 +785,7 @@ public class WarehouseInventory {
             row.put("size", v.get("size"));
             row.put("barcode", v.get("barcode"));
             if (!matches(row, key)) continue;
-            if (categoryId != null && !Objects.equals(categoryId, v.get("category_id") == null ? null : num(v, "category_id")))
-                continue;
+            if (!WarehouseStore.inCategoryBranch(branch, v)) continue;
             var f = flows.getOrDefault(detail, Map.of());
             long now = num(v, "stock_quantity");
             long opening = now - f.getOrDefault("since_start", 0L);

@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import useSWR from 'swr';
-import { Box, IconButton, Table, TableBody, TableCell, TableHead, TableRow, Tooltip, Typography } from '@mui/material';
+import { Box, Table, TableBody, TableCell, TableHead, TableRow, Typography } from '@mui/material';
 import { Stack } from '../components/Flex';
-import { CheckCircleOutlined, CloseCircleOutlined, DownloadOutlined, FileTextOutlined, ReloadOutlined } from '@ant-design/icons';
+import { PAGE_TYPE } from 'themes/pageType';
+import { CheckCircleOutlined, CloseCircleOutlined, DownloadOutlined, FileTextOutlined } from '@ant-design/icons';
 import { useCrumbs } from 'layouts/crumbs';
 import { downloadCsv } from 'utils/csv';
 import { fetchAll, logsApi } from '../api';
@@ -98,16 +99,14 @@ export default function SystemLogPage() {
   const offset = tzOffsetMinutes();
 
   const params = { q: search, status, from, to, offset, page, size: LOG_PAGE_SIZE };
+  // Không còn nút "Làm mới": tự tải lại khi quay lại tab, khi có mạng lại và mỗi 30 giây khi tab đang mở
+  const live = { keepPreviousData: true, revalidateOnFocus: true, revalidateOnReconnect: true, refreshInterval: 30000, refreshWhenHidden: false };
   const list = useSWR(['system-log', params], () => logsApi.list(params), {
-    keepPreviousData: true,
-    revalidateOnFocus: false,
+    ...live,
     onSuccess: () => setRefreshedAt(new Date())
   });
   const summaryParams = { from, to, offset };
-  const summary = useSWR(['system-log-summary', summaryParams], () => logsApi.summary(summaryParams), {
-    keepPreviousData: true,
-    revalidateOnFocus: false
-  });
+  const summary = useSWR(['system-log-summary', summaryParams], () => logsApi.summary(summaryParams), live);
 
   const filter = (setter) => (value) => {
     setter(value);
@@ -203,25 +202,29 @@ export default function SystemLogPage() {
             <TableHead>
               <TableRow>
                 {[
+                  ['STT', 64],
                   ['Thời gian', 230],
                   ['Người dùng', 200],
                   ['Hành động', undefined],
                   ['Địa chỉ IP', 190],
                   ['Trạng thái', 150]
                 ].map(([label, width]) => (
-                  <TableCell key={label} sx={{ ...headCellSx, width }}>
+                  <TableCell key={label} align={label === 'STT' ? 'center' : undefined} sx={{ ...headCellSx, width }}>
                     {label}
                   </TableCell>
                 ))}
               </TableRow>
             </TableHead>
             <TableBody>
-              {items.map((item) => {
+              {items.map((item, index) => {
                 const meta = LOG_STATUS[item.status] ?? LOG_STATUS.SUCCESS;
                 return (
                   <TableRow key={item.id} hover>
+                    <TableCell align="center" sx={{ ...cellSx, color: brand.muted }}>
+                      {page * LOG_PAGE_SIZE + index + 1}
+                    </TableCell>
                     <TableCell sx={cellSx}>
-                      <Typography sx={{ fontSize: fs.body, whiteSpace: 'nowrap' }}>
+                      <Typography sx={{ fontSize: PAGE_TYPE.td, whiteSpace: 'nowrap' }}>
                         {formatLogDate(item.performedAt)}
                         <Box component="span" sx={{ color: brand.muted, ml: 1 }}>
                           {formatTime(item.performedAt)}
@@ -229,24 +232,24 @@ export default function SystemLogPage() {
                       </Typography>
                     </TableCell>
                     <TableCell sx={cellSx}>
-                      <Typography noWrap sx={{ fontSize: fs.body }}>
+                      <Typography noWrap sx={{ fontSize: PAGE_TYPE.td }}>
                         {item.actorName ?? 'Hệ thống'}
                       </Typography>
                     </TableCell>
                     <TableCell sx={cellSx}>
-                      <Typography noWrap title={`${actionLabel(item)} ${subtitle(item)}`} sx={{ fontSize: fs.body }}>
+                      <Typography noWrap title={`${actionLabel(item)} ${subtitle(item)}`} sx={{ fontSize: PAGE_TYPE.td }}>
                         <Box component="span" sx={{ fontWeight: 600, color: brand.ink }}>
                           {actionLabel(item)}
                         </Box>
                         {subtitle(item) && (
-                          <Box component="span" sx={{ color: brand.muted, fontSize: fs.caption, ml: 1 }}>
+                          <Box component="span" sx={{ color: brand.muted, fontSize: PAGE_TYPE.tdSub, ml: 1 }}>
                             {subtitle(item)}
                           </Box>
                         )}
                       </Typography>
                     </TableCell>
                     <TableCell sx={cellSx}>
-                      <Typography noWrap title={item.ip ?? ''} sx={{ fontSize: fs.body }}>
+                      <Typography noWrap title={item.ip ?? ''} sx={{ fontSize: PAGE_TYPE.td }}>
                         {item.ip ?? '—'}
                       </Typography>
                     </TableCell>
@@ -256,7 +259,7 @@ export default function SystemLogPage() {
                   </TableRow>
                 );
               })}
-              {!list.isLoading && items.length === 0 && <EmptyRow colSpan={5}>Không có sự kiện nào khớp với bộ lọc.</EmptyRow>}
+              {!list.isLoading && items.length === 0 && <EmptyRow colSpan={6}>Không có sự kiện nào khớp với bộ lọc.</EmptyRow>}
             </TableBody>
           </Table>
         </Box>
@@ -273,21 +276,9 @@ export default function SystemLogPage() {
       <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 1.5 }}>
         <Typography sx={{ color: brand.muted, fontSize: fs.caption }}>
           {`Nhật ký chỉ để xem, không thể chỉnh sửa. Mọi thời gian theo ${tzLabel()}.${
-            refreshedAt ? ` Làm mới lúc ${refreshedAt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}.` : ''
+            refreshedAt ? ` Cập nhật lúc ${refreshedAt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}.` : ''
           }`}
         </Typography>
-        <Tooltip title="Làm mới">
-          <IconButton
-            size="small"
-            aria-label="Làm mới nhật ký"
-            onClick={() => {
-              list.mutate();
-              summary.mutate();
-            }}
-          >
-            <ReloadOutlined />
-          </IconButton>
-        </Tooltip>
       </Stack>
       {toast}
     </Box>

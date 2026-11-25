@@ -627,6 +627,9 @@ function SourceDocumentForm({
                   <TableHead>
                     {isReturn ? (
                       <TableRow>
+                        <TableCell align="center" sx={{ width: 56 }}>
+                          STT
+                        </TableCell>
                         <TableCell>Sản phẩm</TableCell>
                         <TableCell>Màu / size</TableCell>
                         <TableCell align="right">Đã nhập</TableCell>
@@ -638,6 +641,9 @@ function SourceDocumentForm({
                       </TableRow>
                     ) : (
                     <TableRow>
+                      <TableCell align="center" sx={{ width: 56 }}>
+                        STT
+                      </TableCell>
                       <TableCell>
                         Sản phẩm · màu · size
                       </TableCell>
@@ -686,6 +692,9 @@ function SourceDocumentForm({
 
                       return (
                         <TableRow key={item.detailId}>
+                          <TableCell align="center" sx={{ color: 'text.secondary' }}>
+                            {idx + 1}
+                          </TableCell>
                           {isReturn ? (
                             <>
                               <TableCell>
@@ -812,7 +821,7 @@ function SourceDocumentForm({
                     {!f.values.items.length && (
                       <TableRow>
                         <TableCell
-                          colSpan={8}
+                          colSpan={9}
                           sx={{ py: 3 }}
                         >
                           {isReturn

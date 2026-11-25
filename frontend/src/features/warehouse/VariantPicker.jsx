@@ -10,7 +10,6 @@ import {
   DialogTitle,
   IconButton,
   Link,
-  MenuItem,
   Stack,
   Table,
   TableBody,
@@ -23,6 +22,7 @@ import {
 } from '@mui/material';
 import { CloseOutlined } from '@ant-design/icons';
 import { Pager } from 'features/account/components/Blocks';
+import CategoryTreeSelect from 'components/CategoryTreeSelect';
 import { api } from 'services/http';
 import { money, number, variantLabel, when } from './model';
 
@@ -53,6 +53,9 @@ function OtherOrdersDialog({ row, onClose }) {
         <Table size="small">
           <TableHead>
             <TableRow>
+              <TableCell align="center" sx={{ width: 56 }}>
+                STT
+              </TableCell>
               <TableCell>Mã phiếu</TableCell>
               <TableCell>Nhà cung cấp</TableCell>
               <TableCell>Ngày đặt</TableCell>
@@ -63,8 +66,11 @@ function OtherOrdersDialog({ row, onClose }) {
             </TableRow>
           </TableHead>
           <TableBody>
-            {orders.map((o) => (
+            {orders.map((o, i) => (
               <TableRow key={o.order_id}>
+                <TableCell align="center" sx={{ color: 'text.secondary' }}>
+                  {i + 1}
+                </TableCell>
                 <TableCell>
                   <Link href={`/warehouse/orders?id=${o.order_id}`} target="_blank" rel="noopener" underline="hover">
                     {o.code}
@@ -80,7 +86,7 @@ function OtherOrdersDialog({ row, onClose }) {
             ))}
             {!orders.length && (
               <TableRow>
-                <TableCell colSpan={7} sx={{ py: 3, textAlign: 'center', color: 'text.secondary' }}>
+                <TableCell colSpan={8} sx={{ py: 3, textAlign: 'center', color: 'text.secondary' }}>
                   Chưa có chi tiết phiếu. Khởi động lại backend để tải dữ liệu mới.
                 </TableCell>
               </TableRow>
@@ -202,24 +208,14 @@ export default function VariantPicker({ supplier, excludeOrderId, categories, on
           sx={{ flex: 1 }}
           slotProps={{ htmlInput: { 'aria-label': 'Tìm hàng để đặt' } }}
         />
-        <TextField
-          size="small"
-          select
+        <CategoryTreeSelect
+          categories={categories}
           value={categoryId}
-          onChange={(e) => {
-            setCategoryId(e.target.value);
+          onChange={(id) => {
+            setCategoryId(id);
             setPage(0);
           }}
-          sx={{ minWidth: 180 }}
-          slotProps={{ select: { displayEmpty: true, inputProps: { 'aria-label': 'Lọc danh mục' } } }}
-        >
-          <MenuItem value="">Tất cả danh mục</MenuItem>
-          {categories.map((c) => (
-            <MenuItem key={c.categoryId} value={c.categoryId}>
-              {c.categoryName}
-            </MenuItem>
-          ))}
-        </TextField>
+        />
       </Stack>
       {error && <Alert severity="error">{error}</Alert>}
       <Box sx={{ overflowX: 'auto', opacity: loading ? 0.6 : 1 }}>
@@ -235,6 +231,9 @@ export default function VariantPicker({ supplier, excludeOrderId, categories, on
                   slotProps={{ input: { 'aria-label': 'Chọn cả trang' } }}
                 />
               </TableCell>
+              <TableCell align="center" sx={{ width: 56 }}>
+                STT
+              </TableCell>
               <TableCell>Sản phẩm · màu · size</TableCell>
               <TableCell>Danh mục</TableCell>
               <TableCell align="right">Tồn hiện tại</TableCell>
@@ -244,7 +243,7 @@ export default function VariantPicker({ supplier, excludeOrderId, categories, on
             </TableRow>
           </TableHead>
           <TableBody>
-            {rows.map((r) => {
+            {rows.map((r, i) => {
               const onForm = existingIds.has(r.detail_id);
               const off = stopped(r);
               return (
@@ -257,6 +256,9 @@ export default function VariantPicker({ supplier, excludeOrderId, categories, on
                       onChange={() => onToggle([r], !onForm)}
                       slotProps={{ input: { 'aria-label': `Chọn ${variantLabel(r)}` } }}
                     />
+                  </TableCell>
+                  <TableCell align="center" sx={{ color: 'text.secondary' }}>
+                    {page * size + i + 1}
                   </TableCell>
                   <TableCell>
                     {variantLabel(r)} {onForm && <Chip size="small" label="Đã có trên phiếu" />}
@@ -311,7 +313,7 @@ export default function VariantPicker({ supplier, excludeOrderId, categories, on
             })}
             {!rows.length && !loading && (
               <TableRow>
-                <TableCell colSpan={7} sx={{ py: 3, textAlign: 'center', color: 'text.secondary' }}>
+                <TableCell colSpan={8} sx={{ py: 3, textAlign: 'center', color: 'text.secondary' }}>
                   Không có hàng phù hợp.
                 </TableCell>
               </TableRow>

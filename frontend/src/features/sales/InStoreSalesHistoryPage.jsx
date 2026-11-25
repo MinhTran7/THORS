@@ -23,6 +23,7 @@ import { api } from '../../services/http';
 import { useCrumbs } from '../../layouts/crumbs';
 import { useDebounced } from '../account/hooks';
 import { isCashMethod, money, splitDateTime } from './salesFormat';
+import { PAGE_TYPE, pageTitleSx } from 'themes/pageType';
 
 const C = {
   text: '#1E293B',
@@ -105,7 +106,7 @@ export default function InStoreSalesHistoryPage() {
     <Box sx={{ color: C.text, pb: 4 }}>
       {/* ─── TIÊU ĐỀ TRÊN CÙNG: DANH SÁCH HÓA ĐƠN ─── */}
       <Box sx={{ mb: 2.5 }}>
-        <Typography variant="h3" sx={{ fontWeight: 800, color: C.text }}>
+        <Typography variant="h3" sx={{ ...pageTitleSx, color: C.text }}>
           Danh sách hóa đơn
         </Typography>
       </Box>
@@ -268,7 +269,7 @@ export default function InStoreSalesHistoryPage() {
                     py: 1.75,
                     bgcolor: '#F8FAFC',
                     color: '#475569',
-                    fontSize: 13,
+                    fontSize: PAGE_TYPE.th,
                     fontWeight: 600
                   }
                 }}
@@ -317,31 +318,31 @@ export default function InStoreSalesHistoryPage() {
                         '& td': { borderBottom: `1px solid ${C.borderLight}`, py: 2 }
                       }}
                     >
-                      <TableCell align="center" sx={{ fontSize: 13, color: C.muted }}>
+                      <TableCell align="center" sx={{ fontSize: PAGE_TYPE.td, color: C.muted }}>
                         {page * PAGE_SIZE + i + 1}
                       </TableCell>
 
                       {/* Mã hóa đơn */}
                       <TableCell>
-                        <Typography sx={{ fontWeight: 800, fontSize: 13.5, color: C.text }}>
+                        <Typography sx={{ fontWeight: 800, fontSize: PAGE_TYPE.td, color: C.text }}>
                           {sale.invoiceNumber || sale.orderNumber}
                         </Typography>
                       </TableCell>
 
                       {/* Thời gian */}
                       <TableCell>
-                        <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text }}>{date}</Typography>
-                        <Typography sx={{ fontSize: 11.5, color: '#94A3B8' }}>{time}</Typography>
+                        <Typography sx={{ fontSize: PAGE_TYPE.td, fontWeight: 600, color: C.text }}>{date}</Typography>
+                        <Typography sx={{ fontSize: PAGE_TYPE.tdSub, color: '#94A3B8' }}>{time}</Typography>
                       </TableCell>
 
                       {/* Thu ngân */}
                       <TableCell>
-                        <Typography sx={{ fontSize: 13, color: C.text, fontWeight: 500 }}>{sale.sellerName || '—'}</Typography>
+                        <Typography sx={{ fontSize: PAGE_TYPE.td, color: C.text, fontWeight: 500 }}>{sale.sellerName || '—'}</Typography>
                       </TableCell>
 
                       {/* Tổng tiền */}
                       <TableCell>
-                        <Typography sx={{ fontWeight: 800, fontSize: 14, color: C.text }}>{money(sale.totalAmount)}</Typography>
+                        <Typography sx={{ fontWeight: 800, fontSize: PAGE_TYPE.td, color: C.text }}>{money(sale.totalAmount)}</Typography>
                       </TableCell>
 
                       {/* Phương thức */}

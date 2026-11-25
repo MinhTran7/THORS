@@ -31,6 +31,7 @@ import { brand, cardSx } from 'features/account/tokens';
 import { OutlineButton } from 'features/account/components/Brand';
 import { StatusPill } from 'features/account/components/Chips';
 import { bodyCellSx, headCellSx, NoticeBox, PageHeader } from 'features/account/components/Blocks';
+import { PAGE_TYPE } from 'themes/pageType';
 import { FINAL_STATUSES, LIVE_INTERVAL, LIVE_SWR, ordersApi, refreshAllOrders } from './api';
 import { CUSTOMER_ACTIONS, OWNER_ACTIONS, carrierLabel, ownerActionsFor } from './orderActions';
 import AddressNotFoundDialog, { ADDRESS_NOT_FOUND, INVALID_ADDRESS_REASON } from './AddressNotFoundDialog';
@@ -690,6 +691,7 @@ function StaffView({ order, status, actions, busy, onAction, actionError, back, 
               <Table size="small" sx={{ minWidth: 540 }}>
                 <TableHead>
                   <TableRow>
+                    <TableCell sx={{ ...headCellSx, textAlign: 'center', width: 56 }}>STT</TableCell>
                     <TableCell sx={headCellSx}>Sản phẩm</TableCell>
                     <TableCell sx={{ ...headCellSx, textAlign: 'right' }}>Đơn giá</TableCell>
                     <TableCell sx={{ ...headCellSx, textAlign: 'right' }}>SL</TableCell>
@@ -697,8 +699,9 @@ function StaffView({ order, status, actions, busy, onAction, actionError, back, 
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {order.lines.map((line) => (
+                  {order.lines.map((line, index) => (
                     <TableRow key={line.orderItemId}>
+                      <TableCell sx={{ ...bodyCellSx, textAlign: 'center', color: brand.muted }}>{index + 1}</TableCell>
                       <TableCell sx={bodyCellSx}>
                         <Stack direction="row" spacing={2} alignItems="center">
                           <Box
@@ -708,10 +711,10 @@ function StaffView({ order, status, actions, busy, onAction, actionError, back, 
                             sx={{ width: 64, height: 64, borderRadius: '10px', objectFit: 'cover', bgcolor: brand.neutralBg, flexShrink: 0 }}
                           />
                           <Box sx={{ minWidth: 0 }}>
-                            <Typography variant="body1" sx={{ fontWeight: 600, color: brand.ink }}>
+                            <Typography variant="body1" sx={{ fontWeight: 600, color: brand.ink, fontSize: PAGE_TYPE.td }}>
                               {line.productName}
                             </Typography>
-                            <Typography variant="body2" sx={{ color: brand.muted }}>
+                            <Typography variant="body2" sx={{ color: brand.muted, fontSize: PAGE_TYPE.tdSub }}>
                               {[line.size, line.color].filter(Boolean).join(' · ') || '—'}
                             </Typography>
                           </Box>

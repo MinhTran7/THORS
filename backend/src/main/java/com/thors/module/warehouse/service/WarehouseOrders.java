@@ -412,6 +412,7 @@ public class WarehouseOrders {
             }
         }
         String query = searchKey(q);
+        var branch = s.categoryBranch(categoryId); // danh mục cha: gồm cả hàng của danh mục con, cháu
         var rows = new ArrayList<Map<String, Object>>();
         for (var v :
                 s.jdbc()
@@ -428,8 +429,7 @@ public class WarehouseOrders {
             int detail = num(v, "detail_id");
             var last = history.get(detail);
             if (historyOnly && last == null) continue;
-            if (categoryId != null && (v.get("category_id") == null || num(v, "category_id") != categoryId))
-                continue;
+            if (!WarehouseStore.inCategoryBranch(branch, v)) continue;
             if (!query.isEmpty()
                     && !searchKey(v.get("product_name") + " " + v.get("color") + " " + v.get("size") + " #"
                                     + detail + " sp" + v.get("product_id"))

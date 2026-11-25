@@ -50,6 +50,7 @@ import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../shippingaddress/
 import { formatPriceInput, parsePriceInput } from './priceInput';
 import ProductDescriptionFields from './ProductDescriptionFields';
 import ImageCropDialog from './ImageCropDialog';
+import { pageSubtitleSx, pageTitleSx } from 'themes/pageType';
 import { getImageColors, sameColor, setImageColor } from './productDescription';
 
 const inputSx = (hasError) => ({
@@ -453,15 +454,14 @@ export default function EditProductPage() {
             <Typography
               variant="h3"
               sx={{
-                fontWeight: 800,
-                color: '#0F172A',
-                fontSize: { xs: 22, sm: 26 }
+                ...pageTitleSx,
+                color: '#0F172A'
               }}
             >
               Chỉnh sửa sản phẩm
             </Typography>
 
-            <Typography sx={{ fontSize: 13.5, color: C.muted, mt: 0.5, lineHeight: 1.6 }}>
+            <Typography sx={{ ...pageSubtitleSx, color: C.muted, mt: 0.5 }}>
               Cập nhật thông tin chi tiết, danh mục và bảng giá các biến thể sản phẩm
             </Typography>
           </Box>

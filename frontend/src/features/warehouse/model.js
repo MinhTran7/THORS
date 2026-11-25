@@ -177,6 +177,9 @@ export const countReasonLabel = {
   FOUND: 'Tìm thấy hàng',
   MISSING_DOCUMENT: 'Quên lập phiếu (nhập/bán/trả)'
 };
+// Danh mục từ API kho (category_id, category_name, parent_id) -> dạng ô lọc cây danh mục CategoryTreeSelect
+export const warehouseCategories = (rows = []) =>
+  rows.map((c) => ({ categoryId: c.category_id, categoryName: c.category_name, parentId: c.parent_id ?? null }));
 // Mã sản phẩm SP + 5 số mã sản phẩm, khớp WarehouseInventory.productCode ở backend.
 export const productCode = (id) => `SP${String(id).padStart(5, '0')}`;
 // Hàng lỗi (mỗi chiếc lỗi một dòng trong bảng product_unit), khớp WarehouseDefects ở backend.

@@ -20,6 +20,7 @@ import { api } from '../../services/http';
 import { useCrumbs } from '../../layouts/crumbs';
 import ReceiptDialog from './ReceiptDialog';
 import { isCashMethod, money, splitDateTime, toReceiptItems } from './salesFormat';
+import { PAGE_TYPE, pageTitleSx } from 'themes/pageType';
 
 const C = {
   text: '#0F172A',
@@ -113,7 +114,7 @@ export default function InStoreSaleDetailPage() {
           mb: 3
         }}
       >
-        <Typography variant="h3" sx={{ fontWeight: 800, color: C.text, fontSize: { xs: 22, sm: 28 } }}>
+        <Typography variant="h3" sx={{ ...pageTitleSx, color: C.text }}>
           Chi tiết hóa đơn
         </Typography>
 
@@ -226,21 +227,24 @@ export default function InStoreSaleDetailPage() {
           <Table>
             <TableHead>
               <TableRow sx={{ '& th': { borderBottom: `1px solid ${C.borderLight}`, py: 1.5 } }}>
-                <TableCell sx={{ color: C.muted, fontSize: 12.5, fontWeight: 500, pl: 3 }}>Sản phẩm</TableCell>
-                <TableCell sx={{ color: C.muted, fontSize: 12.5, fontWeight: 500 }} align="center">
+                <TableCell align="center" sx={{ color: C.muted, fontSize: PAGE_TYPE.th, fontWeight: 500, pl: 3, width: 72 }}>
+                  STT
+                </TableCell>
+                <TableCell sx={{ color: C.muted, fontSize: PAGE_TYPE.th, fontWeight: 500 }}>Sản phẩm</TableCell>
+                <TableCell sx={{ color: C.muted, fontSize: PAGE_TYPE.th, fontWeight: 500 }} align="center">
                   Số lượng
                 </TableCell>
-                <TableCell sx={{ color: C.muted, fontSize: 12.5, fontWeight: 500 }} align="right">
+                <TableCell sx={{ color: C.muted, fontSize: PAGE_TYPE.th, fontWeight: 500 }} align="right">
                   Đơn giá
                 </TableCell>
-                <TableCell sx={{ color: C.muted, fontSize: 12.5, fontWeight: 500, pr: 3 }} align="right">
+                <TableCell sx={{ color: C.muted, fontSize: PAGE_TYPE.th, fontWeight: 500, pr: 3 }} align="right">
                   Thành tiền
                 </TableCell>
               </TableRow>
             </TableHead>
 
             <TableBody>
-              {items.map((item) => {
+              {items.map((item, index) => {
                 const variantParts = [];
                 if (item.color) variantParts.push(item.color);
                 if (item.size) variantParts.push(`Size ${item.size}`);
@@ -257,8 +261,11 @@ export default function InStoreSaleDetailPage() {
                       '& td': { borderBottom: `1px solid ${C.borderLight}`, py: 2 }
                     }}
                   >
+                    <TableCell align="center" sx={{ pl: 3, color: C.muted, fontSize: PAGE_TYPE.td }}>
+                      {index + 1}
+                    </TableCell>
                     {/* Sản phẩm */}
-                    <TableCell sx={{ pl: 3 }}>
+                    <TableCell>
                       <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
                         <Box
                           sx={{
@@ -286,25 +293,25 @@ export default function InStoreSaleDetailPage() {
                           )}
                         </Box>
                         <Box>
-                          <Typography sx={{ fontSize: 14, fontWeight: 700, color: C.text }}>{item.productName || 'Sản phẩm'}</Typography>
-                          <Typography sx={{ fontSize: 12.5, color: C.muted, mt: 0.25 }}>{variantText}</Typography>
+                          <Typography sx={{ fontSize: PAGE_TYPE.td, fontWeight: 700, color: C.text }}>{item.productName || 'Sản phẩm'}</Typography>
+                          <Typography sx={{ fontSize: PAGE_TYPE.tdSub, color: C.muted, mt: 0.25 }}>{variantText}</Typography>
                         </Box>
                       </Stack>
                     </TableCell>
 
                     {/* Số lượng */}
                     <TableCell align="center">
-                      <Typography sx={{ fontSize: 14, color: C.text, fontWeight: 500 }}>{item.quantity}</Typography>
+                      <Typography sx={{ fontSize: PAGE_TYPE.td, color: C.text, fontWeight: 500 }}>{item.quantity}</Typography>
                     </TableCell>
 
                     {/* Đơn giá */}
                     <TableCell align="right">
-                      <Typography sx={{ fontSize: 14, color: C.text }}>{money(item.unitPrice)}</Typography>
+                      <Typography sx={{ fontSize: PAGE_TYPE.td, color: C.text }}>{money(item.unitPrice)}</Typography>
                     </TableCell>
 
                     {/* Thành tiền */}
                     <TableCell align="right" sx={{ pr: 3 }}>
-                      <Typography sx={{ fontSize: 14, fontWeight: 600, color: C.text }}>{money(item.totalPrice)}</Typography>
+                      <Typography sx={{ fontSize: PAGE_TYPE.td, fontWeight: 600, color: C.text }}>{money(item.totalPrice)}</Typography>
                     </TableCell>
                   </TableRow>
                 );

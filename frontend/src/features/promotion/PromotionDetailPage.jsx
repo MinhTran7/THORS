@@ -22,6 +22,7 @@ import { useCrumbs } from '../../layouts/crumbs';
 import { orderStatusMeta } from 'features/order/constants';
 import { ConfirmDialog, NoticeDialog } from './PromotionForm';
 import { deleteAction, endEarlyAction } from './promotionActions';
+import { PAGE_TYPE, pageTitleSx } from 'themes/pageType';
 import {
   discountText,
   editBlockedMessage,
@@ -75,7 +76,7 @@ const tableSx = {
   '& th': {
     bgcolor: '#F8FAFC',
     color: C.subtle,
-    fontSize: 11.5,
+    fontSize: PAGE_TYPE.th,
     fontWeight: 700,
     textTransform: 'uppercase',
     letterSpacing: 0.4,
@@ -85,7 +86,7 @@ const tableSx = {
   '& td': {
     borderColor: C.borderLight,
     py: 1.75,
-    fontSize: 13.5,
+    fontSize: PAGE_TYPE.td,
     color: C.text
   }
 };
@@ -257,7 +258,7 @@ export default function PromotionDetailPage({ kind = 'PRODUCT' }) {
           gap: 2
         }}
       >
-        <Typography variant="h3" sx={{ fontWeight: 800, color: C.text, fontSize: { xs: 22, sm: 28 } }}>
+        <Typography variant="h3" sx={{ ...pageTitleSx, color: C.text }}>
           Chi tiết {name}
         </Typography>
 
@@ -450,7 +451,10 @@ export default function PromotionDetailPage({ kind = 'PRODUCT' }) {
               <Table sx={tableSx}>
                 <TableHead>
                   <TableRow>
-                    <TableCell sx={{ pl: 3 }}>Mã đơn</TableCell>
+                    <TableCell align="center" sx={{ width: 64, pl: 3 }}>
+                      STT
+                    </TableCell>
+                    <TableCell>Mã đơn</TableCell>
                     <TableCell>Khách hàng</TableCell>
                     <TableCell>Ngày đặt</TableCell>
                     <TableCell align="right">Tiền hàng</TableCell>
@@ -462,7 +466,7 @@ export default function PromotionDetailPage({ kind = 'PRODUCT' }) {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {orders.map((order) => {
+                  {orders.map((order, index) => {
                     const status = orderStatusMeta(order.orderStatus);
                     const tone = TONE[status.tone] || TONE.neutral;
                     return (
@@ -472,7 +476,10 @@ export default function PromotionDetailPage({ kind = 'PRODUCT' }) {
                         onClick={() => navigate(`/orders/${order.orderId}`)}
                         sx={{ cursor: 'pointer', '&:hover': { bgcolor: '#FAFCFE' } }}
                       >
-                        <TableCell sx={{ pl: 3, fontWeight: '700 !important' }}>{order.orderNumber}</TableCell>
+                        <TableCell align="center" sx={{ pl: 3, color: `${C.muted} !important` }}>
+                          {index + 1}
+                        </TableCell>
+                        <TableCell sx={{ fontWeight: '700 !important' }}>{order.orderNumber}</TableCell>
                         <TableCell>{order.customerName || '—'}</TableCell>
                         <TableCell sx={{ color: `${C.muted} !important` }}>{formatDateTime(order.orderDate)}</TableCell>
                         <TableCell align="right">{money(order.itemsAmount)}</TableCell>
@@ -583,15 +590,15 @@ export default function PromotionDetailPage({ kind = 'PRODUCT' }) {
                               </Box>
                             </TableCell>
                             <TableCell>
-                              <Typography sx={{ fontWeight: 600, color: C.text, fontSize: 14 }}>{name}</Typography>
-                              <Typography sx={{ fontSize: 12, color: C.muted }}>{product.sku || '—'}</Typography>
+                              <Typography sx={{ fontWeight: 600, color: C.text, fontSize: PAGE_TYPE.td }}>{name}</Typography>
+                              <Typography sx={{ fontSize: PAGE_TYPE.tdSub, color: C.muted }}>{product.sku || '—'}</Typography>
                             </TableCell>
                             <TableCell sx={{ color: `${C.muted} !important` }}>{categoryName(product)}</TableCell>
                             <TableCell align="center" sx={{ color: Number(product.totalStock) > 0 ? undefined : '#EF4444 !important' }}>
                               {Number(product.totalStock || 0).toLocaleString('vi-VN')}
                             </TableCell>
                             <TableCell align="right" sx={{ pr: 3 }}>
-                              <Typography sx={{ fontWeight: 700, color: C.text, fontSize: 14 }}>{price}</Typography>
+                              <Typography sx={{ fontWeight: 700, color: C.text, fontSize: PAGE_TYPE.td }}>{price}</Typography>
                             </TableCell>
                           </TableRow>
                         );

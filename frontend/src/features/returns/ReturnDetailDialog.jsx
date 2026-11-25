@@ -380,6 +380,9 @@ export default function ReturnDetailDialog({ open, onClose, returnData, onProces
           <Table size="small">
             <TableHead sx={{ bgcolor: '#F7F9FC' }}>
               <TableRow>
+                <TableCell align="center" sx={{ fontSize: 11, fontWeight: 600, color: COLORS.muted, width: 48 }}>
+                  STT
+                </TableCell>
                 <TableCell sx={{ fontSize: 11, fontWeight: 600, color: COLORS.muted }}>SẢN PHẨM</TableCell>
                 <TableCell sx={{ fontSize: 11, fontWeight: 600, color: COLORS.muted }}>ĐƠN GIÁ</TableCell>
                 <TableCell align="center" sx={{ fontSize: 11, fontWeight: 600, color: COLORS.muted }}>SL KHÁCH TRẢ</TableCell>
@@ -391,7 +394,7 @@ export default function ReturnDetailDialog({ open, onClose, returnData, onProces
             <TableBody>
               {loadingDetail && (
                 <TableRow>
-                  <TableCell colSpan={6} align="center" sx={{ py: 3 }}>
+                  <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
                     <CircularProgress size={20} />
                     <Typography fontSize={12} color={COLORS.muted} sx={{ mt: 1 }}>
                       Đang tải danh sách sản phẩm hoàn...
@@ -401,16 +404,21 @@ export default function ReturnDetailDialog({ open, onClose, returnData, onProces
               )}
               {!loadingDetail && (!data.items || data.items.length === 0) && (
                 <TableRow>
-                  <TableCell colSpan={6} align="center" sx={{ py: 3, color: COLORS.muted, fontSize: 13 }}>
+                  <TableCell colSpan={7} align="center" sx={{ py: 3, color: COLORS.muted, fontSize: 13 }}>
                     Không tìm thấy thông tin mặt hàng trong yêu cầu hoàn.
                   </TableCell>
                 </TableRow>
               )}
-              {!loadingDetail && data.items?.map((item) => {
+              {!loadingDetail && data.items?.map((item, index) => {
                 const cState = completeItems[item.returnRequestItemId] || {};
 
                 return (
                   <TableRow key={item.returnRequestItemId} hover>
+                    <TableCell align="center">
+                      <Typography fontSize={12} color={COLORS.muted}>
+                        {index + 1}
+                      </Typography>
+                    </TableCell>
                     <TableCell>
                       <Typography fontSize={12} fontWeight={600} color={COLORS.text}>
                         {item.productName}

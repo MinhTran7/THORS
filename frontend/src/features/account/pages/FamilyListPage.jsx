@@ -37,6 +37,7 @@ import {
   bodyCellSx,
   headCellSx
 } from '../components/Blocks';
+import { PAGE_TYPE } from 'themes/pageType';
 import ResetPasswordDialog from '../components/ResetPasswordDialog';
 import { useToast } from '../components/Toast';
 import UserAvatar from '../components/UserAvatar';
@@ -56,6 +57,7 @@ const STATUS_OPTIONS = [
 
 // Độ rộng cột cố định để bảng không bị nhảy khi nhãn trạng thái đổi (vd. "Đã kích hoạt" ↔ "Đã vô hiệu hóa").
 const COLUMNS = [
+  { label: 'STT', width: 56, align: 'center' },
   { label: 'Tên', width: '20%' },
   { label: 'Vai trò', width: '16%' },
   { label: 'Liên hệ', width: '26%' },
@@ -181,24 +183,27 @@ export default function FamilyListPage() {
             <TableHead>
               <TableRow>
                 {COLUMNS.map((col) => (
-                  <TableCell key={col.label} sx={{ ...headCellSx, width: col.width }}>
+                  <TableCell key={col.label} align={col.align} sx={{ ...headCellSx, width: col.width }}>
                     {col.label}
                   </TableCell>
                 ))}
               </TableRow>
             </TableHead>
             <TableBody>
-              {items.map((account) => {
+              {items.map((account, index) => {
                 const locked = account.status === 'LOCKED';
                 const pending = account.status === 'PENDING_VERIFICATION';
                 const meta = ACCOUNT_STATUS[account.status] ?? { label: account.status, tone: 'neutral' };
                 const switchHint = locked ? 'Đã bị quản trị viên khóa. Chỉ quản trị viên mới có thể mở khóa.' : '';
                 return (
                   <TableRow key={account.id} hover>
+                    <TableCell align="center" sx={{ ...bodyCellSx, color: brand.muted }}>
+                      {page * PAGE_SIZE + index + 1}
+                    </TableCell>
                     <TableCell sx={bodyCellSx}>
                       <Stack direction="row" spacing={1.5} alignItems="center">
                         <UserAvatar name={account.fullName} src={account.avatarUrl} />
-                        <Typography variant="body2" sx={{ fontWeight: 600, color: brand.ink }}>
+                        <Typography variant="body2" sx={{ fontWeight: 600, color: brand.ink, fontSize: PAGE_TYPE.td }}>
                           {account.fullName}
                         </Typography>
                       </Stack>
@@ -207,10 +212,10 @@ export default function FamilyListPage() {
                       <RoleChip role={account.role} />
                     </TableCell>
                     <TableCell sx={bodyCellSx}>
-                      <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>
+                      <Typography variant="body2" sx={{ wordBreak: 'break-word', fontSize: PAGE_TYPE.td }}>
                         {account.email}
                       </Typography>
-                      <Typography variant="caption" sx={{ color: brand.muted }}>
+                      <Typography variant="caption" sx={{ color: brand.muted, fontSize: PAGE_TYPE.tdSub }}>
                         {account.phone || '—'}
                       </Typography>
                     </TableCell>
@@ -262,7 +267,7 @@ export default function FamilyListPage() {
                 );
               })}
               {!list.isLoading && items.length === 0 && (
-                <EmptyRow colSpan={5}>Không có thành viên gia đình nào phù hợp với tìm kiếm.</EmptyRow>
+                <EmptyRow colSpan={6}>Không có thành viên gia đình nào phù hợp với tìm kiếm.</EmptyRow>
               )}
             </TableBody>
           </Table>

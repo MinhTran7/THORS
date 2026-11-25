@@ -370,6 +370,9 @@ export default function CustomerReturnDialog({
             <TableHead sx={{ bgcolor: '#F8FAFC' }}>
               <TableRow>
                 <TableCell padding="checkbox" />
+                <TableCell align="center" sx={{ fontSize: 12, fontWeight: 700, color: COLORS.muted, width: 48 }}>
+                  STT
+                </TableCell>
                 <TableCell sx={{ fontSize: 12, fontWeight: 700, color: COLORS.muted }}>SẢN PHẨM</TableCell>
                 <TableCell align="right" sx={{ fontSize: 12, fontWeight: 700, color: COLORS.muted }}>ĐƠN GIÁ</TableCell>
                 <TableCell align="center" sx={{ fontSize: 12, fontWeight: 700, color: COLORS.muted }}>ĐÃ MUA</TableCell>
@@ -379,7 +382,7 @@ export default function CustomerReturnDialog({
               </TableRow>
             </TableHead>
             <TableBody>
-              {normalizedItems.map((item) => {
+              {normalizedItems.map((item, index) => {
                 const itemState = selectedItems[item.orderItemId] || { checked: false, quantity: 1 };
                 const canReturn = (item.quantityReturnable || 0) > 0;
                 const subTotal = Number(item.unitPrice || 0) * (itemState.quantity || 1);
@@ -392,6 +395,11 @@ export default function CustomerReturnDialog({
                         disabled={!canReturn || submitting}
                         onChange={(e) => handleItemCheck(item.orderItemId, e.target.checked)}
                       />
+                    </TableCell>
+                    <TableCell align="center">
+                      <Typography fontSize={12} color={COLORS.muted}>
+                        {index + 1}
+                      </Typography>
                     </TableCell>
                     <TableCell>
                       <Typography fontSize={13} fontWeight={600} color={COLORS.text}>

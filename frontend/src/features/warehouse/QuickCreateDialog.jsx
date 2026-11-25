@@ -452,6 +452,9 @@ export default function QuickCreateDialog({ initial = {}, variants = [], withOrd
             <Table size="small" stickyHeader sx={{ minWidth: withOrderFields ? 1180 : 720, '& td': { verticalAlign: 'top', px: 1 } }}>
               <TableHead>
                 <TableRow>
+                  <TableCell align="center" sx={{ width: 56 }}>
+                    STT
+                  </TableCell>
                   <TableCell sx={{ minWidth: 170 }}>Màu</TableCell>
                   <TableCell sx={{ minWidth: 120 }}>Size</TableCell>
                   {withOrderFields && <TableCell sx={{ minWidth: 160 }}>Số lượng đặt</TableCell>}
@@ -468,6 +471,9 @@ export default function QuickCreateDialog({ initial = {}, variants = [], withOrd
               <TableBody>
                 {rows.map((r, idx) => (
                   <TableRow key={idx}>
+                    <TableCell align="center" sx={{ color: 'text.secondary', pt: 2 }}>
+                      {idx + 1}
+                    </TableCell>
                     <TableCell>
                       <SuggestField
                         label={`Màu dòng ${idx + 1}`}
