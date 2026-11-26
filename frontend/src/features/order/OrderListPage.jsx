@@ -10,7 +10,6 @@ import {
   DialogContent,
   DialogTitle,
   FormControlLabel,
-  IconButton,
   InputAdornment,
   MenuItem,
   Radio,
@@ -23,11 +22,10 @@ import {
   TableRow,
   Tabs,
   TextField,
-  Tooltip,
   Typography
 } from '@mui/material';
 import { Stack } from 'features/account/components/Flex';
-import { CarOutlined, EyeOutlined, InboxOutlined, SearchOutlined } from '@ant-design/icons';
+import { CarOutlined, InboxOutlined, SearchOutlined } from '@ant-design/icons';
 import { post } from 'services/http';
 import { openCustomerChat, useChatStatus } from 'features/chat/api';
 import { useCrumbs } from 'layouts/crumbs';
@@ -350,14 +348,13 @@ function CustomerOrderCard({ order, onOpen, actions, onAction, busy, onRebuy, re
                 </Box>
               ))}
             {canReturn && (
-              // Mở trang chi tiết và bật sẵn hộp thoại yêu cầu trả hàng
+              // Sang trang riêng "Yêu cầu trả hàng" (/orders/:id/return), không còn mở hộp thoại
               <Box
                 component={RouterLink}
-                to={`/orders/${order.id}`}
-                state={{ openReturn: true }}
+                to={`/orders/${order.id}/return`}
                 sx={storeBtnSx(actions.some((a) => a.primary) ? 'outline' : 'dark')}
               >
-                TRẢ HÀNG
+                YÊU CẦU TRẢ HÀNG / HOÀN TIỀN
               </Box>
             )}
             {/* Mở khung chat với cửa hàng, đính kèm thẻ đơn này vào tin nhắn tiếp theo */}
@@ -371,7 +368,8 @@ function CustomerOrderCard({ order, onOpen, actions, onAction, busy, onRebuy, re
                 LIÊN HỆ NGƯỜI BÁN
               </Box>
             )}
-            {lines.length > 0 && (
+            {/* Mua lại: chỉ đơn đã hoàn thành */}
+            {lines.length > 0 && order.orderStatus === 'COMPLETED' && (
               <Box component="button" type="button" disabled={busy || rebuying} onClick={onRebuy} sx={storeBtnSx('outline')}>
                 {rebuying ? 'ĐANG THÊM…' : 'MUA LẠI'}
               </Box>
@@ -942,7 +940,7 @@ export default function OrderListPage() {
                 <TableCell>Người nhận</TableCell>
                 <TableCell>Tổng tiền</TableCell>
                 <TableCell>Trạng thái</TableCell>
-                <TableCell align="center" sx={{ width: 32 + ACTION_WIDTH.primary + ACTION_WIDTH.secondary + 64 }}>
+                <TableCell align="center" sx={{ width: ACTION_WIDTH.primary + ACTION_WIDTH.secondary + 56 }}>
                   Thao tác
                 </TableCell>
               </TableRow>
@@ -953,10 +951,23 @@ export default function OrderListPage() {
                 const prep =
                   order.preparationStatus && order.preparationStatus !== 'NOT_STARTED' ? preparationMeta(order.preparationStatus) : null;
                 return (
+                  // Bấm vào dòng (hoặc Enter) là mở chi tiết đơn, không cần nút xem riêng
                   <TableRow
                     key={order.id}
                     hover
-                    sx={{ '&:hover': { bgcolor: '#FAFCFE' }, '& td': { borderBottom: '1px solid #F1F5F9', py: 2 } }}
+                    tabIndex={0}
+                    role="link"
+                    aria-label={`Xem chi tiết đơn ${order.orderNumber}`}
+                    onClick={() => navigate(`/orders/${order.id}`)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && e.target === e.currentTarget) navigate(`/orders/${order.id}`);
+                    }}
+                    sx={{
+                      cursor: 'pointer',
+                      '&:hover': { bgcolor: '#FAFCFE' },
+                      '&:focus-visible': { outline: `2px solid ${brand.cyan}`, outlineOffset: '-2px' },
+                      '& td': { borderBottom: '1px solid #F1F5F9', py: 2 }
+                    }}
                   >
                     <TableCell align="center" sx={{ fontSize: PAGE_TYPE.td, color: '#64748B' }}>
                       {page * PAGE_SIZE + i + 1}
@@ -1008,29 +1019,18 @@ export default function OrderListPage() {
                       </Stack>
                     </TableCell>
 
-                    {/* Thao tác: xem chi tiết (icon mắt như bảng tại quầy) và các nút xử lý đơn */}
-                    <TableCell>
-                      {/* Lưới cố định: con mắt | nút chính | nút phụ, nút rộng bằng nhau nên mọi dòng thẳng hàng */}
+                    {/* Thao tác: các nút xử lý đơn (bấm nút không mở chi tiết) */}
+                    <TableCell onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} sx={{ cursor: 'default' }}>
+                      {/* Lưới cố định: nút chính | nút phụ, nút rộng bằng nhau nên mọi dòng thẳng hàng */}
                       <Box
                         sx={{
                           display: 'grid',
-                          gridTemplateColumns: `32px ${ACTION_WIDTH.primary}px ${ACTION_WIDTH.secondary}px`,
+                          gridTemplateColumns: `${ACTION_WIDTH.primary}px ${ACTION_WIDTH.secondary}px`,
                           columnGap: 1,
                           alignItems: 'center',
                           justifyContent: 'center'
                         }}
                       >
-                        <Tooltip title="Xem chi tiết đơn hàng">
-                          <IconButton
-                            size="small"
-                            component={RouterLink}
-                            to={`/orders/${order.id}`}
-                            aria-label={`Xem chi tiết đơn ${order.orderNumber}`}
-                            sx={{ color: '#64748B', p: 0.75, '&:hover': { color: '#0F172A', bgcolor: 'transparent' } }}
-                          >
-                            <EyeOutlined style={{ fontSize: 17 }} />
-                          </IconButton>
-                        </Tooltip>
                         {/* Luôn hiện đủ nút; nút không áp dụng cho trạng thái hiện tại chỉ bị làm mờ */}
                         {(isOwner ? ownerActionSlots(order) : []).map((action) =>
                           action.primary ? (

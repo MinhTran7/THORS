@@ -5,7 +5,9 @@ import { Stack } from 'features/account/components/Flex';
 import { brand } from 'features/account/tokens';
 import { useAuth } from 'features/auth/AuthProvider';
 import NotificationBell from 'features/notification/NotificationBell';
+import ChatHeaderButton from 'features/chat/ChatHeaderButton';
 import CartButton from 'components/CartButton';
+import { FontScaleButton } from 'components/FontScale';
 import UserMenu from './UserMenu';
 import PendingCartHandler from 'features/shop/PendingCartHandler';
 import { buildCrumbs } from './routeCrumbs';
@@ -70,8 +72,10 @@ export default function AppHeader({ crumbs, onOpenMenu, onSignOut }) {
       <Typography variant="caption" sx={{ color: brand.muted, fontSize: 14, display: { xs: 'none', sm: 'block' } }}>
         {formatTodayVi()}
       </Typography>
+      {account?.role !== 'CUSTOMER' && <FontScaleButton />}
       {account?.role === 'CUSTOMER' && <CartButton />}
       <PendingCartHandler />
+      <ChatHeaderButton />
       <NotificationBell />
       <UserMenu onSignOut={onSignOut} />
     </Stack>

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { Alert, Button, Checkbox, CircularProgress, FormControlLabel, Stack, TextField, Typography } from '@mui/material';
 import useSWR from 'swr';
 import MainCard from 'components/MainCard';
@@ -103,9 +103,6 @@ export default function ReportPage() {
         subtitle="Số hàng nhập, xuất và tồn trong khoảng thời gian bạn chọn."
         action={
           <Stack direction="row" spacing={1}>
-            <Button variant="outlined" component={Link} to="/warehouse/inventory">
-              Quay lại kho
-            </Button>
             <Button variant="outlined" disabled={!data?.items?.length} onClick={exportExcel}>
               Xuất Excel
             </Button>
@@ -115,7 +112,7 @@ export default function ReportPage() {
       <MainCard sx={{ mb: 2 }}>
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} useFlexGap flexWrap="wrap" sx={{ alignItems: { md: 'flex-end' } }}>
           {/* Ô lọc ngày dùng chung; để trống thì về mặc định đầu tháng → hôm nay */}
-          <DateRangeFilter from={from} to={to} height={40} onChange={(range) => set(range)} />
+          <DateRangeFilter from={from} to={to} height={40} allowAll={false} onChange={(range) => set(range)} />
           <TextField
             size="small"
             placeholder="Tìm tên, mã SP, mã vạch"

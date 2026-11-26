@@ -28,7 +28,6 @@ import { PAGE_TYPE, pageSubtitleSx, pageTitleSx } from 'themes/pageType';
 import {
   SearchOutlined,
   PlusOutlined,
-  EyeOutlined,
   ExperimentOutlined,
   AuditOutlined,
   DollarCircleOutlined
@@ -370,8 +369,19 @@ export default function ReturnsPage() {
                   <TableRow
                     key={row.returnRequestId}
                     hover
-                    sx={{ cursor: 'pointer', '&:last-child td': { borderBottom: 0 } }}
+                    // Bấm vào dòng (hoặc Enter) là xem chi tiết phiếu, không cần nút "Chi tiết" riêng
+                    tabIndex={0}
+                    role="link"
+                    aria-label={`Xem chi tiết yêu cầu #${row.returnRequestId}`}
+                    sx={{
+                      cursor: 'pointer',
+                      '&:last-child td': { borderBottom: 0 },
+                      '&:focus-visible': { outline: `2px solid ${COLORS.cyan}`, outlineOffset: '-2px' }
+                    }}
                     onClick={() => handleOpenDetail(row)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && e.target === e.currentTarget) handleOpenDetail(row);
+                    }}
                   >
                     <TableCell align="center">
                       <Typography fontSize={PAGE_TYPE.td} color={COLORS.muted}>
@@ -467,16 +477,7 @@ export default function ReturnsPage() {
                         >
                           Nhập kho
                         </Button>
-                      ) : (
-                        <Button
-                          size="small"
-                          startIcon={<EyeOutlined />}
-                          onClick={() => handleOpenDetail(row)}
-                          sx={{ textTransform: 'none', fontSize: 11, color: COLORS.text }}
-                        >
-                          Chi tiết
-                        </Button>
-                      )}
+                      ) : null}
                     </TableCell>
                   </TableRow>
                 ))}

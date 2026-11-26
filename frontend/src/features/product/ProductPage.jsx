@@ -734,8 +734,14 @@ export default function ProductPage() {
                     <TableRow
                       key={product.productId}
                       hover={!busy}
+                      // Bấm vào dòng là xem chi tiết (không còn mục "Xem chi tiết" trong menu ⋯)
+                      tabIndex={busy ? -1 : 0}
+                      aria-label={`Xem chi tiết sản phẩm ${product.productName}`}
                       onClick={() => {
                         if (!busy) viewProduct(product.productId);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && e.target === e.currentTarget && !busy) viewProduct(product.productId);
                       }}
                       sx={{
                         cursor: busy ? 'default' : 'pointer',
@@ -842,7 +848,7 @@ export default function ProductPage() {
                       </TableCell>
 
                       {/* ACTIONS */}
-                      <TableCell align="right" sx={{ pr: 3 }}>
+                      <TableCell align="right" sx={{ pr: 3 }} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
                         <Stack direction="row" alignItems="center" justifyContent="flex-end" spacing={0.5}>
                           <Tooltip title="Chỉnh sửa">
                             <IconButton
@@ -924,7 +930,7 @@ export default function ProductPage() {
         </Typography>
       </Box>
 
-      {/* MENU ⋯: xem, ẩn/hiện, bật/tắt bán online (mở hộp thoại xác nhận như trước) */}
+      {/* MENU ⋯: ẩn/hiện, bật/tắt bán online (mở hộp thoại xác nhận như trước); xem chi tiết = bấm vào dòng */}
       <Menu
         anchorEl={menuAnchor}
         open={Boolean(menuAnchor)}
@@ -934,19 +940,6 @@ export default function ProductPage() {
         slotProps={{ paper: { sx: { borderRadius: 2.5, minWidth: 220, mt: 0.5 } } }}
       >
         {menuProduct && [
-          <MenuItem
-            key="view"
-            onClick={() => {
-              setMenuAnchor(null);
-              viewProduct(menuProduct.productId);
-            }}
-            sx={{ fontSize: 13.5, fontWeight: 600 }}
-          >
-            <ListItemIcon>
-              <EyeOutlined />
-            </ListItemIcon>
-            Xem chi tiết
-          </MenuItem>,
           <MenuItem
             key="online"
             disabled={menuProduct.status !== 'ACTIVE'}

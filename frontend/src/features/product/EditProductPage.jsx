@@ -18,7 +18,6 @@ import {
 } from '@mui/material';
 
 import {
-  ArrowLeftOutlined,
   DeleteOutlined,
   LockOutlined,
   PlusOutlined,
@@ -434,21 +433,6 @@ export default function EditProductPage() {
     <Box sx={{ maxWidth: 1440, mx: 'auto', pb: 6, color: C.text }}>
       {/* HEADER */}
       <Box sx={{ mb: 3.5 }}>
-        <Button
-          startIcon={<ArrowLeftOutlined />}
-          onClick={() => navigate(`/products/${productId}`)}
-          sx={{
-            textTransform: 'none',
-            fontSize: 13,
-            color: C.muted,
-            mb: 1.5,
-            p: 0,
-            '&:hover': { bgcolor: 'transparent', color: '#0F172A' }
-          }}
-        >
-          Quay lại chi tiết sản phẩm
-        </Button>
-
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
           <Box>
             <Typography

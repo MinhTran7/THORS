@@ -21,7 +21,6 @@ import {
 } from '@mui/material';
 
 import {
-  ArrowLeftOutlined,
   EditOutlined,
   InfoCircleOutlined,
   PictureOutlined
@@ -32,7 +31,7 @@ import { PAGE_TYPE, pageSubtitleSx, pageTitleSx } from 'themes/pageType';
 import { useAuth } from 'features/auth/AuthProvider';
 import SizeChartEditor from 'features/fitting/SizeChartEditor';
 import ProductStyleEditor from 'features/outfit/ProductStyleEditor';
-import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../shippingaddress/theme';
+import { C, cardSx, primaryButtonSx } from '../shippingaddress/theme';
 import { descriptionToText } from './productDescription';
 
 // Switch thu nhỏ theo Design System
@@ -255,13 +254,6 @@ export default function ProductDetailPage() {
         <Alert severity="error" sx={{ mb: 2.5, borderRadius: 2.5, fontSize: 13.5, fontWeight: 600 }}>
           {error || 'Không tìm thấy thông tin sản phẩm.'}
         </Alert>
-
-        <Button
-          onClick={() => navigate('/products')}
-          sx={outlineButtonSx}
-        >
-          Quay lại danh sách sản phẩm
-        </Button>
       </Box>
     );
   }
@@ -324,21 +316,6 @@ export default function ProductDetailPage() {
     >
       {/* PAGE HEADER */}
       <Box sx={{ mb: 3.5 }}>
-        <Button
-          startIcon={<ArrowLeftOutlined />}
-          onClick={() => navigate('/products')}
-          sx={{
-            textTransform: 'none',
-            fontSize: 13,
-            color: C.muted,
-            mb: 1.5,
-            p: 0,
-            '&:hover': { bgcolor: 'transparent', color: '#0F172A' }
-          }}
-        >
-          Quay lại danh sách sản phẩm
-        </Button>
-
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
           <Box>
             <Typography

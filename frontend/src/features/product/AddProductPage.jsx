@@ -25,7 +25,6 @@ import {
 } from '@mui/material';
 
 import {
-  ArrowLeftOutlined,
   CloudUploadOutlined,
   DeleteOutlined,
   InfoCircleOutlined,
@@ -563,21 +562,6 @@ export default function AddProductPage() {
     >
       {/* PAGE HEADER */}
       <Box sx={{ mb: 3.5 }}>
-        <Button
-          startIcon={<ArrowLeftOutlined />}
-          onClick={() => navigate('/products')}
-          sx={{
-            textTransform: 'none',
-            fontSize: 13,
-            color: C.muted,
-            mb: 1.5,
-            p: 0,
-            '&:hover': { bgcolor: 'transparent', color: '#0F172A' }
-          }}
-        >
-          Quay lại danh sách sản phẩm
-        </Button>
-
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
           <Box>
             <Typography

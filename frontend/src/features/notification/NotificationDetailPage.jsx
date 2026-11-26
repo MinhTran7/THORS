@@ -104,7 +104,7 @@ export default function NotificationDetailPage() {
   }
   return (
     <Box>
-      <PageHeader back={BACK} title="Chi tiết thông báo" />
+      <PageHeader title="Chi tiết thông báo" />
       {body}
     </Box>
   );

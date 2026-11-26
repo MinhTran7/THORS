@@ -6,9 +6,10 @@ export const PAGE_TYPE = {
   titleWeight: 800,
   subtitle: 14, // dòng mô tả dưới tiêu đề
   section: 17, // tiêu đề khối / thẻ trong trang
-  th: 13, // chữ tiêu đề cột bảng
-  td: 13.5, // nội dung chính trong ô bảng
-  tdSub: 12.5 // dòng phụ trong ô bảng (SĐT dưới tên, giờ dưới ngày…)
+  // Chữ trong bảng cộng thêm --thors-fs-table (người dùng chỉnh ở nút "Aa" trên header, xem components/FontScale)
+  th: 'calc(13px + var(--thors-fs-table, 0px))', // chữ tiêu đề cột bảng
+  td: 'calc(13.5px + var(--thors-fs-table, 0px))', // nội dung chính trong ô bảng
+  tdSub: 'calc(12.5px + var(--thors-fs-table, 0px))' // dòng phụ trong ô bảng (SĐT dưới tên, giờ dưới ngày…)
 };
 
 // sx cho tiêu đề trang và dòng mô tả, dùng khi trang tự dựng phần đầu trang thay vì PageHeader

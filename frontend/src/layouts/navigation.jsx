@@ -14,7 +14,6 @@ import {
   IdcardOutlined,
   ImportOutlined,
   InboxOutlined,
-  MessageOutlined,
   MobileOutlined,
   PercentageOutlined,
   PieChartOutlined,
@@ -59,8 +58,6 @@ const OWNER_MENU = [
       { to: '/in-store-sales', label: 'Bán tại quầy', icon: <ShopOutlined /> },
       { to: '/in-store-sales/history', label: 'Đơn hàng tại quầy', icon: <FileDoneOutlined /> },
       { to: '/orders', label: 'Đơn hàng online', icon: <MobileOutlined /> },
-      // Tin khách nhắn qua "Liên hệ người bán"; ThorsLayout hiện số cuộc trò chuyện có tin chưa đọc
-      { to: '/messages', label: 'Tin nhắn', icon: <MessageOutlined />, chatBadge: true },
       { to: '/returns', label: 'Đổi trả', icon: <SwapOutlined /> },
       { to: '/warehouse/defects', label: 'Xử lý hàng lỗi', icon: <WarningOutlined /> }
     ]
@@ -99,7 +96,7 @@ const OWNER_MENU = [
       { to: '/warehouse/locations', label: 'Vị trí kho', icon: <PushpinOutlined /> }
     ]
   },
-  { to: '/family', label: 'Family', icon: <TeamOutlined /> }
+  { to: '/family', label: 'Gia đình', icon: <TeamOutlined /> }
 ];
 
 // Các trang chỉ OWNER được vào (khớp với RequireAuth roles={['OWNER']} trong routes/index.jsx).

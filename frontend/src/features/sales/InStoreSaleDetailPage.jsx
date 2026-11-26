@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import useSWR from 'swr';
 import {
   Box,
@@ -15,7 +15,7 @@ import {
   TableRow,
   Typography
 } from '@mui/material';
-import { ArrowLeftOutlined, CreditCardOutlined, DollarOutlined, PictureOutlined, PrinterOutlined } from '@ant-design/icons';
+import { CreditCardOutlined, DollarOutlined, PictureOutlined, PrinterOutlined } from '@ant-design/icons';
 import { api } from '../../services/http';
 import { useCrumbs } from '../../layouts/crumbs';
 import ReceiptDialog from './ReceiptDialog';
@@ -40,7 +40,6 @@ const C = {
 
 export default function InStoreSaleDetailPage() {
   const { orderId } = useParams();
-  const navigate = useNavigate();
   const [receiptOpen, setReceiptOpen] = useState(false);
 
   useCrumbs(['Bán hàng tại quầy', 'Danh sách hóa đơn', 'Chi tiết hóa đơn']);
@@ -81,22 +80,6 @@ export default function InStoreSaleDetailPage() {
           <Typography color="error" sx={{ fontWeight: 700, fontSize: 15 }}>
             {error?.message || 'Không tìm thấy thông tin hóa đơn.'}
           </Typography>
-          <Button
-            startIcon={<ArrowLeftOutlined />}
-            onClick={() => navigate('/in-store-sales/history')}
-            sx={{
-              mt: 2,
-              textTransform: 'none',
-              bgcolor: C.cyan,
-              color: C.text,
-              fontWeight: 700,
-              borderRadius: 2.5,
-              px: 2.5,
-              '&:hover': { bgcolor: C.cyanHover }
-            }}
-          >
-            Quay lại danh sách
-          </Button>
         </Card>
       </Box>
     );

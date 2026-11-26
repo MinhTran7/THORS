@@ -91,7 +91,7 @@ const senderLabel = (message, mine) => {
   return message.senderName ? `${message.senderName} · ` : '';
 };
 
-function MessageBubble({ message, mine, seen, showName, palette, onPreview }) {
+function MessageBubble({ message, mine, seen, showName, palette, onPreview, storeView = false }) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: mine ? 'flex-end' : 'flex-start', mb: 1 }}>
       {message.body && (
@@ -142,7 +142,8 @@ function MessageBubble({ message, mine, seen, showName, palette, onPreview }) {
       {message.product && (
         <AttachmentCard
           palette={palette}
-          to={`/shop/products/${message.product.id}`}
+          // Cửa hàng không vào trang của khách: mở trang chi tiết sản phẩm quản trị
+          to={storeView ? `/products/${message.product.id}` : `/shop/products/${message.product.id}`}
           image={message.product.imageUrl}
           title={message.product.name}
           lines={[message.product.minPrice != null ? `Từ ${formatVnd(message.product.minPrice)}` : null]}
@@ -461,6 +462,7 @@ export default function ChatThread({
                 showName={mySide === 'STORE' ? m.side !== 'CUSTOMER' : AI_SIDES.has(m.side)}
                 onPreview={setPreview}
                 palette={palette}
+                storeView={mySide === 'STORE'}
               />
             </Box>
           );

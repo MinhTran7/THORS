@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { useLocation, useParams, useSearchParams } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import useSWR, { useSWRConfig } from 'swr';
 import {
   Alert,
@@ -191,7 +191,6 @@ function CustomerRefundBox({ order, onSave }) {
   );
 }
 import { DeliveryProofDialog, DeliveryProofView, useDeliveryProofRequired } from './components/DeliveryProof';
-import CustomerReturnDialog from '../returns/CustomerReturnDialog';
 import {
   C,
   SANS,
@@ -533,7 +532,6 @@ function StaffView({ order, status, actions, busy, onAction, actionError, back, 
   return (
     <>
       <PageHeader
-        back={back}
         title={`Đơn hàng ${order.orderNumber}`}
         subtitle={`Đặt lúc ${dateTime(order.orderDate) ?? '—'}`}
         action={
@@ -781,19 +779,13 @@ export default function OrderDetailPage() {
   const isStore = ['OWNER', 'FAMILY_MEMBER'].includes(account.role);
   const proofRequired = useDeliveryProofRequired(isStore);
 
-  const [returnDialogOpen, setReturnDialogOpen] = useState(false);
-  // Bấm "TRẢ HÀNG" ở danh sách đơn: mở sẵn hộp thoại yêu cầu trả hàng một lần (nếu còn trong hạn)
+  // Yêu cầu trả hàng là trang riêng (/orders/:id/return); gửi xong quay về đây kèm thông báo trong location.state
   const location = useLocation();
-  const autoReturn = useRef(Boolean(location.state?.openReturn));
-  useEffect(() => {
-    if (!autoReturn.current || !order) return;
-    autoReturn.current = false;
-    if (account.role === 'CUSTOMER' && withinReturnWindow(order)) setReturnDialogOpen(true);
-  }, [order, account.role]);
+  const navigate = useNavigate();
   const [refundBusy, setRefundBusy] = useState(false);
   // Tài khoản nhận hoàn khi khách hủy đơn đã thanh toán (null = không cần)
   const [refundForm, setRefundForm] = useState(null);
-  const [returnSuccessMsg, setReturnSuccessMsg] = useState('');
+  const [returnSuccessMsg, setReturnSuccessMsg] = useState(() => location.state?.returnSuccess || '');
 
   // Tự động kiểm tra trạng thái thanh toán nếu quay lại từ PayOS với URL ?payment=success
   const orderIdVal = order?.id || Number(id);
@@ -827,7 +819,7 @@ export default function OrderDetailPage() {
   if (error && !order) {
     return (
       <Box>
-        <PageHeader back={back} title="Chi tiết đơn hàng" />
+        <PageHeader title="Chi tiết đơn hàng" />
         <NoticeBox title="Không xem được đơn hàng">{error.message}</NoticeBox>
       </Box>
     );
@@ -835,7 +827,7 @@ export default function OrderDetailPage() {
   if (isLoading || !order) {
     return (
       <Box>
-        <PageHeader back={back} title="Chi tiết đơn hàng" />
+        <PageHeader title="Chi tiết đơn hàng" />
         <Typography sx={{ color: brand.muted }}>Đang tải đơn hàng…</Typography>
       </Box>
     );
@@ -941,7 +933,7 @@ export default function OrderDetailPage() {
     onPayNow: handlePayNow,
     payLoading,
     payError,
-    onOpenReturn: () => setReturnDialogOpen(true)
+    onOpenReturn: () => navigate(`/orders/${order.id}/return`)
   };
 
   return (
@@ -1071,20 +1063,6 @@ export default function OrderDetailPage() {
         }}
         onCancelled={() => mutate()}
       />
-
-      {/* Modal Trả hàng / Hoàn tiền cho Khách hàng */}
-      {returnDialogOpen && (
-        <CustomerReturnDialog
-          open={returnDialogOpen}
-          onClose={() => setReturnDialogOpen(false)}
-          orderData={order}
-          isPublic={false}
-          onSuccess={(msg) => {
-            setReturnSuccessMsg(msg);
-            mutate();
-          }}
-        />
-      )}
     </Box>
   );
 }

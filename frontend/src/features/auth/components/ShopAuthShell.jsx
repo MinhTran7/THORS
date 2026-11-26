@@ -1,16 +1,16 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { EyeInvisibleOutlined, EyeOutlined } from '@ant-design/icons';
-import { ThorsLogo } from './ShopAuthArt';
+import ShopAuthArt, { ThorsLogo } from './ShopAuthArt';
 import { FONT_URL } from 'features/shop/storeTheme';
 import { AnnouncementBar } from 'layouts/StorefrontLayout';
 import { useWebsiteSettings } from 'features/website/websiteSettings';
 import './ShopAuthShell.css';
 
-// Lời giới thiệu bên trái (cùng tông đỏ rượu với thanh thông báo và chân trang của trang bán hàng)
+// Lời giới thiệu bên trái, trên nền kem (chữ nhấn đỏ rượu như trang bán hàng)
+// Gọn như giao diện cũ: chỉ tiêu đề lớn + một câu ngắn (không thêm dòng nhỏ phía trên, không danh sách quyền lợi)
 const STORY = {
   login: {
-    eyebrow: 'Thành viên THORS',
     title: (
       <>
         Chào mừng bạn
@@ -18,10 +18,9 @@ const STORY = {
         quay lại <em>THORS</em>
       </>
     ),
-    lead: 'Đăng nhập để tiếp tục mua sắm và theo dõi đơn hàng của bạn.'
+    lead: 'Đăng nhập để tiếp tục mua sắm cùng THORS.'
   },
   register: {
-    eyebrow: 'Tài khoản mới',
     title: (
       <>
         Mở tài khoản,
@@ -29,11 +28,9 @@ const STORY = {
         mua sắm <em>dễ hơn</em>
       </>
     ),
-    lead: 'Đăng ký trong một phút để nhận đầy đủ quyền lợi thành viên THORS.'
+    lead: 'Đăng ký để trở thành thành viên THORS.'
   }
 };
-
-const PERKS = ['Theo dõi đơn hàng mọi lúc', 'Lưu sẵn địa chỉ giao hàng', 'Nhận ưu đãi dành riêng cho thành viên'];
 
 // Nạp font của trang bán hàng (Be Vietnam Pro + Playfair Display cho logo) nếu chưa có
 function useStoreFonts() {
@@ -44,6 +41,47 @@ function useStoreFonts() {
     link.href = FONT_URL;
     document.head.appendChild(link);
   }, []);
+}
+
+// Hình vẽ minh họa (không lấy dữ liệu): áo thun và túi mua sắm, tông đỏ rượu – kem của trang khách
+const ShirtArt = () => (
+  <svg viewBox="0 0 120 120" aria-hidden="true">
+    <rect width="120" height="120" fill="#F3E3DF" />
+    <path
+      d="M42 28l-20 12 8 16 10-5v43h40V51l10 5 8-16-20-12c-3 7-10 11-18 11s-15-4-18-11z"
+      fill="#8A2B2B"
+      stroke="#6E1F1F"
+      strokeWidth="2"
+      strokeLinejoin="round"
+    />
+    <path d="M44 62h32M44 72h32M44 82h32" stroke="#F3E3DF" strokeWidth="3" strokeLinecap="round" opacity="0.8" />
+  </svg>
+);
+
+const BagArt = () => (
+  <svg viewBox="0 0 120 120" aria-hidden="true">
+    <rect width="120" height="120" fill="#EFEBE5" />
+    <path d="M44 46V38a16 16 0 0 1 32 0v8" fill="none" stroke="#4A1717" strokeWidth="4" strokeLinecap="round" />
+    <path d="M30 46h60l-5 50H35z" fill="#FFFFFF" stroke="#4A1717" strokeWidth="2.5" strokeLinejoin="round" />
+    <text x="60" y="78" textAnchor="middle" fontFamily="'Playfair Display', Georgia, serif" fontSize="13" fill="#8A2B2B">
+      THORS
+    </text>
+  </svg>
+);
+
+// Cụm hình bên trái: áo thun – thẻ treo THORS – túi mua sắm (khung polaroid nghiêng), toàn hình vẽ sẵn
+function AuthShowcase() {
+  return (
+    <div className="shop-auth__showcase" aria-hidden="true">
+      <figure className="shop-auth__photo shop-auth__photo--left">
+        <ShirtArt />
+      </figure>
+      <ShopAuthArt />
+      <figure className="shop-auth__photo shop-auth__photo--right">
+        <BagArt />
+      </figure>
+    </div>
+  );
 }
 
 // Thanh trên cùng giống header trang bán hàng: logo THORS bên trái, link quay lại cửa hàng bên phải
@@ -74,9 +112,9 @@ function AuthCard({ title, subtitle, children }) {
 }
 
 /**
- * KHUNG CHUNG cho mọi màn hình xác thực — cùng phong cách trang bán hàng
- * (nền kem, chữ đen, điểm nhấn đỏ rượu, nút vuông chữ in hoa, font Be Vietnam Pro).
- *   - variant 'login' / 'register': khối giới thiệu đỏ rượu bên trái, form bên phải (Đăng nhập, Đăng ký)
+ * KHUNG CHUNG cho mọi màn hình xác thực — bố cục cũ, màu của trang bán hàng
+ * (nền kem, chữ đen, điểm nhấn đỏ rượu, ô và nút bo tròn, font Be Vietnam Pro).
+ *   - variant 'login' / 'register': lời chào + hình thẻ treo bên trái, form bên phải (Đăng nhập, Đăng ký)
  *   - variant 'card'             : một thẻ giữa màn hình (Quên mật khẩu, Nhập OTP, Đặt lại mật khẩu,
  *                                  Hoàn tất Facebook, trang 404)
  */
@@ -93,14 +131,10 @@ export default function ShopAuthShell({ variant = 'login', title, subtitle, chil
         <main className="shop-auth__main">
           <section className="shop-auth__story">
             <div className="shop-auth__intro">
-              <p className="shop-auth__eyebrow">{story.eyebrow}</p>
               <h2 className="shop-auth__headline">{story.title}</h2>
               <p className="shop-auth__lead">{story.lead}</p>
-              <ul className="shop-auth__perks">
-                {PERKS.map((perk) => (
-                  <li key={perk}>{perk}</li>
-                ))}
-              </ul>
+              {/* Áo thun – thẻ treo THORS (giao diện cũ, tô lại màu trang khách) – túi mua sắm */}
+              <AuthShowcase />
             </div>
           </section>
           <AuthCard title={title} subtitle={subtitle}>

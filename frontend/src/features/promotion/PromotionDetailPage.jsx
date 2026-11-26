@@ -14,7 +14,7 @@ import {
   TableRow,
   Typography
 } from '@mui/material';
-import { ArrowLeftOutlined, DeleteOutlined, EditOutlined, PictureOutlined, StopOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EditOutlined, PictureOutlined, StopOutlined } from '@ant-design/icons';
 import { getPromotionById, getPromotionOrders } from 'services/promotionService';
 import { getProducts } from 'services/productService';
 import { categoryFullName, getCategories } from 'services/categoryService';
@@ -194,22 +194,6 @@ export default function PromotionDetailPage({ kind = 'PRODUCT' }) {
           <Typography color="error" sx={{ fontWeight: 700, fontSize: 15 }}>
             {error || 'Không tìm thấy chương trình khuyến mãi.'}
           </Typography>
-          <Button
-            startIcon={<ArrowLeftOutlined />}
-            onClick={() => navigate(base)}
-            sx={{
-              mt: 2,
-              textTransform: 'none',
-              bgcolor: C.cyan,
-              color: C.text,
-              fontWeight: 700,
-              borderRadius: 2.5,
-              px: 2.5,
-              '&:hover': { bgcolor: C.cyanHover }
-            }}
-          >
-            Quay lại danh sách
-          </Button>
         </Card>
       </Box>
     );

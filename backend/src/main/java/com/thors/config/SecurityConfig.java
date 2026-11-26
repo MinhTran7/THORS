@@ -121,6 +121,59 @@ public class SecurityConfig {
                                                 "/api/ghn/webhook/**",
                                                 "/error")
                                                 .permitAll()
+                                                // ── Chặn theo vai trò ngay ở đường dẫn: sai vai trò là 403, không vào tới code
+                                                // (các service vẫn tự kiểm tra; đây là lớp chặn thứ hai). Luật cụ thể đặt
+                                                // TRƯỚC luật "/**" cùng nhánh vì Spring dừng ở luật khớp đầu tiên.
+                                                // Đổi trả: khách chỉ được gửi yêu cầu cho đơn của mình (POST); còn lại là
+                                                // màn quản lý của chủ shop. track/public/upload-evidence đã permitAll ở trên.
+                                                .requestMatchers(HttpMethod.POST, "/api/returns")
+                                                .hasAnyRole("CUSTOMER", "OWNER")
+                                                .requestMatchers("/api/returns", "/api/returns/**")
+                                                .hasRole("OWNER")
+                                                // Danh mục bản quản trị (cửa hàng dùng /api/shop/categories)
+                                                .requestMatchers(HttpMethod.GET, "/api/categories", "/api/categories/**")
+                                                .hasAnyRole("OWNER", "FAMILY_MEMBER", "STAFF")
+                                                // Khuyến mãi: khách chỉ xem voucher của mình lúc thanh toán (GET danh sách)
+                                                .requestMatchers(HttpMethod.GET, "/api/promotions")
+                                                .hasAnyRole("OWNER", "CUSTOMER")
+                                                .requestMatchers("/api/promotions", "/api/promotions/**")
+                                                .hasRole("OWNER")
+                                                // Bán tại quầy, cài đặt website, nhật ký hệ thống
+                                                .requestMatchers("/api/sales/**")
+                                                .hasAnyRole("OWNER", "FAMILY_MEMBER")
+                                                .requestMatchers("/api/website-settings")
+                                                .hasRole("OWNER")
+                                                .requestMatchers("/api/audit-logs", "/api/audit-logs/**")
+                                                .hasRole("ADMIN")
+                                                // Tài khoản: hồ sơ của chính mình thì ai cũng dùng; quản lý tài khoản là Admin/Owner
+                                                .requestMatchers("/api/accounts/profile", "/api/accounts/profile/**")
+                                                .authenticated()
+                                                .requestMatchers("/api/accounts", "/api/accounts/**")
+                                                .hasAnyRole("ADMIN", "OWNER")
+                                                // Chat: hộp thư cửa hàng / cài đặt / khung chat của khách
+                                                .requestMatchers("/api/chat/settings")
+                                                .hasRole("OWNER")
+                                                .requestMatchers("/api/chat/conversations", "/api/chat/conversations/**", "/api/chat/quick-replies")
+                                                .hasAnyRole("OWNER", "FAMILY_MEMBER")
+                                                .requestMatchers("/api/chat/me", "/api/chat/me/**")
+                                                .hasRole("CUSTOMER")
+                                                // Đơn online: các thao tác chỉ phía cửa hàng (khách vẫn xem / hủy đơn của mình)
+                                                .requestMatchers("/api/ghn/suggest")
+                                                .hasAnyRole("OWNER", "FAMILY_MEMBER")
+                                                .requestMatchers("/api/orders/counts", "/api/orders/delivery-proof/required", "/api/orders/*/delivery-suggestion")
+                                                .hasAnyRole("OWNER", "FAMILY_MEMBER")
+                                                .requestMatchers(HttpMethod.POST, "/api/orders/*/delivered")
+                                                .hasAnyRole("OWNER", "FAMILY_MEMBER")
+                                                .requestMatchers(HttpMethod.POST, "/api/orders/*/refunded")
+                                                .hasRole("OWNER")
+                                                // Chức năng của khách: chỉ tài khoản khách hàng (quản trị không dùng giỏ hàng,
+                                                // đặt hàng, sổ địa chỉ, số đo, phối đồ theo số đo, mặc thử)
+                                                .requestMatchers(HttpMethod.POST, "/api/checkout")
+                                                .hasRole("CUSTOMER")
+                                                .requestMatchers("/api/cart", "/api/cart/**", "/api/addresses", "/api/addresses/**",
+                                                                "/api/customer/addresses", "/api/customer/addresses/**",
+                                                                "/api/body-profile/**", "/api/try-on/**")
+                                                .hasRole("CUSTOMER")
                                                 .requestMatchers("/api/warehouse", "/api/warehouse/**")
                                                 .hasAnyRole("OWNER", "FAMILY_MEMBER")
                                                 // Màn hình Social POS: đọc chat, gửi tin, tạo đơn — cùng quyền với route /facebook

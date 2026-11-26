@@ -101,7 +101,7 @@ const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 /** Tin nhắn > Cài đặt: chủ cửa hàng sửa tin chào, giờ làm việc, tin ngoài giờ, mẫu câu trả lời nhanh, câu hỏi thường gặp. */
 export default function ChatSettingsPage() {
-  useCrumbs(['Bán hàng', 'Tin nhắn', 'Cài đặt tự động']);
+  useCrumbs(['Tin nhắn', 'Cài đặt tự động']);
   const [toast, showToast] = useToast();
   const { mutate } = useSWRConfig();
   const [saved, setSaved] = useState(null);
@@ -175,7 +175,6 @@ export default function ChatSettingsPage() {
   return (
     <Box>
       <PageHeader
-        back={{ to: '/messages', label: 'Tin nhắn' }}
         title="Tin nhắn tự động"
         subtitle="Tự trả lời khách trong khung chat “Liên hệ người bán”. Lưu xong áp dụng ngay cho tin nhắn tiếp theo."
       />

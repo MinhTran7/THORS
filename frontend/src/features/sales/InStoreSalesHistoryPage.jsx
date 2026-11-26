@@ -4,7 +4,6 @@ import useSWR from 'swr';
 import {
   Box,
   CircularProgress,
-  IconButton,
   InputAdornment,
   MenuItem,
   Select,
@@ -14,10 +13,9 @@ import {
   TableHead,
   TableRow,
   TextField,
-  Tooltip,
   Typography
 } from '@mui/material';
-import { CreditCardOutlined, DollarOutlined, EyeOutlined, SearchOutlined, ShoppingCartOutlined } from '@ant-design/icons';
+import { CreditCardOutlined, DollarOutlined, SearchOutlined, ShoppingCartOutlined } from '@ant-design/icons';
 import { DateRangeFilter, FilterResetButton, Pager } from 'features/account/components/Blocks';
 import { api } from '../../services/http';
 import { useCrumbs } from '../../layouts/crumbs';
@@ -120,7 +118,7 @@ export default function InStoreSalesHistoryPage() {
             xs: '1fr',
             sm: 'repeat(2, minmax(0, 1fr))',
             // Chỉ dàn 1 hàng khi đủ chỗ (lg); cột co giãn để không tràn ngang
-            lg: 'minmax(150px, 1.8fr) minmax(120px, 140px) minmax(120px, 140px) 130px 130px auto'
+            lg: 'minmax(150px, 1.8fr) minmax(120px, 140px) minmax(120px, 140px) 130px 130px 130px auto'
           },
           gap: { xs: 1.5, lg: 2 },
           alignItems: 'flex-end'
@@ -232,6 +230,7 @@ export default function InStoreSalesHistoryPage() {
           from={fromDate}
           to={toDate}
           width="100%"
+          presetWidth="100%"
           onChange={({ from, to }) => {
             setFromDate(from);
             setToDate(to);
@@ -282,21 +281,20 @@ export default function InStoreSalesHistoryPage() {
                 <TableCell>Thu ngân</TableCell>
                 <TableCell>Tổng tiền</TableCell>
                 <TableCell>Phương thức</TableCell>
-                <TableCell align="center">Thao tác</TableCell>
               </TableRow>
             </TableHead>
 
             <TableBody>
               {isLoading && !items.length ? (
                 <TableRow>
-                  <TableCell colSpan={7} sx={{ py: 8, textAlign: 'center' }}>
+                  <TableCell colSpan={6} sx={{ py: 8, textAlign: 'center' }}>
                     <CircularProgress size={32} sx={{ color: C.cyan }} />
                     <Typography sx={{ mt: 1.5, color: C.muted, fontSize: 13 }}>Đang tải danh sách hóa đơn...</Typography>
                   </TableCell>
                 </TableRow>
               ) : !items.length && (dateError || error) ? null : !items.length ? (
                 <TableRow>
-                  <TableCell colSpan={7} sx={{ py: 8, textAlign: 'center' }}>
+                  <TableCell colSpan={6} sx={{ py: 8, textAlign: 'center' }}>
                     <ShoppingCartOutlined style={{ fontSize: 36, color: '#CBD5E1' }} />
                     <Typography sx={{ mt: 1, fontSize: 14, fontWeight: 700, color: C.text }}>Chưa có hóa đơn nào</Typography>
                     <Typography sx={{ fontSize: 12, color: C.muted, mt: 0.5 }}>
@@ -310,11 +308,21 @@ export default function InStoreSalesHistoryPage() {
                   const { date, time } = splitDateTime(sale.orderDate);
 
                   return (
+                    // Bấm vào dòng (hoặc Enter) là mở chi tiết hóa đơn, không cần nút xem riêng
                     <TableRow
                       key={sale.orderId}
                       hover
+                      tabIndex={0}
+                      role="link"
+                      aria-label={`Xem chi tiết hóa đơn ${sale.invoiceNumber || sale.orderNumber}`}
+                      onClick={() => navigate(`/in-store-sales/history/${sale.orderId}`)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') navigate(`/in-store-sales/history/${sale.orderId}`);
+                      }}
                       sx={{
+                        cursor: 'pointer',
                         '&:hover': { bgcolor: '#FAFCFE' },
+                        '&:focus-visible': { outline: `2px solid ${C.cyan}`, outlineOffset: '-2px' },
                         '& td': { borderBottom: `1px solid ${C.borderLight}`, py: 2 }
                       }}
                     >
@@ -367,25 +375,6 @@ export default function InStoreSalesHistoryPage() {
                         </Box>
                       </TableCell>
 
-                      {/* Thao tác - Icon mắt đơn giản, không viền hộp, không button hover */}
-                      <TableCell align="center">
-                        <Tooltip title="Xem chi tiết hóa đơn">
-                          <IconButton
-                            size="small"
-                            onClick={() => navigate(`/in-store-sales/history/${sale.orderId}`)}
-                            sx={{
-                              color: '#64748B',
-                              p: 0.75,
-                              '&:hover': {
-                                color: '#0F172A',
-                                bgcolor: 'transparent'
-                              }
-                            }}
-                          >
-                            <EyeOutlined style={{ fontSize: 17 }} />
-                          </IconButton>
-                        </Tooltip>
-                      </TableCell>
                     </TableRow>
                   );
                 })

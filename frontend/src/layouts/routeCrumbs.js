@@ -30,6 +30,9 @@ const ROUTE_CRUMBS = [
   ['/products/:productId/edit', ['Sản phẩm', 'Sửa sản phẩm']],
   ['/products/:productId', ['Sản phẩm', 'Chi tiết sản phẩm']],
   ['/returns', ['Hoàn hàng / Đổi trả']],
+  // Tin nhắn không có trong menu trái (mở từ nút Tin nhắn trên header)
+  ['/messages', ['Tin nhắn']],
+  ['/messages/settings', ['Tin nhắn', 'Cài đặt tự động']],
   ['/website', ['Kênh bán hàng', 'Website']],
   ['/promotions', ['Khuyến mãi sản phẩm']],
   ['/promotions/add', ['Khuyến mãi sản phẩm', 'Thêm khuyến mãi sản phẩm']],

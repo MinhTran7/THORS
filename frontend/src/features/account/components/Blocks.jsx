@@ -1,23 +1,13 @@
-import { Link as RouterLink } from 'react-router-dom';
 import { Box, Button, IconButton, InputAdornment, MenuItem, TableCell, TableRow, TextField, Typography } from '@mui/material';
 import { Stack } from './Flex';
-import { ArrowLeftOutlined, InfoCircleOutlined, LeftOutlined, RightOutlined, SearchOutlined } from '@ant-design/icons';
+import { InfoCircleOutlined, LeftOutlined, RightOutlined, SearchOutlined } from '@ant-design/icons';
 import { brand, cardSx, fs } from '../tokens';
 import { PAGE_TYPE, pageSubtitleSx, pageTitleSx } from 'themes/pageType';
 
-export function PageHeader({ back, title, subtitle, action }) {
+// Không có nút "Quay lại": đường dẫn (breadcrumb) trên header đã có link về trang trước
+export function PageHeader({ title, subtitle, action }) {
   return (
     <Box sx={{ mb: 3 }}>
-      {back && (
-        <Button
-          component={RouterLink}
-          to={back.to}
-          startIcon={<ArrowLeftOutlined style={{ fontSize: 13 }} />}
-          sx={{ color: brand.muted, fontSize: fs.small, letterSpacing: 0.4, textTransform: 'uppercase', p: 0, mb: 1, minWidth: 0 }}
-        >
-          {back.label}
-        </Button>
-      )}
       <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'flex-start' }} spacing={2}>
         <Box>
           <Typography variant="h3" sx={{ ...pageTitleSx, color: brand.ink }}>
@@ -161,13 +151,63 @@ export function FilterField({ label, width, grow = false, children }) {
   );
 }
 
+const ymd = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+
+/** Các khoảng chọn nhanh dùng chung cho mọi ô lọc ngày (và các nút khoảng ngày ở Bảng điều khiển). */
+export const DATE_PRESETS = [
+  { key: 'today', label: 'Hôm nay' },
+  { key: '7d', label: '7 ngày' },
+  { key: '30d', label: '30 ngày' },
+  { key: 'month', label: 'Tháng này' }
+];
+
+/** Ngày bắt đầu / kết thúc (yyyy-MM-dd) của một khoảng chọn nhanh, tính đến hôm nay. */
+export function presetRange(key) {
+  const today = new Date();
+  const start = new Date(today);
+  if (key === '7d') start.setDate(today.getDate() - 6);
+  if (key === '30d') start.setDate(today.getDate() - 29);
+  if (key === 'month') start.setDate(1);
+  return { from: ymd(start), to: ymd(today) };
+}
+
+const ALL_TIME = 'all';
+const CUSTOM = 'custom';
+// Khoảng đang chọn khớp nút nào (không khớp = "Tùy chọn" từ ngày – đến ngày)
+const presetOf = (from, to) => {
+  if (!from && !to) return ALL_TIME;
+  const hit = DATE_PRESETS.find((p) => {
+    const r = presetRange(p.key);
+    return r.from === from && r.to === to;
+  });
+  return hit ? hit.key : CUSTOM;
+};
+
 /**
- * Lọc theo khoảng ngày dùng chung cho mọi trang: 2 ô "Từ ngày" / "Đến ngày", nhãn nằm trên ô.
+ * Lọc theo khoảng ngày dùng chung cho mọi trang: ô "Thời gian" chọn nhanh (Hôm nay, 7 ngày, 30 ngày, Tháng này)
+ * và 2 ô "Từ ngày" / "Đến ngày" để chọn khoảng tùy ý; nhãn nằm trên ô.
  * from / to dạng yyyy-MM-dd, chuỗi rỗng = không giới hạn phía đó. onChange({ from, to }).
  * Không cho chọn ngày tương lai (trừ khi allowFuture); chọn "Từ" sau "Đến" thì tự kéo ô kia theo,
- * nên khoảng ngày luôn hợp lệ. Trả về 2 ô liền nhau (Fragment) để nằm được trong grid lẫn flex của trang.
+ * nên khoảng ngày luôn hợp lệ. Trả về 3 ô liền nhau (Fragment) để nằm được trong grid lẫn flex của trang.
+ * allowAll = false: trang luôn cần một khoảng ngày (không có lựa chọn "Tất cả thời gian").
  */
-export function DateRangeFilter({ from, to, onChange, allowFuture = false, height = 44, width = 150, fromLabel = 'Từ ngày', toLabel = 'Đến ngày' }) {
+export function DateRangeFilter({
+  from,
+  to,
+  onChange,
+  allowFuture = false,
+  allowAll = true,
+  height = 44,
+  width = 150,
+  presetWidth = 150,
+  fromLabel = 'Từ ngày',
+  toLabel = 'Đến ngày'
+}) {
+  const preset = presetOf(from, to);
+  const pick = (key) => {
+    if (key === ALL_TIME) onChange({ from: '', to: '' });
+    else if (key !== CUSTOM) onChange(presetRange(key));
+  };
   const max = allowFuture ? undefined : todayYmd();
   const clamp = (v) => (v && max && v > max ? max : v);
   const setFrom = (value) => {
@@ -194,6 +234,29 @@ export function DateRangeFilter({ from, to, onChange, allowFuture = false, heigh
   );
   return (
     <>
+      <Box sx={{ minWidth: 0, width: { xs: '100%', md: presetWidth }, flexShrink: 0 }}>
+        <Typography sx={{ fontSize: 13, fontWeight: 600, color: brand.ink, mb: 0.75 }}>Thời gian</Typography>
+        <TextField
+          select
+          fullWidth
+          size="small"
+          value={preset}
+          onChange={(event) => pick(event.target.value)}
+          slotProps={{ htmlInput: { 'aria-label': 'Khoảng thời gian' } }}
+          sx={filterInputSx(height)}
+        >
+          {(allowAll || preset === ALL_TIME) && <MenuItem value={ALL_TIME}>Tất cả thời gian</MenuItem>}
+          {DATE_PRESETS.map((p) => (
+            <MenuItem key={p.key} value={p.key}>
+              {p.label}
+            </MenuItem>
+          ))}
+          {/* Chỉ hiện khi đang chọn tay ở 2 ô ngày; muốn khoảng tùy ý thì sửa thẳng Từ ngày / Đến ngày */}
+          <MenuItem value={CUSTOM} sx={{ display: preset === CUSTOM ? undefined : 'none' }}>
+            Tùy chọn
+          </MenuItem>
+        </TextField>
+      </Box>
       {field(fromLabel, from, setFrom, { max: to && max ? (to < max ? to : max) : to || max })}
       {field(toLabel, to, setTo, { min: from || undefined, max })}
     </>

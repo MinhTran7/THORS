@@ -65,7 +65,6 @@ export default function FamilyDetailPage() {
   return (
     <Box>
       <PageHeader
-        back={{ to: '/family', label: 'Danh sách gia đình' }}
         title="Chi tiết thành viên gia đình"
         subtitle="Thông tin tài khoản, vai trò được gán và trạng thái truy cập."
         action={

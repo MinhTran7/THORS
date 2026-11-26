@@ -23,7 +23,7 @@ import {
   Typography
 } from '@mui/material';
 import { FilterResetButton, Pager } from 'features/account/components/Blocks';
-import { DeleteOutlined, EditOutlined, EyeOutlined, PlusOutlined, SearchOutlined, StopOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EditOutlined, PlusOutlined, SearchOutlined, StopOutlined } from '@ant-design/icons';
 import { getPromotions } from 'services/promotionService';
 import { useAuth } from 'features/auth/AuthProvider';
 import CustomerPromotionPage from './CustomerPromotionPage';
@@ -477,7 +477,18 @@ function OwnerPromotionView({ kind }) {
                     rows.map((promotion, index) => {
                       const { schedule } = promotion;
                       return (
-                        <TableRow key={promotion.promotionId} hover sx={{ '&:hover': { bgcolor: '#FAFCFE' } }}>
+                        <TableRow
+                          key={promotion.promotionId}
+                          hover
+                          // Bấm vào dòng là xem chi tiết (thay cho icon con mắt)
+                          tabIndex={0}
+                          aria-label={`Xem chi tiết khuyến mãi ${promotion.name}`}
+                          onClick={() => navigate(`${base}/${promotion.promotionId}`)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && e.target === e.currentTarget) navigate(`${base}/${promotion.promotionId}`);
+                          }}
+                          sx={{ cursor: 'pointer', '&:hover': { bgcolor: '#FAFCFE' } }}
+                        >
                           <TableCell align="center" sx={{ pl: 3, color: C.muted, fontWeight: 600 }}>
                             {(currentPage - 1) * PAGE_SIZE + index + 1}
                           </TableCell>
@@ -543,7 +554,7 @@ function OwnerPromotionView({ kind }) {
                           )}
 
                           {/* Trạng thái Switch & Chip chuẩn theo mẫu */}
-                          <TableCell>
+                          <TableCell onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
                             <PromotionSwitch
                               promotion={promotion}
                               onToggle={toggleStatus}
@@ -552,24 +563,8 @@ function OwnerPromotionView({ kind }) {
                           </TableCell>
 
                           {/* Thao tác - Icon phẳng đơn giản */}
-                          <TableCell align="center" sx={{ pr: 3 }}>
+                          <TableCell align="center" sx={{ pr: 3 }} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
                             <Stack direction="row" spacing={0.5} sx={{ justifyContent: 'center', alignItems: 'center' }}>
-                              <Tooltip title="Xem chi tiết">
-                                <IconButton
-                                  size="small"
-                                  onClick={() => navigate(`${base}/${promotion.promotionId}`)}
-                                  sx={{
-                                    color: '#64748B',
-                                    p: 0.75,
-                                    '&:hover': {
-                                      color: '#0F172A',
-                                      bgcolor: 'transparent'
-                                    }
-                                  }}
-                                >
-                                  <EyeOutlined style={{ fontSize: 17 }} />
-                                </IconButton>
-                              </Tooltip>
                               <Tooltip title="Chỉnh sửa">
                                 <IconButton
                                   size="small"

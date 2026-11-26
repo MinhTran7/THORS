@@ -38,7 +38,6 @@ import {
   DownOutlined,
   EditOutlined,
   EllipsisOutlined,
-  EyeOutlined,
   FolderAddOutlined,
   PlusOutlined,
   RightOutlined,
@@ -976,7 +975,7 @@ export default function CategoryPage() {
                 <TableCell>MÔ TẢ</TableCell>
                 <TableCell sx={{ minWidth: 140 }}>SỐ SẢN PHẨM</TableCell>
                 <TableCell sx={{ minWidth: 130 }}>TRẠNG THÁI</TableCell>
-                <TableCell align="center" sx={{ pr: 3, minWidth: 130 }}>THAO TÁC</TableCell>
+                <TableCell align="center" sx={{ pr: 3, minWidth: 100 }}>THAO TÁC</TableCell>
               </TableRow>
             </TableHead>
 
@@ -1006,7 +1005,15 @@ export default function CategoryPage() {
                     <TableRow
                       key={category.categoryId}
                       hover
+                      // Bấm vào dòng là xem chi tiết (thay cho icon con mắt)
+                      tabIndex={0}
+                      aria-label={`Xem chi tiết danh mục ${category.categoryName}`}
+                      onClick={() => setViewCategory(category)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && e.target === e.currentTarget) setViewCategory(category);
+                      }}
                       sx={{
+                        cursor: 'pointer',
                         // Cha đang mở: nền xanh nhạt + vạch trái (chỉ cấp gốc); con: nền xám rất nhạt
                         bgcolor: category.isChild ? (open ? '#F3FAFC' : '#FAFBFC') : open ? '#F5FDFE' : '#FFFFFF',
                         boxShadow: !category.isChild && open ? `inset 3px 0 0 ${C.cyanHover}` : 'none',
@@ -1019,7 +1026,15 @@ export default function CategoryPage() {
 
                       {/* CATEGORY NAME */}
                       <TableCell
-                        onClick={canToggle && !isFiltering ? () => toggleExpanded(category.categoryId) : undefined}
+                        // Bấm tên danh mục cha để xổ / thu gọn danh mục con (không mở chi tiết)
+                        onClick={
+                          canToggle && !isFiltering
+                            ? (e) => {
+                                e.stopPropagation();
+                                toggleExpanded(category.categoryId);
+                              }
+                            : undefined
+                        }
                         sx={{
                           py: category.isChild ? 1.25 : 1.75,
                           opacity: category.contextOnly ? 0.6 : 1,
@@ -1061,7 +1076,7 @@ export default function CategoryPage() {
                             >
                               {category.categoryName}
                             </Typography>
-                            {/* Chỉ hiện tên cho gọn; mã danh mục xem ở nút Xem chi tiết */}
+                            {/* Chỉ hiện tên cho gọn; mã danh mục xem khi bấm vào dòng (chi tiết) */}
                           </Box>
                         </Stack>
                       </TableCell>
@@ -1104,10 +1119,14 @@ export default function CategoryPage() {
                             <Typography
                               role="button"
                               tabIndex={0}
-                              onClick={() => openTransferDialog(category)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openTransferDialog(category);
+                              }}
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter' || e.key === ' ') {
                                   e.preventDefault();
+                                  e.stopPropagation();
                                   openTransferDialog(category);
                                 }
                               }}
@@ -1130,8 +1149,8 @@ export default function CategoryPage() {
                         )}
                       </TableCell>
 
-                      {/* STATUS */}
-                      <TableCell>
+                      {/* STATUS: bấm công tắc không mở chi tiết */}
+                      <TableCell onClick={(e) => e.stopPropagation()}>
                         <Stack
                           direction="row"
                           spacing={1.25}
@@ -1198,29 +1217,12 @@ export default function CategoryPage() {
                       </TableCell>
 
                       {/* ACTIONS */}
-                      <TableCell align="center" sx={{ pr: 3 }}>
+                      <TableCell align="center" sx={{ pr: 3 }} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
                         <Stack
                           direction="row"
                           spacing={0.5}
                           sx={{ alignItems: 'center', justifyContent: 'center' }}
                         >
-                          <Tooltip title="Xem chi tiết">
-                            <IconButton
-                              size="small"
-                              onClick={() => setViewCategory(category)}
-                              sx={{
-                                color: '#64748B',
-                                p: 0.75,
-                                '&:hover': {
-                                  color: '#0F172A',
-                                  bgcolor: 'transparent'
-                                }
-                              }}
-                            >
-                              <EyeOutlined style={{ fontSize: 17 }} />
-                            </IconButton>
-                          </Tooltip>
-
                           <Tooltip title="Chỉnh sửa danh mục">
                             <IconButton
                               size="small"
