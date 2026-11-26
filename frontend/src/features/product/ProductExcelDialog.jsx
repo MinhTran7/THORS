@@ -48,7 +48,19 @@ const COLORS = {
   yellow: '#D97706'
 };
 
-export default function ProductExcelDialog({ open, onClose, categories = [], onSuccess }) {
+// Bỏ dấu + viết thường (đ -> d), giống fold() ở AddProductPage và ProductCodes.fold ở backend
+const fold = (value) =>
+  (value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/đ/g, 'd')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '');
+
+// Khóa so trùng tên sản phẩm: như backend ProductCodes.nameKey (bỏ dấu, viết thường, gộp khoảng trắng)
+const nameKey = (value) => fold(value).replace(/\s+/g, ' ').trim();
+
+export default function ProductExcelDialog({ open, onClose, categories = [], existingProducts = [], onSuccess }) {
   const fileInputRef = useRef(null);
   const [activeTab, setActiveTab] = useState(0);
   const [fileName, setFileName] = useState('');
@@ -292,13 +304,32 @@ export default function ProductExcelDialog({ open, onClose, categories = [], onS
         throw new Error('Không tìm thấy dòng dữ liệu nào trong file.');
       }
 
-      // Gom nhóm theo Sản phẩm cha (cùng danh mục + cùng tên sản phẩm)
+      // Gom nhóm theo Sản phẩm cha (cùng danh mục + cùng tên sản phẩm đã chuẩn hóa)
       const groupMap = new Map();
+      // Tên đã có trên hệ thống (cùng quy tắc so trùng với backend: bỏ dấu, viết thường, gộp khoảng trắng)
+      const existingNames = new Set(existingProducts.map((p) => nameKey(p.productName)));
+      // Tên -> danh mục của nhóm đầu tiên trong file (cùng tên nhưng khác danh mục = trùng tên trong file)
+      const categoryOfName = new Map();
 
       parsed.forEach((item) => {
         if (!item.isValid) return;
 
-        const groupKey = `${item.categoryId}|||${item.productName.toLowerCase()}`;
+        const key = nameKey(item.productName);
+        if (existingNames.has(key)) {
+          item.errors.push('Sản phẩm đã tồn tại trên hệ thống');
+          item.isValid = false;
+          return;
+        }
+        if (categoryOfName.has(key) && categoryOfName.get(key).categoryId !== item.categoryId) {
+          item.errors.push(
+            `Trùng tên với sản phẩm "${categoryOfName.get(key).productName}" thuộc danh mục khác trong cùng file`
+          );
+          item.isValid = false;
+          return;
+        }
+        if (!categoryOfName.has(key)) categoryOfName.set(key, { categoryId: item.categoryId, productName: item.productName });
+
+        const groupKey = `${item.categoryId}|||${key}`;
         if (!groupMap.has(groupKey)) {
           groupMap.set(groupKey, {
             categoryId: item.categoryId,
@@ -318,7 +349,8 @@ export default function ProductExcelDialog({ open, onClose, categories = [], onS
           group.imageUrl = item.imageUrl;
         }
 
-        const variantKey = `${item.size.toLowerCase()}___${item.color.toLowerCase()}`;
+        // Bỏ dấu khi so biến thể: "Đen" và "Den" là cùng một màu (giống backend), tránh lọt xuống backend mới lỗi cả lô
+        const variantKey = `${fold(item.size)}___${fold(item.color)}`;
 
         if (group.variantKeys.has(variantKey)) {
           item.errors.push(`Trùng lặp biến thể Size "${item.size}" và Màu "${item.color}" trong cùng sản phẩm`);
@@ -683,5 +715,7 @@ ProductExcelDialog.propTypes = {
   open: PropTypes.bool.isRequired,
   onClose: PropTypes.func.isRequired,
   categories: PropTypes.array,
+  // Sản phẩm đang có (để báo trùng tên ngay ở bước xem trước)
+  existingProducts: PropTypes.array,
   onSuccess: PropTypes.func
 };

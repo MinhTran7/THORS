@@ -14,6 +14,7 @@ const ROUTE_CRUMBS = [
   ['/order-success', ['Đơn hàng', 'Đặt hàng thành công']],
   ['/orders', ['Đơn hàng']],
   ['/orders/:id', ['Đơn hàng', 'Chi tiết đơn hàng']],
+  ['/facebook-orders', ['Bán hàng', 'Đơn hàng Facebook']],
   ['/addresses', ['Tài khoản', 'Địa chỉ của tôi']],
   ['/body-profile', ['Tài khoản', 'Số đo của tôi']],
   ['/try-on-history', ['Tài khoản', 'Ảnh mặc thử của tôi']],

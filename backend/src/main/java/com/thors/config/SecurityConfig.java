@@ -136,6 +136,8 @@ public class SecurityConfig {
                                                 .requestMatchers(HttpMethod.GET, "/api/products", "/api/products/**")
                                                 .hasAnyRole("OWNER", "FAMILY_MEMBER", "STAFF")
                                                 // Tạo danh mục: cả Family Member (hộp thoại tạo nhanh khi lập phiếu kho)
+                                                .requestMatchers(HttpMethod.GET, "/api/categories/*/direct-products")
+                                                .hasRole("OWNER")
                                                 .requestMatchers(HttpMethod.POST, "/api/categories")
                                                 .hasAnyRole("OWNER", "FAMILY_MEMBER")
                                                 .requestMatchers(HttpMethod.POST, "/api/products", "/api/products/**",
@@ -147,6 +149,16 @@ public class SecurityConfig {
                                                 .hasRole("OWNER")
                                                 .requestMatchers(HttpMethod.DELETE, "/api/products/**", "/api/categories/**")
                                                 .hasRole("OWNER")
+                                                // Quản lý hoàn hàng (danh sách, chi tiết có STK ngân hàng của khách, tra đơn
+                                                // theo mã, duyệt, tạo đơn mẫu): chỉ nội bộ - khớp processReturnRequest.
+                                                // Khách vẫn gửi yêu cầu qua POST /api/returns (chỉ đơn của mình) và các
+                                                // đường dẫn công khai /track/**, /public, /upload-evidence ở trên.
+                                                .requestMatchers(HttpMethod.GET, "/api/returns", "/api/returns/*",
+                                                                "/api/returns/orders/**")
+                                                .hasAnyRole("OWNER", "ADMIN", "STAFF")
+                                                .requestMatchers(HttpMethod.POST, "/api/returns/*/process",
+                                                                "/api/returns/seed-sample-order")
+                                                .hasAnyRole("OWNER", "ADMIN", "STAFF")
                                                 .anyRequest()
                                                 .authenticated());
                 http.requestCache(c -> c.disable())

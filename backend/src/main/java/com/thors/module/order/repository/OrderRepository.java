@@ -204,11 +204,7 @@ public class OrderRepository {
             where.append(" AND o.payment_method = ?");
             args.add(paymentFilter);
         }
-        if (sourceFilter != null) {
-            where.append(sourceFilter.equals("WEB") ? " AND EXISTS" : " AND NOT EXISTS")
-                    .append(" (SELECT 1 FROM `user` su JOIN `role` sr ON sr.role_id = su.role_id")
-                    .append(" WHERE su.user_id = o.user_id AND sr.role_name = 'CUSTOMER')");
-        }
+        appendSourceFilter(where, sourceFilter);
         if (q != null) {
             String like =
                     "%"
@@ -959,18 +955,37 @@ public class OrderRepository {
                 orderId);
     }
 
+    private static void appendSourceFilter(StringBuilder where, String sourceFilter) {
+        if (sourceFilter == null) return;
+        where.append(sourceFilter.equals("WEB") ? " AND EXISTS" : " AND NOT EXISTS")
+                .append(" (SELECT 1 FROM `user` su JOIN `role` sr ON sr.role_id = su.role_id")
+                .append(" WHERE su.user_id = o.user_id AND sr.role_name = 'CUSTOMER')");
+    }
+
     private record StatusCount(String status, long count) {}
 
     /** Số đơn theo từng trạng thái; customerId = null thì tính mọi đơn của loại đó. */
     public Map<String, Long> countByStatus(Integer customerId, String orderType) {
-        String sql =
-                "SELECT order_status, COUNT(*) AS n FROM orders WHERE order_type = ?"
-                        + (customerId != null ? " AND user_id = ?" : "")
-                        + " GROUP BY order_status";
-        Object[] args = customerId != null ? new Object[] {orderType, customerId} : new Object[] {orderType};
+        return countByStatus(customerId, orderType, null);
+    }
+
+    /** Số đơn theo từng trạng thái, có thể lọc thêm theo nguồn (WEB hoặc FACEBOOK). */
+    public Map<String, Long> countByStatus(Integer customerId, String orderType, String sourceFilter) {
+        var sql = new StringBuilder("SELECT o.order_status, COUNT(*) AS n FROM orders o WHERE o.order_type = ?");
+        List<Object> args = new ArrayList<>();
+        args.add(orderType);
+        if (customerId != null) {
+            sql.append(" AND o.user_id = ?");
+            args.add(customerId);
+        }
+        appendSourceFilter(sql, sourceFilter);
+        sql.append(" GROUP BY o.order_status");
         Map<String, Long> out = new HashMap<>();
         for (StatusCount c :
-                db.query(sql, (rs, i) -> new StatusCount(rs.getString("order_status"), rs.getLong("n")), args)) {
+                db.query(
+                        sql.toString(),
+                        (rs, i) -> new StatusCount(rs.getString("order_status"), rs.getLong("n")),
+                        args.toArray())) {
             out.put(c.status(), c.count());
         }
         return out;

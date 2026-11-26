@@ -36,44 +36,8 @@ export async function createProductWithImages(productData, images) {
     formData.append('images', file);
   });
 
-  // Get CSRF token using the existing session
-  const csrfResponse = await fetch('/api/auth/csrf', {
-    credentials: 'same-origin'
-  });
-
-  if (!csrfResponse.ok) {
-    throw new Error('Unable to obtain CSRF token.');
-  }
-
-  const csrf = await csrfResponse.json();
-
-  const headerName = csrf.headerName;
-  const token = csrf.token;
-
-  if (!headerName || !token) {
-    throw new Error('Invalid CSRF response.');
-  }
-
-  const response = await fetch('/api/products', {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: {
-      [headerName]: token
-    },
-    body: formData
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-
-    throw new Error(
-      errorData?.message ||
-      errorData?.error ||
-      `Unable to create product (HTTP ${response.status}).`
-    );
-  }
-
-  return response.json();
+  // Đi qua api() như mọi request khác: tự gắn CSRF, báo 401 (thors:unauthorized), lỗi thành ApiError { status, code, message }
+  return api('/products', { method: 'POST', form: formData });
 }
 
 export async function getProductById(productId) {

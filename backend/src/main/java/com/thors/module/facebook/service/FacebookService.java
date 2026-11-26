@@ -9,22 +9,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import jakarta.annotation.PostConstruct;
-import java.io.File;
-import java.io.FileWriter;
-import java.io.PrintWriter;
 import com.thors.common.ApiException;
 import com.thors.module.account.entity.Account;
 import com.thors.module.order.delivery.GeoClient;
 import com.thors.module.order.service.OrderService;
 import com.thors.security.SessionAccess;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.support.GeneratedKeyHolder;
-import org.springframework.jdbc.support.KeyHolder;
+import com.thors.module.facebook.repository.FacebookOrderRepository;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.sql.PreparedStatement;
-import java.sql.Statement;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -48,7 +41,8 @@ public class FacebookService {
     @Value("${thors.facebook.page-id:1375988095602878}")
     private String pageId;
 
-    private final JdbcTemplate jdbc;
+    // SQL của luồng tạo đơn (ghi vào orders / order_item của module Order)
+    private final FacebookOrderRepository orders;
     private final SessionAccess sessionAccess;
     private final RestTemplate restTemplate = new RestTemplate();
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -60,11 +54,11 @@ public class FacebookService {
     private final OrderService orderService;
 
     public FacebookService(
-            @Autowired(required = false) JdbcTemplate jdbc,
+            @Autowired(required = false) FacebookOrderRepository orders,
             @Autowired(required = false) SessionAccess sessionAccess,
             @Autowired(required = false) GeoClient geo,
             @Autowired(required = false) OrderService orderService) {
-        this.jdbc = jdbc;
+        this.orders = orders;
         this.sessionAccess = sessionAccess;
         this.geo = geo;
         this.orderService = orderService;
@@ -116,6 +110,18 @@ public class FacebookService {
     // Lưu danh sách tin nhắn nhận được gần đây (in-memory)
     private final List<Map<String, Object>> recentMessages = new CopyOnWriteArrayList<>();
 
+    /** Giữ tối đa bấy nhiêu tin nhắn gần nhất trong bộ nhớ (cũ hơn thì bỏ, lần đồng bộ sau lấy lại từ Facebook). */
+    static final int MAX_RECENT_MESSAGES = 2000;
+
+    /** Thêm tin nhắn vào bộ nhớ đệm, bỏ bớt tin cũ nhất khi vượt MAX_RECENT_MESSAGES để RAM không phình mãi. */
+    private synchronized void addRecent(Map<String, Object> record) {
+        recentMessages.add(record);
+        int overflow = recentMessages.size() - MAX_RECENT_MESSAGES;
+        if (overflow > 0) {
+            recentMessages.subList(0, overflow).clear();
+        }
+    }
+
     // Map các cuộc trò chuyện theo PSID của khách hàng
     private final Map<String, Map<String, Object>> conversations = new ConcurrentHashMap<>();
 
@@ -165,8 +171,8 @@ public class FacebookService {
      */
     public void processWebhookPayload(Map<String, Object> payload) {
         try {
-            log.info("==> Đang xử lý sự kiện Facebook Webhook: {}", payload);
-            logToFile(payload);
+            // Payload có nội dung tin nhắn của khách: chỉ ghi ở mức DEBUG, không ghi ra file ở thư mục chạy
+            log.debug("==> Đang xử lý sự kiện Facebook Webhook: {}", payload);
 
             List<Map<String, Object>> entries = (List<Map<String, Object>>) payload.get("entry");
             if (entries == null || entries.isEmpty()) {
@@ -211,7 +217,7 @@ public class FacebookService {
                             LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss dd/MM/yyyy")));
                     msgRecord.put("from", "CUSTOMER");
 
-                    recentMessages.add(msgRecord);
+                    addRecent(msgRecord);
 
                     // Cập nhật cuộc hội thoại
                     conversations.compute(senderPsid, (k, v) -> {
@@ -281,7 +287,7 @@ public class FacebookService {
                 sentRecord.put("rawTime", nowIso);
                 sentRecord.put("timestamp", formattedTime);
                 sentRecord.put("from", "SHOP");
-                recentMessages.add(sentRecord);
+                addRecent(sentRecord);
 
                 // Cập nhật tin nhắn gần nhất vào danh sách hội thoại
                 conversations.computeIfPresent(recipientPsid, (k, conv) -> {
@@ -371,7 +377,7 @@ public class FacebookService {
                 sentRecord.put("rawTime", nowIso);
                 sentRecord.put("timestamp", formattedTime);
                 sentRecord.put("from", "SHOP");
-                recentMessages.add(sentRecord);
+                addRecent(sentRecord);
 
                 conversations.computeIfPresent(recipientPsid, (k, conv) -> {
                     conv.put("lastMessage", "Bạn đã gửi 1 hình ảnh");
@@ -523,7 +529,7 @@ public class FacebookService {
                                 record.put("timestamp", formatFacebookTime(rawTime));
                                 record.put("from", isShop ? "SHOP" : "CUSTOMER");
 
-                                recentMessages.add(record);
+                                addRecent(record);
                                 existingMids.add(mid);
                             }
                         }
@@ -585,22 +591,15 @@ public class FacebookService {
         return conversations.values();
     }
 
-    private synchronized void logToFile(Map<String, Object> payload) {
-        try {
-            File logFile = new File("facebook_webhook_events.log");
-            try (PrintWriter out = new PrintWriter(new FileWriter(logFile, true))) {
-                out.println("[" + LocalDateTime.now() + "] " + objectMapper.writeValueAsString(payload));
-            }
-        } catch (Exception ignored) {
-        }
-    }
+    // (Bỏ logToFile - ghi payload webhook ra facebook_webhook_events.log ở thư mục chạy - 26/11/2026:
+    //  file chứa tin nhắn khách, phình mãi; đã có log.debug trong processWebhookPayload.)
 
     /**
      * Tạo đơn hàng từ Facebook POS và lưu trực tiếp vào Quản lý Đơn hàng (orders)
      */
     @Transactional
     public Map<String, Object> createOrderFromFacebook(Map<String, Object> req) {
-        if (jdbc == null) {
+        if (orders == null) {
             throw new ApiException(500, "DB_ERROR", "Dịch vụ cơ sở dữ liệu chưa sẵn sàng.");
         }
 
@@ -621,6 +620,9 @@ public class FacebookService {
         String paymentMethod = req.get("paymentMethod") != null
                 ? String.valueOf(req.get("paymentMethod")).trim().toUpperCase()
                 : "ONLINE";
+        if (!"ONLINE".equals(paymentMethod) && !"COD".equals(paymentMethod)) {
+            throw new ApiException(400, "PAYMENT_METHOD", "Hình thức thanh toán chỉ hỗ trợ ONLINE hoặc COD.");
+        }
         String psid = req.get("psid") != null ? String.valueOf(req.get("psid")) : "";
 
         if (customerName.isBlank()) {
@@ -662,36 +664,30 @@ public class FacebookService {
             }
         }
 
-        List<Map<String, Object>> items = (List<Map<String, Object>>) req.get("items");
-        if (items == null || items.isEmpty()) {
+        Object rawItems = req.get("items");
+        if (!(rawItems instanceof List<?> rawList) || rawList.isEmpty()) {
             throw new ApiException(400, "EMPTY_CART", "Đơn hàng phải có ít nhất 1 sản phẩm.");
         }
 
         long itemsAmount = 0;
         List<Map<String, Object>> validItems = new ArrayList<>();
+        Map<Integer, Integer> requestedQtyByDetail = new HashMap<>();
 
-        for (Map<String, Object> it : items) {
-            int detailId = ((Number) it.get("detailId")).intValue();
-            int quantity = ((Number) it.get("quantity")).intValue();
+        for (Object itemObj : rawList) {
+            if (!(itemObj instanceof Map<?, ?> it)
+                    || !(it.get("detailId") instanceof Number detailNum)
+                    || !(it.get("quantity") instanceof Number qtyNum)) {
+                throw new ApiException(400, "INVALID_ITEM", "Thông tin sản phẩm trong đơn không hợp lệ.");
+            }
+            int detailId = detailNum.intValue();
+            int quantity = qtyNum.intValue();
             if (quantity <= 0)
                 continue;
 
             // Khóa dòng biến thể (FOR UPDATE) để hai đơn chốt cùng lúc không giữ quá số hàng có thể bán
-            List<Map<String, Object>> rows = jdbc.queryForList("""
-                    SELECT pd.detail_id, pd.product_id, p.product_name, pd.size, pd.color, pd.price, pd.stock_quantity,
-                           pd.status AS variant_status, p.status AS product_status
-                    FROM product_detail pd
-                    JOIN product p ON p.product_id = pd.product_id
-                    WHERE pd.detail_id = ?
-                    FOR UPDATE
-                    """, detailId);
-
-            if (rows.isEmpty()) {
-                throw new ApiException(400, "PRODUCT_NOT_FOUND",
-                        "Không tìm thấy thông tin sản phẩm (ID: " + detailId + ").");
-            }
-
-            Map<String, Object> row = rows.get(0);
+            Map<String, Object> row = orders.lockVariant(detailId)
+                    .orElseThrow(() -> new ApiException(400, "PRODUCT_NOT_FOUND",
+                            "Không tìm thấy thông tin sản phẩm (ID: " + detailId + ")."));
             int stock = ((Number) row.get("stock_quantity")).intValue();
             String pName = String.valueOf(row.get("product_name"));
             String size = String.valueOf(row.get("size"));
@@ -708,12 +704,11 @@ public class FacebookService {
             }
 
             // Có thể bán = tồn − hàng đang giữ cho các đơn khác chưa xác nhận (cùng công thức màn hình Tồn kho)
-            Integer held = jdbc.queryForObject(
-                    "SELECT COALESCE(SUM(reserved_quantity), 0) FROM order_item WHERE detail_id = ? AND reserved_quantity > 0",
-                    Integer.class, detailId);
-            int sellable = Math.max(0, stock - (held == null ? 0 : held));
+            int sellable = Math.max(0, stock - orders.heldQuantity(detailId));
 
-            if (quantity > sellable) {
+            // Cùng một biến thể ở nhiều dòng: cộng dồn rồi mới so với số có thể bán
+            int totalRequestedForVariant = requestedQtyByDetail.merge(detailId, quantity, Integer::sum);
+            if (totalRequestedForVariant > sellable) {
                 throw new ApiException(400, "OUT_OF_STOCK",
                         "Sản phẩm \"" + pName + "\" (" + size + "/" + color + ") chỉ còn " + sellable
                                 + " cái có thể bán" + (sellable < stock ? " (" + (stock - sellable) + " cái đang giữ cho đơn khác)" : "") + ".");
@@ -728,6 +723,11 @@ public class FacebookService {
             validItems.add(itemData);
         }
 
+        // Mọi dòng có số lượng <= 0 (đã bỏ qua) -> không tạo đơn rỗng 0đ
+        if (validItems.isEmpty()) {
+            throw new ApiException(400, "EMPTY_CART", "Đơn hàng phải có ít nhất 1 sản phẩm.");
+        }
+
         long totalAmount = itemsAmount;
         String dateStr = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE);
         String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 6).toUpperCase();
@@ -735,51 +735,9 @@ public class FacebookService {
 
         String initialStatus = "PENDING_CONFIRMATION";
 
-        KeyHolder keyHolder = new GeneratedKeyHolder();
-        final String finalCustomerName = customerName;
-        final String finalCustomerPhone = customerPhone;
-        final String finalCustomerAddress = customerAddress;
-        final String finalPaymentMethod = paymentMethod;
-        final long finalItemsAmount = itemsAmount;
-        final long finalTotalAmount = totalAmount;
-        final int finalActorId = actorId;
-        final Double finalLat = deliveryLat;
-        final Double finalLng = deliveryLng;
-
-        jdbc.update(con -> {
-            PreparedStatement ps = con.prepareStatement("""
-                    INSERT INTO orders (
-                        user_id, created_by, order_number, order_type, order_date,
-                        order_status, preparation_status, payment_method, payment_status,
-                        items_amount, promotion_discount_amount, coupon_discount_amount,
-                        shipping_fee, total_amount,
-                        delivery_name, delivery_phone, delivery_address,
-                        delivery_lat, delivery_lng
-                    ) VALUES (
-                        ?, ?, ?, 'Online', NOW(),
-                        ?, 'NOT_STARTED', ?, 'UNPAID',
-                        ?, 0, 0,
-                        0, ?,
-                        ?, ?, ?,
-                        ?, ?
-                    )
-                    """, Statement.RETURN_GENERATED_KEYS);
-            ps.setInt(1, finalActorId);
-            ps.setInt(2, finalActorId);
-            ps.setString(3, orderNumber);
-            ps.setString(4, initialStatus);
-            ps.setString(5, finalPaymentMethod);
-            ps.setLong(6, finalItemsAmount);
-            ps.setLong(7, finalTotalAmount);
-            ps.setString(8, finalCustomerName);
-            ps.setString(9, finalCustomerPhone);
-            ps.setString(10, finalCustomerAddress);
-            ps.setObject(11, finalLat);
-            ps.setObject(12, finalLng);
-            return ps;
-        }, keyHolder);
-
-        int orderId = keyHolder.getKey().intValue();
+        int orderId = orders.insertOrder(new FacebookOrderRepository.NewOrder(
+                actorId, orderNumber, initialStatus, paymentMethod, itemsAmount, totalAmount,
+                customerName, customerPhone, customerAddress, deliveryLat, deliveryLng));
 
         for (Map<String, Object> line : validItems) {
             int detailId = ((Number) line.get("detail_id")).intValue();
@@ -789,19 +747,8 @@ public class FacebookService {
             // KHÔNG trừ tồn kho khi chốt đơn: chỉ GIỮ hàng (reserved_quantity) cho đơn chờ xác nhận.
             // Owner xác nhận đơn (OrderService.changeStatus -> AWAITING_PICKUP) mới trừ kho + ghi thẻ kho
             // "Xuất bán", dùng đúng phần đã giữ này; hủy / từ chối / hết hạn thì trả lại phần giữ.
-            jdbc.update("""
-                    INSERT INTO order_item (order_id, detail_id, product_name_snapshot, size_snapshot,
-                                            color_snapshot, quantity, unit_price, reserved_quantity)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    orderId,
-                    detailId,
-                    line.get("product_name"),
-                    line.get("size"),
-                    line.get("color"),
-                    qty,
-                    unitPrice,
-                    qty);
+            orders.insertItem(orderId, detailId, line.get("product_name"), line.get("size"), line.get("color"),
+                    qty, unitPrice);
         }
 
         log.info("==> Đã tạo đơn hàng Facebook #{} ({}) cho khách: {} - Tổng tiền: {}",
@@ -817,6 +764,7 @@ public class FacebookService {
         result.put("deliveryPhone", customerPhone);
         result.put("deliveryAddress", customerAddress);
         result.put("status", initialStatus);
+        result.put("paymentMethod", paymentMethod);
         return result;
     }
 }

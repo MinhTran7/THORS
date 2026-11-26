@@ -272,9 +272,16 @@ public class CategoryService {
         }
     }
 
+    /** Danh sách sản phẩm gắn trực tiếp vào danh mục nguồn (hiển thị để Owner tick chọn khi chuyển). */
+    public List<Map<String, Object>> getDirectProducts(int categoryId) {
+        categoryRepository.findById(categoryId)
+                .orElseThrow(() -> new ApiException(404, "CATEGORY_NOT_FOUND", "Không tìm thấy danh mục."));
+        return categoryRepository.findDirectProducts(categoryId);
+    }
+
     /**
-     * Chuyển toàn bộ sản phẩm gắn trực tiếp vào danh mục nguồn sang một danh mục lá đang hoạt động
-     * (dùng khi danh mục có sản phẩm rồi mới được thêm danh mục con -> sản phẩm bị "kẹt" ở danh mục cha).
+     * Chuyển toàn bộ hoặc các sản phẩm đã chọn đang gắn trực tiếp vào danh mục nguồn sang một danh mục lá đang hoạt động.
+     * Nếu danh mục nguồn là danh mục cha và không bật {@code allowOutsideBranch}, danh mục đích bắt buộc phải thuộc nhánh con của nó.
      */
     @Transactional
     public Map<String, Object> transferProducts(int sourceCategoryId, TransferCategoryProductsRequest request) {
@@ -307,15 +314,46 @@ public class CategoryService {
                             + "\" là danh mục cha. Hãy chọn một danh mục con (danh mục lá).");
         }
 
-        // 3. Chuyển
-        int movedCount = categoryRepository.transferProducts(sourceCategoryId, targetCategoryId);
-        if (movedCount == 0) {
-            throw new ApiException(409, "NO_PRODUCTS_TO_TRANSFER",
-                    "Danh mục này không còn sản phẩm nào để chuyển.");
+        if (!request.isAllowOutsideBranch()
+                && categoryRepository.countChildren(sourceCategoryId) > 0
+                && !isDescendant(sourceCategoryId, targetCategoryId)) {
+            throw new ApiException(400, "TARGET_NOT_DESCENDANT",
+                    "Hãy chọn một danh mục con thuộc nhánh của danh mục nguồn.");
         }
+
+        // 3. Chuyển (toàn bộ hoặc theo danh sách sản phẩm đã chọn)
+        int movedCount;
+        List<Integer> selectedIds = request.getProductIds();
+        if (selectedIds != null) {
+            List<Integer> cleanIds = selectedIds.stream()
+                    .filter(id -> id != null && id > 0)
+                    .distinct()
+                    .toList();
+            if (cleanIds.isEmpty()) {
+                throw new ApiException(400, "PRODUCTS_REQUIRED", "Vui lòng chọn ít nhất một sản phẩm để chuyển.");
+            }
+            movedCount = categoryRepository.transferProducts(sourceCategoryId, targetCategoryId, cleanIds);
+            if (movedCount == 0) {
+                throw new ApiException(409, "NO_PRODUCTS_TO_TRANSFER",
+                        "Các sản phẩm đã chọn không còn nằm ở danh mục nguồn.");
+            }
+            if (movedCount < cleanIds.size()) {
+                throw new ApiException(409, "PRODUCTS_CHANGED",
+                        "Một số sản phẩm đã chọn không thuộc danh mục nguồn hoặc vừa được chuyển trước đó.");
+            }
+        } else {
+            movedCount = categoryRepository.transferProducts(sourceCategoryId, targetCategoryId);
+            if (movedCount == 0) {
+                throw new ApiException(409, "NO_PRODUCTS_TO_TRANSFER",
+                        "Danh mục này không còn sản phẩm nào để chuyển.");
+            }
+        }
+
+        int remainingCount = categoryRepository.findDirectProducts(sourceCategoryId).size();
 
         return Map.of(
                 "movedCount", movedCount,
+                "remainingCount", remainingCount,
                 "sourceCategoryId", sourceCategoryId,
                 "targetCategoryId", targetCategoryId,
                 "targetCategoryName", target.getCategoryName()
@@ -440,17 +478,25 @@ public class CategoryService {
 
     /** Đi ngược từ danh mục cha mới lên gốc: gặp lại chính danh mục đang sửa nghĩa là chọn con/cháu làm cha. */
     private void rejectCycle(int categoryId, int parentId, String categoryName) {
-        Integer cursor = parentId;
+        if (isDescendant(categoryId, parentId)) {
+            throw new ApiException(
+                    400,
+                    "CATEGORY_PARENT_CYCLE",
+                    "Không thể chọn danh mục con / cháu của \"" + categoryName + "\" làm danh mục cha."
+            );
+        }
+    }
+
+    /** Kiểm tra {@code nodeId} có phải là con / cháu của {@code ancestorId} không. */
+    private boolean isDescendant(int ancestorId, int nodeId) {
+        Integer cursor = nodeId;
         for (int depth = 0; cursor != null && depth < 1000; depth++) {
-            if (cursor == categoryId) {
-                throw new ApiException(
-                        400,
-                        "CATEGORY_PARENT_CYCLE",
-                        "Không thể chọn danh mục con / cháu của \"" + categoryName + "\" làm danh mục cha."
-                );
+            if (cursor == ancestorId) {
+                return true;
             }
             cursor = categoryRepository.findById(cursor).map(Category::getParentId).orElse(null);
         }
+        return false;
     }
 
     /** DB chưa chạy migration 2026-11-11 thì cột target_group còn CHECK chỉ nhận 4 mã chuẩn. */

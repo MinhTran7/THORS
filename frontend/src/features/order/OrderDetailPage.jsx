@@ -21,7 +21,7 @@ import {
   TextField,
   Typography
 } from '@mui/material';
-import { QrcodeOutlined, RollbackOutlined, ShoppingOutlined } from '@ant-design/icons';
+import { CheckCircleOutlined, QrcodeOutlined, ReloadOutlined, RollbackOutlined, ShoppingOutlined } from '@ant-design/icons';
 import { Stack } from 'features/account/components/Flex';
 import { useCrumbs } from 'layouts/crumbs';
 import { useAuth } from 'features/auth/AuthProvider';
@@ -523,7 +523,27 @@ function CustomerView({ order, status, actions, busy, onAction, actionError, onP
 
 /* ------------------------------------------------------------------ Chủ shop và người xử lý đơn */
 
-function StaffView({ order, status, actions, busy, onAction, actionError, back, onPayNow, payLoading, payError, onMarkRefunded, refundBusy, canRefund, onSaveRefund }) {
+function StaffView({
+  order,
+  status,
+  actions,
+  busy,
+  onAction,
+  actionError,
+  back,
+  onPayNow,
+  payLoading,
+  payError,
+  onCheckPayOS,
+  payChecking,
+  payCheckMsg,
+  onConfirmPaid,
+  confirmPaidBusy,
+  onMarkRefunded,
+  refundBusy,
+  canRefund,
+  onSaveRefund
+}) {
   const payment = orderPaymentMeta(order);
   const prep = order.preparationStatus && order.preparationStatus !== 'NOT_STARTED' ? preparationMeta(order.preparationStatus) : null;
   const staffView = Boolean(order.customer);
@@ -632,17 +652,22 @@ function StaffView({ order, status, actions, busy, onAction, actionError, back, 
               </Box>
             )}
             {order.paymentMethod === 'ONLINE' && order.paymentStatus !== 'PAID' && !CLOSED.includes(order.orderStatus) && (
-              <Box sx={{ mt: 1.5, pt: 1, borderTop: `1px dashed ${brand.line}` }}>
+              <Box sx={{ mt: 1.5, pt: 1, borderTop: `1px dashed ${brand.line}`, display: 'grid', gap: 1 }}>
                 {payError && (
-                  <Alert severity="error" sx={{ mb: 1, fontSize: 13 }}>
+                  <Alert severity="error" sx={{ fontSize: 13 }}>
                     {payError}
+                  </Alert>
+                )}
+                {payCheckMsg && (
+                  <Alert severity={payCheckMsg.tone} sx={{ fontSize: 12.5 }}>
+                    {payCheckMsg.text}
                   </Alert>
                 )}
                 <Button
                   fullWidth
                   variant="contained"
                   startIcon={payLoading ? <CircularProgress size={16} color="inherit" /> : <QrcodeOutlined />}
-                  disabled={payLoading}
+                  disabled={payLoading || payChecking || confirmPaidBusy}
                   onClick={onPayNow}
                   sx={{
                     bgcolor: '#16a34a',
@@ -654,6 +679,41 @@ function StaffView({ order, status, actions, busy, onAction, actionError, back, 
                 >
                   {payLoading ? 'Đang tạo mã…' : 'Tạo mã thanh toán PayOS / VietQR'}
                 </Button>
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  startIcon={payChecking ? <CircularProgress size={15} color="inherit" /> : <ReloadOutlined />}
+                  disabled={payLoading || payChecking || confirmPaidBusy}
+                  onClick={onCheckPayOS}
+                  sx={{
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    py: 0.65,
+                    borderColor: brand.line,
+                    color: brand.ink
+                  }}
+                >
+                  {payChecking ? 'Đang kiểm tra PayOS…' : 'Kiểm tra thanh toán PayOS'}
+                </Button>
+                {canRefund && (
+                  <Button
+                    fullWidth
+                    variant="outlined"
+                    startIcon={confirmPaidBusy ? <CircularProgress size={15} color="inherit" /> : <CheckCircleOutlined />}
+                    disabled={payLoading || payChecking || confirmPaidBusy}
+                    onClick={onConfirmPaid}
+                    sx={{
+                      textTransform: 'none',
+                      fontWeight: 600,
+                      py: 0.65,
+                      borderColor: '#86EFAC',
+                      color: '#15803D',
+                      '&:hover': { bgcolor: '#F0FDF4', borderColor: '#22C55E' }
+                    }}
+                  >
+                    {confirmPaidBusy ? 'Đang xác nhận…' : 'Xác nhận đã thu tiền'}
+                  </Button>
+                )}
               </Box>
             )}
             {order.confirmedAt && (
@@ -749,10 +809,17 @@ function StaffView({ order, status, actions, busy, onAction, actionError, back, 
 /* ------------------------------------------------------------------ Trang */
 
 export default function OrderDetailPage() {
-  useCrumbs(['Đơn hàng', 'Chi tiết đơn hàng']);
   const { id } = useParams();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const { account } = useAuth();
+  const backTo = location.state?.backTo || '/orders';
+  const backLabel = location.state?.backLabel || 'Quay lại danh sách đơn';
+  useCrumbs(
+    account.role === 'CUSTOMER'
+      ? ['Đơn hàng', 'Chi tiết đơn hàng']
+      : ['Bán hàng', backTo === '/facebook-orders' ? 'Đơn hàng Facebook' : 'Đơn hàng online', 'Chi tiết đơn hàng']
+  );
   const { mutate: globalMutate } = useSWRConfig();
   const { data: order, error, isLoading, mutate } = useSWR(['order', id], () => ordersApi.detail(id), {
     ...LIVE_SWR,
@@ -772,6 +839,10 @@ export default function OrderDetailPage() {
   const [paymentData, setPaymentData] = useState(null);
   const [payLoading, setPayLoading] = useState(false);
   const [payError, setPayError] = useState('');
+  const [payChecking, setPayChecking] = useState(false);
+  const [payCheckMsg, setPayCheckMsg] = useState(null);
+  const [confirmPaidOpen, setConfirmPaidOpen] = useState(false);
+  const [confirmPaidBusy, setConfirmPaidBusy] = useState(false);
 
   const [proofOpen, setProofOpen] = useState(false); // hộp thoại chụp ảnh minh chứng giao hàng
   // Người nhà xử lý đơn như chủ shop
@@ -780,7 +851,6 @@ export default function OrderDetailPage() {
 
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
   // Bấm "TRẢ HÀNG" ở danh sách đơn: mở sẵn hộp thoại yêu cầu trả hàng một lần (nếu còn trong hạn)
-  const location = useLocation();
   const autoReturn = useRef(Boolean(location.state?.openReturn));
   useEffect(() => {
     if (!autoReturn.current || !order) return;
@@ -792,21 +862,77 @@ export default function OrderDetailPage() {
   const [refundForm, setRefundForm] = useState(null);
   const [returnSuccessMsg, setReturnSuccessMsg] = useState('');
 
-  // Tự động kiểm tra trạng thái thanh toán nếu quay lại từ PayOS với URL ?payment=success
+  // Tự động kiểm tra trạng thái thanh toán PayOS (khi quay lại ?payment=success hoặc khi mở đơn chuyển khoản chưa trả tiền)
   const orderIdVal = order?.id || Number(id);
+  const autoPayCheckKey = useRef('');
 
   useEffect(() => {
-    if (searchParams.get('payment') === 'success' && orderIdVal && order?.paymentStatus !== 'PAID') {
-      ordersApi.checkPayOSStatus(orderIdVal).then((res) => {
-        if (res.paid) mutate();
-      }).catch(() => {});
+    const paymentSuccess = searchParams.get('payment') === 'success';
+    const shouldCheck =
+      Boolean(orderIdVal) &&
+      order?.paymentMethod === 'ONLINE' &&
+      order?.paymentStatus !== 'PAID' &&
+      !CLOSED.includes(order?.orderStatus);
+    if (!shouldCheck && !(paymentSuccess && orderIdVal && order?.paymentStatus !== 'PAID')) return;
+    const key = `${orderIdVal}:${paymentSuccess}`;
+    if (autoPayCheckKey.current === key) return;
+    autoPayCheckKey.current = key;
+    ordersApi
+      .checkPayOSStatus(orderIdVal)
+      .then(async (res) => {
+        if (res?.paid) {
+          await mutate();
+          refreshAllOrders(globalMutate);
+        }
+      })
+      .catch(() => {});
+  }, [searchParams, orderIdVal, order?.paymentMethod, order?.paymentStatus, order?.orderStatus, mutate, globalMutate]);
+
+  const handleCheckPayOS = async () => {
+    if (!orderIdVal) return;
+    setPayChecking(true);
+    setPayCheckMsg(null);
+    setPayError('');
+    try {
+      const res = await ordersApi.checkPayOSStatus(orderIdVal);
+      if (res?.paid) {
+        await mutate();
+        refreshAllOrders(globalMutate);
+        setPayCheckMsg({ tone: 'success', text: 'Đã đồng bộ thanh toán thành công từ PayOS.' });
+      } else {
+        setPayCheckMsg({ tone: 'info', text: 'PayOS chưa ghi nhận giao dịch thanh toán cho đơn này.' });
+      }
+    } catch (err) {
+      setPayError(err.message || 'Không kiểm tra được trạng thái PayOS.');
+    } finally {
+      setPayChecking(false);
     }
-  }, [searchParams, orderIdVal, order?.paymentStatus, mutate]);
+  };
+
+  const handleConfirmPaid = async () => {
+    if (!orderIdVal) return;
+    setConfirmPaidBusy(true);
+    setPayError('');
+    setPayCheckMsg(null);
+    try {
+      await ordersApi.confirmPaid(orderIdVal);
+      setConfirmPaidOpen(false);
+      await mutate();
+      refreshAllOrders(globalMutate);
+      setPayCheckMsg({ tone: 'success', text: 'Đã xác nhận thu tiền đơn hàng.' });
+    } catch (err) {
+      setPayError(err.message || 'Không xác nhận được thanh toán.');
+      setConfirmPaidOpen(false);
+    } finally {
+      setConfirmPaidBusy(false);
+    }
+  };
 
   const handlePayNow = async () => {
     if (!orderIdVal) return;
     setPayLoading(true);
     setPayError('');
+    setPayCheckMsg(null);
     try {
       const res = await ordersApi.createPayOSLink(orderIdVal);
       setPaymentData(res);
@@ -818,7 +944,7 @@ export default function OrderDetailPage() {
     }
   };
 
-  const back = { to: '/orders', label: 'Quay lại danh sách đơn' };
+  const back = { to: backTo, label: backLabel };
 
   // Chỉ hiện màn hình lỗi khi chưa có dữ liệu; nếu lần tải lại ngầm bị lỗi thì vẫn giữ dữ liệu cũ
   if (error && !order) {
@@ -961,6 +1087,11 @@ export default function OrderDetailPage() {
         <StaffView
           {...viewProps}
           back={back}
+          onCheckPayOS={handleCheckPayOS}
+          payChecking={payChecking}
+          payCheckMsg={payCheckMsg}
+          onConfirmPaid={() => setConfirmPaidOpen(true)}
+          confirmPaidBusy={confirmPaidBusy}
           onMarkRefunded={markRefunded}
           refundBusy={refundBusy}
           canRefund={account.role === 'OWNER'}
@@ -1058,15 +1189,40 @@ export default function OrderDetailPage() {
         }}
       />
 
+      {/* Hộp thoại xác nhận đã thu tiền thủ công (Owner) */}
+      <Dialog open={confirmPaidOpen} onClose={() => !confirmPaidBusy && setConfirmPaidOpen(false)} fullWidth maxWidth="xs">
+        <DialogTitle>Xác nhận đã thu tiền</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ color: brand.muted, mb: 1.5 }}>
+            Chỉ xác nhận khi bạn chắc chắn đã nhận đủ <strong>{formatVnd(order.totalAmount)}</strong> từ khách (ví dụ khách chuyển khoản trực tiếp ngoài link PayOS hoặc thanh toán khi nhận hàng).
+          </Typography>
+          <Typography variant="body2" sx={{ color: brand.ink }}>
+            Sau khi xác nhận, đơn <strong>{order.orderNumber}</strong> sẽ chuyển sang trạng thái <strong>Đã thanh toán</strong> và được cộng vào doanh thu Dashboard.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button disabled={confirmPaidBusy} onClick={() => setConfirmPaidOpen(false)}>
+            Hủy
+          </Button>
+          <Button variant="contained" color="success" disableElevation disabled={confirmPaidBusy} onClick={handleConfirmPaid}>
+            {confirmPaidBusy ? 'Đang lưu…' : 'Xác nhận đã thu tiền'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Modal thanh toán PayOS / VietQR */}
       <PayOSPaymentModal
         open={payModalOpen}
         onClose={() => setPayModalOpen(false)}
         paymentData={paymentData}
-        onSuccess={() => {
-          mutate();
+        onSuccess={async () => {
+          await mutate();
+          refreshAllOrders(globalMutate);
         }}
-        onCancelled={() => mutate()}
+        onCancelled={async () => {
+          await mutate();
+          refreshAllOrders(globalMutate);
+        }}
       />
 
       {/* Modal Trả hàng / Hoàn tiền cho Khách hàng */}

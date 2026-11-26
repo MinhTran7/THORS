@@ -75,8 +75,6 @@ public class ProductController {
     public ResponseEntity<Map<String, Object>> getProductById(
             @PathVariable int productId
     ) {
-        System.out.println("GET PRODUCT DETAIL CALLED: " + productId);
-
         Map<String, Object> productDetail =
                 productService.getProductById(productId);
 
@@ -103,7 +101,8 @@ public class ProductController {
             @RequestBody CreateProductRequest request
     ) {
 
-        int productId = productService.createProduct(request);
+        // Chặn trùng tên (409); WarehouseCatalog gọi thẳng createProduct() vì Kho tự xử lý allowSimilar
+        int productId = productService.createCatalogProduct(request);
 
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(Map.of(

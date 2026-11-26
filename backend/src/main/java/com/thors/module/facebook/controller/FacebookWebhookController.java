@@ -89,10 +89,8 @@ public class FacebookWebhookController {
         ));
     }
 
-    @GetMapping("/sync")
-    public ResponseEntity<Map<String, Object>> syncConversationsGet() {
-        return syncConversations();
-    }
+    // (Bỏ GET /sync - 26/11/2026: đồng bộ là thao tác ghi, GET không cần CSRF nên trang lạ cũng kích hoạt được;
+    //  FacebookPOSPage chỉ gọi POST /sync.)
 
     /**
      * Gửi tin nhắn trả lời khách hàng từ hệ thống THORS

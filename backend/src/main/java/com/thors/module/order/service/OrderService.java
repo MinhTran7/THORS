@@ -132,12 +132,7 @@ public class OrderService {
         }
 
         // Khách chỉ thấy đơn của mình nên bộ lọc nguồn không có ý nghĩa, bỏ qua
-        String safeSource = isCustomer(actor) ? null : blankToNull(source);
-        if (safeSource != null) {
-            safeSource = safeSource.toUpperCase();
-            if (!SOURCE_FILTERS.contains(safeSource))
-                throw new ApiException(400, "SOURCE", "Nguồn đơn không hợp lệ.");
-        }
+        String safeSource = normalizeSource(actor, source);
 
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), MAX_SIZE);
@@ -160,10 +155,26 @@ public class OrderService {
         return new Page(slice.items(), safePage, safeSize, slice.total(), totalPages);
     }
 
+    private String normalizeSource(Account actor, String source) {
+        String safeSource = isCustomer(actor) ? null : blankToNull(source);
+        if (safeSource != null) {
+            safeSource = safeSource.toUpperCase();
+            if (!SOURCE_FILTERS.contains(safeSource))
+                throw new ApiException(400, "SOURCE", "Nguồn đơn không hợp lệ.");
+        }
+        return safeSource;
+    }
+
     /** Số đơn theo từng trạng thái: Customer đếm đơn của mình, nhân viên cửa hàng đếm mọi đơn online. */
     public Map<String, Long> counts(Account actor) {
+        return counts(actor, null);
+    }
+
+    /** Số đơn theo từng trạng thái có thể lọc thêm theo nguồn (WEB hoặc FACEBOOK). */
+    public Map<String, Long> counts(Account actor, String source) {
         requireOrderAccess(actor);
-        return orders.countByStatus(isCustomer(actor) ? actor.id() : null, OrderStatus.TYPE_ONLINE);
+        String safeSource = normalizeSource(actor, source);
+        return orders.countByStatus(isCustomer(actor) ? actor.id() : null, OrderStatus.TYPE_ONLINE, safeSource);
     }
 
     /**
@@ -512,6 +523,31 @@ public class OrderService {
         notifyCustomer(found.userId(), orderId, "Đã hoàn tiền",
                 "Cửa hàng đã hoàn " + vnd(found.detail().totalAmount()) + " cho đơn "
                         + found.detail().orderNumber() + ".");
+        return detail(actor, orderId);
+    }
+
+    /**
+     * Owner xác nhận đã nhận tiền thanh toán cho đơn online (vd. khách chuyển khoản trực tiếp hoặc
+     * webhook PayOS không tới được môi trường local). Cập nhật payment_status = PAID để tính doanh thu.
+     */
+    @Transactional
+    public Detail confirmOnlinePaid(Account actor, int orderId) {
+        requireOrderAccess(actor);
+        if (!"OWNER".equals(actor.role()))
+            throw new ApiException(403, "ROLE", "Chỉ Owner được xác nhận đã thu tiền.");
+        var found =
+                orders.find(orderId, true)
+                        .filter(f -> OrderStatus.TYPE_ONLINE.equals(f.orderType()))
+                        .orElseThrow(
+                                () -> new ApiException(404, "ORDER_NOT_FOUND", "Không tìm thấy đơn hàng."));
+        var d = found.detail();
+        if (!"ONLINE".equalsIgnoreCase(d.paymentMethod()))
+            throw new ApiException(409, "PAYMENT_METHOD", "Chỉ áp dụng cho đơn thanh toán chuyển khoản / online.");
+        if (Set.of(OrderStatus.CANCELLED, OrderStatus.REJECTED, OrderStatus.EXPIRED).contains(d.orderStatus()))
+            throw new ApiException(409, "ORDER_STATE", "Đơn hàng đã đóng, không thể xác nhận thanh toán.");
+        if (!"PAID".equalsIgnoreCase(d.paymentStatus())) {
+            onOnlinePaymentPaid(orderId);
+        }
         return detail(actor, orderId);
     }
 

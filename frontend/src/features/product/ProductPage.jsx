@@ -1119,6 +1119,7 @@ export default function ProductPage() {
         open={excelDialogOpen}
         onClose={() => setExcelDialogOpen(false)}
         categories={categories}
+        existingProducts={products}
         onSuccess={(msg) => {
           setSuccess(msg);
           loadProducts();

@@ -1,8 +1,12 @@
 package com.thors.module.order;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
+import com.thors.common.ApiException;
+import com.thors.module.account.entity.Account;
 import com.thors.module.notification.service.NotificationPublisher;
 import com.thors.module.notification.service.NotificationTypes;
 import com.thors.module.order.delivery.GhnShippingService;
@@ -120,5 +124,27 @@ class OrderPaymentNotificationTest {
 
         verify(orders, never()).markOnlinePaid(anyInt());
         verifyNoInteractions(notifications);
+    }
+
+    @Test
+    void ownerCanConfirmOnlinePaidForDeliveredUnpaidOrder() {
+        var owner = new Account(1, "OWNER", "Chủ shop", null, null, null, null, null, "ACTIVE", null, null, null, 0, null);
+        var d = new com.thors.module.order.dto.OrderViews.Detail(
+                10, "ORD-10", null, "DELIVERED", null, "ONLINE", "UNPAID", null, 10000,
+                null, 0, null, 0, 0, 10000, "A", "0900000001", "Addr", null, null, null, null,
+                null, null, java.util.List.of(), null, null, null);
+        when(orders.find(10, true)).thenReturn(Optional.of(new OrderRepository.Found(1, "Online", d)));
+        order("DELIVERED", "UNPAID");
+
+        service.confirmOnlinePaid(owner, 10);
+
+        verify(orders).markOnlinePaid(10);
+    }
+
+    @Test
+    void nonOwnerCannotConfirmOnlinePaid() {
+        var family = new Account(2, "FAMILY_MEMBER", "Lan", null, null, null, null, null, "ACTIVE", null, null, null, 0, null);
+        ApiException e = assertThrows(ApiException.class, () -> service.confirmOnlinePaid(family, 10));
+        assertEquals(403, e.status);
     }
 }

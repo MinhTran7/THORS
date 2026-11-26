@@ -83,4 +83,14 @@ class OrderSourceFilterTest {
         assertEquals(1, orders.search(null, "Online", java.util.List.of("PENDING_CONFIRMATION"), null, null, null, null,
                 "FACEBOOK", 0, 20).total());
     }
+
+    @Test
+    void countByStatusRespectsSourceFilter() {
+        assertEquals(java.util.Map.of("PENDING_CONFIRMATION", 1L, "COMPLETED", 1L),
+                orders.countByStatus(null, "Online", "WEB"));
+        assertEquals(java.util.Map.of("PENDING_CONFIRMATION", 1L, "SHIPPING", 1L),
+                orders.countByStatus(null, "Online", "FACEBOOK"));
+        assertEquals(java.util.Map.of("PENDING_CONFIRMATION", 2L, "COMPLETED", 1L, "SHIPPING", 1L),
+                orders.countByStatus(null, "Online", null));
+    }
 }

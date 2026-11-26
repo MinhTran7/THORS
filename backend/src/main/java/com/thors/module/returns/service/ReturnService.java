@@ -576,6 +576,12 @@ public class ReturnService {
         if (file.getSize() > 25 * 1024 * 1024) {
             throw new ApiException(400, "FILE_TOO_LARGE", "Dung lượng tệp tối đa là 25MB.");
         }
+        // Endpoint công khai: chỉ nhận ảnh / video (khớp accept="image/*,video/*" ở CustomerReturnDialog),
+        // không để khách vãng lai đẩy tệp tùy ý (pdf, zip, html...) lên Cloudinary
+        String contentType = file.getContentType();
+        if (contentType == null || !(contentType.startsWith("image/") || contentType.startsWith("video/"))) {
+            throw new ApiException(400, "FILE_TYPE_INVALID", "Chỉ nhận tệp ảnh hoặc video.");
+        }
         if (cloudinary == null) {
             throw new ApiException(500, "CLOUDINARY_NOT_CONFIGURED", "Dịch vụ tải tệp chưa được cấu hình.");
         }
@@ -594,7 +600,8 @@ public class ReturnService {
             );
         } catch (IOException e) {
             logger.error("Failed to upload evidence to Cloudinary: ", e);
-            throw new ApiException(500, "UPLOAD_FAILED", "Không thể tải lên tệp: " + e.getMessage());
+            // Chi tiết lỗi đã ghi log; không trả lỗi nội bộ của Cloudinary ra ngoài
+            throw new ApiException(500, "UPLOAD_FAILED", "Không thể tải tệp lên. Vui lòng thử lại.");
         }
     }
 

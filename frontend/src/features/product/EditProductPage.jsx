@@ -319,8 +319,9 @@ export default function EditProductPage() {
       await updateProduct(productId, payload);
       navigate(`/products/${productId}`);
     } catch (err) {
-      // 409: người khác vừa sửa sản phẩm này => mời tải lại thay vì ghi đè
-      setConflict(err?.status === 409);
+      // 409 PRODUCT_VERSION_CONFLICT: người khác vừa sửa sản phẩm này => mời tải lại thay vì ghi đè.
+      // 409 khác (vd PRODUCT_NAME_EXISTS - trùng tên) chỉ hiện thông báo lỗi.
+      setConflict(err?.status === 409 && err?.code === 'PRODUCT_VERSION_CONFLICT');
       setError(
         err?.message || 'Không thể lưu thay đổi sản phẩm. Vui lòng thử lại.'
       );

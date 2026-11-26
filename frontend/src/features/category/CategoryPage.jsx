@@ -7,6 +7,7 @@ import {
   Card,
   CardContent,
   CircularProgress,
+  Checkbox,
   Dialog,
   DialogActions,
   DialogContent,
@@ -18,6 +19,7 @@ import {
   Menu,
   MenuItem,
   Select,
+  Snackbar,
   Stack,
   Switch,
   Table,
@@ -54,6 +56,7 @@ import {
   updateCategory,
   changeCategoryStatus,
   transferProducts,
+  getDirectCategoryProducts,
   isAssignableCategory,
   TARGET_GROUPS,
   targetGroupLabel,
@@ -257,6 +260,9 @@ export default function CategoryPage() {
   // Chuyển nhanh sản phẩm gắn trực tiếp sang danh mục lá: { category, targetCategoryId, error }
   const [transferDialog, setTransferDialog] = useState(null);
   const [transferring, setTransferring] = useState(false);
+  const [highlightedCategoryId, setHighlightedCategoryId] = useState(null);
+  const [toast, setToast] = useState({ open: false, message: '' });
+  const highlightTimerRef = useRef(null);
 
   const [viewCategory, setViewCategory] = useState(null);
 
@@ -670,34 +676,138 @@ export default function CategoryPage() {
   // TRANSFER PRODUCTS
   // ==========================================
 
-  function openTransferDialog(category) {
+  function showToast(message) {
+    setToast({ open: true, message });
+  }
+
+  function expandAncestorsOf(categoryId) {
+    const byId = new Map(categories.map((c) => [c.categoryId, c]));
+    const ancestors = [];
+    let cursor = byId.get(Number(categoryId))?.parentId;
+    for (let i = 0; cursor && i < 100; i++) {
+      ancestors.push(cursor);
+      cursor = byId.get(cursor)?.parentId;
+    }
+    if (ancestors.length > 0) {
+      setExpanded((prev) => {
+        const next = new Set(prev);
+        ancestors.forEach((id) => next.add(id));
+        return next;
+      });
+    }
+  }
+
+  function highlightCategory(categoryId) {
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    setHighlightedCategoryId(Number(categoryId));
+    highlightTimerRef.current = setTimeout(() => setHighlightedCategoryId(null), 3500);
+  }
+
+  async function loadDirectProductsForTransfer(categoryId, autoSelectAll) {
+    try {
+      const list = await getDirectCategoryProducts(categoryId);
+      const products = Array.isArray(list) ? list : [];
+      setTransferDialog((current) => {
+        if (!current || current.category.categoryId !== categoryId) return current;
+        return {
+          ...current,
+          products,
+          selectedProductIds: autoSelectAll || products.length <= 1 ? products.map((p) => p.productId) : [],
+          loadingProducts: false
+        };
+      });
+    } catch (e) {
+      setTransferDialog((current) =>
+        current && current.category.categoryId === categoryId
+          ? { ...current, loadingProducts: false, error: e?.message || 'Không thể tải danh sách sản phẩm.' }
+          : current
+      );
+    }
+  }
+
+  function openTransferDialog(category, options = {}) {
+    const allowOutsideBranch = Boolean(options.allowOutsideBranch);
     // Gợi ý sẵn danh mục con trực tiếp đầu tiên nhận được sản phẩm (đang hoạt động, không có con)
     const firstLeafChild = (childrenOf.get(category.categoryId) || []).find(isAssignableCategory);
     setTransferDialog({
       category,
       targetCategoryId: firstLeafChild ? String(firstLeafChild.categoryId) : '',
+      allowOutsideBranch,
+      products: [],
+      selectedProductIds: [],
+      loadingProducts: true,
       error: ''
+    });
+    loadDirectProductsForTransfer(category.categoryId, allowOutsideBranch);
+  }
+
+  function toggleTransferProduct(productId) {
+    setTransferDialog((current) => {
+      if (!current) return current;
+      const exists = current.selectedProductIds.includes(productId);
+      const next = exists
+        ? current.selectedProductIds.filter((id) => id !== productId)
+        : [...current.selectedProductIds, productId];
+      return { ...current, selectedProductIds: next, error: '' };
+    });
+  }
+
+  function toggleAllTransferProducts() {
+    setTransferDialog((current) => {
+      if (!current) return current;
+      const allIds = current.products.map((p) => p.productId);
+      const allSelected = allIds.length > 0 && current.selectedProductIds.length === allIds.length;
+      return { ...current, selectedProductIds: allSelected ? [] : allIds, error: '' };
     });
   }
 
   async function handleTransferProducts() {
-    if (!transferDialog?.category || !transferDialog.targetCategoryId || transferring) return;
+    if (
+      !transferDialog?.category ||
+      !transferDialog.targetCategoryId ||
+      transferDialog.selectedProductIds.length === 0 ||
+      transferring
+    ) {
+      return;
+    }
+
+    const sourceId = transferDialog.category.categoryId;
+    const targetId = Number(transferDialog.targetCategoryId);
+    const allowOutsideBranch = transferDialog.allowOutsideBranch;
 
     setTransferring(true);
     setError('');
     setSuccess('');
 
     try {
-      const res = await transferProducts(transferDialog.category.categoryId, transferDialog.targetCategoryId);
+      const res = await transferProducts(sourceId, targetId, {
+        productIds: transferDialog.selectedProductIds,
+        allowOutsideBranch
+      });
       const targetName =
         res?.targetCategoryName ||
-        categories.find((c) => String(c.categoryId) === String(transferDialog.targetCategoryId))?.categoryName ||
+        categories.find((c) => c.categoryId === targetId)?.categoryName ||
         '';
-      setTransferDialog(null);
-      setSuccess(`Đã chuyển ${res?.movedCount ?? ''} sản phẩm sang danh mục "${targetName}".`);
+      const movedCount = res?.movedCount ?? transferDialog.selectedProductIds.length;
+      const msg = `Đã chuyển ${movedCount} sản phẩm sang danh mục "${targetName}".`;
+
+      setSuccess(msg);
+      showToast(msg);
+      expandAncestorsOf(targetId);
+      highlightCategory(targetId);
+
       await loadCategories();
+
+      if ((res?.remainingCount ?? 0) > 0) {
+        setTransferDialog((current) =>
+          current ? { ...current, loadingProducts: true, selectedProductIds: [], error: '' } : current
+        );
+        await loadDirectProductsForTransfer(sourceId, false);
+      } else {
+        setTransferDialog(null);
+      }
     } catch (e) {
-      // Báo lỗi ngay trong hộp thoại để người dùng chọn lại danh mục đích
+      // Báo lỗi ngay trong hộp thoại để người dùng chọn lại
       setTransferDialog((current) =>
         current ? { ...current, error: e?.message || 'Không thể chuyển sản phẩm sang danh mục khác.' } : current
       );
@@ -706,11 +816,21 @@ export default function CategoryPage() {
     }
   }
 
-  // Danh mục đích chọn được: danh mục lá đang hoạt động, khác danh mục nguồn
-  const transferTargets = transferDialog
-    ? treeCategories.filter((c) => isAssignableCategory(c) && c.categoryId !== transferDialog.category.categoryId)
-    : [];
   const transferDescendants = transferDialog ? descendantIds(categories, transferDialog.category.categoryId) : new Set();
+  const transferIsParent = Boolean(
+    transferDialog && (childrenOf.get(transferDialog.category.categoryId) || []).length > 0
+  );
+  // Chuyển SP kẹt ở danh mục cha -> chỉ cho chọn danh mục con/cháu trong nhánh đó.
+  // Chuyển trước khi ngưng hoạt động -> cho chọn mọi danh mục lá đang hoạt động khác.
+  const transferTargets = transferDialog
+    ? treeCategories.filter((c) => {
+        if (!isAssignableCategory(c) || c.categoryId === transferDialog.category.categoryId) return false;
+        if (!transferDialog.allowOutsideBranch && transferIsParent) {
+          return transferDescendants.has(c.categoryId);
+        }
+        return true;
+      })
+    : [];
 
   // ==========================================
   // ACTION MENU
@@ -1003,9 +1123,24 @@ export default function CategoryPage() {
                       key={category.categoryId}
                       hover
                       sx={{
-                        // Cha đang mở: nền xanh nhạt + vạch trái (chỉ cấp gốc); con: nền xám rất nhạt
-                        bgcolor: category.isChild ? (open ? '#F3FAFC' : '#FAFBFC') : open ? '#F5FDFE' : '#FFFFFF',
-                        boxShadow: !category.isChild && open ? `inset 3px 0 0 ${C.cyanHover}` : 'none',
+                        // Highlight dòng đích vừa nhận sản phẩm, hoặc nền cây cha/con bình thường
+                        bgcolor:
+                          category.categoryId === highlightedCategoryId
+                            ? '#ECFEFF'
+                            : category.isChild
+                              ? open
+                                ? '#F3FAFC'
+                                : '#FAFBFC'
+                              : open
+                                ? '#F5FDFE'
+                                : '#FFFFFF',
+                        boxShadow:
+                          category.categoryId === highlightedCategoryId
+                            ? 'inset 3px 0 0 #0891B2'
+                            : !category.isChild && open
+                              ? `inset 3px 0 0 ${C.cyanHover}`
+                              : 'none',
+                        transition: 'background-color 0.3s ease',
                         '&:hover': { bgcolor: '#F5FAFC' }
                       }}
                     >
@@ -1317,7 +1452,7 @@ export default function CategoryPage() {
           </MenuItem>
         )}
 
-        {menuCategory && (getDirectProductCount(menuCategory.categoryId) || 0) > 0 && (
+        {menuCategory && menuCategory.childCount > 0 && (getDirectProductCount(menuCategory.categoryId) || 0) > 0 && (
           <MenuItem
             onClick={() => {
               const selected = menuCategory;
@@ -1327,7 +1462,7 @@ export default function CategoryPage() {
             sx={{ fontSize: 13.5, fontWeight: 600, py: 1, borderRadius: 1.5 }}
           >
             <SwapOutlined style={{ marginRight: 10, color: C.muted }} />
-            Chuyển sản phẩm sang danh mục khác
+            Chuyển sản phẩm sang danh mục con
           </MenuItem>
         )}
 
@@ -1734,7 +1869,7 @@ export default function CategoryPage() {
                       onClick={() => {
                         const selected = statusDialog;
                         setStatusDialog(null);
-                        openTransferDialog(selected);
+                        openTransferDialog(selected, { allowOutsideBranch: true });
                       }}
                       sx={{ mt: 1, px: 1, fontSize: 12.5, fontWeight: 700, color: '#B45309', textTransform: 'none' }}
                     >
@@ -1838,13 +1973,104 @@ export default function CategoryPage() {
                   {pathNameOf(transferDialog.category.categoryId) || transferDialog.category.categoryName}
                 </Typography>
                 <Typography sx={{ fontSize: 13, color: '#B45309', fontWeight: 600, mt: 0.5 }}>
-                  Đang có {getDirectProductCount(transferDialog.category.categoryId) || 0} sản phẩm gắn trực tiếp.
+                  Đang có {transferDialog.loadingProducts ? '...' : transferDialog.products.length} sản phẩm gắn trực tiếp.
                 </Typography>
               </Box>
 
+              {/* Bước 1: Tick chọn từng sản phẩm */}
+              <Box>
+                <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', mb: 0.75 }}>
+                  <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text }}>
+                    1. Chọn sản phẩm muốn chuyển{' '}
+                    <Box component="span" sx={{ color: C.error }}>
+                      *
+                    </Box>
+                  </Typography>
+                  {transferDialog.products.length > 0 && (
+                    <Button
+                      size="small"
+                      disabled={transferring}
+                      onClick={toggleAllTransferProducts}
+                      sx={{ fontSize: 12, fontWeight: 700, textTransform: 'none', py: 0.2, px: 1 }}
+                    >
+                      {transferDialog.selectedProductIds.length === transferDialog.products.length
+                        ? 'Bỏ chọn tất cả'
+                        : `Chọn tất cả (${transferDialog.products.length})`}
+                    </Button>
+                  )}
+                </Stack>
+
+                <Box
+                  sx={{
+                    border: `1px solid ${C.border}`,
+                    borderRadius: 2.5,
+                    maxHeight: 210,
+                    overflowY: 'auto',
+                    bgcolor: '#FFFFFF'
+                  }}
+                >
+                  {transferDialog.loadingProducts ? (
+                    <Stack direction="row" spacing={1} sx={{ p: 2.5, justifyContent: 'center', alignItems: 'center' }}>
+                      <CircularProgress size={18} sx={{ color: C.cyan }} />
+                      <Typography sx={{ fontSize: 13, color: C.muted }}>Đang tải danh sách sản phẩm...</Typography>
+                    </Stack>
+                  ) : transferDialog.products.length === 0 ? (
+                    <Typography sx={{ p: 2.5, fontSize: 13, color: C.muted, textAlign: 'center' }}>
+                      Không còn sản phẩm nào gắn trực tiếp vào danh mục này.
+                    </Typography>
+                  ) : (
+                    transferDialog.products.map((p, idx) => {
+                      const checked = transferDialog.selectedProductIds.includes(p.productId);
+                      return (
+                        <Box
+                          key={p.productId}
+                          onClick={() => !transferring && toggleTransferProduct(p.productId)}
+                          sx={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 1,
+                            px: 1.5,
+                            py: 0.85,
+                            cursor: transferring ? 'default' : 'pointer',
+                            bgcolor: checked ? '#F0FCFE' : 'transparent',
+                            borderBottom:
+                              idx < transferDialog.products.length - 1 ? `1px solid ${C.borderLight}` : 'none',
+                            '&:hover': { bgcolor: checked ? '#E6FAFC' : '#F8FAFC' }
+                          }}
+                        >
+                          <Checkbox size="small" checked={checked} disabled={transferring} sx={{ p: 0.25 }} />
+                          <Box sx={{ flex: 1, minWidth: 0 }}>
+                            <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: C.text }} noWrap>
+                              {p.productName}
+                            </Typography>
+                            {p.sku && (
+                              <Typography sx={{ fontSize: 11.5, color: C.muted }}>SKU: {p.sku}</Typography>
+                            )}
+                          </Box>
+                          <Box
+                            component="span"
+                            sx={badgeSx(
+                              p.status === 'ACTIVE' ? '#E7F6F1' : '#F1F5F9',
+                              p.status === 'ACTIVE' ? '#168B70' : '#64748B',
+                              p.status === 'ACTIVE' ? '#BBF7D0' : '#E2E8F0'
+                            )}
+                          >
+                            {p.status === 'ACTIVE' ? 'Hoạt động' : 'Đã ẩn'}
+                          </Box>
+                        </Box>
+                      );
+                    })
+                  )}
+                </Box>
+                <Typography sx={{ fontSize: 12, color: C.muted, mt: 0.5 }}>
+                  Đã chọn {transferDialog.selectedProductIds.length}/{transferDialog.products.length} sản phẩm.
+                </Typography>
+              </Box>
+
+              {/* Bước 2: Chọn danh mục nhận */}
               <Box>
                 <Typography sx={{ fontSize: 13, fontWeight: 600, color: C.text, mb: 0.75 }}>
-                  Danh mục nhận sản phẩm{' '}
+                  2. Danh mục nhận sản phẩm{' '}
                   <Box component="span" sx={{ color: C.error }}>
                     *
                   </Box>
@@ -1867,7 +2093,9 @@ export default function CategoryPage() {
                 >
                   {transferTargets.length === 0 && (
                     <MenuItem value="" disabled>
-                      Chưa có danh mục lá nào đang hoạt động
+                      {!transferDialog.allowOutsideBranch && transferIsParent
+                        ? 'Chưa có danh mục con lá nào đang hoạt động trong nhánh này'
+                        : 'Chưa có danh mục lá nào đang hoạt động'}
                     </MenuItem>
                   )}
                   {transferTargets.map((c) => (
@@ -1884,13 +2112,9 @@ export default function CategoryPage() {
                   ))}
                 </TextField>
                 <Typography sx={{ fontSize: 12, color: C.muted, mt: 0.75 }}>
-                  Chỉ chọn được danh mục đang hoạt động và không có danh mục con.
-                </Typography>
-              </Box>
-
-              <Box sx={{ bgcolor: '#FFFDE7', border: '1.5px solid #FDE047', borderRadius: 2.5, p: 2 }}>
-                <Typography sx={{ fontSize: 12.5, color: '#713F12', lineHeight: 1.6 }}>
-                  Toàn bộ sản phẩm gắn trực tiếp vào danh mục nguồn sẽ được chuyển sang danh mục đã chọn ngay lập tức.
+                  {!transferDialog.allowOutsideBranch && transferIsParent
+                    ? 'Chỉ chọn được danh mục con lá đang hoạt động thuộc chính nhánh danh mục này.'
+                    : 'Chỉ chọn được danh mục đang hoạt động và không có danh mục con.'}
                 </Typography>
               </Box>
             </Stack>
@@ -1899,10 +2123,14 @@ export default function CategoryPage() {
 
         <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
           <Button disabled={transferring} onClick={() => setTransferDialog(null)} sx={outlineButtonSx}>
-            Hủy
+            {transferDialog?.products?.length === 0 ? 'Đóng' : 'Hủy'}
           </Button>
           <Button
-            disabled={transferring || !transferDialog?.targetCategoryId}
+            disabled={
+              transferring ||
+              !transferDialog?.targetCategoryId ||
+              (transferDialog?.selectedProductIds?.length || 0) === 0
+            }
             onClick={handleTransferProducts}
             sx={{
               ...outlineButtonSx,
@@ -1913,10 +2141,28 @@ export default function CategoryPage() {
               '&:hover': { bgcolor: C.cyanHover }
             }}
           >
-            {transferring ? 'Đang chuyển...' : 'Xác nhận chuyển'}
+            {transferring
+              ? 'Đang chuyển...'
+              : `Chuyển ${transferDialog?.selectedProductIds?.length || 0} sản phẩm`}
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Snackbar
+        open={toast.open}
+        autoHideDuration={4500}
+        onClose={() => setToast((prev) => ({ ...prev, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert
+          severity="success"
+          variant="filled"
+          onClose={() => setToast((prev) => ({ ...prev, open: false }))}
+          sx={{ borderRadius: 2.5, fontWeight: 600, fontSize: 13.5 }}
+        >
+          {toast.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

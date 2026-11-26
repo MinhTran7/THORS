@@ -45,6 +45,14 @@ public class ProductCodes {
         return Normalizer.normalize(s, Normalizer.Form.NFD).replaceAll("\\p{M}+", "");
     }
 
+    /**
+     * Khóa so trùng TÊN sản phẩm: bỏ dấu (đ → d), viết thường, gộp khoảng trắng thừa.
+     * "Áo Polo Nam", "  áo   polo  NAM " và "Ao Polo Nam" cho cùng một khóa.
+     */
+    public static String nameKey(String value) {
+        return fold(value).replaceAll("\\s+", " ").trim();
+    }
+
     /** Khóa so trùng biến thể (size + màu), không phân biệt hoa/thường và dấu. */
     public static String variantKey(String size, String color) {
         return fold(size) + "\u0000" + fold(color);

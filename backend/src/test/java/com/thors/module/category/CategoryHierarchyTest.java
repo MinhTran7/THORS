@@ -12,10 +12,13 @@ import static org.mockito.Mockito.when;
 
 import com.thors.common.ApiException;
 import com.thors.module.category.dto.CreateCategoryRequest;
+import com.thors.module.category.dto.TransferCategoryProductsRequest;
 import com.thors.module.category.dto.UpdateCategoryRequest;
 import com.thors.module.category.entity.Category;
 import com.thors.module.category.repository.CategoryRepository;
 import com.thors.module.category.service.CategoryService;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -229,5 +232,54 @@ class CategoryHierarchyTest {
 
         assertEquals("CATEGORY_HIERARCHY_UNAVAILABLE", e.code);
         verify(repo, never()).insert(anyString(), any());
+    }
+
+    @Test
+    void parentTransferRejectsTargetOutsideBranchUnlessAllowed() {
+        when(repo.countChildren(1)).thenReturn(1);
+        when(repo.countChildren(4)).thenReturn(0);
+        when(repo.findById(4)).thenReturn(Optional.of(category(4, "Thời trang", null, "ACTIVE", 0)));
+
+        TransferCategoryProductsRequest r = new TransferCategoryProductsRequest();
+        r.setTargetCategoryId(4);
+
+        ApiException e = assertThrows(ApiException.class, () -> service.transferProducts(1, r));
+        assertEquals("TARGET_NOT_DESCENDANT", e.code);
+        verify(repo, never()).transferProducts(anyInt(), anyInt());
+    }
+
+    @Test
+    void parentTransferMovesSelectedProductsToDescendantLeaf() {
+        when(repo.countChildren(1)).thenReturn(1);
+        when(repo.countChildren(2)).thenReturn(0);
+        when(repo.transferProducts(1, 2, List.of(10, 11))).thenReturn(2);
+        when(repo.findDirectProducts(1)).thenReturn(List.of(Map.of("productId", 12)));
+
+        TransferCategoryProductsRequest r = new TransferCategoryProductsRequest();
+        r.setTargetCategoryId(2);
+        r.setProductIds(List.of(10, 11));
+
+        Map<String, Object> result = service.transferProducts(1, r);
+        assertEquals(2, result.get("movedCount"));
+        assertEquals(1, result.get("remainingCount"));
+        verify(repo).transferProducts(1, 2, List.of(10, 11));
+    }
+
+    @Test
+    void leafTransferAllowsOutsideBranchWhenFlagged() {
+        when(repo.countChildren(2)).thenReturn(0);
+        when(repo.countChildren(4)).thenReturn(0);
+        when(repo.findById(4)).thenReturn(Optional.of(category(4, "Thời trang", null, "ACTIVE", 0)));
+        when(repo.transferProducts(2, 4, List.of(20))).thenReturn(1);
+        when(repo.findDirectProducts(2)).thenReturn(List.of());
+
+        TransferCategoryProductsRequest r = new TransferCategoryProductsRequest();
+        r.setTargetCategoryId(4);
+        r.setAllowOutsideBranch(true);
+        r.setProductIds(List.of(20));
+
+        Map<String, Object> result = service.transferProducts(2, r);
+        assertEquals(1, result.get("movedCount"));
+        assertEquals(0, result.get("remainingCount"));
     }
 }

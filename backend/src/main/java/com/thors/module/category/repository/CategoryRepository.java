@@ -299,12 +299,41 @@ public class CategoryRepository {
         }
     }
 
+    /** Danh sách sản phẩm đang gắn trực tiếp vào danh mục (dùng để chọn từng sản phẩm khi chuyển). */
+    public List<java.util.Map<String, Object>> findDirectProducts(int categoryId) {
+        try {
+            return jdbcTemplate.queryForList(
+                    "SELECT product_id AS productId, sku, product_name AS productName, status "
+                            + "FROM product WHERE category_id = ? ORDER BY product_id DESC",
+                    categoryId);
+        } catch (BadSqlGrammarException e) {
+            return jdbcTemplate.queryForList(
+                    "SELECT product_id AS productId, NULL AS sku, product_name AS productName, status "
+                            + "FROM product WHERE category_id = ? ORDER BY product_id DESC",
+                    categoryId);
+        }
+    }
+
     /** Chuyển mọi sản phẩm gắn trực tiếp vào danh mục nguồn sang danh mục đích; trả số sản phẩm đã chuyển. */
     public int transferProducts(int sourceCategoryId, int targetCategoryId) {
         return jdbcTemplate.update(
                 "UPDATE product SET category_id = ? WHERE category_id = ?",
                 targetCategoryId,
                 sourceCategoryId);
+    }
+
+    /** Chuyển các sản phẩm được chọn đang gắn trực tiếp vào danh mục nguồn sang danh mục đích. */
+    public int transferProducts(int sourceCategoryId, int targetCategoryId, List<Integer> productIds) {
+        String placeholders = String.join(",", java.util.Collections.nCopies(productIds.size(), "?"));
+        Object[] args = new Object[2 + productIds.size()];
+        args[0] = targetCategoryId;
+        args[1] = sourceCategoryId;
+        for (int i = 0; i < productIds.size(); i++) {
+            args[2 + i] = productIds.get(i);
+        }
+        return jdbcTemplate.update(
+                "UPDATE product SET category_id = ? WHERE category_id = ? AND product_id IN (" + placeholders + ")",
+                args);
     }
 
     /** Số danh mục con đang hoạt động (0 nếu DB chưa có cột parent_id). */

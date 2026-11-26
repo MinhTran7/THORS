@@ -13,7 +13,7 @@ export const ordersApi = {
   list: (params) => api(`/orders${query(params)}`),
   detail: (id) => api(`/orders/${id}`),
   // Số đơn theo từng trạng thái, để hiện số trên các tab
-  counts: () => api('/orders/counts'),
+  counts: (params) => api(`/orders/counts${query(params)}`),
   // Owner: xác nhận / từ chối / giao / hoàn tất. Customer: hủy đơn.
   // carrier chỉ dùng khi chuyển sang SHIPPING: SELF (tự giao) hoặc mã đơn vị vận chuyển
   // ghn (chỉ khi carrier = GHN): { provinceId, wardId, weightG } theo danh mục mới (2 cấp) của GHN
@@ -53,6 +53,7 @@ export const ordersApi = {
   deliverySuggestion: (id) => api(`/orders/${id}/delivery-suggestion`),
   // Owner: đã chuyển khoản trả lại khách cho đơn "Chờ hoàn tiền" (đơn đã thanh toán online nhưng bị hủy / từ chối)
   markRefunded: (id) => post(`/orders/${id}/refunded`, {}),
+  confirmPaid: (id) => post(`/orders/${id}/paid`, {}),
   createPayOSLink: (orderId) => post('/payment/payos/create-link', { orderId }),
   checkPayOSStatus: (orderId) => api(`/payment/payos/status/${orderId}`)
 };

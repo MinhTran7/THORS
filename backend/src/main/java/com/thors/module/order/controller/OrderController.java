@@ -41,8 +41,14 @@ public class OrderController {
 
     /** GET /api/orders/counts: số đơn theo từng trạng thái (hiện trên các tab) */
     @GetMapping("/counts")
-    Object counts() {
-        return service.counts(sessions.current());
+    Object counts(@RequestParam(required = false) String source) {
+        return service.counts(sessions.current(), source);
+    }
+
+    /** POST /api/orders/{id}/paid: Owner xác nhận đã nhận thanh toán cho đơn online */
+    @PostMapping("/{id}/paid")
+    Object confirmPaid(@PathVariable int id) {
+        return service.confirmOnlinePaid(sessions.current(), id);
     }
 
     @GetMapping("/{id}")

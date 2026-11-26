@@ -1,4 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
+import { useSWRConfig } from 'swr';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import {
   Alert,
@@ -14,9 +16,12 @@ import {
   DialogContent,
   DialogTitle,
   Divider,
+  FormControlLabel,
   IconButton,
   InputAdornment,
   MenuItem,
+  Radio,
+  RadioGroup,
   Select,
   Stack,
   TextField,
@@ -47,6 +52,7 @@ import { api } from '../../services/http';
 import { useAuth } from '../auth/AuthProvider';
 import { useCrumbs } from '../../layouts/crumbs';
 import { brand } from '../account/tokens';
+import { ordersApi, refreshAllOrders } from '../order/api';
 import ShippingAddressFields from './ShippingAddressFields';
 import { composeAddress, findPhoneInText, normalizePhone, parseAddressText, stripPhones } from './addressParser';
 
@@ -87,6 +93,7 @@ const getPrice = (v) => Number(v?.price ?? v?.salePrice ?? 0);
 export default function FacebookPOSPage() {
   useCrumbs(['Bán hàng Facebook']);
   const { account } = useAuth();
+  const { mutate: globalMutate } = useSWRConfig();
 
   // Danh sách hội thoại và tin nhắn
   const [conversations, setConversations] = useState([]);
@@ -115,6 +122,7 @@ export default function FacebookPOSPage() {
   const customerAddress = composeAddress(addressParts);
   // Kết quả kiểm tra địa chỉ trên bản đồ: { status, precision, matchedAddress, loading, address }
   const [addressCheck, setAddressCheck] = useState(null);
+  const [paymentMethod, setPaymentMethod] = useState('ONLINE');
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [creatingOrder, setCreatingOrder] = useState(false);
   const [orderSuccessMsg, setOrderSuccessMsg] = useState('');
@@ -123,6 +131,7 @@ export default function FacebookPOSPage() {
   // Dialog hiển thị Mã QR VietQR PayOS
   const [qrModal, setQrModal] = useState({
     open: false,
+    orderId: null,
     orderNumber: '',
     totalAmount: 0,
     qrImageUrl: '',
@@ -130,8 +139,66 @@ export default function FacebookPOSPage() {
     bankName: '',
     accountNumber: '',
     accountName: '',
-    copied: false
+    copied: false,
+    paid: false,
+    checking: false,
+    checkNotice: ''
   });
+
+  // Tự động kiểm tra trạng thái thanh toán PayOS mỗi 4 giây khi modal QR đang mở
+  useEffect(() => {
+    if (!qrModal.open || !qrModal.orderId || qrModal.paid) return undefined;
+    let active = true;
+    const check = async () => {
+      try {
+        const res = await ordersApi.checkPayOSStatus(qrModal.orderId);
+        if (active && res?.paid) {
+          refreshAllOrders(globalMutate);
+          setQrModal((prev) => ({
+            ...prev,
+            paid: true,
+            checkNotice: 'Đã nhận thanh toán thành công! Đơn hàng đã được tính vào doanh thu Dashboard.'
+          }));
+        }
+      } catch {
+        // Bỏ qua lỗi mạng khi polling ngầm
+      }
+    };
+    const timer = setInterval(check, 4000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [qrModal.open, qrModal.orderId, qrModal.paid, globalMutate]);
+
+  const handleManualPayCheck = async () => {
+    if (!qrModal.orderId) return;
+    setQrModal((prev) => ({ ...prev, checking: true, checkNotice: '' }));
+    try {
+      const res = await ordersApi.checkPayOSStatus(qrModal.orderId);
+      if (res?.paid) {
+        refreshAllOrders(globalMutate);
+        setQrModal((prev) => ({
+          ...prev,
+          checking: false,
+          paid: true,
+          checkNotice: 'Đã nhận thanh toán thành công! Đơn hàng đã được tính vào doanh thu Dashboard.'
+        }));
+      } else {
+        setQrModal((prev) => ({
+          ...prev,
+          checking: false,
+          checkNotice: 'PayOS chưa ghi nhận thanh toán cho đơn này.'
+        }));
+      }
+    } catch (e) {
+      setQrModal((prev) => ({
+        ...prev,
+        checking: false,
+        checkNotice: e?.message || 'Không kiểm tra được trạng thái PayOS.'
+      }));
+    }
+  };
 
   const chatBoxRef = useRef(null);
 
@@ -766,6 +833,7 @@ export default function FacebookPOSPage() {
 
     try {
       // Bước A: Tạo đơn hàng (chờ xác nhận) và GIỮ hàng; chủ shop xác nhận đơn mới trừ kho
+      const isOnline = paymentMethod === 'ONLINE';
       const orderResult = await api('/facebook/webhook/order', {
         method: 'POST',
         body: {
@@ -777,43 +845,54 @@ export default function FacebookPOSPage() {
           customerPhone: phone,
           customerAddress,
           psid: selectedPsid,
-          paymentMethod: 'ONLINE'
+          paymentMethod
         }
       });
 
       const orderId = orderResult?.orderId;
       const orderNumber = orderResult?.orderNumber || `#${orderId}`;
       const totalAmount = orderResult?.totalAmount || cartTotal;
+      refreshAllOrders(globalMutate);
 
-      // Bước B: Thử tạo link thanh toán PayOS thật & Mã VietQR
+      // Bước B: Nếu chọn chuyển khoản PayOS thì tạo link & Mã VietQR
       const trackingUrl = `${window.location.origin}/tracking/${encodeURIComponent(orderNumber)}`;
       let payUrl = trackingUrl;
       let qrImageUrl = '';
       let bankInfo = null;
 
-      try {
-        const payRes = await api('/payment/payos/create-link', {
-          method: 'POST',
-          body: { orderId }
-        });
-        if (payRes?.checkoutUrl) {
-          payUrl = payRes.checkoutUrl;
+      if (isOnline) {
+        try {
+          const payRes = await api('/payment/payos/create-link', {
+            method: 'POST',
+            body: { orderId }
+          });
+          if (payRes?.checkoutUrl) {
+            payUrl = payRes.checkoutUrl;
+          }
+          if (payRes?.bin && payRes?.accountNumber) {
+            const desc = `DH ${orderNumber.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20)}`;
+            qrImageUrl = `https://img.vietqr.io/image/${payRes.bin}-${payRes.accountNumber}-compact2.png?amount=${payRes.amount || totalAmount}&addInfo=${encodeURIComponent(desc)}&accountName=${encodeURIComponent(payRes.accountName || 'THORS')}`;
+            bankInfo = {
+              bin: payRes.bin,
+              accountNumber: payRes.accountNumber,
+              accountName: payRes.accountName || 'THORS'
+            };
+          }
+        } catch (ignored) {
+          // Fallback tạo mã QR dẫn thẳng vào trang theo dõi đơn hàng công khai
+          qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(payUrl)}`;
         }
-        if (payRes?.bin && payRes?.accountNumber) {
-          const desc = `DH ${orderNumber.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20)}`;
-          qrImageUrl = `https://img.vietqr.io/image/${payRes.bin}-${payRes.accountNumber}-compact2.png?amount=${payRes.amount || totalAmount}&addInfo=${encodeURIComponent(desc)}&accountName=${encodeURIComponent(payRes.accountName || 'THORS')}`;
-          bankInfo = {
-            bin: payRes.bin,
-            accountNumber: payRes.accountNumber,
-            accountName: payRes.accountName || 'THORS'
-          };
-        }
-      } catch (ignored) {
-        // Fallback tạo mã QR dẫn thẳng vào trang theo dõi đơn hàng công khai
-        qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(payUrl)}`;
       }
 
-      // Bước C: Tạo tin nhắn xác nhận kèm thông tin thanh toán VietQR / PayOS và link theo dõi
+      // Bước C: Tạo tin nhắn xác nhận kèm thông tin thanh toán phù hợp và link theo dõi
+      const paymentSection = isOnline
+        ? `\n💳 Bạn vui lòng quét mã VietQR hình bên dưới hoặc truy cập link sau để thanh toán online:\n` +
+          `${payUrl}\n\n`
+        : `\n🚚 Hình thức thanh toán: Thanh toán khi nhận hàng (COD)\n\n`;
+      const closingLine = isOnline
+        ? 'Shop sẽ đóng gói và giao hàng ngay khi nhận được thanh toán ạ! ❤️'
+        : 'Shop sẽ xác nhận và giao hàng cho bạn trong thời gian sớm nhất ạ! ❤️';
+
       const paymentMsg =
         `🎉 Cảm ơn bạn đã đặt hàng tại THORS!\n\n` +
         `📦 THÔNG TIN ĐƠN HÀNG ${orderNumber}:\n` +
@@ -821,11 +900,10 @@ export default function FacebookPOSPage() {
         `\n\n💵 TỔNG CỘNG: ${money(totalAmount)}\n` +
         `📍 Địa chỉ nhận hàng: ${customerAddress}\n` +
         `📞 SĐT: ${phone}\n` +
-        `\n💳 Bạn vui lòng quét mã VietQR hình bên dưới hoặc truy cập link sau để thanh toán online:\n` +
-        `${payUrl}\n\n` +
+        paymentSection +
         `🔍 Theo dõi hành trình giao hàng & yêu cầu đổi trả online tại:\n` +
         `${trackingUrl}\n\n` +
-        `Shop sẽ đóng gói và giao hàng ngay khi nhận được thanh toán ạ! ❤️`;
+        closingLine;
 
       // Bước D: Bắn tin nhắn qua Messenger cho khách hàng
       let sendSuccess = true;
@@ -847,8 +925,8 @@ export default function FacebookPOSPage() {
         sendWarningMsg = err.message || '';
       }
 
-      // Bước E: Gửi trực tiếp ảnh Mã QR VietQR vào Messenger cho khách hàng
-      if (qrImageUrl && sendSuccess) {
+      // Bước E: Gửi trực tiếp ảnh Mã QR VietQR vào Messenger nếu là đơn ONLINE
+      if (isOnline && qrImageUrl && sendSuccess) {
         try {
           await api('/facebook/webhook/send-image', {
             method: 'POST',
@@ -860,26 +938,33 @@ export default function FacebookPOSPage() {
         } catch (ignored) {}
       }
 
-      // Mở modal hiển thị mã QR VietQR trên màn hình Web POS để nhân viên đối soát
-      setQrModal({
-        open: true,
-        orderNumber,
-        totalAmount,
-        qrImageUrl,
-        payUrl,
-        bankName: bankInfo ? `Ngân hàng (BIN: ${bankInfo.bin})` : 'VietQR / PayOS',
-        accountNumber: bankInfo?.accountNumber || '',
-        accountName: bankInfo?.accountName || 'THORS',
-        copied: false
-      });
+      // Mở modal hiển thị mã QR VietQR nếu là đơn chuyển khoản PayOS
+      if (isOnline) {
+        setQrModal({
+          open: true,
+          orderId,
+          orderNumber,
+          totalAmount,
+          qrImageUrl,
+          payUrl,
+          bankName: bankInfo ? `Ngân hàng (BIN: ${bankInfo.bin})` : 'VietQR / PayOS',
+          accountNumber: bankInfo?.accountNumber || '',
+          accountName: bankInfo?.accountName || 'THORS',
+          copied: false,
+          paid: false,
+          checking: false,
+          checkNotice: ''
+        });
+      }
 
+      const channelNote = isOnline ? 'gửi link + mã QR cho khách' : 'tạo đơn thu hộ COD cho khách';
       if (sendSuccess) {
         setOrderSuccessMsg(
-          `Tạo đơn ${orderNumber} thành công, đã giữ hàng và gửi link + mã QR cho khách. Đơn đang chờ chủ shop xác nhận ở mục "Đơn hàng" (xác nhận mới trừ kho).`
+          `Tạo đơn ${orderNumber} thành công, đã giữ hàng và ${channelNote}. Đơn đang chờ xử lý ở mục "Đơn hàng Facebook" (xác nhận mới trừ kho).`
         );
       } else {
         setOrderSuccessMsg(
-          `Tạo đơn ${orderNumber} thành công, đã giữ hàng. Đơn đang chờ chủ shop xác nhận ở mục "Đơn hàng" (xác nhận mới trừ kho).`
+          `Tạo đơn ${orderNumber} thành công, đã giữ hàng. Đơn đang chờ xử lý ở mục "Đơn hàng Facebook" (xác nhận mới trừ kho).`
         );
         setErrorMsg(
           `Chưa gửi được tin nhắn Messenger: ${sendWarningMsg || 'Khách đã quá 24h chưa nhắn tin cho Page, vui lòng bảo khách gửi 1 tin vào Page để nhận tin nhắn!'}`
@@ -959,7 +1044,16 @@ export default function FacebookPOSPage() {
 
       {/* Thông báo thành công / lỗi */}
       {orderSuccessMsg && (
-        <Alert severity="success" sx={{ mb: 1.5, py: 0.25, borderRadius: 2, flexShrink: 0 }} onClose={() => setOrderSuccessMsg('')}>
+        <Alert
+          severity="success"
+          sx={{ mb: 1.5, py: 0.25, borderRadius: 2, flexShrink: 0 }}
+          action={
+            <Button component={RouterLink} to="/facebook-orders" color="inherit" size="small" sx={{ fontWeight: 700, textTransform: 'none', whiteSpace: 'nowrap' }}>
+              Xem đơn Facebook
+            </Button>
+          }
+          onClose={() => setOrderSuccessMsg('')}
+        >
           {orderSuccessMsg}
         </Alert>
       )}
@@ -1745,8 +1839,32 @@ export default function FacebookPOSPage() {
             )}
           </Box>
 
-          {/* Nút Chốt đơn & Bắn link PayOS */}
+          {/* Chọn phương thức thanh toán & Chốt đơn */}
           <Box sx={{ p: 1.75, borderTop: `1px solid ${C.border}`, bgcolor: '#fff' }}>
+            <Box sx={{ mb: 1.25 }}>
+              <Typography sx={{ fontSize: 11.5, fontWeight: 700, color: C.muted, mb: 0.25 }}>
+                Hình thức thanh toán
+              </Typography>
+              <RadioGroup
+                row
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+                sx={{ gap: 1 }}
+              >
+                <FormControlLabel
+                  value="ONLINE"
+                  control={<Radio size="small" />}
+                  label={<Typography sx={{ fontSize: 12, fontWeight: 600 }}>Chuyển khoản PayOS</Typography>}
+                  sx={{ mr: 1 }}
+                />
+                <FormControlLabel
+                  value="COD"
+                  control={<Radio size="small" />}
+                  label={<Typography sx={{ fontSize: 12, fontWeight: 600 }}>Thu hộ (COD)</Typography>}
+                  sx={{ mr: 0 }}
+                />
+              </RadioGroup>
+            </Box>
             {errorMsg && (
               <Alert severity="warning" onClose={() => setErrorMsg('')} sx={{ mb: 1.5, fontSize: 11.5, py: 0.5, borderRadius: '8px' }}>
                 {errorMsg}
@@ -1757,7 +1875,15 @@ export default function FacebookPOSPage() {
               variant="contained"
               disabled={creatingOrder || !selectedPsid}
               onClick={handleCreateOrderAndSendPayOS}
-              startIcon={creatingOrder ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : <QrcodeOutlined />}
+              startIcon={
+                creatingOrder ? (
+                  <CircularProgress size={16} sx={{ color: '#fff' }} />
+                ) : paymentMethod === 'ONLINE' ? (
+                  <QrcodeOutlined />
+                ) : (
+                  <CheckCircleOutlined />
+                )
+              }
               sx={{
                 bgcolor: '#087F8C',
                 color: '#fff',
@@ -1770,7 +1896,13 @@ export default function FacebookPOSPage() {
                 '&:hover': { bgcolor: '#066670', boxShadow: 'none' }
               }}
             >
-              {creatingOrder ? 'Đang tạo đơn & PayOS...' : 'Chốt đơn & Gửi Link PayOS'}
+              {creatingOrder
+                ? paymentMethod === 'ONLINE'
+                  ? 'Đang tạo đơn & PayOS...'
+                  : 'Đang tạo đơn COD...'
+                : paymentMethod === 'ONLINE'
+                  ? 'Chốt đơn & Gửi Link PayOS'
+                  : 'Chốt đơn COD & Nhắn khách'}
             </Button>
           </Box>
         </Card>
@@ -1830,9 +1962,16 @@ export default function FacebookPOSPage() {
             )}
           </Box>
 
-          <Alert severity="success" icon={<CheckCircleOutlined />} sx={{ mt: 1.5, textAlign: 'left', fontSize: 12 }}>
-            Ảnh mã QR này đã được gửi trực tiếp vào Messenger cho khách hàng!
+          <Alert severity={qrModal.paid ? 'success' : 'info'} icon={qrModal.paid ? <CheckCircleOutlined /> : undefined} sx={{ mt: 1.5, textAlign: 'left', fontSize: 12 }}>
+            {qrModal.paid
+              ? 'Khách đã thanh toán thành công! Đơn hàng đã được cập nhật Đã thanh toán và tính vào doanh thu Dashboard.'
+              : 'Ảnh mã QR này đã được gửi trực tiếp vào Messenger cho khách. Hệ thống đang tự động kiểm tra thanh toán PayOS...'}
           </Alert>
+          {qrModal.checkNotice && !qrModal.paid && (
+            <Alert severity="warning" sx={{ mt: 1, textAlign: 'left', fontSize: 11.5 }}>
+              {qrModal.checkNotice}
+            </Alert>
+          )}
 
           {/* Thông tin chuyển khoản */}
           {qrModal.accountNumber && (
@@ -1862,20 +2001,32 @@ export default function FacebookPOSPage() {
           )}
         </DialogContent>
 
-        <DialogActions sx={{ p: 2, pt: 0, justifyContent: 'space-between' }}>
-          {qrModal.payUrl ? (
-            <Button
-              variant="outlined"
-              size="small"
-              startIcon={<LinkOutlined />}
-              onClick={() => window.open(qrModal.payUrl, '_blank')}
-              sx={{ textTransform: 'none', borderRadius: '8px', fontSize: 12 }}
-            >
-              Mở link thanh toán
-            </Button>
-          ) : (
-            <Box />
-          )}
+        <DialogActions sx={{ p: 2, pt: 0, justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
+          <Stack direction="row" spacing={1}>
+            {qrModal.payUrl && (
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<LinkOutlined />}
+                onClick={() => window.open(qrModal.payUrl, '_blank')}
+                sx={{ textTransform: 'none', borderRadius: '8px', fontSize: 12 }}
+              >
+                Mở link thanh toán
+              </Button>
+            )}
+            {qrModal.orderId && !qrModal.paid && (
+              <Button
+                variant="outlined"
+                size="small"
+                disabled={qrModal.checking}
+                startIcon={qrModal.checking ? <CircularProgress size={13} /> : <ReloadOutlined />}
+                onClick={handleManualPayCheck}
+                sx={{ textTransform: 'none', borderRadius: '8px', fontSize: 12 }}
+              >
+                {qrModal.checking ? 'Đang kiểm tra...' : 'Kiểm tra thanh toán'}
+              </Button>
+            )}
+          </Stack>
           <Button
             variant="contained"
             size="small"

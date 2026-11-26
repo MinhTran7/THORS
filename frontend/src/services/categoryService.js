@@ -90,11 +90,21 @@ export const updateCategory = (categoryId, data) => {
   });
 };
 
-// Chuyển toàn bộ sản phẩm gắn trực tiếp của danh mục nguồn sang một danh mục lá
-export const transferProducts = (sourceCategoryId, targetCategoryId) => {
-  return post(`/categories/${sourceCategoryId}/transfer-products`, {
-    targetCategoryId: Number(targetCategoryId)
-  });
+// Danh sách sản phẩm gắn trực tiếp vào danh mục (để chọn từng sản phẩm khi chuyển)
+export const getDirectCategoryProducts = (categoryId) => {
+  return api(`/categories/${categoryId}/direct-products`);
+};
+
+// Chuyển sản phẩm gắn trực tiếp của danh mục nguồn sang một danh mục lá
+export const transferProducts = (sourceCategoryId, targetCategoryId, options = {}) => {
+  const body = {
+    targetCategoryId: Number(targetCategoryId),
+    allowOutsideBranch: Boolean(options.allowOutsideBranch)
+  };
+  if (Array.isArray(options.productIds)) {
+    body.productIds = options.productIds.map((id) => Number(id));
+  }
+  return post(`/categories/${sourceCategoryId}/transfer-products`, body);
 };
 
 //status category

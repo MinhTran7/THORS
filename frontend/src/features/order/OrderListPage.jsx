@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import useSWR, { useSWRConfig } from 'swr';
 import {
@@ -12,7 +12,6 @@ import {
   FormControlLabel,
   IconButton,
   InputAdornment,
-  MenuItem,
   Radio,
   RadioGroup,
   Tab,
@@ -54,7 +53,7 @@ import { DeliveryProofDialog, useDeliveryProofRequired } from './components/Deli
 import AddressNotFoundDialog, { ADDRESS_NOT_FOUND, INVALID_ADDRESS_REASON } from './AddressNotFoundDialog';
 import DeliveryChoice from './DeliveryChoice';
 import { ghnReady } from './GhnAddressFields';
-import { customerActionsFor, formatVnd, hasReturn, orderStatusMeta, orderPaymentMeta, preparationMeta } from './constants';
+import { customerActionsFor, formatVnd, hasReturn, orderStatusMeta, orderPaymentMeta, paymentMethodLabel, preparationMeta } from './constants';
 import {
   C,
   SANS,
@@ -107,12 +106,7 @@ const RETURN_STATUS = {
 // Chiều rộng cố định của 2 nút thao tác trên mỗi dòng (vừa chữ dài nhất "Xác nhận đã giao" / "Từ chối đơn")
 const ACTION_WIDTH = { primary: 140, secondary: 112 };
 
-// Bộ lọc nguồn đơn (chỉ chủ shop): web là khách tự đặt, Facebook là nhân viên tạo từ Social POS
-const SOURCE_FILTERS = [
-  { value: 'all', label: 'Mọi nguồn đơn' },
-  { value: 'WEB', label: 'Đơn trên web' },
-  { value: 'FACEBOOK', label: 'Đơn Facebook' }
-];
+
 
 // Lý do có sẵn để chọn; chỉ khi chọn "Lý do khác" mới phải tự nhập
 const OTHER_REASON = '__OTHER__';
@@ -389,19 +383,25 @@ function CustomerOrderCard({ order, onOpen, actions, onAction, busy, onRebuy, re
   );
 }
 
-export default function OrderListPage() {
-  useCrumbs(['Đơn hàng']);
+export default function OrderListPage({ fixedSource }) {
   const { account } = useAuth();
   const navigate = useNavigate();
   const { mutate: globalMutate } = useSWRConfig();
   const isCustomer = account.role === 'CUSTOMER';
+  const effectiveSource = isCustomer ? undefined : fixedSource || 'WEB';
+  const isFacebookPage = effectiveSource === 'FACEBOOK';
+  useCrumbs(isCustomer ? ['Đơn hàng'] : ['Bán hàng', isFacebookPage ? 'Đơn hàng Facebook' : 'Đơn hàng online']);
 
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('all');
   const [dateFrom, setDateFrom] = useState(''); // yyyy-MM-dd, rỗng = không giới hạn
   const [dateTo, setDateTo] = useState('');
-  const [sourceFilter, setSourceFilter] = useState('all');
   const [page, setPage] = useState(0);
+
+  useEffect(() => {
+    setPage(0);
+    setStatus('all');
+  }, [fixedSource]);
   const [busyId, setBusyId] = useState(null);
   const [rebuyId, setRebuyId] = useState(null); // đơn đang được "Mua lại"
   // Nút "Liên hệ người bán" chỉ hiện khi chat đã bật (database đã chạy migration chat)
@@ -457,26 +457,29 @@ export default function OrderListPage() {
     q: search || undefined,
     dateFrom: dateFrom || undefined,
     dateTo: dateTo || undefined,
-    source: sourceFilter === 'all' ? undefined : sourceFilter,
+    source: effectiveSource,
     page,
     size: PAGE_SIZE
   };
   // Danh sách tự tải lại định kỳ để thấy ngay đơn mới và trạng thái mới, không cần reload trang
   const list = useSWR(['orders', params], () => ordersApi.list(params), { keepPreviousData: true, ...LIVE_SWR });
-  // Số đơn theo trạng thái cho các tab của chủ shop
-  const counts = useSWR(isOwner ? ['order-counts'] : null, () => ordersApi.counts(), LIVE_SWR);
+  // Số đơn theo trạng thái cho các tab của chủ shop (lọc đúng theo trang Website hoặc Facebook)
+  const counts = useSWR(
+    isOwner ? ['order-counts', effectiveSource] : null,
+    () => ordersApi.counts({ source: effectiveSource }),
+    LIVE_SWR
+  );
   const countData = counts.data ?? {};
   // Làm mới mọi dữ liệu đơn hàng (danh sách, số đếm, cả trang chi tiết đang mở trong cache)
   const refresh = () => refreshAllOrders(globalMutate);
 
   // Các ô trong thanh lọc (không tính tab trạng thái)
-  const barFiltered = Boolean(q) || Boolean(dateFrom) || Boolean(dateTo) || sourceFilter !== 'all';
+  const barFiltered = Boolean(q) || Boolean(dateFrom) || Boolean(dateTo);
   const hasFilter = Boolean(search) || status !== 'all' || barFiltered;
   const resetFilters = () => {
     setQ('');
     setDateFrom('');
     setDateTo('');
-    setSourceFilter('all');
     setPage(0);
   };
 
@@ -701,25 +704,7 @@ export default function OrderListPage() {
           setPage(0);
         }}
       />
-      {!isCustomer && (
-        <FilterField label="Nguồn đơn" width={170}>
-          <TextField
-            select
-            fullWidth
-            size="small"
-            value={sourceFilter}
-            onChange={(e) => filter(setSourceFilter)(e.target.value)}
-            slotProps={{ htmlInput: { 'aria-label': 'Nguồn đơn' } }}
-            sx={filterInputSx()}
-          >
-            {SOURCE_FILTERS.map((item) => (
-              <MenuItem key={item.value} value={item.value}>
-                {item.label}
-              </MenuItem>
-            ))}
-          </TextField>
-        </FilterField>
-      )}
+
       <FilterResetButton onClick={resetFilters} disabled={!barFiltered} />
     </Box>
   );
@@ -862,7 +847,14 @@ export default function OrderListPage() {
   return (
     <Box>
       <Box sx={{ mb: 1 }}>
-        <PageHeader title="Đơn hàng online" subtitle="Xem và xử lý các đơn khách đặt trên website." />
+        <PageHeader
+          title={isFacebookPage ? 'Đơn hàng Facebook' : 'Đơn hàng online'}
+          subtitle={
+            isFacebookPage
+              ? 'Xem và xử lý các đơn hàng được tạo từ Facebook Messenger.'
+              : 'Xem và xử lý các đơn khách đặt trên website.'
+          }
+        />
       </Box>
 
       {rowError && !dialog && (
@@ -978,11 +970,29 @@ export default function OrderListPage() {
                       <Typography sx={{ fontSize: 11.5, color: '#94A3B8' }}>{order.deliveryPhone || '—'}</Typography>
                     </TableCell>
 
-                    {/* Tổng tiền */}
+                    {/* Tổng tiền & trạng thái thanh toán (để nhận biết đơn đã vào doanh thu hay chưa) */}
                     <TableCell>
-                      <Typography sx={{ fontWeight: 800, fontSize: 14, color: '#1E293B', whiteSpace: 'nowrap' }}>
-                        {formatVnd(order.totalAmount)}
-                      </Typography>
+                      {(() => {
+                        const payMeta = orderPaymentMeta(order);
+                        const payColor =
+                          payMeta.tone === 'success' ? '#15803D' : payMeta.tone === 'warning' ? '#B45309' : '#64748B';
+                        const methodShort =
+                          order.paymentMethod === 'COD'
+                            ? 'COD'
+                            : order.paymentMethod === 'ONLINE'
+                              ? 'Chuyển khoản'
+                              : paymentMethodLabel(order.paymentMethod);
+                        return (
+                          <>
+                            <Typography sx={{ fontWeight: 800, fontSize: 14, color: '#1E293B', whiteSpace: 'nowrap' }}>
+                              {formatVnd(order.totalAmount)}
+                            </Typography>
+                            <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: payColor, whiteSpace: 'nowrap' }}>
+                              {methodShort} · {payMeta.label}
+                            </Typography>
+                          </>
+                        );
+                      })()}
                     </TableCell>
 
                     {/* Trạng thái đơn */}
@@ -1024,6 +1034,10 @@ export default function OrderListPage() {
                             size="small"
                             component={RouterLink}
                             to={`/orders/${order.id}`}
+                            state={{
+                              backTo: isFacebookPage ? '/facebook-orders' : '/orders',
+                              backLabel: isFacebookPage ? 'Quay lại đơn hàng Facebook' : 'Quay lại đơn hàng online'
+                            }}
                             aria-label={`Xem chi tiết đơn ${order.orderNumber}`}
                             sx={{ color: '#64748B', p: 0.75, '&:hover': { color: '#0F172A', bgcolor: 'transparent' } }}
                           >
@@ -1086,12 +1100,18 @@ export default function OrderListPage() {
                   <Box sx={{ py: 6, textAlign: 'center' }}>
                     <InboxOutlined style={{ fontSize: 40, color: '#CBD5E1', marginBottom: 12 }} />
                     <Typography variant="body1" sx={{ color: brand.ink, fontWeight: 600 }}>
-                      {hasFilter ? 'Không có đơn hàng nào phù hợp với bộ lọc.' : 'Chưa có đơn hàng online nào trong hệ thống.'}
+                      {hasFilter
+                        ? 'Không có đơn hàng nào phù hợp với bộ lọc.'
+                        : isFacebookPage
+                          ? 'Chưa có đơn hàng Facebook nào trong hệ thống.'
+                          : 'Chưa có đơn hàng online nào trong hệ thống.'}
                     </Typography>
                     <Typography variant="body2" sx={{ color: brand.muted, mt: 0.5 }}>
                       {hasFilter
                         ? 'Hãy thử đổi từ khóa, bộ lọc hoặc chọn tab trạng thái khác.'
-                        : 'Đơn hàng mới từ khách đặt trên website sẽ xuất hiện tại đây.'}
+                        : isFacebookPage
+                          ? 'Đơn hàng chốt từ màn hình Kênh bán hàng > Facebook sẽ xuất hiện tại đây.'
+                          : 'Đơn hàng mới từ khách đặt trên website sẽ xuất hiện tại đây.'}
                     </Typography>
                   </Box>
                 </EmptyRow>

@@ -70,6 +70,11 @@ public class CategoryController {
     }
 
     // Chuyển toàn bộ sản phẩm gắn trực tiếp sang một danh mục lá (chỉ OWNER - SecurityConfig: POST /api/categories/**)
+    @GetMapping("/{categoryId}/direct-products")
+    public List<Map<String, Object>> getDirectProducts(@PathVariable int categoryId) {
+        return categoryService.getDirectProducts(categoryId);
+    }
+
     @PostMapping("/{categoryId}/transfer-products")
     public ResponseEntity<Map<String, Object>> transferProducts(
             @PathVariable int categoryId,

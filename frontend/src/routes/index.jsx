@@ -174,6 +174,7 @@ export default createBrowserRouter([
               { path: '/in-store-sales/history', element: <InStoreSalesHistoryPage /> },
               { path: '/in-store-sales/history/:orderId', element: <InStoreSaleDetailPage /> },
               { path: '/facebook', element: <FacebookPOSPage /> },
+              { path: '/facebook-orders', element: <OrderListPage fixedSource="FACEBOOK" /> },
               // Tin nhắn khách gửi qua "Liên hệ người bán"
               { path: '/messages', element: <StoreChatPage /> }
             ]

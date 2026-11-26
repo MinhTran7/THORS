@@ -59,6 +59,7 @@ const OWNER_MENU = [
       { to: '/in-store-sales', label: 'Bán tại quầy', icon: <ShopOutlined /> },
       { to: '/in-store-sales/history', label: 'Đơn hàng tại quầy', icon: <FileDoneOutlined /> },
       { to: '/orders', label: 'Đơn hàng online', icon: <MobileOutlined /> },
+      { to: '/facebook-orders', label: 'Đơn hàng Facebook', icon: <FacebookOutlined /> },
       // Tin khách nhắn qua "Liên hệ người bán"; ThorsLayout hiện số cuộc trò chuyện có tin chưa đọc
       { to: '/messages', label: 'Tin nhắn', icon: <MessageOutlined />, chatBadge: true },
       { to: '/returns', label: 'Đổi trả', icon: <SwapOutlined /> },

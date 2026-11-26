@@ -30,6 +30,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -108,9 +109,7 @@ public class ProductService {
 
         // Validate product ID
         if (productId <= 0) {
-            throw new IllegalArgumentException(
-                    "Mã sản phẩm không hợp lệ."
-            );
+            throw new ApiException(400, "INVALID_PRODUCT_ID", "Mã sản phẩm không hợp lệ.");
         }
 
         // Get product information
@@ -153,12 +152,54 @@ public class ProductService {
     // ADD PRODUCT - JSON
     // ==========================================
 
+    /**
+     * Tạo sản phẩm KHÔNG chặn trùng tên. Dùng cho WarehouseCatalog: Kho tự hỏi người dùng qua similar()
+     * và chỉ gọi khi đã xác nhận (allowSimilar) - đừng thêm kiểm tra trùng tên vào đây.
+     */
     @Transactional
     public int createProduct(CreateProductRequest request) {
 
         validateProduct(request);
 
         return saveProductAndVariants(request);
+    }
+
+    /** Tạo sản phẩm từ trang Sản phẩm (POST /api/products JSON): chặn trùng tên với sản phẩm đã có (409). */
+    @Transactional
+    public int createCatalogProduct(CreateProductRequest request) {
+
+        validateProduct(request);
+        requireUniqueName(request.getProductName(), null);
+
+        return saveProductAndVariants(request);
+    }
+
+    // ==========================================
+    // CHẶN TRÙNG TÊN SẢN PHẨM
+    // ==========================================
+
+    /** Khóa tên (ProductCodes.nameKey) -> tên đang lưu của các sản phẩm khác exceptProductId. */
+    private Map<String, String> existingNameKeys(Integer exceptProductId) {
+        Map<String, String> keys = new HashMap<>();
+        for (Map<String, Object> row : productRepository.findAllNames()) {
+            Object id = row.get("product_id");
+            if (exceptProductId != null && id instanceof Number n && n.intValue() == exceptProductId) continue;
+            String name = row.get("product_name") == null ? null : row.get("product_name").toString();
+            if (name != null) keys.putIfAbsent(ProductCodes.nameKey(name), name);
+        }
+        return keys;
+    }
+
+    /**
+     * Tên sản phẩm phải chưa có ở sản phẩm khác (so theo nameKey: không phân biệt hoa/thường, dấu, khoảng trắng).
+     * exceptProductId: khi sửa, bỏ qua chính sản phẩm đó (giữ nguyên tên cũ vẫn lưu được).
+     */
+    private void requireUniqueName(String productName, Integer exceptProductId) {
+        String existing = existingNameKeys(exceptProductId).get(ProductCodes.nameKey(productName));
+        if (existing != null) {
+            throw new ApiException(409, "PRODUCT_NAME_EXISTS",
+                    "Sản phẩm \"" + existing + "\" đã tồn tại trong hệ thống.");
+        }
     }
 
     // ==========================================
@@ -186,6 +227,26 @@ public class ProductService {
             } catch (IllegalArgumentException ex) {
                 String name = req != null && req.getProductName() != null ? req.getProductName() : ("#" + (i + 1));
                 throw new IllegalArgumentException("Sản phẩm [" + name + "]: " + ex.getMessage());
+            }
+        }
+
+        // Chặn trùng tên (theo nameKey) TRƯỚC khi lưu bất kỳ sản phẩm nào:
+        // 1) trùng ngay trong file Excel (kể cả khác danh mục), 2) trùng với sản phẩm đã có trong hệ thống
+        Map<String, String> inFile = new HashMap<>();
+        for (CreateProductRequest req : products) {
+            String first = inFile.putIfAbsent(ProductCodes.nameKey(req.getProductName()), req.getProductName());
+            if (first != null) {
+                throw new ApiException(409, "PRODUCT_NAME_DUPLICATED_IN_FILE",
+                        "Sản phẩm [" + req.getProductName() + "]: trùng tên với sản phẩm \"" + first
+                                + "\" trong cùng file Excel.");
+            }
+        }
+        Map<String, String> existing = existingNameKeys(null);
+        for (CreateProductRequest req : products) {
+            String have = existing.get(ProductCodes.nameKey(req.getProductName()));
+            if (have != null) {
+                throw new ApiException(409, "PRODUCT_NAME_EXISTS",
+                        "Sản phẩm [" + req.getProductName() + "]: đã tồn tại trong hệ thống (\"" + have + "\").");
             }
         }
 
@@ -451,6 +512,8 @@ public class ProductService {
 
         // Validate product before uploading
         validateProduct(request);
+        // Trùng tên thì dừng TRƯỚC khi upload ảnh lên Cloudinary (khỏi upload thừa rồi phải dọn)
+        requireUniqueName(request.getProductName(), null);
 
         // Validate image list
         if (images == null || images.isEmpty()) {
@@ -620,6 +683,9 @@ public class ProductService {
         if (productName.length() > 200) {
             throw badRequest("PRODUCT_NAME", "Tên sản phẩm không được vượt quá 200 ký tự.");
         }
+
+        // 3b. Không trùng tên với sản phẩm KHÁC (giữ nguyên tên cũ của chính nó vẫn lưu được)
+        requireUniqueName(productName, productId);
 
         // 3c. Mã sản phẩm (SKU): rỗng = giữ nguyên
         String requestedSku = ProductCodes.normalizeSku(request.getSku());

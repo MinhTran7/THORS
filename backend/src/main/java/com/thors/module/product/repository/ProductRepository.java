@@ -253,6 +253,14 @@ public class ProductRepository {
     // VIEW PRODUCT DETAIL
     // ==========================================
 
+    /**
+     * Mã + tên mọi sản phẩm (kể cả đang ẩn), để service so trùng tên theo khóa đã chuẩn hóa
+     * (ProductCodes.nameKey: bỏ dấu, viết thường, gộp khoảng trắng) - việc này không làm được bằng SQL thuần.
+     */
+    public List<Map<String, Object>> findAllNames() {
+        return jdbcTemplate.queryForList("SELECT product_id, product_name FROM product");
+    }
+
     public Product findById(int productId) {
         try {
             return findById(productId, true);
