@@ -160,7 +160,7 @@ class OrderServiceUnitTest {
             notifications = mock(NotificationPublisher.class);
             ghnShipping = mock(GhnShippingService.class);
             service = new OrderService(orders, notifications, ghnShipping, mock(WarehouseStore.class),
-                    mock(OrderMailService.class));
+                    mock(OrderMailService.class), mock(com.thors.module.sales.service.InStoreSaleCompleter.class));
             when(orders.isCustomerAccount(7)).thenReturn(true);
             when(orders.storeUserIds()).thenReturn(List.of(2, 3));
             when(orders.transition(anyInt(), anyString(), anyString(), anyInt(), any(), any())).thenReturn(true);

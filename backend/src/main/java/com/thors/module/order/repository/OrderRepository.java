@@ -902,7 +902,7 @@ public class OrderRepository {
         return db.query(
                 """
                 SELECT order_id, user_id, order_number FROM orders
-                WHERE order_status = 'AWAITING_PAYMENT'
+                WHERE order_type = 'Online' AND order_status = 'AWAITING_PAYMENT'
                   AND COALESCE(payment_expires_at, DATE_ADD(order_date, INTERVAL 10 MINUTE)) < NOW()
                 """,
                 (rs, i) -> new Due(rs.getInt("order_id"), rs.getInt("user_id"), rs.getString("order_number")));

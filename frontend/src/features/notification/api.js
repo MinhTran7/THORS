@@ -31,8 +31,9 @@ export const PREFERENCES_KEY = 'notifications-preferences';
 // Thêm dòng mới ở đây khi có thêm loại related_entity_type.
 const ENTITY_ROUTES = {
   ORDER: (id) => `/orders/${id}`,
-  // Khách chỉ có trang danh sách khuyến mãi đang chạy (chưa có trang chi tiết cho khách)
+  // Mã giảm giá online: Kho voucher của khách; khuyến mãi sản phẩm: trang Sale
   PROMOTION: () => '/promotions',
+  PRODUCT_SALE: () => '/shop/sale',
   // Yêu cầu đặt lại mật khẩu của Owner chỉ gửi cho Admin; Admin xử lý ở trang Accounts.
   USER: () => '/accounts',
   // Thông báo kho: phiếu kho mở bằng ?id= (trang nào cũng mở được mọi loại phiếu), yêu cầu xếp kệ mở trang Vị trí.
@@ -50,4 +51,4 @@ export const customerNotificationPath = (item) => entityPath(item) ?? `/notifica
 
 // Làm mới số chưa đọc, danh sách trong popup và danh sách ở trang Notifications.
 export const refreshNotifications = () =>
-  mutate((key) => key === UNREAD_KEY || (Array.isArray(key) && (key[0] === 'notifications' || key[0] === POPOVER_KEY)));
+  mutate((key) => key === UNREAD_KEY || (Array.isArray(key) && (key[0] === 'notifications' || key[0] === POPOVER_KEY)));

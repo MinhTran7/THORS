@@ -1,5 +1,6 @@
 package com.thors.module.order.repository;
 
+import com.thors.module.promotion.dto.SalePrice;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
@@ -108,17 +109,19 @@ public class CheckoutRepository {
     }
 
     /**
-     * Thêm dòng đơn và GIỮ luôn số hàng đó (reserved_quantity = quantity) để khách khác không mua được.
+     * Thêm dòng đơn (giá sau khuyến mãi, giá gốc, khuyến mãi đã áp dụng) và GIỮ luôn số hàng đó
+     * (reserved_quantity = quantity) để khách khác không mua được.
      * Phần giữ tự về 0 khi: chủ shop xác nhận (trừ kho thật), đơn bị hủy / từ chối, hoặc hết hạn thanh toán
      * 10 phút (OrderRepository.transition / markStockDeducted).
      */
-    public void insertItem(int orderId, int detailId, int quantity, BigDecimal unitPrice,
+    public void insertItem(int orderId, int detailId, int quantity, SalePrice price,
                            String productName, String size, String color) {
         jdbcTemplate.update("""
             INSERT INTO order_item
-                (order_id, detail_id, quantity, unit_price,
+                (order_id, detail_id, quantity, unit_price, original_price, promotion_id,
                  product_name_snapshot, size_snapshot, color_snapshot, reserved_quantity)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, orderId, detailId, quantity, unitPrice, productName, size, color, quantity);
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, orderId, detailId, quantity, price.price(), price.originalPrice(), price.promotionId(),
+                productName, size, color, quantity);
     }
 }

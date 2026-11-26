@@ -6,4 +6,5 @@ export const getShippingAddresses = () => api(BASE);
 export const getShippingAddress = (id) => api(`${BASE}/${id}`);
 export const createShippingAddress = (body) => api(BASE, { method: 'POST', body });
 export const updateShippingAddress = (id, body) => api(`${BASE}/${id}`, { method: 'PUT', body });
+export const setDefaultShippingAddress = (id) => api(`${BASE}/${id}/default`, { method: 'PATCH' });
 export const deleteShippingAddress = (id) => api(`${BASE}/${id}`, { method: 'DELETE' });

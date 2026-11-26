@@ -19,4 +19,5 @@ public final class NotificationTypes {
     public static final String ENTITY_USER = "USER";
     public static final String ENTITY_ORDER = "ORDER";
     public static final String ENTITY_PROMOTION = "PROMOTION";
-}
+    public static final String ENTITY_PRODUCT_SALE = "PRODUCT_SALE";
+}

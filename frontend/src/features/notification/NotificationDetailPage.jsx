@@ -18,6 +18,7 @@ const RELATED_LABEL = {
   ORDER: 'Xem đơn hàng',
   USER: 'Mở trang tài khoản',
   PROMOTION: 'Xem khuyến mãi',
+  PRODUCT_SALE: 'Xem sản phẩm giảm giá',
   stock_receipt: 'Xem phiếu kho',
   location_move_request: 'Xem yêu cầu xếp kệ'
 };

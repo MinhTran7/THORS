@@ -30,7 +30,8 @@ class OrderPaymentNotificationTest {
                         notifications,
                         mock(GhnShippingService.class),
                         mock(WarehouseStore.class),
-                        mock(com.thors.module.order.service.OrderMailService.class));
+                        mock(com.thors.module.order.service.OrderMailService.class),
+                        mock(com.thors.module.sales.service.InStoreSaleCompleter.class));
         when(orders.isCustomerAccount(5)).thenReturn(true);
     }
 

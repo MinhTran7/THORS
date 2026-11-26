@@ -6,7 +6,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
-// Khuyến mãi trả cho trang quản lý, kèm trạng thái theo thời gian và các thao tác được phép
+// Khuyến mãi cho trang quản lý, kèm lịch và các thao tác được phép tại thời điểm now
 public record PromotionView(
         int promotionId,
         String type,
@@ -15,6 +15,7 @@ public record PromotionView(
         String discountType,
         BigDecimal discountValue,
         BigDecimal minOrderValue,
+        BigDecimal maxDiscountAmount,
         Integer usageLimit,
         Integer usedCount,
         String applyScope,
@@ -30,9 +31,9 @@ public record PromotionView(
         boolean canEndEarly,
         boolean canDelete
 ) {
-    public static PromotionView of(Promotion p, LocalDateTime now) {
-        return new PromotionView(p.promotionId(), p.type(), p.name(), p.description(), p.discountType(),
-                p.discountValue(), p.minOrderValue(), p.usageLimit(), p.usedCount(), p.applyScope(), p.productIds(),
+    public static PromotionView from(Promotion p, LocalDateTime now) {
+        return new PromotionView(p.promotionId(), p.type(), p.name(), p.description(), p.discountType(), p.discountValue(),
+                p.minOrderValue(), p.maxDiscountAmount(), p.usageLimit(), p.usedCount(), p.applyScope(), p.productIds(),
                 p.startDate(), p.endDate(), p.status(), p.schedule(now).name(), p.canEdit(now), p.canAdjust(now),
                 p.canEnable(now), p.canDisable(now), p.canEndEarly(now), p.canDelete(now));
     }

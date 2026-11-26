@@ -23,28 +23,35 @@ public class ShippingAddressController {
 
     @GetMapping
     public List<ShippingAddressResponse> list() {
-        return service.list(sessions.current());
+        return service.list(sessions.current().id());
     }
 
     @GetMapping("/{addressId}")
     public ShippingAddressResponse detail(@PathVariable int addressId) {
-        return service.detail(sessions.current(), addressId);
+        return service.detail(sessions.current().id(), addressId);
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public ShippingAddressResponse create(@RequestBody ShippingAddressRequest request) {
-        return service.create(sessions.current(), request);
+    public void create(@RequestBody ShippingAddressRequest request) {
+        service.create(sessions.current().id(), request);
     }
 
     @PutMapping("/{addressId}")
-    public ShippingAddressResponse update(@PathVariable int addressId, @RequestBody ShippingAddressRequest request) {
-        return service.update(sessions.current(), addressId, request);
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void update(@PathVariable int addressId, @RequestBody ShippingAddressRequest request) {
+        service.update(sessions.current().id(), addressId, request);
+    }
+
+    @PatchMapping("/{addressId}/default")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void setDefault(@PathVariable int addressId) {
+        service.setDefault(sessions.current().id(), addressId);
     }
 
     @DeleteMapping("/{addressId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable int addressId) {
-        service.delete(sessions.current(), addressId);
+        service.delete(sessions.current().id(), addressId);
     }
 }

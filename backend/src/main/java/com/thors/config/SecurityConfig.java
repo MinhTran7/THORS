@@ -200,6 +200,7 @@ public class SecurityConfig {
                                                 .hasRole("OWNER")
                                                 .requestMatchers(HttpMethod.DELETE, "/api/products/**", "/api/categories/**")
                                                 .hasRole("OWNER")
+                                                // (Khuyến mãi, sổ địa chỉ khách, bán tại quầy: đã chặn theo vai trò ở nhóm luật phía trên)
                                                 .anyRequest()
                                                 .authenticated());
                 http.requestCache(c -> c.disable())
