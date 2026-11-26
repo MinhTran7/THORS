@@ -10,6 +10,7 @@ import java.util.*;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -278,7 +279,8 @@ public class WarehouseCounts {
         return detail(a, id);
     }
 
-    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    // Chỉ đọc: chạy chung transaction nếu đã có, không tự mở transaction mới (mỗi transaction tốn thêm ~7 lượt gửi lệnh tới DB cloud)
+    @Transactional(propagation = Propagation.SUPPORTS)
     public List<Map<String, Object>> list(Account a, Integer detail) {
         policy.view(a);
         var offset = s.clockOffset();
@@ -296,7 +298,8 @@ public class WarehouseCounts {
                 detail)), "created_at", "counted_at", "confirmed_at");
     }
 
-    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    // Chỉ đọc: chạy chung transaction nếu đã có, không tự mở transaction mới (mỗi transaction tốn thêm ~7 lượt gửi lệnh tới DB cloud)
+    @Transactional(propagation = Propagation.SUPPORTS)
     public Map<String, Object> detail(Account a, int id) {
         policy.view(a);
         var doc = copy(s.migrated(() -> s.one(

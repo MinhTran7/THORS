@@ -38,9 +38,10 @@ public final class ContactNormalizer {
     String p = value.trim().replaceAll("[ \u002d()]", "");
     if (p.startsWith("0")) p = "+84" + p.substring(1);
     if (p.startsWith("84")) p = "+" + p;
-    if (p.length() > 15 || !p.matches("\\+[1-9][0-9]{7,14}"))
+    // Số VN đủ 10 chữ số: 0 + 9 số, hoặc +84 thay cho số 0 (+84 + 9 số)
+    if (!p.matches("\\+84[0-9]{9}"))
       throw new ApiException(
-              400, "PHONE", "Số điện thoại không hợp lệ. Ví dụ: 0912345678 hoặc +84912345678.");
+              400, "PHONE", "Số điện thoại gồm 10 chữ số, bắt đầu bằng 0.");
     return p;
   }
 
@@ -51,11 +52,12 @@ public final class ContactNormalizer {
   }
 
   public static void password(String p) {
-    if (p == null
-            || p.length() < 10
-            || p.length() > 64
-            || p.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 72)
-      throw new ApiException(400, "PASSWORD", "Mật khẩu cần 10–64 ký tự và tối đa 72 byte.");
+    if (p == null || p.length() < 6 || p.length() > 64)
+      throw new ApiException(400, "PASSWORD", "Mật khẩu cần từ 6 đến 64 ký tự.");
+    // BCrypt chỉ dùng 72 byte đầu; chữ có dấu chiếm 2–3 byte nên mật khẩu nhiều chữ có dấu sẽ vượt giới hạn.
+    if (p.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 72)
+      throw new ApiException(400, "PASSWORD",
+              "Mật khẩu có nhiều chữ có dấu nên bị quá dài. Hãy bớt chữ có dấu hoặc rút ngắn mật khẩu.");
   }
 
   public static String name(String n) {

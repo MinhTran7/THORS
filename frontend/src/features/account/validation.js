@@ -1,6 +1,6 @@
 import * as Yup from 'yup';
 
-// Luật mật khẩu mới (10–64 ký tự, tối đa 72 byte) và ô xác nhận: dùng chung một bản với màn hình
+// Luật mật khẩu mới (6–64 ký tự, tối đa 72 byte) và ô xác nhận: dùng chung một bản với màn hình
 // đăng ký / đặt lại mật khẩu (features/auth/validation.js), không viết lại ở đây.
 export { password as newPassword, confirmation as confirmPassword } from 'features/auth/validation';
 

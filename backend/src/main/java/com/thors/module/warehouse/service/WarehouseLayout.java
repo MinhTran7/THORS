@@ -12,6 +12,7 @@ import java.math.BigDecimal;
 import java.util.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -30,9 +31,8 @@ public class WarehouseLayout {
         this.photos = photos;
     }
 
-    @Transactional(
-            readOnly = true,
-            isolation = Isolation.REPEATABLE_READ)
+    // Chỉ đọc: chạy chung transaction nếu đã có, không tự mở transaction mới (mỗi transaction tốn thêm ~7 lượt gửi lệnh tới DB cloud)
+    @Transactional(propagation = Propagation.SUPPORTS)
     public Map<String, Object> snapshot(Account a) {
         policy.view(a);
 

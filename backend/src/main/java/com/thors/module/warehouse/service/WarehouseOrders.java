@@ -9,7 +9,7 @@ import java.text.Normalizer;
 import java.util.*;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -27,7 +27,8 @@ import org.springframework.transaction.annotation.Transactional;
  * whitespace collapsed, lower-cased; accents are kept so "An" and "Ân" stay different suppliers.
  */
 @Service
-@Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+// Chỉ đọc: chạy chung transaction nếu đã có, không tự mở transaction mới (mỗi transaction tốn thêm ~7 lượt gửi lệnh tới DB cloud)
+@Transactional(propagation = Propagation.SUPPORTS)
 public class WarehouseOrders {
     private static final Set<String> HISTORY = Set.of("CONFIRMED", "CLOSED");
 

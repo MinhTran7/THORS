@@ -132,7 +132,7 @@ export default function FamilyFormPage() {
               <FormField
                 label="Mật khẩu"
                 error={fieldError('password')}
-                helper="Tối thiểu 10 ký tự. Người dùng nên đổi mật khẩu sau lần đăng nhập đầu tiên."
+                helper="Tối thiểu 6 ký tự. Người dùng nên đổi mật khẩu sau lần đăng nhập đầu tiên."
               >
                 <PasswordInput
                   label="Mật khẩu"

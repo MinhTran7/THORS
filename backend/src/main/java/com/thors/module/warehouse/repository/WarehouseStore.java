@@ -254,10 +254,20 @@ public class WarehouseStore {
      * database time − offset = store time; store day + offset = database time.
      */
     public java.time.Duration clockOffset() {
+        // Độ lệch giờ (làm tròn 15 phút) gần như không đổi: nhớ 10 phút để khỏi hỏi DB ở mỗi request
+        long nowMs = System.currentTimeMillis();
+        var cached = offsetCache;
+        if (cached != null && nowMs - offsetCachedAt < 600_000) return cached;
         var dbNow = time(db.queryForObject("SELECT LOCALTIMESTAMP", Object.class));
         long minutes = java.time.Duration.between(java.time.LocalDateTime.now(STORE_ZONE), dbNow).toMinutes();
-        return java.time.Duration.ofMinutes(Math.round(minutes / 15.0) * 15);
+        var offset = java.time.Duration.ofMinutes(Math.round(minutes / 15.0) * 15);
+        offsetCache = offset;
+        offsetCachedAt = nowMs;
+        return offset;
     }
+
+    private volatile java.time.Duration offsetCache;
+    private volatile long offsetCachedAt;
 
     /** Rewrites the given timestamp fields of a row from database time to store (Vietnam) time. */
     public static void storeTime(Map<String, Object> row, java.time.Duration offset, String... fields) {

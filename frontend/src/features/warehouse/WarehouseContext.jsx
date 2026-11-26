@@ -13,7 +13,10 @@ export function WarehouseProvider({ children }) {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  // Lần cuối tải lại toàn bộ dữ liệu kho (để chuyển trang không tải lại khi dữ liệu còn mới)
+  const lastReload = useRef(Date.now());
   const reload = async () => {
+    lastReload.current = Date.now();
     await Promise.all([
       snapshot.mutate(),
       documents.mutate(),
@@ -26,18 +29,30 @@ export function WarehouseProvider({ children }) {
       )
     ]);
   };
-  // Provider nằm ở route cha /warehouse nên không remount khi đổi trang con: mỗi lần bấm menu sang trang khác
-  // (hoặc bấm lại đúng trang đang mở) thì tải lại dữ liệu kho. Chỉ đổi ?id=… để mở chi tiết thì không tải lại.
+  // Provider nằm ở route cha /warehouse nên không remount khi đổi trang con.
+  //  - Bấm lại đúng trang đang mở → tải lại toàn bộ dữ liệu kho (làm mới thủ công).
+  //  - Sang trang khác → KHÔNG tải lại toàn bộ: trang mới hiện ngay dữ liệu đã có, danh sách riêng của trang
+  //    tự tải khi mở (SWR). Chỉ làm mới ngầm snapshot + phiếu nếu đã quá 60 giây kể từ lần tải trước,
+  //    để request của trang mới không phải xếp hàng sau hàng loạt request tải lại.
+  //  - Chỉ đổi ?id=… để mở chi tiết → không tải lại.
+  //  Sau mỗi thao tác lưu (run) và khi quay lại tab trình duyệt, dữ liệu vẫn được làm mới như cũ.
   const location = useLocation();
   const reloadRef = useRef(reload);
   reloadRef.current = reload;
+  const refreshRef = useRef(null);
+  refreshRef.current = () => {
+    lastReload.current = Date.now();
+    snapshot.mutate();
+    documents.mutate();
+  };
   const last = useRef(null);
   useEffect(() => {
     const prev = last.current;
     last.current = location;
     if (!prev || prev.key === location.key) return;
     const samePage = prev.pathname === location.pathname;
-    if (!samePage || prev.search === location.search) reloadRef.current();
+    if (samePage && prev.search === location.search) reloadRef.current();
+    else if (!samePage && Date.now() - lastReload.current > 60000) refreshRef.current();
   }, [location]);
   const run = async (fn, success) => {
     setError('');
