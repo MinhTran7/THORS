@@ -14,7 +14,7 @@ import ProductSearch from '../components/ProductSearch';
 import ReceiptDialog from '../components/ReceiptDialog';
 import TransferDialog from '../components/TransferDialog';
 import VariantDialog from '../components/VariantDialog';
-import { usePosOrders, useSaleProducts, useTransferWatcher } from '../hooks';
+import { usePosOrders, useSaleCodes, useTransferWatcher } from '../hooks';
 import { C, NO_EFFECTS, noEffectStyles } from '../theme';
 import { FAMILY_DISCOUNT_PERCENT, isPaid, saleTotals } from '../utils';
 
@@ -25,7 +25,7 @@ export default function InStoreSalesPage() {
   useCrumbs(['Bán hàng tại quầy', 'Bán hàng']);
   const isDesktop = useMediaQuery((theme) => theme.breakpoints.up('lg'));
 
-  const { products, priceRanges, loading, reload } = useSaleProducts();
+  const { codes, reload } = useSaleCodes();
   const pos = usePosOrders(account?.id);
   const { activeOrder, cart } = pos;
   const locked = Boolean(activeOrder.transfer);
@@ -57,7 +57,7 @@ export default function InStoreSalesPage() {
   }, [isDesktop]);
 
   useEffect(() => {
-    reload().catch((err) => setNotice({ error: err.message || 'Không thể tải danh sách sản phẩm.', success: '' }));
+    reload().catch((err) => setNotice({ error: err.message || 'Không thể tải danh sách mã sản phẩm.', success: '' }));
   }, [reload]);
 
   function addTab() {
@@ -89,10 +89,11 @@ export default function InStoreSalesPage() {
     showSuccess('Đã hủy hóa đơn.');
   }
 
-  function pickProduct(product, line) {
+  // Đổi màu/size của một dòng trong hóa đơn
+  function editLine(line) {
     if (locked) return showError(LOCKED);
     showError('');
-    setPicking({ product, line });
+    setPicking({ product: { productId: line.productId, productName: line.name, primaryImageUrl: line.image }, line });
   }
 
   async function addScanned(code) {
@@ -101,9 +102,10 @@ export default function InStoreSalesPage() {
       return { ok: false, message: LOCKED };
     }
     try {
-      const message = await pos.addScanned(code);
-      showSuccess(message);
-      return { ok: true, message };
+      // Thêm được hàng thì không hiện thông báo; hộp quét camera chỉ ghi lại mã vừa quét
+      await pos.addScanned(code);
+      showError('');
+      return { ok: true, message: code };
     } catch (err) {
       showError(err.message);
       return { ok: false, message: err.message };
@@ -223,20 +225,13 @@ export default function InStoreSalesPage() {
         }}
       >
         <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-          <ProductSearch
-            products={products}
-            priceRanges={priceRanges}
-            loading={loading}
-            onPick={pickProduct}
-            onScan={addScanned}
-            onOpenCamera={() => setCameraOpen(true)}
-          />
+          <ProductSearch codes={codes} onScan={addScanned} onPrefetch={pos.prefetchLine} onOpenCamera={() => setCameraOpen(true)} />
           <CartLines
             cart={cart}
             locked={locked}
             otherTabsQty={pos.otherTabsQty}
             onInfo={setInfoLine}
-            onEdit={(line) => pickProduct({ productId: line.productId, productName: line.name, primaryImageUrl: line.image }, line)}
+            onEdit={editLine}
             onStep={pos.stepLine}
             onSetQuantity={(line, qty) => {
               const error = pos.setLineQuantity(line, qty);

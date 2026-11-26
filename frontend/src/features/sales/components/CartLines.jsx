@@ -64,7 +64,7 @@ export default function CartLines({ cart, locked, otherTabsQty, onInfo, onEdit, 
             <ShoppingCartOutlined style={{ fontSize: 30, color: C.faint, marginBottom: 8 }} />
             <Typography sx={{ fontSize: 13, fontWeight: 700, color: C.body }}>Chưa có sản phẩm nào</Typography>
             <Typography sx={{ fontSize: 11.5, color: C.subtle, mt: 0.25 }}>
-              Tìm và chọn sản phẩm ở thanh tìm kiếm để thêm vào hóa đơn
+              Quét hoặc nhập mã sản phẩm ở thanh tìm kiếm để thêm vào hóa đơn
             </Typography>
           </Box>
         ) : (

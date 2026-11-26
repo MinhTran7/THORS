@@ -63,9 +63,6 @@ public class InStoreSalesRepository {
     public record VariantStock(BigDecimal price, int available) {
     }
 
-    public record PriceBounds(BigDecimal min, BigDecimal max) {
-    }
-
     public record PendingSale(int orderId, String orderNumber, int sellerId, String orderStatus, BigDecimal total) {
         public boolean awaitingPayment() {
             return "AWAITING_PAYMENT".equals(orderStatus);
@@ -264,16 +261,6 @@ public class InStoreSalesRepository {
                 },
                 productId);
         return result;
-    }
-
-    public Map<Integer, PriceBounds> findPriceBounds() {
-        Map<Integer, PriceBounds> bounds = new LinkedHashMap<>();
-        jdbc.query("SELECT product_id, MIN(price) AS min_price, MAX(price) AS max_price FROM product_detail"
-                        + " WHERE status = 'ACTIVE' AND price IS NOT NULL GROUP BY product_id",
-                rs -> {
-                    bounds.put(rs.getInt("product_id"), new PriceBounds(rs.getBigDecimal("min_price"), rs.getBigDecimal("max_price")));
-                });
-        return bounds;
     }
 
     // ---- Tiện ích ----

@@ -1,51 +1,54 @@
-import { useMemo, useState } from 'react';
-import { Box, CircularProgress, ClickAwayListener, IconButton, InputAdornment, TextField, Typography } from '@mui/material';
+import { useEffect, useState } from 'react';
+import { Box, ClickAwayListener, IconButton, InputAdornment, TextField, Typography } from '@mui/material';
 import { ScanOutlined, SearchOutlined, ShoppingCartOutlined } from '@ant-design/icons';
 import { C } from '../theme';
-import { getProductStock, priceRangeText } from '../utils';
+import { BARCODE_PATTERN, normalizeCode } from '../utils';
 
-// Ô tìm sản phẩm (tên, mã) kèm danh sách gợi ý; gõ/quét mã vạch TH… rồi Enter để thêm thẳng vào hóa đơn
-export default function ProductSearch({ products, priceRanges, loading, onPick, onScan, onOpenCamera }) {
+// Ô tìm theo mã sản phẩm (mã vạch biến thể TH…): nhập đúng mã mới hiện sản phẩm; chọn hoặc Enter là thêm thẳng vào hóa đơn
+export default function ProductSearch({ codes, onScan, onPrefetch, onOpenCamera }) {
   const [search, setSearch] = useState('');
-  const [searchOpen, setSearchOpen] = useState(false);
+  const [open, setOpen] = useState(false);
+  const keyword = normalizeCode(search);
 
-  const visibleProducts = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
-    return products.filter((p) =>
-      [p.productName, p.sku].some((value) =>
-        String(value || '')
-          .toLowerCase()
-          .includes(keyword)
-      )
-    );
-  }, [products, search]);
+  const match = keyword ? codes.find((entry) => entry.code === keyword) : null;
+
+  // Vừa gõ đúng mã là tải sẵn giá và tồn, để bấm chọn hoặc Enter là vào hóa đơn ngay
+  useEffect(() => {
+    if (match) onPrefetch(match.code, match.productId);
+  }, [match, onPrefetch]);
+
+  async function add(code) {
+    const result = await onScan(code);
+    if (result.ok) {
+      setSearch('');
+      setOpen(false);
+    }
+  }
+
+  // Enter: mã có trong danh sách, hoặc mã đầy đủ dạng TH… (máy quét / mã vừa tạo chưa tải về)
+  function onEnter(e) {
+    if (e.key !== 'Enter' || !(match || BARCODE_PATTERN.test(keyword))) return;
+    e.preventDefault();
+    add(keyword);
+  }
 
   return (
     <Box sx={{ display: 'flex', gap: 1.5, mb: 2 }}>
-      <ClickAwayListener onClickAway={() => setSearchOpen(false)}>
+      <ClickAwayListener onClickAway={() => setOpen(false)}>
         <Box sx={{ position: 'relative', flex: 1 }}>
           <TextField
             fullWidth
             size="small"
-            placeholder="Tìm theo tên sản phẩm hoặc mã sản phẩm"
+            placeholder="Nhập hoặc quét mã sản phẩm, ví dụ TH000051"
             value={search}
-            onFocus={() => setSearchOpen(true)}
+            onFocus={() => setOpen(true)}
             onChange={(e) => {
               setSearch(e.target.value);
-              setSearchOpen(true);
+              setOpen(true);
             }}
-            onKeyDown={async (e) => {
-              // Máy quét gõ mã vào ô này rồi Enter (hoặc người gõ mã vạch TH… rồi Enter) → thêm vào hóa đơn.
-              const code = search.trim();
-              if (e.key !== 'Enter' || !/^TH\d{6,}(-\d+)?$/i.test(code)) return;
-              e.preventDefault();
-              const result = await onScan(code);
-              if (result.ok) {
-                setSearch('');
-                setSearchOpen(false);
-              }
-            }}
+            onKeyDown={onEnter}
             slotProps={{
+              htmlInput: { maxLength: 40, autoComplete: 'off', spellCheck: false },
               input: {
                 startAdornment: (
                   <InputAdornment position="start">
@@ -77,7 +80,7 @@ export default function ProductSearch({ products, priceRanges, loading, onPick, 
             }}
           />
 
-          {searchOpen && (
+          {open && match && (
             <Box
               sx={{
                 position: 'absolute',
@@ -89,105 +92,63 @@ export default function ProductSearch({ products, priceRanges, loading, onPick, 
                 border: `1px solid ${C.border}`,
                 borderRadius: 2.5,
                 boxShadow: '0 10px 24px rgba(15, 23, 42, 0.12)',
-                maxHeight: 380,
-                overflowY: 'auto',
                 py: 0.5
               }}
             >
-              {loading ? (
-                <Box sx={{ py: 3, textAlign: 'center' }}>
-                  <CircularProgress size={24} sx={{ color: C.cyan }} />
-                </Box>
-              ) : !visibleProducts.length ? (
-                <Typography sx={{ py: 3, textAlign: 'center', color: C.muted, fontSize: 13 }}>Không tìm thấy sản phẩm phù hợp.</Typography>
-              ) : (
-                visibleProducts.map((product) => {
-                  const id = product.productId;
-                  const stock = getProductStock(product);
-                  const isOut = stock <= 0;
-                  const range = priceRanges[id];
-                  const priceText = range ? priceRangeText(range.min, range.max) : priceRangeText(product.minPrice, product.maxPrice);
-                  const onSale = range && (range.saleMin < range.min || range.saleMax < range.max);
-                  const image = product.primaryImageUrl;
-
-                  return (
-                    <Box
-                      key={id}
-                      onClick={() => {
-                        setSearchOpen(false);
-                        onPick(product);
-                      }}
-                      sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 1.25,
-                        px: 1.5,
-                        py: 1,
-                        cursor: 'pointer',
-                        opacity: isOut ? 0.55 : 1
-                      }}
-                    >
-                      <Box
-                        sx={{
-                          width: 40,
-                          height: 40,
-                          borderRadius: 1.5,
-                          bgcolor: C.bg,
-                          border: `1px solid ${C.border}`,
-                          flexShrink: 0,
-                          overflow: 'hidden',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
-                      >
-                        {image ? (
-                          <Box
-                            component="img"
-                            src={image}
-                            alt={product.productName}
-                            sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          />
-                        ) : (
-                          <ShoppingCartOutlined style={{ fontSize: 16, color: C.faint }} />
-                        )}
-                      </Box>
-                      <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography
-                          sx={{
-                            fontSize: 13,
-                            fontWeight: 700,
-                            color: C.text,
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis'
-                          }}
-                        >
-                          {product.productName}
-                        </Typography>
-                        <Typography sx={{ fontSize: 11.5, color: C.subtle }}>{product.sku || '—'}</Typography>
-                      </Box>
-                      <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'flex-end', gap: 0.75 }}>
-                          {onSale && (
-                            <Typography sx={{ fontSize: 11.5, color: C.subtle, textDecoration: 'line-through' }}>{priceText}</Typography>
-                          )}
-                          <Typography sx={{ fontSize: 13, fontWeight: 800, color: C.text }}>
-                            {onSale ? priceRangeText(range.saleMin, range.saleMax) : priceText}
-                          </Typography>
-                        </Box>
-                        <Typography sx={{ fontSize: 11.5, color: isOut ? C.error : C.muted }}>
-                          {isOut ? 'Hết hàng' : `Tồn: ${stock}`}
-                        </Typography>
-                      </Box>
-                    </Box>
-                  );
-                })
-              )}
+              <CodeOption entry={match} onClick={() => add(match.code)} />
             </Box>
           )}
         </Box>
       </ClickAwayListener>
+    </Box>
+  );
+}
+
+// Sản phẩm của mã vừa nhập: ảnh, tên, mã · màu · size, số có thể bán
+function CodeOption({ entry, onClick }) {
+  const isOut = entry.stock <= 0;
+
+  return (
+    <Box
+      onClick={onClick}
+      sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 1.5, py: 1, cursor: 'pointer', opacity: isOut ? 0.55 : 1 }}
+    >
+      <Box
+        sx={{
+          width: 40,
+          height: 40,
+          borderRadius: 1.5,
+          bgcolor: C.bg,
+          border: `1px solid ${C.border}`,
+          flexShrink: 0,
+          overflow: 'hidden',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}
+      >
+        {entry.image ? (
+          <Box component="img" src={entry.image} alt={entry.productName} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        ) : (
+          <ShoppingCartOutlined style={{ fontSize: 16, color: C.faint }} />
+        )}
+      </Box>
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Typography
+          sx={{ fontSize: 13, fontWeight: 700, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+        >
+          {entry.productName}
+        </Typography>
+        <Typography sx={{ fontSize: 11.5, color: C.subtle }}>
+          <Box component="span" sx={{ fontFamily: 'monospace', color: C.body, fontWeight: 600 }}>
+            {entry.code}
+          </Box>
+          {[entry.color, entry.size].filter(Boolean).map((part) => ` · ${part}`)}
+        </Typography>
+      </Box>
+      <Typography sx={{ fontSize: 11.5, color: isOut ? C.error : C.muted, flexShrink: 0 }}>
+        {isOut ? 'Hết hàng' : `Tồn: ${entry.stock}`}
+      </Typography>
     </Box>
   );
 }

@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getProducts } from 'services/productService';
-import { getPriceRanges, getSale, getVariantSales } from 'services/salesService';
+import { getSale, getVariantBarcodes, getVariantSales } from 'services/salesService';
 import { ordersApi } from 'features/order/api';
 import { addScannedLine, scanToCartLine } from 'features/warehouse/scanToCart';
-import { isActive, lineLabel, newRequestId } from './utils';
+import { isActive, lineLabel, newRequestId, normalizeCode } from './utils';
 
 const MAX_ORDERS = 8;
 const KEEP_MS = 24 * 3600 * 1000;
+const PREFETCH_MS = 15 * 1000; // dữ liệu tải sẵn của một mã dùng được trong 15 giây, quá thì tải lại cho đúng giá/tồn
 
 export const variantSalesOf = (productId) => getVariantSales(productId).catch(() => ({}));
 
@@ -32,22 +33,32 @@ function loadSaved(key) {
   }
 }
 
-// Sản phẩm đang bán và khoảng giá sau khuyến mãi cho ô tìm kiếm
-export function useSaleProducts() {
-  const [products, setProducts] = useState([]);
-  const [priceRanges, setPriceRanges] = useState({});
-  const [loading, setLoading] = useState(true);
+// Mã vạch của mọi biến thể thuộc sản phẩm đang bán: mã, tên, màu, size, số có thể bán, ảnh sản phẩm
+export function useSaleCodes() {
+  const [codes, setCodes] = useState([]);
 
-  const reload = useCallback(() => {
-    getPriceRanges()
-      .then(setPriceRanges)
-      .catch(() => setPriceRanges({}));
-    return getProducts()
-      .then((res) => setProducts(res.filter(isActive)))
-      .finally(() => setLoading(false));
-  }, []);
+  const reload = useCallback(
+    () =>
+      Promise.all([getProducts(), getVariantBarcodes()]).then(([products, variants]) => {
+        const selling = new Map(products.filter(isActive).map((p) => [Number(p.productId), p]));
+        setCodes(
+          variants
+            .filter((v) => v.barcode && selling.has(Number(v.product_id)))
+            .map((v) => ({
+              code: normalizeCode(v.barcode),
+              productId: Number(v.product_id),
+              productName: v.product_name,
+              color: v.color,
+              size: v.size,
+              stock: Math.max(0, Number(v.available_quantity ?? v.stock_quantity ?? 0)),
+              image: selling.get(Number(v.product_id)).primaryImageUrl
+            }))
+        );
+      }),
+    []
+  );
 
-  return { products, priceRanges, loading, reload };
+  return { codes, reload };
 }
 
 // Các hóa đơn chờ (tab kiểu Sapo) và giỏ hàng của hóa đơn đang mở; lưu trên trình duyệt theo từng tài khoản
@@ -181,24 +192,37 @@ export function usePosOrders(accountId) {
     return qty > max ? `${lineLabel(line)}: chỉ còn ${line.stock} trong kho${others ? `, hóa đơn chờ khác đang giữ ${others}` : ''}.` : '';
   }
 
-  // Quét mã vạch: thêm vào hóa đơn đang mở, quét lại cùng mã thì +1 (không vượt số bán được)
+  // Dòng hóa đơn của một mã (thông tin biến thể + giá sau khuyến mãi + số còn bán được).
+  // Biết trước mã sản phẩm thì tải hai thứ song song; kết quả được nhớ ngắn hạn để bấm chọn là thêm ngay.
+  const prefetched = useRef(new Map());
+  const loadLine = useCallback((code, productId) => {
+    const cached = prefetched.current.get(code);
+    if (cached && Date.now() - cached.at < PREFETCH_MS) return cached.promise;
+    const promise = Promise.all([scanToCartLine(code), productId ? variantSalesOf(productId) : null]).then(async ([line, sales]) => {
+      const sale = (sales ?? (await variantSalesOf(line.productId)))[line.variantId];
+      return { ...line, originalPrice: line.price, price: Number(sale?.price ?? line.price), stock: sale?.available ?? line.stock };
+    });
+    prefetched.current.set(code, { promise, at: Date.now() });
+    promise.catch(() => prefetched.current.delete(code));
+    return promise;
+  }, []);
+
+  // Tải sẵn khi ô tìm kiếm vừa nhận ra mã, lỗi để lúc thêm mới báo
+  const prefetchLine = useCallback((code, productId) => loadLine(code, productId).catch(() => {}), [loadLine]);
+
+  // Quét mã vạch: thêm vào hóa đơn đang mở, quét lại cùng mã thì +1 (không vượt số bán được); lỗi thì ném Error
   async function addScanned(code) {
-    const line = await scanToCartLine(code);
-    const sale = (await variantSalesOf(line.productId))[line.variantId];
-    line.originalPrice = line.price;
-    line.price = Number(sale?.price ?? line.price);
-    line.stock = sale?.available ?? line.stock;
+    const line = await loadLine(code);
     syncStock(line.key, line.stock);
     const current = ordersRef.current.find((o) => o.id === activeOrder.id).cart;
     const inThis = current.find((item) => item.key === line.key)?.quantity ?? 0;
     const others = otherTabsQty(line.key);
     if (others && inThis + others >= line.stock)
       throw new Error(`${lineLabel(line)}: đã đủ ${line.stock} (hết tồn kho), hóa đơn chờ khác đang giữ ${others}.`);
-    const result = addScannedLine(current, line);
+    const result = addScannedLine(current, { ...line }); // bản sao: dữ liệu tải sẵn còn dùng lại cho lần quét sau
     if (result.error) throw new Error(result.error);
     ordersRef.current = ordersRef.current.map((o) => (o.id === activeOrder.id ? { ...o, cart: result.cart } : o));
     setCart(() => result.cart);
-    return `Đã thêm ${lineLabel(line)} (SL: ${result.cart.find((item) => item.key === line.key).quantity})`;
   }
 
   return {
@@ -218,6 +242,7 @@ export function usePosOrders(accountId) {
     removeLine,
     setLineQuantity,
     addScanned,
+    prefetchLine,
     refreshPrices
   };
 }

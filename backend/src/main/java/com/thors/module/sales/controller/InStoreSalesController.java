@@ -3,7 +3,6 @@ package com.thors.module.sales.controller;
 import com.thors.module.sales.dto.CreateInStoreSaleRequest;
 import com.thors.module.sales.dto.InStoreSaleDetailResponse;
 import com.thors.module.sales.dto.InStoreSalePageResponse;
-import com.thors.module.sales.dto.PriceRange;
 import com.thors.module.sales.dto.SellerOption;
 import com.thors.module.sales.dto.VariantSale;
 import com.thors.module.sales.service.InStoreSalesService;
@@ -58,11 +57,6 @@ public class InStoreSalesController {
     @GetMapping("/sellers")
     public List<SellerOption> sellers() {
         return service.listSellers();
-    }
-
-    @GetMapping("/prices")
-    public Map<Integer, PriceRange> priceRanges() {
-        return service.salePriceRanges();
     }
 
     @GetMapping("/prices/{productId}")

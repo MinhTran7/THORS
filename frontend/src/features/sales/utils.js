@@ -10,6 +10,14 @@ export const getPrice = (v) => Number(v?.price ?? 0);
 export const getProductStock = (p) => Number(p?.totalStock ?? 0);
 export const lineLabel = (line) => `${line.name} · ${line.color} · ${line.size}`;
 
+// ---- Mã vạch biến thể (TH + 6 số mã biến thể, có thể kèm hậu tố -số) ----
+
+export const BARCODE_PATTERN = /^TH\d{6,}(-\d+)?$/;
+export const normalizeCode = (value) =>
+  String(value ?? '')
+    .replace(/\s+/g, '')
+    .toUpperCase();
+
 // Đơn cũ không lưu cách thanh toán được coi là tiền mặt
 export const isCashMethod = (method) => !method || method === 'CASH';
 

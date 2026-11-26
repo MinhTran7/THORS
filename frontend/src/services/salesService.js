@@ -17,11 +17,11 @@ export const getSales = (params) => api(`/sales/in-store${query(params)}`);
 
 export const getSellers = () => api('/sales/in-store/sellers');
 
-// { [productId]: { min, max, saleMin, saleMax } }
-export const getPriceRanges = () => api('/sales/in-store/prices');
-
 // { [detailId]: { price, available } }: giá sau khuyến mãi và số còn bán được
 export const getVariantSales = (productId) => api(`/sales/in-store/prices/${productId}`);
+
+// Mọi biến thể kèm mã vạch, màu, size, số có thể bán (API tồn kho)
+export const getVariantBarcodes = () => api('/warehouse/inventory?all=true').then((res) => res.items ?? []);
 
 // Tồn kho và vị trí lưu kho của một biến thể (API kho)
 export const getVariantInventory = (detailId) => api(`/warehouse/inventory/${detailId}`);

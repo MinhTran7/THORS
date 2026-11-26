@@ -8,7 +8,6 @@ import com.thors.module.promotion.service.PricingService;
 import com.thors.module.sales.dto.CreateInStoreSaleRequest;
 import com.thors.module.sales.dto.InStoreSaleDetailResponse;
 import com.thors.module.sales.dto.InStoreSalePageResponse;
-import com.thors.module.sales.dto.PriceRange;
 import com.thors.module.sales.dto.SellerOption;
 import com.thors.module.sales.dto.VariantSale;
 import com.thors.module.sales.entity.SaleVariant;
@@ -138,15 +137,6 @@ public class InStoreSalesService {
         repository.findVariantStocks(productId).forEach((detailId, v) ->
                 result.put(detailId, new VariantSale(quoter.apply(productId, v.price()).price(),
                         Math.max(0, v.available() - warehouse.units().openDefects(detailId)))));
-        return result;
-    }
-
-    // Khoảng giá gốc và giá sau khuyến mãi của từng sản phẩm, dùng ở ô tìm kiếm
-    public Map<Integer, PriceRange> salePriceRanges() {
-        BiFunction<Integer, BigDecimal, SalePrice> quoter = pricing.quoter();
-        Map<Integer, PriceRange> result = new LinkedHashMap<>();
-        repository.findPriceBounds().forEach((productId, b) -> result.put(productId,
-                new PriceRange(b.min(), b.max(), quoter.apply(productId, b.min()).price(), quoter.apply(productId, b.max()).price())));
         return result;
     }
 
