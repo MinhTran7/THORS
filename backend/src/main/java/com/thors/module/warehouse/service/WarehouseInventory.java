@@ -1,6 +1,7 @@
 package com.thors.module.warehouse.service;
 
 import com.thors.module.warehouse.repository.WarehouseStore;
+import com.thors.module.warehouse.util.ParallelReads;
 import static com.thors.module.warehouse.repository.WarehouseStore.*;
 
 import com.thors.common.ApiException;
@@ -11,8 +12,9 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.function.Supplier;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -33,7 +35,8 @@ import org.springframework.transaction.annotation.Transactional;
  * </ul>
  */
 @Service
-@Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+// Chỉ đọc: chạy chung transaction nếu đã có, không tự mở transaction mới (mỗi transaction tốn thêm ~7 lượt gửi lệnh tới DB cloud)
+@Transactional(propagation = Propagation.SUPPORTS)
 public class WarehouseInventory {
     static final Set<String> STATES = Set.of("in", "out", "low", "unassigned", "slow", "noThreshold");
 
@@ -209,33 +212,8 @@ public class WarehouseInventory {
         return labels;
     }
 
-    /** One row per variant with every inventory figure; owner rows also carry cost/value. */
-    private List<Map<String, Object>> rows(Account a, Integer onlyDetail) {
-        var incoming = new HashMap<Integer, Long>();
-        for (var l : orders.lineStates().values())
-            if (l.remaining() > 0) incoming.merge(l.detailId, l.remaining(), Long::sum);
-        var costs = owner(a) ? replay((LocalDateTime) null) : Map.<Integer, Cost[]>of();
-        var places = new HashMap<Integer, List<Map<String, Object>>>();
-        var labels = locationLabels();
-        for (var row :
-                s.jdbc()
-                        .queryForList(
-                                "SELECT l.product_location_id,l.detail_id,l.shelf_level_id,l.quantity FROM product_location l"
-                                        + " WHERE l.quantity>0 ORDER BY l.quantity DESC,l.product_location_id")) {
-            var place = new LinkedHashMap<String, Object>();
-            place.put("location_id", num(row, "product_location_id"));
-            place.put("shelf_level_id", num(row, "shelf_level_id"));
-            place.put("label", labels.getOrDefault(num(row, "product_location_id"), "?"));
-            place.put("quantity", num(row, "quantity"));
-            places.computeIfAbsent(num(row, "detail_id"), k -> new ArrayList<>()).add(place);
-        }
-        var result = new ArrayList<Map<String, Object>>();
-        var now = time(s.jdbc().queryForObject("SELECT LOCALTIMESTAMP", Object.class));
-        var offset = dbOffset();
-        for (var v :
-                s.jdbc()
-                        .queryForList(
-                                """
+    private static final String VARIANTS_SQL =
+            """
                 SELECT d.detail_id,d.product_id,d.barcode,d.color,d.size,d.price,d.stock_quantity,d.min_stock_quantity,
                   d.status,p.product_name,p.status AS product_status,p.category_id,c.category_name,
                   COALESCE(l.assigned,0) AS assigned_quantity,COALESCE(h.held,0) AS held_quantity,
@@ -254,9 +232,48 @@ public class WarehouseInventory {
                   ON led.detail_id=d.detail_id
                 WHERE (? IS NULL OR d.detail_id=?) AND d.status<>'DELETED'
                 ORDER BY p.product_name,d.color,d.size,d.detail_id
-                """,
-                                onlyDetail,
-                                onlyDetail)) {
+                """;
+
+    /** One row per variant with every inventory figure; owner rows also carry cost/value. */
+    private List<Map<String, Object>> rows(Account a, Integer onlyDetail) {
+        return rows(a, onlyDetail, ParallelReads.start(orders::lineStates), ParallelReads.start(this::locationLabels));
+    }
+
+    // Bản nhận sẵn lineStates + labels (đang chạy song song): chi tiết biến thể dùng lại, khỏi truy vấn 2 lần.
+    // Các câu SQL độc lập dưới đây được bắt đầu cùng lúc (ParallelReads) rồi mới đợi kết quả.
+    private List<Map<String, Object>> rows(
+            Account a,
+            Integer onlyDetail,
+            Supplier<Map<Integer, WarehouseOrders.LineState>> lineStatesTask,
+            Supplier<Map<Integer, String>> labelsTask) {
+        Supplier<Map<Integer, Cost[]>> costsTask = owner(a)
+                ? ParallelReads.start(() -> replay((LocalDateTime) null))
+                : Map::of;
+        var placeRowsTask = ParallelReads.start(() -> s.jdbc()
+                .queryForList(
+                        "SELECT l.product_location_id,l.detail_id,l.shelf_level_id,l.quantity FROM product_location l"
+                                + " WHERE l.quantity>0 ORDER BY l.quantity DESC,l.product_location_id"));
+        var nowTask = ParallelReads.start(() -> time(s.jdbc().queryForObject("SELECT LOCALTIMESTAMP", Object.class)));
+        var offsetTask = ParallelReads.start(this::dbOffset);
+        var variantsTask = ParallelReads.start(() -> s.jdbc().queryForList(VARIANTS_SQL, onlyDetail, onlyDetail));
+        var incoming = new HashMap<Integer, Long>();
+        for (var l : lineStatesTask.get().values())
+            if (l.remaining() > 0) incoming.merge(l.detailId, l.remaining(), Long::sum);
+        var labels = labelsTask.get();
+        var costs = costsTask.get();
+        var places = new HashMap<Integer, List<Map<String, Object>>>();
+        for (var row : placeRowsTask.get()) {
+            var place = new LinkedHashMap<String, Object>();
+            place.put("location_id", num(row, "product_location_id"));
+            place.put("shelf_level_id", num(row, "shelf_level_id"));
+            place.put("label", labels.getOrDefault(num(row, "product_location_id"), "?"));
+            place.put("quantity", num(row, "quantity"));
+            places.computeIfAbsent(num(row, "detail_id"), k -> new ArrayList<>()).add(place);
+        }
+        var result = new ArrayList<Map<String, Object>>();
+        var now = nowTask.get();
+        var offset = offsetTask.get();
+        for (var v : variantsTask.get()) {
             var row = new LinkedHashMap<String, Object>();
             int detail = num(v, "detail_id");
             int stock = num(v, "stock_quantity");
@@ -373,6 +390,8 @@ public class WarehouseInventory {
         if (days < 1 || days > 3650)
             throw new ApiException(400, "INVENTORY_FILTER", "Số ngày không bán phải từ 1 đến 3650.");
         String key = WarehouseOrders.searchKey(q);
+        var categoriesTask = ParallelReads.start(() ->
+                s.jdbc().queryForList("SELECT category_id,category_name FROM category ORDER BY category_name"));
         var everything = s.migrated(() -> rows(a, null));
         var base = new ArrayList<Map<String, Object>>();
         for (var r : everything) {
@@ -450,9 +469,7 @@ public class WarehouseInventory {
                 "colors",
                 everything.stream().map(r -> (String) r.get("color")).distinct().sorted().toList());
         result.put("sizes", everything.stream().map(r -> (String) r.get("size")).distinct().sorted().toList());
-        result.put(
-                "categories",
-                s.jdbc().queryForList("SELECT category_id,category_name FROM category ORDER BY category_name"));
+        result.put("categories", categoriesTask.get());
         return result;
     }
 
@@ -508,49 +525,53 @@ public class WarehouseInventory {
     /** Variant detail: figures, locations, orders holding stock, open purchase orders, cost. */
     public Map<String, Object> detail(Account a, int detail) {
         policy.view(a);
-        var found = s.migrated(() -> rows(a, detail));
+        // Tính 1 lần, dùng cho cả số liệu tổng và danh sách vị trí / phiếu đặt bên dưới
+        // Bắt đầu cùng lúc mọi câu SQL độc lập (ParallelReads), rồi mới đợi kết quả
+        var lineStatesTask = ParallelReads.start(orders::lineStates);
+        var labelsTask = ParallelReads.start(this::locationLabels);
+        var locationRowsTask = ParallelReads.start(() -> s.jdbc()
+                .queryForList(
+                        "SELECT product_location_id,shelf_level_id,quantity,description,updated_at FROM product_location"
+                                + " WHERE detail_id=? ORDER BY quantity DESC,product_location_id",
+                        detail));
+        var holdsTask = ParallelReads.start(() -> s.jdbc()
+                .queryForList(
+                        """
+                SELECT o.order_id,o.order_number,o.order_type,o.order_status,o.order_date,o.stock_hold_created_at,
+                  i.order_item_id,i.quantity,i.reserved_quantity
+                FROM order_item i JOIN orders o ON o.order_id=i.order_id
+                WHERE i.detail_id=? AND i.reserved_quantity>0 ORDER BY o.order_date
+                """,
+                        detail));
+        // Online orders placed before holds existed: waiting for the owner but holding nothing.
+        var unheldTask = ParallelReads.start(() -> s.jdbc()
+                .queryForList(
+                        """
+                SELECT o.order_id,o.order_number,o.order_status,o.order_date,i.quantity
+                FROM order_item i JOIN orders o ON o.order_id=i.order_id
+                WHERE i.detail_id=? AND i.reserved_quantity=0 AND o.order_type='Online'
+                  AND o.order_status='PENDING_CONFIRMATION' AND o.stock_deducted_at IS NULL ORDER BY o.order_date
+                """,
+                        detail));
+        var found = s.migrated(() -> rows(a, detail, lineStatesTask, labelsTask));
         if (found.isEmpty()) throw new ApiException(404, "NOT_FOUND", "Không tìm thấy biến thể.");
         var result = new LinkedHashMap<String, Object>(found.get(0));
-        var labels = locationLabels();
-        var offset = dbOffset();
+        var labels = labelsTask.get();
+        var lineStates = lineStatesTask.get();
+        // Luồng chính không tự truy vấn khi còn chờ tác vụ song song (khỏi giữ 1 kết nối DB trong lúc chờ)
+        var offset = ParallelReads.start(this::dbOffset).get();
         var places = new ArrayList<Map<String, Object>>();
-        for (var row :
-                s.jdbc()
-                        .queryForList(
-                                "SELECT product_location_id,shelf_level_id,quantity,description,updated_at FROM product_location"
-                                        + " WHERE detail_id=? ORDER BY quantity DESC,product_location_id",
-                                detail)) {
+        for (var row : locationRowsTask.get()) {
             var place = copy(row);
             place.put("label", labels.get(num(row, "product_location_id")));
             storeTime(place, offset, "updated_at");
             places.add(place);
         }
         result.put("location_rows", places);
-        result.put(
-                "holds",
-                stored(offset, s.jdbc()
-                        .queryForList(
-                                """
-                SELECT o.order_id,o.order_number,o.order_type,o.order_status,o.order_date,o.stock_hold_created_at,
-                  i.order_item_id,i.quantity,i.reserved_quantity
-                FROM order_item i JOIN orders o ON o.order_id=i.order_id
-                WHERE i.detail_id=? AND i.reserved_quantity>0 ORDER BY o.order_date
-                """,
-                                detail), "order_date", "stock_hold_created_at"));
-        // Online orders placed before holds existed: waiting for the owner but holding nothing.
-        result.put(
-                "unheld_pending",
-                stored(offset, s.jdbc()
-                        .queryForList(
-                                """
-                SELECT o.order_id,o.order_number,o.order_status,o.order_date,i.quantity
-                FROM order_item i JOIN orders o ON o.order_id=i.order_id
-                WHERE i.detail_id=? AND i.reserved_quantity=0 AND o.order_type='Online'
-                  AND o.order_status='PENDING_CONFIRMATION' AND o.stock_deducted_at IS NULL ORDER BY o.order_date
-                """,
-                                detail), "order_date"));
+        result.put("holds", stored(offset, holdsTask.get(), "order_date", "stock_hold_created_at"));
+        result.put("unheld_pending", stored(offset, unheldTask.get(), "order_date"));
         var incoming = new ArrayList<Map<String, Object>>();
-        for (var l : orders.lineStates().values()) {
+        for (var l : lineStates.values()) {
             if (l.detailId != detail || l.remaining() <= 0) continue;
             var row = new LinkedHashMap<String, Object>();
             row.put("order_id", l.orderId);

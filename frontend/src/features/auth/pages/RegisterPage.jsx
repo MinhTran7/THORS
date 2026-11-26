@@ -32,7 +32,7 @@ export default function RegisterPage() {
               label="Mật khẩu"
               type="password"
               icon={<LockOutlined />}
-              hint="Mật khẩu từ 10 ký tự. Bạn sẽ nhận mã OTP để xác minh email."
+              hint="Mật khẩu từ 6 ký tự. Bạn sẽ nhận mã OTP để xác minh email."
               autoComplete="new-password"
             />
             <ShopField

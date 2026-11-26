@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import {
@@ -857,6 +857,9 @@ export default function LocationsPage() {
   );
 
   const selectedVariant = Number(params.get('variant')) || '';
+  // ?back=... : trang chi tiết đã mở trang này (vd Tồn kho → Chi tiết). Chỉ nhận đường dẫn nội bộ của kho.
+  const back = params.get('back');
+  const backTo = back && back.startsWith('/warehouse/') ? back : null;
 
   const variant = data.variants.find(
     (v) => v.detail_id === selectedVariant
@@ -1097,7 +1100,13 @@ export default function LocationsPage() {
             : 'Chọn màu/size để tìm vị trí. Chọn một tầng để xem hàng và ảnh thực tế.'
         }
         action={
-          owner &&
+          <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
+          {backTo && !editLayout && (
+            <Button variant="outlined" component={Link} to={backTo}>
+              ← Quay lại chi tiết
+            </Button>
+          )}
+          {owner &&
           (editLayout ? (
             <Stack
               direction="row"
@@ -1136,7 +1145,8 @@ export default function LocationsPage() {
             >
               Sửa bố cục kho
             </Button>
-          ))
+          ))}
+          </Stack>
         }
       />
 

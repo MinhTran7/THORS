@@ -6,16 +6,16 @@ import * as Yup from 'yup';
  * Backend kiểm tra lại lần nữa (ContactNormalizer.java), nên luật ở đây chỉ để báo lỗi sớm cho người dùng.
  */
 
-// Mật khẩu MỚI (đăng ký, đổi / đặt lại mật khẩu): 10–64 ký tự và tối đa 72 byte (giới hạn của BCrypt).
+// Mật khẩu MỚI (đăng ký, đổi / đặt lại mật khẩu): 6–64 ký tự và tối đa 72 byte (giới hạn của BCrypt).
 // Màn hình ĐĂNG NHẬP không dùng luật này, chỉ yêu cầu không để trống.
 // features/account/validation.js dùng lại luật này (tên newPassword) cho đổi mật khẩu / tạo thành viên.
 export const password = Yup.string()
   .required('Nhập mật khẩu.')
-  .min(10, 'Mật khẩu cần ít nhất 10 ký tự.')
+  .min(6, 'Mật khẩu cần ít nhất 6 ký tự.')
   .max(64, 'Mật khẩu tối đa 64 ký tự.')
   .test(
     'bytes',
-    'Mật khẩu tối đa 72 byte.',
+    'Mật khẩu có nhiều chữ có dấu nên bị quá dài. Hãy bớt chữ có dấu hoặc rút ngắn mật khẩu.',
     (v) => !v || new TextEncoder().encode(v).length <= 72
   );
 

@@ -13,6 +13,7 @@ import static com.thors.module.warehouse.repository.WarehouseStore.copy;
 import java.util.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -51,7 +52,8 @@ public class WarehouseCatalog {
     }
 
     /** Products whose normalised name equals or contains the given name. Same name is a hint only. */
-    @Transactional(readOnly = true)
+    // Chỉ đọc: chạy chung transaction nếu đã có, không tự mở transaction mới (mỗi transaction tốn thêm ~7 lượt gửi lệnh tới DB cloud)
+    @Transactional(propagation = Propagation.SUPPORTS)
     public List<Map<String, Object>> similar(Account a, String name) {
         policy.view(a);
         String wanted = key(name);

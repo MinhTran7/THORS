@@ -10,6 +10,7 @@ import java.math.BigDecimal;
 import java.util.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -66,7 +67,8 @@ public class WarehouseDocuments {
                 self == null ? 0 : self);
     }
 
-    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    // Chỉ đọc: chạy chung transaction nếu đã có, không tự mở transaction mới (mỗi transaction tốn thêm ~7 lượt gửi lệnh tới DB cloud)
+    @Transactional(propagation = Propagation.SUPPORTS)
     public List<Map<String, Object>> list(Account a) {
         policy.view(a);
         var docs =
@@ -763,7 +765,8 @@ public class WarehouseDocuments {
     }
 
     /** Status/audit trail and stock movements of one document, from the existing audit/movement logs. */
-    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    // Chỉ đọc: chạy chung transaction nếu đã có, không tự mở transaction mới (mỗi transaction tốn thêm ~7 lượt gửi lệnh tới DB cloud)
+    @Transactional(propagation = Propagation.SUPPORTS)
     public Map<String, Object> history(Account a, int id) {
         policy.view(a);
         header(id);
