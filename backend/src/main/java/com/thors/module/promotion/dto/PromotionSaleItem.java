@@ -3,7 +3,7 @@ package com.thors.module.promotion.dto;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-// Một dòng hàng đọc từ DB đã được giảm bởi khuyến mãi sản phẩm; PromotionSalesReport gộp các dòng theo đơn
+// Một dòng hàng đọc từ DB đã được giảm bởi khuyến mãi sản phẩm
 public record PromotionSaleItem(
         int orderId,
         String orderNumber,

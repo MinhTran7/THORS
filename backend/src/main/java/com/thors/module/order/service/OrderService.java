@@ -9,6 +9,7 @@ import com.thors.module.order.dto.OrderViews;
 import com.thors.module.order.dto.OrderViews.Detail;
 import com.thors.module.order.dto.OrderViews.Page;
 import com.thors.module.order.repository.OrderRepository;
+import com.thors.module.sales.service.InStoreSaleCompleter;
 import com.thors.module.warehouse.repository.WarehouseStore;
 import java.time.LocalDate;
 import java.util.List;
@@ -72,13 +73,17 @@ public class OrderService {
     private final WarehouseStore warehouse;
     private final OrderMailService orderMail;
 
+    private final InStoreSaleCompleter inStoreSales;
+
     public OrderService(
             OrderRepository orders,
             NotificationPublisher notifications,
             GhnShippingService ghnShipping,
             WarehouseStore warehouse,
-            OrderMailService orderMail) {
+            OrderMailService orderMail,
+            InStoreSaleCompleter inStoreSales) {
         this.orders = orders;
+        this.inStoreSales = inStoreSales;
         this.notifications = notifications;
         this.ghnShipping = ghnShipping;
         this.orderMail = orderMail;
@@ -265,9 +270,11 @@ public class OrderService {
     public void onOnlinePaymentPaid(int orderId) {
         var p = orders.findPayableForUpdate(orderId).orElse(null);
         if (p == null || "PAID".equalsIgnoreCase(p.paymentStatus())) return;
+        if ("In-Store".equals(p.orderType())) {
+            inStoreSales.onTransferPaid(orderId);
+            return;
+        }
         orders.markOnlinePaid(orderId);
-        // Đơn tại quầy: thu ngân tự thấy bill, không gửi thông báo
-        if ("In-Store".equals(p.orderType())) return;
 
         String number = p.orderNumber();
         switch (p.orderStatus()) {
@@ -665,4 +672,4 @@ public class OrderService {
         String s = value.trim();
         return s.isEmpty() ? null : s;
     }
-}
+}

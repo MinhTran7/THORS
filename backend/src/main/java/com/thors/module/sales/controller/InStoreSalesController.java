@@ -7,16 +7,10 @@ import com.thors.module.sales.dto.PriceRange;
 import com.thors.module.sales.dto.SellerOption;
 import com.thors.module.sales.dto.VariantSale;
 import com.thors.module.sales.service.InStoreSalesService;
+import com.thors.security.SessionAccess;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -26,51 +20,53 @@ import java.util.Map;
 @RequestMapping("/api/sales/in-store")
 public class InStoreSalesController {
 
-    private final InStoreSalesService salesService;
+    private final InStoreSalesService service;
+    private final SessionAccess sessions;
 
-    public InStoreSalesController(InStoreSalesService salesService) {
-        this.salesService = salesService;
+    public InStoreSalesController(InStoreSalesService service, SessionAccess sessions) {
+        this.service = service;
+        this.sessions = sessions;
     }
 
     @PostMapping
-    public ResponseEntity<InStoreSaleDetailResponse> createSale(
-            @RequestBody CreateInStoreSaleRequest request
-    ) {
-        return ResponseEntity
-                .status(HttpStatus.CREATED)
-                .body(salesService.createSale(request));
+    @ResponseStatus(HttpStatus.CREATED)
+    public InStoreSaleDetailResponse create(@RequestBody CreateInStoreSaleRequest request) {
+        return service.createSale(sessions.current(), request);
+    }
+
+    @PostMapping("/{orderId}/cancel")
+    public InStoreSaleDetailResponse cancel(@PathVariable int orderId) {
+        return service.cancel(sessions.current(), orderId);
     }
 
     @GetMapping
-    public ResponseEntity<InStoreSalePageResponse> listSales(
-            @RequestParam(required = false) String q,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate,
-            @RequestParam(required = false) Integer sellerId,
-            @RequestParam(required = false) String paymentMethod,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size
-    ) {
-        return ResponseEntity.ok(salesService.listSales(q, fromDate, toDate, sellerId, paymentMethod, page, size));
-    }
-
-    @GetMapping("/sellers")
-    public ResponseEntity<List<SellerOption>> listSellers() {
-        return ResponseEntity.ok(salesService.listSellers());
-    }
-
-    @GetMapping("/prices")
-    public ResponseEntity<Map<Integer, PriceRange>> salePriceRanges() {
-        return ResponseEntity.ok(salesService.salePriceRanges());
-    }
-
-    @GetMapping("/prices/{productId}")
-    public ResponseEntity<Map<Integer, VariantSale>> variantSales(@PathVariable int productId) {
-        return ResponseEntity.ok(salesService.variantSales(productId));
+    public InStoreSalePageResponse list(@RequestParam(required = false) String q,
+                                        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
+                                        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate,
+                                        @RequestParam(required = false) Integer sellerId,
+                                        @RequestParam(required = false) String paymentMethod,
+                                        @RequestParam(defaultValue = "0") int page,
+                                        @RequestParam(defaultValue = "10") int size) {
+        return service.listSales(q, fromDate, toDate, sellerId, paymentMethod, page, size);
     }
 
     @GetMapping("/{orderId}")
-    public ResponseEntity<InStoreSaleDetailResponse> getSaleDetail(@PathVariable int orderId) {
-        return ResponseEntity.ok(salesService.getSaleDetail(orderId));
+    public InStoreSaleDetailResponse detail(@PathVariable int orderId) {
+        return service.getSaleDetail(orderId);
+    }
+
+    @GetMapping("/sellers")
+    public List<SellerOption> sellers() {
+        return service.listSellers();
+    }
+
+    @GetMapping("/prices")
+    public Map<Integer, PriceRange> priceRanges() {
+        return service.salePriceRanges();
+    }
+
+    @GetMapping("/prices/{productId}")
+    public Map<Integer, VariantSale> variantSales(@PathVariable int productId) {
+        return service.variantSales(productId);
     }
 }

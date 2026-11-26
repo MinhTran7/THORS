@@ -2,7 +2,6 @@ package com.thors.module.sales.entity;
 
 import java.math.BigDecimal;
 
-// Biến thể đang được khóa để bán; held là phần hàng đang giữ cho đơn khác
 public record SaleVariant(
         int detailId,
         int productId,
@@ -12,9 +11,14 @@ public record SaleVariant(
         BigDecimal price,
         int stockQuantity,
         int held,
+        int defective,
         boolean active
 ) {
     public int available() {
-        return stockQuantity - held;
+        return stockQuantity - held - defective;
+    }
+
+    public SaleVariant withDefective(int count) {
+        return new SaleVariant(detailId, productId, productName, size, color, price, stockQuantity, held, count, active);
     }
 }

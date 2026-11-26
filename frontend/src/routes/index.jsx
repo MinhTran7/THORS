@@ -44,13 +44,13 @@ import ProductDetailPage from 'features/product/ProductDetailPage';
 import EditProductPage from 'features/product/EditProductPage';
 
 // Sales
-import InStoreSalesPage from 'features/sales/InStoreSalesPage';
-import InStoreSalesHistoryPage from 'features/sales/InStoreSalesHistoryPage';
-import InStoreSaleDetailPage from 'features/sales/InStoreSaleDetailPage';
-import PromotionPage from 'features/promotion/PromotionPage';
-import AddPromotionPage from 'features/promotion/AddPromotionPage';
-import PromotionDetailPage from 'features/promotion/PromotionDetailPage';
-import EditPromotionPage from 'features/promotion/EditPromotionPage';
+import InStoreSalesPage from 'features/sales/pages/InStoreSalesPage';
+import InStoreSalesHistoryPage from 'features/sales/pages/InStoreSalesHistoryPage';
+import InStoreSaleDetailPage from 'features/sales/pages/InStoreSaleDetailPage';
+import PromotionPage from 'features/promotion/pages/PromotionPage';
+import AddPromotionPage from 'features/promotion/pages/AddPromotionPage';
+import PromotionDetailPage from 'features/promotion/pages/PromotionDetailPage';
+import EditPromotionPage from 'features/promotion/pages/EditPromotionPage';
 
 // Returns Management (Đổi trả / Hoàn hàng)
 import ReturnsPage from 'features/returns/ReturnsPage';
@@ -58,9 +58,9 @@ import FacebookPOSPage from 'features/facebook/FacebookPOSPage';
 import StoreChatPage from 'features/chat/StoreChatPage';
 import ChatSettingsPage from 'features/chat/ChatSettingsPage';
 // Customer Addresses
-import CustomerAddressPage from 'features/shippingaddress/CustomerAddressPage';
-import AddAddressPage from 'features/shippingaddress/AddAddressPage';
-import EditAddressPage from 'features/shippingaddress/EditAddressPage';
+import CustomerAddressPage from 'features/shippingaddress/pages/CustomerAddressPage';
+import AddAddressPage from 'features/shippingaddress/pages/AddAddressPage';
+import EditAddressPage from 'features/shippingaddress/pages/EditAddressPage';
 // Số đo cơ thể (gợi ý size / thử đồ ảo)
 import BodyProfilePage from 'features/fitting/BodyProfilePage';
 import TryOnHistoryPage from 'features/tryon/TryOnHistoryPage';

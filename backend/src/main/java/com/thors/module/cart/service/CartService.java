@@ -1,7 +1,7 @@
 package com.thors.module.cart.service;
 
 import com.thors.module.cart.repository.CartRepository;
-import com.thors.module.promotion.service.PromotionService;
+import com.thors.module.promotion.service.PricingService;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -17,11 +17,11 @@ import java.util.Map;
 public class CartService {
 
     private final CartRepository cartRepository;
-    private final PromotionService promotionService;
+    private final PricingService pricing;
 
-    public CartService(CartRepository cartRepository, PromotionService promotionService) {
+    public CartService(CartRepository cartRepository, PricingService pricing) {
         this.cartRepository = cartRepository;
-        this.promotionService = promotionService;
+        this.pricing = pricing;
     }
 
     @Transactional(readOnly = true)
@@ -29,7 +29,7 @@ public class CartService {
         List<Map<String, Object>> items = cartRepository.findItems(userId);
         for (Map<String, Object> item : items) {
             int productId = ((Number) item.get("productId")).intValue();
-            item.put("salePrice", promotionService.salePrice(productId, (BigDecimal) item.get("price")));
+            item.put("salePrice", pricing.salePrice(productId, (BigDecimal) item.get("price")));
         }
         return items;
     }
@@ -99,4 +99,4 @@ public class CartService {
         if (value instanceof Boolean b) return b;
         return value instanceof Number n && n.intValue() == 1;
     }
-}
+}

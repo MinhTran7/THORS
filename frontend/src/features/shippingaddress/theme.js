@@ -1,5 +1,5 @@
 // Màu và kiểu nút / thẻ của trang địa chỉ giao hàng, đồng bộ với trang Đăng nhập và các trang tài khoản của khách
-import { C as STORE } from 'features/shop/storeTheme';
+import { C as STORE, focusRing } from 'features/shop/storeTheme';
 
 export const C = {
   cyan: '#A8F1F8',
@@ -47,3 +47,36 @@ export const cardSx = {
   border: 0,
   boxShadow: '0 24px 50px -30px rgba(31, 41, 55, 0.25), 0 0 0 1px #F2EBD3'
 };
+
+export const YELLOW = { bg: '#FEF9C3', border: '#FDE68A', text: '#A16207', star: '#FACC15' };
+
+export const addButtonSx = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 1,
+  height: 46,
+  px: 3,
+  border: 0,
+  borderRadius: 0,
+  bgcolor: STORE.accent,
+  color: '#FFFFFF',
+  fontFamily: 'inherit',
+  fontSize: 14.5,
+  fontWeight: 800,
+  cursor: 'pointer',
+  transition: 'background-color 0.15s ease',
+  '&:hover': { bgcolor: STORE.primaryDark },
+  ...focusRing
+};
+
+export const inputSx = (hasError) => ({
+  '& .MuiOutlinedInput-root': {
+    borderRadius: '14px',
+    minHeight: 46,
+    bgcolor: '#FAFDFD',
+    '&.Mui-focused': { boxShadow: 'none' },
+    '& fieldset, &:hover fieldset, &.Mui-focused fieldset': { borderWidth: '1.5px', borderColor: hasError ? C.error : C.border }
+  }
+});
+
+export const dialogPaper = { paper: { sx: { borderRadius: '24px', p: 1 } } };

@@ -147,6 +147,15 @@ public class SecurityConfig {
                                                 .hasRole("OWNER")
                                                 .requestMatchers(HttpMethod.DELETE, "/api/products/**", "/api/categories/**")
                                                 .hasRole("OWNER")
+                                                // Khuyến mãi: khách chỉ đọc danh sách mã (trang Checkout); còn lại chỉ Owner
+                                                .requestMatchers(HttpMethod.GET, "/api/promotions")
+                                                .hasAnyRole("OWNER", "CUSTOMER")
+                                                .requestMatchers("/api/promotions", "/api/promotions/**")
+                                                .hasRole("OWNER")
+                                                .requestMatchers("/api/customer/addresses", "/api/customer/addresses/**")
+                                                .hasRole("CUSTOMER")
+                                                .requestMatchers("/api/sales/in-store", "/api/sales/in-store/**")
+                                                .hasAnyRole("OWNER", "FAMILY_MEMBER")
                                                 .anyRequest()
                                                 .authenticated());
                 http.requestCache(c -> c.disable())

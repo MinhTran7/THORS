@@ -3,20 +3,15 @@ package com.thors.module.sales.repository;
 import com.thors.module.promotion.dto.SalePrice;
 import com.thors.module.sales.dto.InStoreSaleDetailResponse;
 import com.thors.module.sales.dto.InStoreSaleListItem;
-import com.thors.module.sales.dto.PriceRange;
 import com.thors.module.sales.dto.SellerOption;
-import com.thors.module.sales.dto.VariantSale;
 import com.thors.module.sales.entity.SaleVariant;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.PreparedStatementCreator;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
 import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.LocalDate;
@@ -30,13 +25,9 @@ import java.util.Optional;
 @Repository
 public class InStoreSalesRepository {
 
-    // Hàng đang giữ cho đơn khác: phần giữ của đơn Facebook/online và đơn online đang trong hạn thanh toán
+    // Hàng đang giữ cho đơn khác, cùng cách tính với kho (WarehouseStore.held)
     private static final String HELD_SQL = """
-            (SELECT COALESCE(SUM(IF(oi.reserved_quantity > 0, oi.reserved_quantity, oi.quantity)), 0)
-             FROM order_item oi JOIN orders o ON o.order_id = oi.order_id
-             WHERE oi.detail_id = pd.detail_id
-               AND (oi.reserved_quantity > 0
-                    OR (o.order_type = 'Online' AND o.order_status = 'AWAITING_PAYMENT' AND o.payment_expires_at > NOW())))
+            (SELECT COALESCE(SUM(oi.reserved_quantity), 0) FROM order_item oi WHERE oi.detail_id = pd.detail_id)
             """;
 
     // Ảnh chính của sản phẩm (cần alias pd cho product_detail)
@@ -53,8 +44,8 @@ public class InStoreSalesRepository {
             """;
 
     private static final String SALE_SQL = """
-            SELECT o.order_id, o.order_number, i.invoice_number, o.order_date,
-                   u.full_name AS seller_name, COALESCE(o.manual_discount_amount, 0) AS manual_discount, o.total_amount,
+            SELECT o.order_id, o.order_number, i.invoice_number, o.order_date, o.order_status,
+                   u.full_name AS seller_name, o.items_amount, o.manual_discount_amount, o.total_amount,
                    o.payment_method, o.payment_status
             """ + SALE_FROM;
 
@@ -67,6 +58,21 @@ public class InStoreSalesRepository {
     }
 
     public record Filter(String keyword, LocalDate fromDate, LocalDate toDate, Integer sellerId, String paymentMethod) {
+    }
+
+    public record VariantStock(BigDecimal price, int available) {
+    }
+
+    public record PriceBounds(BigDecimal min, BigDecimal max) {
+    }
+
+    public record PendingSale(int orderId, String orderNumber, int sellerId, String orderStatus, BigDecimal total) {
+        public boolean awaitingPayment() {
+            return "AWAITING_PAYMENT".equals(orderStatus);
+        }
+    }
+
+    public record OrderLine(int orderItemId, int detailId, int quantity) {
     }
 
     // ---- Tạo hóa đơn ----
@@ -83,86 +89,54 @@ public class InStoreSalesRepository {
                         """,
                 (rs, i) -> new SaleVariant(rs.getInt("detail_id"), rs.getInt("product_id"), rs.getString("product_name"),
                         rs.getString("size"), rs.getString("color"), rs.getBigDecimal("price"),
-                        rs.getInt("stock_quantity"), rs.getInt("held"),
+                        rs.getInt("stock_quantity"), rs.getInt("held"), 0,
                         "ACTIVE".equals(rs.getString("detail_status")) && "ACTIVE".equals(rs.getString("product_status"))),
                 detailId).stream().findFirst();
     }
 
-    // Đơn đã tạo từ cùng một lần bấm thanh toán (requestId), nhận ra qua khóa thẻ kho của đơn đó
     public Optional<Integer> findOrderIdByRequest(String requestId) {
-        return jdbc.queryForList("""
-                        SELECT oi.order_id
-                        FROM stock_adjustment sa JOIN order_item oi ON oi.order_item_id = sa.order_item_id
-                        WHERE sa.idempotency_key LIKE ?
-                        LIMIT 1
-                        """,
-                Integer.class, REQUEST_KEY_PREFIX + requestId + ":%").stream().findFirst();
-    }
-
-    public static String stockKey(String requestId, int detailId) {
-        return REQUEST_KEY_PREFIX + requestId + ":" + detailId;
+        return jdbc.queryForList("SELECT order_id FROM orders WHERE stock_hold_key = ?", Integer.class, REQUEST_KEY_PREFIX + requestId)
+                .stream().findFirst();
     }
 
     // Đơn tại quầy dùng chung bảng orders; user_id NOT NULL nên lưu người bán
     public int insertOrder(String orderNumber, int sellerId, String paymentMethod, BigDecimal subtotal,
-                           BigDecimal discount, BigDecimal total, LocalDateTime at) {
-        Timestamp time = Timestamp.valueOf(at);
-        return insertAndGetKey(con -> {
+                           BigDecimal discount, BigDecimal total, String requestId, LocalDateTime at) {
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        jdbc.update(con -> {
             PreparedStatement ps = con.prepareStatement("""
-                    INSERT INTO orders (order_number, order_type, user_id, order_date, order_status, payment_expires_at,
-                                        total_amount, created_by, stock_deducted_at, payment_method, payment_status,
-                                        items_amount, promotion_discount_amount, coupon_discount_amount, manual_discount_amount,
-                                        shipping_fee, stock_hold_status, stock_hold_closed_at, stock_hold_close_reason)
-                    VALUES (?, 'In-Store', ?, ?, 'COMPLETED', NULL, ?, ?, ?, ?, 'PAID', ?, 0, 0, ?, 0, 'NONE', ?, 'IN_STORE_SALE')
+                    INSERT INTO orders (order_number, order_type, user_id, order_date, order_status, total_amount, created_by,
+                                        payment_method, payment_status, items_amount, promotion_discount_amount,
+                                        coupon_discount_amount, manual_discount_amount, shipping_fee, stock_hold_status, stock_hold_key)
+                    VALUES (?, 'In-Store', ?, ?, 'AWAITING_PAYMENT', ?, ?, ?, 'UNPAID', ?, 0, 0, ?, 0, 'NONE', ?)
                     """, Statement.RETURN_GENERATED_KEYS);
             ps.setString(1, orderNumber);
             ps.setInt(2, sellerId);
-            ps.setTimestamp(3, time);
+            ps.setTimestamp(3, Timestamp.valueOf(at));
             ps.setBigDecimal(4, total);
             ps.setInt(5, sellerId);
-            ps.setTimestamp(6, time);
-            ps.setString(7, paymentMethod);
-            ps.setBigDecimal(8, subtotal);
-            ps.setBigDecimal(9, discount);
-            ps.setTimestamp(10, time);
+            ps.setString(6, paymentMethod);
+            ps.setBigDecimal(7, subtotal);
+            ps.setBigDecimal(8, discount);
+            ps.setString(9, REQUEST_KEY_PREFIX + requestId);
             return ps;
-        });
+        }, keyHolder);
+        return keyHolder.getKey().intValue();
     }
 
-    public int insertItem(int orderId, SaleVariant variant, int quantity, SalePrice price) {
-        return insertAndGetKey(con -> {
-            PreparedStatement ps = con.prepareStatement("""
-                    INSERT INTO order_item (order_id, detail_id, quantity, unit_price, original_price, promotion_id,
-                                            product_name_snapshot, size_snapshot, color_snapshot, reserved_quantity)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
-                    """, Statement.RETURN_GENERATED_KEYS);
-            ps.setInt(1, orderId);
-            ps.setInt(2, variant.detailId());
-            ps.setInt(3, quantity);
-            ps.setBigDecimal(4, price.price());
-            ps.setBigDecimal(5, price.originalPrice());
-            ps.setObject(6, price.promotionId());
-            ps.setString(7, variant.productName());
-            ps.setString(8, variant.size());
-            ps.setString(9, variant.color());
-            return ps;
-        });
+    public void insertItem(int orderId, SaleVariant variant, int quantity, SalePrice price) {
+        jdbc.update("""
+                        INSERT INTO order_item (order_id, detail_id, quantity, unit_price, original_price, promotion_id,
+                                                product_name_snapshot, size_snapshot, color_snapshot, reserved_quantity)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                orderId, variant.detailId(), quantity, price.price(), price.originalPrice(), price.promotionId(),
+                variant.productName(), variant.size(), variant.color(), quantity);
     }
 
     public boolean deductStock(int detailId, int quantity) {
-        return jdbc.update(
-                "UPDATE product_detail SET stock_quantity = stock_quantity - ? WHERE detail_id = ? AND stock_quantity >= ? AND status = 'ACTIVE'",
+        return jdbc.update("UPDATE product_detail SET stock_quantity = stock_quantity - ? WHERE detail_id = ? AND stock_quantity >= ?",
                 quantity, detailId, quantity) == 1;
-    }
-
-    // Thẻ kho "Xuất bán"
-    public void insertStockOut(int detailId, int quantity, String reason, int sellerId, int orderItemId, String idempotencyKey) {
-        jdbc.update("""
-                        INSERT INTO stock_adjustment (detail_id, quantity_change, reason, adjusted_by, movement_type,
-                                                      movement_quantity, order_item_id, idempotency_key)
-                        VALUES (?, ?, ?, ?, 'ORDER_OUT', ?, ?, ?)
-                        """,
-                detailId, -quantity, reason, sellerId, quantity, orderItemId, idempotencyKey);
     }
 
     public void insertPayment(int orderId, String paymentMethod, BigDecimal amount, LocalDateTime at) {
@@ -175,12 +149,57 @@ public class InStoreSalesRepository {
                 orderId, invoiceNumber, Timestamp.valueOf(at), sellerId);
     }
 
+    public Optional<PendingSale> lockSale(int orderId) {
+        return jdbc.query("""
+                        SELECT order_id, order_number, created_by, order_status, total_amount
+                        FROM orders WHERE order_id = ? AND order_type = 'In-Store' FOR UPDATE
+                        """,
+                (rs, i) -> new PendingSale(rs.getInt("order_id"), rs.getString("order_number"), rs.getInt("created_by"),
+                        rs.getString("order_status"), rs.getBigDecimal("total_amount")),
+                orderId).stream().findFirst();
+    }
+
+    public List<OrderLine> findOrderLines(int orderId) {
+        return jdbc.query("""
+                        SELECT order_item_id, detail_id, quantity
+                        FROM order_item WHERE order_id = ? ORDER BY detail_id
+                        """,
+                (rs, i) -> new OrderLine(rs.getInt("order_item_id"), rs.getInt("detail_id"), rs.getInt("quantity")), orderId);
+    }
+
+    public void releaseItems(int orderId) {
+        jdbc.update("UPDATE order_item SET reserved_quantity = 0 WHERE order_id = ?", orderId);
+    }
+
+    public void markCompleted(int orderId, String paymentMethod, LocalDateTime at) {
+        Timestamp time = Timestamp.valueOf(at);
+        jdbc.update("""
+                UPDATE orders
+                SET order_status = 'COMPLETED', payment_status = 'PAID', payment_method = ?, stock_deducted_at = ?,
+                    stock_hold_closed_at = ?, stock_hold_close_reason = 'IN_STORE_SALE'
+                WHERE order_id = ?
+                """, paymentMethod, time, time, orderId);
+    }
+
+    public void markCancelled(int orderId, String reason, LocalDateTime at) {
+        jdbc.update("UPDATE orders SET order_status = 'CANCELLED', cancel_reason = ?, cancelled_at = ? WHERE order_id = ?",
+                reason, Timestamp.valueOf(at), orderId);
+    }
+
+    public void markRefundPending(int orderId) {
+        jdbc.update("UPDATE orders SET payment_status = 'REFUND_PENDING' WHERE order_id = ?", orderId);
+    }
+
+    public void failPendingPayments(int orderId, String reason) {
+        jdbc.update("UPDATE payment SET payment_status = 'FAILED', failure_reason = ? WHERE order_id = ? AND payment_status = 'PENDING'",
+                reason, orderId);
+    }
+
     // ---- Lịch sử, chi tiết ----
 
     public long countSales(Filter filter) {
         List<Object> args = new ArrayList<>();
-        Long total = jdbc.queryForObject("SELECT COUNT(*) " + SALE_FROM + where(filter, args), Long.class, args.toArray());
-        return total == null ? 0 : total;
+        return jdbc.queryForObject("SELECT COUNT(*) " + SALE_FROM + where(filter, args), Long.class, args.toArray());
     }
 
     public List<InStoreSaleListItem> findSales(Filter filter, int limit, long offset) {
@@ -190,18 +209,18 @@ public class InStoreSalesRepository {
         args.add(offset);
         return jdbc.query(sql,
                 (rs, i) -> new InStoreSaleListItem(rs.getInt("order_id"), rs.getString("order_number"),
-                        rs.getString("invoice_number"), orderDate(rs), rs.getString("seller_name"),
+                        rs.getString("invoice_number"), rs.getTimestamp("order_date").toLocalDateTime(), rs.getString("seller_name"),
                         rs.getBigDecimal("total_amount"), rs.getString("payment_method")),
                 args.toArray());
     }
 
     public Optional<InStoreSaleDetailResponse> findSale(int orderId) {
-        List<InStoreSaleDetailResponse.SaleItemDetail> items = findSaleItems(orderId);
         return jdbc.query(SALE_SQL + " WHERE o.order_id = ? AND o.order_type = 'In-Store'",
-                (rs, i) -> InStoreSaleDetailResponse.of(rs.getInt("order_id"), rs.getString("order_number"),
-                        rs.getString("invoice_number"), orderDate(rs), rs.getString("seller_name"),
-                        rs.getBigDecimal("manual_discount"), rs.getBigDecimal("total_amount"),
-                        rs.getString("payment_method"), rs.getString("payment_status"), items),
+                (rs, i) -> new InStoreSaleDetailResponse(rs.getInt("order_id"), rs.getString("order_number"),
+                        rs.getString("invoice_number"), rs.getTimestamp("order_date").toLocalDateTime(), rs.getString("seller_name"),
+                        rs.getBigDecimal("items_amount"), rs.getBigDecimal("manual_discount_amount"), rs.getBigDecimal("total_amount"),
+                        rs.getString("order_status"), rs.getString("payment_method"), rs.getString("payment_status"),
+                        findSaleItems(orderId)),
                 orderId).stream().findFirst();
     }
 
@@ -209,20 +228,17 @@ public class InStoreSalesRepository {
         return jdbc.query("""
                         SELECT oi.order_item_id, oi.product_name_snapshot, oi.size_snapshot, oi.color_snapshot,
                                oi.quantity, oi.unit_price, COALESCE(oi.original_price, oi.unit_price) AS original_price,
+                               oi.quantity * oi.unit_price AS total_price,
                         """ + IMAGE_SQL + """
                         FROM order_item oi
                         LEFT JOIN product_detail pd ON pd.detail_id = oi.detail_id
                         WHERE oi.order_id = ?
                         ORDER BY oi.order_item_id
                         """,
-                (rs, i) -> {
-                    BigDecimal unitPrice = rs.getBigDecimal("unit_price");
-                    int quantity = rs.getInt("quantity");
-                    return new InStoreSaleDetailResponse.SaleItemDetail(rs.getInt("order_item_id"),
-                            rs.getString("product_name_snapshot"), rs.getString("size_snapshot"), rs.getString("color_snapshot"),
-                            quantity, rs.getBigDecimal("original_price"), unitPrice,
-                            unitPrice.multiply(BigDecimal.valueOf(quantity)), rs.getString("image_url"));
-                },
+                (rs, i) -> new InStoreSaleDetailResponse.SaleItemDetail(rs.getInt("order_item_id"),
+                        rs.getString("product_name_snapshot"), rs.getString("size_snapshot"), rs.getString("color_snapshot"),
+                        rs.getInt("quantity"), rs.getBigDecimal("original_price"), rs.getBigDecimal("unit_price"),
+                        rs.getBigDecimal("total_price"), rs.getString("image_url")),
                 orderId);
     }
 
@@ -239,27 +255,25 @@ public class InStoreSalesRepository {
 
     // ---- Giá gốc, số còn bán được ----
 
-    public Map<Integer, VariantSale> findVariantStocks(int productId) {
-        Map<Integer, VariantSale> result = new LinkedHashMap<>();
+    public Map<Integer, VariantStock> findVariantStocks(int productId) {
+        Map<Integer, VariantStock> result = new LinkedHashMap<>();
         jdbc.query("SELECT pd.detail_id, pd.price, GREATEST(pd.stock_quantity - " + HELD_SQL + ", 0) AS available"
                         + " FROM product_detail pd WHERE pd.product_id = ? AND pd.price IS NOT NULL",
                 rs -> {
-                    result.put(rs.getInt("detail_id"), new VariantSale(rs.getBigDecimal("price"), rs.getInt("available")));
+                    result.put(rs.getInt("detail_id"), new VariantStock(rs.getBigDecimal("price"), rs.getInt("available")));
                 },
                 productId);
         return result;
     }
 
-    public Map<Integer, PriceRange> findPriceRanges() {
-        Map<Integer, PriceRange> ranges = new LinkedHashMap<>();
+    public Map<Integer, PriceBounds> findPriceBounds() {
+        Map<Integer, PriceBounds> bounds = new LinkedHashMap<>();
         jdbc.query("SELECT product_id, MIN(price) AS min_price, MAX(price) AS max_price FROM product_detail"
                         + " WHERE status = 'ACTIVE' AND price IS NOT NULL GROUP BY product_id",
                 rs -> {
-                    BigDecimal min = rs.getBigDecimal("min_price");
-                    BigDecimal max = rs.getBigDecimal("max_price");
-                    ranges.put(rs.getInt("product_id"), new PriceRange(min, max, min, max));
+                    bounds.put(rs.getInt("product_id"), new PriceBounds(rs.getBigDecimal("min_price"), rs.getBigDecimal("max_price")));
                 });
-        return ranges;
+        return bounds;
     }
 
     // ---- Tiện ích ----
@@ -290,20 +304,5 @@ public class InStoreSalesRepository {
             args.add(f.paymentMethod());
         }
         return where.toString();
-    }
-
-    private int insertAndGetKey(PreparedStatementCreator creator) {
-        KeyHolder keyHolder = new GeneratedKeyHolder();
-        jdbc.update(creator, keyHolder);
-        Number key = keyHolder.getKey();
-        if (key == null) {
-            throw new IllegalStateException("Không lấy được ID vừa tạo.");
-        }
-        return key.intValue();
-    }
-
-    private static LocalDateTime orderDate(ResultSet rs) throws SQLException {
-        Timestamp ts = rs.getTimestamp("order_date");
-        return ts != null ? ts.toLocalDateTime() : null;
     }
 }

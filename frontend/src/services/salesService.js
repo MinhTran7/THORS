@@ -20,5 +20,10 @@ export const getSellers = () => api('/sales/in-store/sellers');
 // { [productId]: { min, max, saleMin, saleMax } }
 export const getPriceRanges = () => api('/sales/in-store/prices');
 
-// Giá sau khuyến mãi và số còn bán được của từng biến thể: { [detailId]: { price, available } }
+// { [detailId]: { price, available } }: giá sau khuyến mãi và số còn bán được
 export const getVariantSales = (productId) => api(`/sales/in-store/prices/${productId}`);
+
+// Tồn kho và vị trí lưu kho của một biến thể (API kho)
+export const getVariantInventory = (detailId) => api(`/warehouse/inventory/${detailId}`);
+
+export const cancelTransfer = (orderId) => api(`/sales/in-store/${orderId}/cancel`, { method: 'POST' });

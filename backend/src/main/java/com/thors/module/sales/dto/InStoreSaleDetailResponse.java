@@ -14,6 +14,7 @@ public record InStoreSaleDetailResponse(
         BigDecimal subtotal,
         BigDecimal manualDiscount,
         BigDecimal totalAmount,
+        String orderStatus,
         String paymentMethod,
         String paymentStatus,
         List<SaleItemDetail> items
@@ -28,13 +29,6 @@ public record InStoreSaleDetailResponse(
             BigDecimal unitPrice,
             BigDecimal totalPrice,
             String imageUrl
-    ) {}
-
-    public static InStoreSaleDetailResponse of(int orderId, String orderNumber, String invoiceNumber, LocalDateTime orderDate,
-                                               String sellerName, BigDecimal manualDiscount, BigDecimal totalAmount,
-                                               String paymentMethod, String paymentStatus, List<SaleItemDetail> items) {
-        BigDecimal subtotal = items.stream().map(SaleItemDetail::totalPrice).reduce(BigDecimal.ZERO, BigDecimal::add);
-        return new InStoreSaleDetailResponse(orderId, orderNumber, invoiceNumber, orderDate, sellerName, subtotal,
-                manualDiscount, totalAmount, paymentMethod, paymentStatus, items);
+    ) {
     }
 }
