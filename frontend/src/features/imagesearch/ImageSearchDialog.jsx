@@ -330,6 +330,15 @@ export default function ImageSearchDialog({ open, onClose }) {
                   <Box sx={{ fontSize: 14, lineHeight: 1.6 }}>{result.message}</Box>
                 </Box>
               )}
+              {/* Nút tìm lại đặt ngang ảnh của khách để không phải cuộn xuống cuối */}
+              <Box
+                component="button"
+                type="button"
+                onClick={reset}
+                sx={{ ...btnSx('outline'), flexShrink: 0, alignSelf: 'center', ml: 'auto', whiteSpace: 'nowrap' }}
+              >
+                TÌM BẰNG ẢNH KHÁC
+              </Box>
             </Box>
 
             {featured && (
@@ -350,12 +359,6 @@ export default function ImageSearchDialog({ open, onClose }) {
                   : featured ? 'Sản phẩm khác gần giống' : 'Có thể bạn đang tìm'
               }
             />
-
-            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
-              <Box component="button" type="button" onClick={reset} sx={btnSx('outline')}>
-                TÌM BẰNG ẢNH KHÁC
-              </Box>
-            </Box>
           </Box>
         )}
       </Box>
