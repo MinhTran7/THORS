@@ -310,22 +310,26 @@ export default function ImageSearchDialog({ open, onClose }) {
                   />
                 </Box>
               )}
-              <Box
-                sx={{
-                  flex: 1,
-                  minWidth: 0,
-                  bgcolor: status.bg,
-                  color: status.fg,
-                  p: 2,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'center',
-                  gap: 0.75
-                }}
-              >
-                <Box sx={{ fontWeight: 700, fontSize: 18 }}>{status.title}</Box>
-                <Box sx={{ fontSize: 14, lineHeight: 1.6 }}>{result.message}</Box>
-              </Box>
+              {/* Chưa có mẫu: không ghi "Shop chưa có mẫu này...", chỉ hiện khung "Gần giống nhất" + sản phẩm khác
+                  (không có sản phẩm nào để hiện thì vẫn ghi để màn hình không trống) */}
+              {(result.status !== 'NOT_FOUND' || !featured) && (
+                <Box
+                  sx={{
+                    flex: 1,
+                    minWidth: 0,
+                    bgcolor: status.bg,
+                    color: status.fg,
+                    p: 2,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    gap: 0.75
+                  }}
+                >
+                  <Box sx={{ fontWeight: 700, fontSize: 18 }}>{status.title}</Box>
+                  <Box sx={{ fontSize: 14, lineHeight: 1.6 }}>{result.message}</Box>
+                </Box>
+              )}
             </Box>
 
             {featured && (
@@ -333,7 +337,7 @@ export default function ImageSearchDialog({ open, onClose }) {
                 product={featured}
                 detectedColor={result.product ? result.detectedColor : null}
                 onNavigate={onClose}
-                label={result.product ? (result.status === 'SIMILAR' ? 'Giống nhất' : '') : 'Gần giống nhất (shop chưa có đúng mẫu này)'}
+                label={result.product ? (result.status === 'SIMILAR' ? 'Giống nhất' : '') : 'Gần giống nhất'}
               />
             )}
 
