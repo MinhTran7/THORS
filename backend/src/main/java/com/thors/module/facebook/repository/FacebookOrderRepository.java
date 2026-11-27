@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
@@ -28,9 +29,10 @@ public class FacebookOrderRepository {
 
     /** Dữ liệu một đơn Facebook mới (trạng thái chờ xác nhận, chưa thanh toán). */
     public record NewOrder(int actorId, String orderNumber, String status, String paymentMethod,
-                           long itemsAmount, long totalAmount,
+                           long itemsAmount, Integer promotionId, String promotionName,
+                           long promotionDiscountAmount, long shippingFee, long totalAmount,
                            String deliveryName, String deliveryPhone, String deliveryAddress,
-                           Double deliveryLat, Double deliveryLng) {
+                           Double deliveryLat, Double deliveryLng, String facebookPsid) {
     }
 
     /**
@@ -65,15 +67,15 @@ public class FacebookOrderRepository {
                     INSERT INTO orders (
                         user_id, created_by, order_number, order_type, order_date,
                         order_status, preparation_status, payment_method, payment_status,
-                        items_amount, promotion_discount_amount, coupon_discount_amount,
-                        shipping_fee, total_amount,
+                        items_amount, promotion_id, promotion_name_snapshot, promotion_discount_amount,
+                        coupon_discount_amount, shipping_fee, total_amount,
                         delivery_name, delivery_phone, delivery_address,
                         delivery_lat, delivery_lng
                     ) VALUES (
                         ?, ?, ?, 'Online', NOW(),
                         ?, 'NOT_STARTED', ?, 'UNPAID',
-                        ?, 0, 0,
-                        0, ?,
+                        ?, ?, ?, ?,
+                        0, ?, ?,
                         ?, ?, ?,
                         ?, ?
                     )
@@ -84,15 +86,27 @@ public class FacebookOrderRepository {
             ps.setString(4, o.status());
             ps.setString(5, o.paymentMethod());
             ps.setLong(6, o.itemsAmount());
-            ps.setLong(7, o.totalAmount());
-            ps.setString(8, o.deliveryName());
-            ps.setString(9, o.deliveryPhone());
-            ps.setString(10, o.deliveryAddress());
-            ps.setObject(11, o.deliveryLat());
-            ps.setObject(12, o.deliveryLng());
+            ps.setObject(7, o.promotionId(), java.sql.Types.INTEGER);
+            ps.setString(8, o.promotionName());
+            ps.setLong(9, o.promotionDiscountAmount());
+            ps.setLong(10, o.shippingFee());
+            ps.setLong(11, o.totalAmount());
+            ps.setString(12, o.deliveryName());
+            ps.setString(13, o.deliveryPhone());
+            ps.setString(14, o.deliveryAddress());
+            ps.setObject(15, o.deliveryLat());
+            ps.setObject(16, o.deliveryLng());
             return ps;
         }, keyHolder);
-        return Objects.requireNonNull(keyHolder.getKey(), "Không lấy được mã đơn vừa tạo.").intValue();
+        int orderId = Objects.requireNonNull(keyHolder.getKey(), "Không lấy được mã đơn vừa tạo.").intValue();
+        if (o.facebookPsid() != null && !o.facebookPsid().isBlank()) {
+            try {
+                jdbc.update("UPDATE orders SET facebook_psid = ? WHERE order_id = ?", o.facebookPsid().trim(), orderId);
+            } catch (DataAccessException ignored) {
+                // DB chưa chạy migration 2026-11-27_order_facebook_psid.sql -> bỏ qua, vẫn tạo đơn bình thường
+            }
+        }
+        return orderId;
     }
 
     /**

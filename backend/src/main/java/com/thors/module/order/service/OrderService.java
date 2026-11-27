@@ -14,6 +14,8 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -69,8 +71,21 @@ public class OrderService {
     private final OrderRepository orders;
     private final NotificationPublisher notifications;
     private final GhnShippingService ghnShipping;
+    /** Sự kiện gửi tin Messenger cho khách Facebook sau khi transaction đổi trạng thái/hoàn tiền commit. */
+    public record FacebookOrderStatusEvent(
+            int orderId,
+            String orderNumber,
+            String psid,
+            String targetStatus,
+            String reason,
+            String carrier,
+            long totalAmount,
+            boolean refundPending,
+            boolean refundAccountKnown) {}
+
     private final WarehouseStore warehouse;
     private final OrderMailService orderMail;
+    private final ApplicationEventPublisher events;
 
     public OrderService(
             OrderRepository orders,
@@ -78,11 +93,23 @@ public class OrderService {
             GhnShippingService ghnShipping,
             WarehouseStore warehouse,
             OrderMailService orderMail) {
+        this(orders, notifications, ghnShipping, warehouse, orderMail, null);
+    }
+
+    @Autowired
+    public OrderService(
+            OrderRepository orders,
+            NotificationPublisher notifications,
+            GhnShippingService ghnShipping,
+            WarehouseStore warehouse,
+            OrderMailService orderMail,
+            ApplicationEventPublisher events) {
         this.orders = orders;
         this.notifications = notifications;
         this.ghnShipping = ghnShipping;
         this.orderMail = orderMail;
         this.warehouse = warehouse;
+        this.events = events;
     }
 
     private static boolean isStore(Account actor) {
@@ -433,10 +460,14 @@ public class OrderService {
                 (OrderStatus.CANCELLED.equals(target) || OrderStatus.REJECTED.equals(target))
                         && orders.markRefundPendingIfPaid(orderId) > 0;
         String refundAmount = vnd(found.detail().totalAmount());
+        boolean refundAccountKnown = false;
         if (refundNeeded) {
-            // Tài khoản nhận hoàn: khách vừa nhập, hoặc (cửa hàng từ chối) tài khoản khách đã chuyển khoản
-            OrderViews.BankAccount account = safeRefund != null ? safeRefund : orders.payerAccount(orderId);
-            if (account != null) orders.saveRefundAccount(orderId, account);
+            // Chỉ dùng tài khoản PayOS trả về khi có đủ tên chủ tài khoản cá nhân (tránh ví trung gian như MoMo)
+            OrderViews.BankAccount account = safeRefund != null ? safeRefund : usablePayerAccount(orderId);
+            if (account != null) {
+                refundAccountKnown = true;
+                orders.saveRefundAccount(orderId, account);
+            }
             notifyOwner(
                     orderId,
                     "Cần hoàn tiền cho khách",
@@ -502,6 +533,18 @@ public class OrderService {
             if (done != null)
                 notifyStoreExcept(actor.id(), orderId, "Đơn hàng đã được xử lý", "Đơn " + number + " " + done + ".");
         }
+        if (List.of(OrderStatus.AWAITING_PICKUP, OrderStatus.REJECTED, OrderStatus.SHIPPING, OrderStatus.DELIVERED)
+                .contains(target)) {
+            publishFacebookStatus(
+                    orderId,
+                    number,
+                    target,
+                    finalReason,
+                    safeCarrier,
+                    found.detail().totalAmount(),
+                    refundNeeded,
+                    refundAccountKnown);
+        }
         return detail(actor, orderId);
     }
 
@@ -518,11 +561,25 @@ public class OrderService {
                         .filter(f -> OrderStatus.TYPE_ONLINE.equals(f.orderType()))
                         .orElseThrow(
                                 () -> new ApiException(404, "ORDER_NOT_FOUND", "Không tìm thấy đơn hàng."));
+        if (!isUsableRefundAccount(found.detail().refundAccount()))
+            throw new ApiException(
+                    409,
+                    "REFUND_ACCOUNT_REQUIRED",
+                    "Tài khoản nhận hoàn chưa đầy đủ hoặc là tài khoản ví trung gian. Hãy nhập STK ngân hàng cá nhân của khách trước khi xác nhận đã hoàn tiền.");
         if (orders.markRefunded(orderId) == 0)
             throw new ApiException(409, "REFUND_STATE", "Đơn này không ở trạng thái chờ hoàn tiền.");
         notifyCustomer(found.userId(), orderId, "Đã hoàn tiền",
                 "Cửa hàng đã hoàn " + vnd(found.detail().totalAmount()) + " cho đơn "
                         + found.detail().orderNumber() + ".");
+        publishFacebookStatus(
+                orderId,
+                found.detail().orderNumber(),
+                "REFUNDED",
+                null,
+                null,
+                found.detail().totalAmount(),
+                false,
+                true);
         return detail(actor, orderId);
     }
 
@@ -584,6 +641,31 @@ public class OrderService {
         return detail(actor, orderId);
     }
 
+    private static final List<String> INTERMEDIARY_PAYER_KEYWORDS =
+            List.of("CONG TY", "DICH VU DI DONG", "M_SERVICE", "ZALOPAY", "SHOPEEPAY", "VNPAY");
+
+    private OrderViews.BankAccount usablePayerAccount(int orderId) {
+        OrderViews.BankAccount payer = orders.payerAccount(orderId);
+        return isUsableRefundAccount(payer) ? payer : null;
+    }
+
+    /** Tài khoản nhận hoàn hợp lệ phải đủ BIN, STK và tên cá nhân (loại trừ ví trung gian khi thiếu tên hoặc tên công ty ví). */
+    private static boolean isUsableRefundAccount(OrderViews.BankAccount a) {
+        if (a == null) return false;
+        String bin = blankToNull(a.bankBin());
+        String number = blankToNull(a.accountNumber());
+        String name = blankToNull(a.accountName());
+        if (bin == null || number == null || name == null) return false;
+        String cleanNumber = number.replaceAll("\\s", "");
+        if (!bin.matches("\\d{6}") || !cleanNumber.matches("\\d{6,19}")) return false;
+        return !isIntermediaryName(name);
+    }
+
+    private static boolean isIntermediaryName(String name) {
+        String upper = name.trim().toUpperCase(java.util.Locale.ROOT);
+        return INTERMEDIARY_PAYER_KEYWORDS.stream().anyMatch(upper::contains);
+    }
+
     /** Kiểm tra tài khoản nhận tiền hoàn: mã BIN 6 số, số tài khoản 6–19 chữ số, tên chủ tài khoản. */
     private static OrderViews.BankAccount requireBankAccount(OrderViews.BankAccount a) {
         String bin = a == null ? null : blankToNull(a.bankBin());
@@ -599,6 +681,9 @@ public class OrderService {
             throw new ApiException(400, "REFUND_ACCOUNT", "Số tài khoản chỉ gồm 6–19 chữ số.");
         if (name.length() > 100)
             throw new ApiException(400, "REFUND_ACCOUNT", "Tên chủ tài khoản quá dài.");
+        if (isIntermediaryName(name))
+            throw new ApiException(400, "REFUND_ACCOUNT",
+                    "Không dùng tài khoản công ty trung gian / ví điện tử. Vui lòng nhập tài khoản ngân hàng cá nhân của khách.");
         String bankName = blankToNull(a.bankName());
         return new OrderViews.BankAccount(bin, bankName == null ? null : bankName.trim(), number,
                 name.trim().toUpperCase(java.util.Locale.ROOT));
@@ -664,6 +749,31 @@ public class OrderService {
             count++;
         }
         return count;
+    }
+
+    private void publishFacebookStatus(
+            int orderId,
+            String orderNumber,
+            String targetStatus,
+            String reason,
+            String carrier,
+            long totalAmount,
+            boolean refundPending,
+            boolean refundAccountKnown) {
+        if (events == null) return;
+        String psid = orders.findFacebookPsid(orderId);
+        if (psid == null) return;
+        events.publishEvent(
+                new FacebookOrderStatusEvent(
+                        orderId,
+                        orderNumber,
+                        psid,
+                        targetStatus,
+                        reason,
+                        carrier,
+                        totalAmount,
+                        refundPending,
+                        refundAccountKnown));
     }
 
     /** Đơn Facebook gắn tài khoản nhân viên (khách không có tài khoản web) nên không gửi. */

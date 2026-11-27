@@ -48,6 +48,7 @@ import {
   SwapOutlined
 } from '@ant-design/icons';
 import { getProducts, getProductById } from '../../services/productService';
+import { getVouchers } from '../../services/promotionService';
 import { api } from '../../services/http';
 import { useAuth } from '../auth/AuthProvider';
 import { useCrumbs } from '../../layouts/crumbs';
@@ -122,6 +123,9 @@ export default function FacebookPOSPage() {
   const customerAddress = composeAddress(addressParts);
   // Kết quả kiểm tra địa chỉ trên bản đồ: { status, precision, matchedAddress, loading, address }
   const [addressCheck, setAddressCheck] = useState(null);
+  const [vouchers, setVouchers] = useState([]);
+  const [selectedPromotionId, setSelectedPromotionId] = useState('');
+  const [shippingFeeInput, setShippingFeeInput] = useState('0');
   const [paymentMethod, setPaymentMethod] = useState('ONLINE');
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [creatingOrder, setCreatingOrder] = useState(false);
@@ -280,6 +284,12 @@ export default function FacebookPOSPage() {
       })
       .catch(() => {});
 
+    getVouchers()
+      .then((res) => {
+        setVouchers(Array.isArray(res) ? res : []);
+      })
+      .catch(() => {});
+
     fetchConversationsAndMessages();
 
     // Thăm dò tin nhắn mới mỗi 3.5 giây (Real-time polling)
@@ -298,9 +308,21 @@ export default function FacebookPOSPage() {
     if (!pid) return;
 
     setLoadingVariants(true);
-    getProductById(pid)
-      .then((res) => {
-        const vList = res?.variants ?? [];
+    Promise.all([getProductById(pid), api(`/in-store-sales/prices/${pid}`).catch(() => ({}))])
+      .then(([res, saleMap]) => {
+        const rawList = res?.variants ?? [];
+        const vList = rawList.map((v) => {
+          const vId = v.detailId ?? v.variantId ?? v.id;
+          const basePrice = Number(v.price ?? v.salePrice ?? 0);
+          const sale = saleMap?.[vId];
+          const effectivePrice = sale?.price != null ? Number(sale.price) : basePrice;
+          return {
+            ...v,
+            originalPrice: basePrice,
+            price: effectivePrice,
+            ...(sale?.available != null ? { sellableQuantity: Number(sale.available) } : {})
+          };
+        });
         setVariants(vList);
         if (vList.length > 0) {
           // Ưu tiên chọn biến thể còn hàng
@@ -712,6 +734,7 @@ export default function FacebookPOSPage() {
           variantId: vId,
           size: selectedVariant.size,
           color: selectedVariant.color,
+          originalPrice: Number(selectedVariant.originalPrice ?? getPrice(selectedVariant)),
           price: getPrice(selectedVariant),
           stock,
           quantity: 1
@@ -747,6 +770,40 @@ export default function FacebookPOSPage() {
   const cartTotal = useMemo(() => {
     return cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   }, [cart]);
+
+  const selectedVoucher = useMemo(
+    () => vouchers.find((v) => String(v.promotionId) === String(selectedPromotionId)) || null,
+    [vouchers, selectedPromotionId]
+  );
+
+  const voucherEvaluation = useMemo(() => {
+    if (!selectedVoucher || cart.length === 0) return { eligible: false, discount: 0, reason: '' };
+    const now = new Date();
+    if (selectedVoucher.startDate && new Date(selectedVoucher.startDate) > now) {
+      return { eligible: false, discount: 0, reason: 'Chưa đến thời gian áp dụng mã.' };
+    }
+    if (selectedVoucher.endDate && new Date(selectedVoucher.endDate) <= now) {
+      return { eligible: false, discount: 0, reason: 'Mã giảm giá đã hết hạn.' };
+    }
+    if (selectedVoucher.remaining != null && Number(selectedVoucher.remaining) <= 0) {
+      return { eligible: false, discount: 0, reason: 'Mã giảm giá đã hết lượt.' };
+    }
+    const minOrder = Number(selectedVoucher.minOrderValue || 0);
+    if (cartTotal < minOrder) {
+      return { eligible: false, discount: 0, reason: `Cần đơn tối thiểu ${money(minOrder)}.` };
+    }
+    const val = Number(selectedVoucher.discountValue || 0);
+    const discount =
+      selectedVoucher.discountType === 'PERCENT' ? Math.round((cartTotal * val) / 100) : Math.min(val, cartTotal);
+    return { eligible: true, discount: Math.min(discount, cartTotal), reason: '' };
+  }, [selectedVoucher, cart.length, cartTotal]);
+
+  const voucherDiscount = voucherEvaluation.eligible ? voucherEvaluation.discount : 0;
+  const shippingFee = useMemo(() => {
+    const num = Number(String(shippingFeeInput || '0').replace(/[^0-9]/g, ''));
+    return Number.isFinite(num) && num >= 0 ? num : 0;
+  }, [shippingFeeInput]);
+  const finalTotal = Math.max(0, cartTotal - voucherDiscount) + shippingFee;
 
   // 3. Gửi tin nhắn trả lời khách hàng qua Messenger API
   const handleSendMessage = async (textToSend) => {
@@ -832,6 +889,11 @@ export default function FacebookPOSPage() {
     setOrderSuccessMsg('');
 
     try {
+      if (selectedVoucher && !voucherEvaluation.eligible) {
+        setErrorMsg(voucherEvaluation.reason || 'Mã giảm giá chưa đủ điều kiện áp dụng.');
+        return;
+      }
+
       // Bước A: Tạo đơn hàng (chờ xác nhận) và GIỮ hàng; chủ shop xác nhận đơn mới trừ kho
       const isOnline = paymentMethod === 'ONLINE';
       const orderResult = await api('/facebook/webhook/order', {
@@ -845,13 +907,19 @@ export default function FacebookPOSPage() {
           customerPhone: phone,
           customerAddress,
           psid: selectedPsid,
-          paymentMethod
+          paymentMethod,
+          promotionId: voucherEvaluation.eligible ? selectedVoucher.promotionId : null,
+          shippingFee
         }
       });
 
       const orderId = orderResult?.orderId;
       const orderNumber = orderResult?.orderNumber || `#${orderId}`;
-      const totalAmount = orderResult?.totalAmount || cartTotal;
+      const itemsAmount = Number(orderResult?.itemsAmount ?? cartTotal);
+      const promoDiscountApplied = Number(orderResult?.promotionDiscountAmount ?? voucherDiscount);
+      const promoNameApplied = orderResult?.promotionName || selectedVoucher?.name || '';
+      const shippingApplied = Number(orderResult?.shippingFee ?? shippingFee);
+      const totalAmount = Number(orderResult?.totalAmount ?? finalTotal);
       refreshAllOrders(globalMutate);
 
       // Bước B: Nếu chọn chuyển khoản PayOS thì tạo link & Mã VietQR
@@ -893,10 +961,20 @@ export default function FacebookPOSPage() {
         ? 'Shop sẽ đóng gói và giao hàng ngay khi nhận được thanh toán ạ! ❤️'
         : 'Shop sẽ xác nhận và giao hàng cho bạn trong thời gian sớm nhất ạ! ❤️';
 
+      const pricingLines =
+        (promoDiscountApplied > 0 || shippingApplied > 0
+          ? `\nTiền hàng: ${money(itemsAmount)}`
+          : '') +
+        (promoDiscountApplied > 0
+          ? `\n🎁 Giảm giá (${promoNameApplied}): -${money(promoDiscountApplied)}`
+          : '') +
+        (shippingApplied > 0 ? `\n🚛 Phí vận chuyển: ${money(shippingApplied)}` : '');
+
       const paymentMsg =
         `🎉 Cảm ơn bạn đã đặt hàng tại THORS!\n\n` +
         `📦 THÔNG TIN ĐƠN HÀNG ${orderNumber}:\n` +
         cart.map((c) => ` • ${c.productName} (${c.size}/${c.color}) x${c.quantity} : ${money(c.price * c.quantity)}`).join('\n') +
+        pricingLines +
         `\n\n💵 TỔNG CỘNG: ${money(totalAmount)}\n` +
         `📍 Địa chỉ nhận hàng: ${customerAddress}\n` +
         `📞 SĐT: ${phone}\n` +
@@ -971,7 +1049,12 @@ export default function FacebookPOSPage() {
         );
       }
       setCart([]);
+      setSelectedPromotionId('');
+      setShippingFeeInput('0');
       setSubmitAttempted(false);
+      getVouchers()
+        .then((res) => setVouchers(Array.isArray(res) ? res : []))
+        .catch(() => {});
       await fetchConversationsAndMessages();
     } catch (e) {
       setErrorMsg('Lỗi tạo đơn: ' + (e.message || 'Vui lòng thử lại'));
@@ -1717,17 +1800,23 @@ export default function FacebookPOSPage() {
                               </Typography>
                               {isSelected && <CheckOutlined style={{ fontSize: 11, color: '#0E7490' }} />}
                             </Box>
-                            <Typography
-                              sx={{
-                                fontSize: 12,
-                                fontWeight: 700,
-                                color: outOfStock ? '#94A3B8' : '#0F172A',
-                                mt: 0.25,
-                                textDecoration: outOfStock ? 'line-through' : 'none'
-                              }}
-                            >
-                              {money(getPrice(v))}
-                            </Typography>
+                            <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5, mt: 0.25, flexWrap: 'wrap' }}>
+                              <Typography
+                                sx={{
+                                  fontSize: 12,
+                                  fontWeight: 700,
+                                  color: outOfStock ? '#94A3B8' : Number(v.originalPrice) > getPrice(v) ? '#B91C1C' : '#0F172A',
+                                  textDecoration: outOfStock ? 'line-through' : 'none'
+                                }}
+                              >
+                                {money(getPrice(v))}
+                              </Typography>
+                              {!outOfStock && Number(v.originalPrice) > getPrice(v) && (
+                                <Typography sx={{ fontSize: 10.5, color: '#94A3B8', textDecoration: 'line-through' }}>
+                                  {money(v.originalPrice)}
+                                </Typography>
+                              )}
+                            </Box>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5, flexWrap: 'wrap' }}>
                               <Box
                                 component="span"
@@ -1811,6 +1900,11 @@ export default function FacebookPOSPage() {
                         <Typography sx={{ fontSize: 12, fontWeight: 700, lineHeight: 1.2 }}>{item.productName}</Typography>
                         <Typography sx={{ fontSize: 11, color: C.muted, mt: 0.2 }}>
                           {item.size} / {item.color} • {money(item.price)}
+                          {Number(item.originalPrice) > item.price && (
+                            <Box component="span" sx={{ ml: 0.5, textDecoration: 'line-through', color: '#94A3B8' }}>
+                              {money(item.originalPrice)}
+                            </Box>
+                          )}
                         </Typography>
                       </Box>
 
@@ -1831,9 +1925,99 @@ export default function FacebookPOSPage() {
                   </Box>
                 ))}
 
-                <Stack direction="row" sx={{ justifyContent: 'space-between', pt: 1, borderTop: `1px dashed ${C.border}` }}>
-                  <Typography sx={{ fontWeight: 800, fontSize: 13, color: C.text }}>Tổng thanh toán:</Typography>
-                  <Typography sx={{ fontWeight: 800, fontSize: 15, color: '#087F8C' }}>{money(cartTotal)}</Typography>
+                {/* Mã giảm giá & Phí vận chuyển */}
+                <Box sx={{ pt: 1, borderTop: `1px dashed ${C.border}`, display: 'grid', gap: 1 }}>
+                  <TextField
+                    select
+                    fullWidth
+                    size="small"
+                    label="Mã giảm giá đơn hàng"
+                    value={selectedPromotionId}
+                    onChange={(e) => setSelectedPromotionId(e.target.value)}
+                    sx={formInputSx}
+                  >
+                    <MenuItem value="">Không áp dụng mã</MenuItem>
+                    {vouchers.map((v) => {
+                      const discountText =
+                        v.discountType === 'PERCENT' ? `Giảm ${Number(v.discountValue)}%` : `Giảm ${money(v.discountValue)}`;
+                      const minText = Number(v.minOrderValue) > 0 ? ` · Đơn từ ${money(v.minOrderValue)}` : '';
+                      return (
+                        <MenuItem key={v.promotionId} value={String(v.promotionId)}>
+                          <Typography sx={{ fontSize: 12 }} noWrap>
+                            {v.name} ({discountText}{minText})
+                          </Typography>
+                        </MenuItem>
+                      );
+                    })}
+                  </TextField>
+                  {selectedVoucher && !voucherEvaluation.eligible && (
+                    <Typography sx={{ fontSize: 11, color: '#B45309', mt: -0.5 }}>
+                      {voucherEvaluation.reason}
+                    </Typography>
+                  )}
+
+                  <Box>
+                    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        label="Phí vận chuyển (₫)"
+                        value={shippingFeeInput}
+                        onChange={(e) => setShippingFeeInput(e.target.value.replace(/[^0-9]/g, '').slice(0, 8))}
+                        slotProps={{ htmlInput: { inputMode: 'numeric' } }}
+                        sx={formInputSx}
+                      />
+                      {[0, 20000, 30000].map((preset) => (
+                        <Button
+                          key={preset}
+                          size="small"
+                          variant={shippingFee === preset ? 'contained' : 'outlined'}
+                          onClick={() => setShippingFeeInput(String(preset))}
+                          sx={{
+                            minWidth: 0,
+                            px: 1,
+                            py: 0.75,
+                            fontSize: 11,
+                            textTransform: 'none',
+                            borderRadius: '8px',
+                            whiteSpace: 'nowrap',
+                            ...(shippingFee === preset
+                              ? { bgcolor: '#087F8C', color: '#fff', boxShadow: 'none' }
+                              : { borderColor: C.border, color: C.text })
+                          }}
+                        >
+                          {preset === 0 ? 'Free' : `${preset / 1000}k`}
+                        </Button>
+                      ))}
+                    </Stack>
+                  </Box>
+                </Box>
+
+                <Stack spacing={0.5} sx={{ pt: 1, borderTop: `1px dashed ${C.border}` }}>
+                  <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
+                    <Typography sx={{ fontSize: 12, color: C.muted }}>Tiền hàng:</Typography>
+                    <Typography sx={{ fontSize: 12, fontWeight: 600, color: C.text }}>{money(cartTotal)}</Typography>
+                  </Stack>
+                  {voucherDiscount > 0 && (
+                    <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
+                      <Typography sx={{ fontSize: 12, color: '#15803D' }}>
+                        Giảm giá ({selectedVoucher?.name}):
+                      </Typography>
+                      <Typography sx={{ fontSize: 12, fontWeight: 700, color: '#15803D' }}>
+                        -{money(voucherDiscount)}
+                      </Typography>
+                    </Stack>
+                  )}
+                  <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
+                    <Typography sx={{ fontSize: 12, color: C.muted }}>Phí vận chuyển:</Typography>
+                    <Typography sx={{ fontSize: 12, fontWeight: 600, color: C.text }}>
+                      {shippingFee > 0 ? money(shippingFee) : 'Miễn phí'}
+                    </Typography>
+                  </Stack>
+                  <Stack direction="row" sx={{ justifyContent: 'space-between', pt: 0.5 }}>
+                    <Typography sx={{ fontWeight: 800, fontSize: 13, color: C.text }}>Tổng thanh toán:</Typography>
+                    <Typography sx={{ fontWeight: 800, fontSize: 15, color: '#087F8C' }}>{money(finalTotal)}</Typography>
+                  </Stack>
                 </Stack>
               </Stack>
             )}

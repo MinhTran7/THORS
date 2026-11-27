@@ -147,4 +147,66 @@ class OrderPaymentNotificationTest {
         ApiException e = assertThrows(ApiException.class, () -> service.confirmOnlinePaid(family, 10));
         assertEquals(403, e.status);
     }
+
+    @Test
+    void rejectPaidOrderSkipsIncompleteOrIntermediaryWalletPayerAccount() {
+        var owner = new Account(1, "OWNER", "Chủ shop", null, null, null, null, null, "ACTIVE", null, null, null, 0, null);
+        var d = new com.thors.module.order.dto.OrderViews.Detail(
+                10, "ORD-10", null, "PENDING_CONFIRMATION", null, "ONLINE", "PAID", null, 10000,
+                null, 0, null, 0, 0, 10000, "A", "0900000001", "Addr", null, null, null, null,
+                null, null, java.util.List.of(), null, null, null);
+        when(orders.find(10, true)).thenReturn(Optional.of(new OrderRepository.Found(5, "Online", d)));
+        when(orders.transition(10, "PENDING_CONFIRMATION", "REJECTED", 1, "Hết hàng", null)).thenReturn(true);
+        when(orders.markRefundPendingIfPaid(10)).thenReturn(1);
+        // PayOS trả về tài khoản trung gian MoMo không có tên chủ tài khoản
+        when(orders.payerAccount(10))
+                .thenReturn(new com.thors.module.order.dto.OrderViews.BankAccount("970422", null, "2281072020614", null));
+
+        service.changeStatus(owner, 10, "REJECTED", "Hết hàng", null, null, null, null, null);
+
+        verify(orders, never()).saveRefundAccount(anyInt(), any());
+    }
+
+    @Test
+    void markRefundedRequiresPersonalRefundAccountWithHolderName() {
+        var owner = new Account(1, "OWNER", "Chủ shop", null, null, null, null, null, "ACTIVE", null, null, null, 0, null);
+        var badRefund = new com.thors.module.order.dto.OrderViews.BankAccount("970422", null, "2281072020614", null);
+        var d = new com.thors.module.order.dto.OrderViews.Detail(
+                10, "ORD-10", null, "REJECTED", null, "ONLINE", "REFUND_PENDING", null, 10000,
+                null, 0, null, 0, 0, 10000, "A", "0900000001", "Addr", null, null, null, null,
+                null, null, java.util.List.of(), badRefund, null, null);
+        when(orders.find(10, true)).thenReturn(Optional.of(new OrderRepository.Found(5, "Online", d)));
+
+        ApiException e = assertThrows(ApiException.class, () -> service.markRefunded(owner, 10));
+        assertEquals("REFUND_ACCOUNT_REQUIRED", e.code);
+        verify(orders, never()).markRefunded(anyInt());
+    }
+
+    @Test
+    void rejectPaidFacebookOrderPublishesMessengerEventAskingBankAccountWhenMissingName() {
+        var events = mock(org.springframework.context.ApplicationEventPublisher.class);
+        var svc = new OrderService(
+                orders,
+                notifications,
+                mock(GhnShippingService.class),
+                mock(WarehouseStore.class),
+                mock(com.thors.module.order.service.OrderMailService.class),
+                events);
+        var owner = new Account(1, "OWNER", "Chủ shop", null, null, null, null, null, "ACTIVE", null, null, null, 0, null);
+        var d = new com.thors.module.order.dto.OrderViews.Detail(
+                10, "ORD-FB10", null, "PENDING_CONFIRMATION", null, "ONLINE", "PAID", null, 10000,
+                null, 0, null, 0, 0, 10000, "A", "0900000001", "Addr", null, null, null, null,
+                null, null, java.util.List.of(), null, null, null);
+        when(orders.find(10, true)).thenReturn(Optional.of(new OrderRepository.Found(1, "Online", d)));
+        when(orders.transition(10, "PENDING_CONFIRMATION", "REJECTED", 1, "Hết hàng", null)).thenReturn(true);
+        when(orders.markRefundPendingIfPaid(10)).thenReturn(1);
+        when(orders.payerAccount(10))
+                .thenReturn(new com.thors.module.order.dto.OrderViews.BankAccount("970422", null, "2281072020614", null));
+        when(orders.findFacebookPsid(10)).thenReturn("999888777");
+
+        svc.changeStatus(owner, 10, "REJECTED", "Hết hàng", null, null, null, null, null);
+
+        verify(events).publishEvent(new OrderService.FacebookOrderStatusEvent(
+                10, "ORD-FB10", "999888777", "REJECTED", "Hết hàng", null, 10000, true, false));
+    }
 }

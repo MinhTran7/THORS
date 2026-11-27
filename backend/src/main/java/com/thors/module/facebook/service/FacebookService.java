@@ -10,14 +10,24 @@ import org.springframework.web.client.RestTemplate;
 
 import jakarta.annotation.PostConstruct;
 import com.thors.common.ApiException;
+import com.thors.config.Settings;
 import com.thors.module.account.entity.Account;
 import com.thors.module.order.delivery.GeoClient;
 import com.thors.module.order.service.OrderService;
+import com.thors.module.promotion.entity.Promotion;
+import com.thors.module.promotion.repository.PromotionRepository;
+import com.thors.module.promotion.service.PricingService;
 import com.thors.security.SessionAccess;
 import org.springframework.beans.factory.annotation.Autowired;
 import com.thors.module.facebook.repository.FacebookOrderRepository;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
+import java.math.BigDecimal;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.text.NumberFormat;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -28,6 +38,7 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
 @Service
@@ -52,16 +63,43 @@ public class FacebookService {
 
     // Gửi thông báo đơn mới cho những người xử lý đơn khác của cửa hàng
     private final OrderService orderService;
+    private final Settings settings;
+    private final PricingService pricing;
+    private final PromotionRepository promotionRepository;
 
+    public FacebookService(
+            FacebookOrderRepository orders,
+            SessionAccess sessionAccess,
+            GeoClient geo,
+            OrderService orderService) {
+        this(orders, sessionAccess, geo, orderService, null, null, null);
+    }
+
+    public FacebookService(
+            FacebookOrderRepository orders,
+            SessionAccess sessionAccess,
+            GeoClient geo,
+            OrderService orderService,
+            Settings settings) {
+        this(orders, sessionAccess, geo, orderService, settings, null, null);
+    }
+
+    @Autowired
     public FacebookService(
             @Autowired(required = false) FacebookOrderRepository orders,
             @Autowired(required = false) SessionAccess sessionAccess,
             @Autowired(required = false) GeoClient geo,
-            @Autowired(required = false) OrderService orderService) {
+            @Autowired(required = false) OrderService orderService,
+            @Autowired(required = false) Settings settings,
+            @Autowired(required = false) PricingService pricing,
+            @Autowired(required = false) PromotionRepository promotionRepository) {
         this.orders = orders;
         this.sessionAccess = sessionAccess;
         this.geo = geo;
         this.orderService = orderService;
+        this.settings = settings;
+        this.pricing = pricing;
+        this.promotionRepository = promotionRepository;
     }
 
     // ==========================================
@@ -669,6 +707,11 @@ public class FacebookService {
             throw new ApiException(400, "EMPTY_CART", "Đơn hàng phải có ít nhất 1 sản phẩm.");
         }
 
+        long shippingFee = parseShippingFee(req.get("shippingFee"));
+        Integer requestedPromotionId = parsePositiveInt(req.get("promotionId"), "PROMOTION_ID",
+                "Mã giảm giá không hợp lệ.");
+
+        BiFunction<Integer, BigDecimal, BigDecimal> salePrice = pricing != null ? pricing.pricer() : (pid, p) -> p;
         long itemsAmount = 0;
         List<Map<String, Object>> validItems = new ArrayList<>();
         Map<Integer, Integer> requestedQtyByDetail = new HashMap<>();
@@ -688,6 +731,7 @@ public class FacebookService {
             Map<String, Object> row = orders.lockVariant(detailId)
                     .orElseThrow(() -> new ApiException(400, "PRODUCT_NOT_FOUND",
                             "Không tìm thấy thông tin sản phẩm (ID: " + detailId + ")."));
+            int productId = ((Number) row.get("product_id")).intValue();
             int stock = ((Number) row.get("stock_quantity")).intValue();
             String pName = String.valueOf(row.get("product_name"));
             String size = String.valueOf(row.get("size"));
@@ -696,7 +740,10 @@ public class FacebookService {
                 throw new ApiException(400, "NO_PRICE",
                         "Sản phẩm \"" + pName + "\" (" + size + "/" + color + ") chưa có giá bán.");
             }
-            long price = ((Number) row.get("price")).longValue();
+            BigDecimal basePrice = row.get("price") instanceof BigDecimal bd
+                    ? bd
+                    : new BigDecimal(String.valueOf(row.get("price")));
+            long price = salePrice.apply(productId, basePrice).longValue();
 
             if (!"ACTIVE".equals(row.get("variant_status")) || !"ACTIVE".equals(row.get("product_status"))) {
                 throw new ApiException(400, "PRODUCT_INACTIVE",
@@ -728,7 +775,37 @@ public class FacebookService {
             throw new ApiException(400, "EMPTY_CART", "Đơn hàng phải có ít nhất 1 sản phẩm.");
         }
 
-        long totalAmount = itemsAmount;
+        Integer promotionId = null;
+        String promotionName = null;
+        long promotionDiscount = 0;
+        if (requestedPromotionId != null) {
+            if (promotionRepository == null) {
+                throw new ApiException(500, "PROMO_UNAVAILABLE", "Dịch vụ khuyến mãi chưa sẵn sàng.");
+            }
+            Promotion promo = promotionRepository.lockById(requestedPromotionId)
+                    .orElseThrow(() -> new ApiException(400, "PROMOTION_NOT_FOUND", "Mã giảm giá không tồn tại."));
+            if (!promo.isOrderVoucher()) {
+                throw new ApiException(400, "PROMOTION_INVALID",
+                        "Giảm giá sản phẩm được áp dụng tự động, không cần chọn mã.");
+            }
+            LocalDateTime now = LocalDateTime.now();
+            if (!"ACTIVE".equals(promo.status()) || now.isBefore(promo.startDate()) || !now.isBefore(promo.endDate())) {
+                throw new ApiException(400, "PROMOTION_UNAVAILABLE", "Mã giảm giá hiện không khả dụng.");
+            }
+            if (promo.usageLimit() != null && promotionRepository.countUsage(promo.promotionId()) >= promo.usageLimit()) {
+                throw new ApiException(400, "PROMOTION_LIMIT", "Mã giảm giá đã hết lượt sử dụng.");
+            }
+            BigDecimal itemsDec = BigDecimal.valueOf(itemsAmount);
+            if (itemsDec.compareTo(promo.minOrderValue()) < 0) {
+                throw new ApiException(400, "PROMOTION_MIN_ORDER",
+                        "Đơn hàng chưa đạt giá trị tối thiểu để áp dụng mã giảm giá.");
+            }
+            promotionDiscount = promo.discountOf(itemsDec).longValue();
+            promotionId = promo.promotionId();
+            promotionName = promo.name();
+        }
+
+        long totalAmount = Math.max(0L, itemsAmount - promotionDiscount) + shippingFee;
         String dateStr = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE);
         String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 6).toUpperCase();
         String orderNumber = "ORD-" + dateStr + "-FB" + suffix.substring(0, 4);
@@ -736,8 +813,9 @@ public class FacebookService {
         String initialStatus = "PENDING_CONFIRMATION";
 
         int orderId = orders.insertOrder(new FacebookOrderRepository.NewOrder(
-                actorId, orderNumber, initialStatus, paymentMethod, itemsAmount, totalAmount,
-                customerName, customerPhone, customerAddress, deliveryLat, deliveryLng));
+                actorId, orderNumber, initialStatus, paymentMethod,
+                itemsAmount, promotionId, promotionName, promotionDiscount, shippingFee, totalAmount,
+                customerName, customerPhone, customerAddress, deliveryLat, deliveryLng, psid));
 
         for (Map<String, Object> line : validItems) {
             int detailId = ((Number) line.get("detail_id")).intValue();
@@ -759,6 +837,12 @@ public class FacebookService {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("orderId", orderId);
         result.put("orderNumber", orderNumber);
+        result.put("itemsAmount", itemsAmount);
+        result.put("promotionDiscountAmount", promotionDiscount);
+        if (promotionName != null) {
+            result.put("promotionName", promotionName);
+        }
+        result.put("shippingFee", shippingFee);
         result.put("totalAmount", totalAmount);
         result.put("deliveryName", customerName);
         result.put("deliveryPhone", customerPhone);
@@ -766,5 +850,100 @@ public class FacebookService {
         result.put("status", initialStatus);
         result.put("paymentMethod", paymentMethod);
         return result;
+    }
+
+    private static long parseShippingFee(Object raw) {
+        if (raw == null) return 0L;
+        String s = String.valueOf(raw).trim();
+        if (s.isEmpty()) return 0L;
+        try {
+            long fee = raw instanceof Number n ? n.longValue() : Long.parseLong(s);
+            if (fee < 0 || fee > 10_000_000L) {
+                throw new ApiException(400, "SHIPPING_FEE", "Phí vận chuyển phải từ 0 đến 10.000.000 ₫.");
+            }
+            return fee;
+        } catch (NumberFormatException e) {
+            throw new ApiException(400, "SHIPPING_FEE", "Phí vận chuyển không hợp lệ.");
+        }
+    }
+
+    private static Integer parsePositiveInt(Object raw, String code, String msg) {
+        if (raw == null) return null;
+        String s = String.valueOf(raw).trim();
+        if (s.isEmpty()) return null;
+        try {
+            int val = raw instanceof Number n ? n.intValue() : Integer.parseInt(s);
+            if (val <= 0) throw new ApiException(400, code, msg);
+            return val;
+        } catch (NumberFormatException e) {
+            throw new ApiException(400, code, msg);
+        }
+    }
+
+    /** Tự động nhắn tin Messenger cho khách khi trạng thái đơn Facebook thay đổi (chạy sau commit, best-effort). */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void onFacebookOrderStatusChanged(OrderService.FacebookOrderStatusEvent event) {
+        if (event == null || event.psid() == null || event.psid().isBlank()) return;
+        CompletableFuture.runAsync(() -> {
+            try {
+                String message = buildOrderStatusMessage(event);
+                if (message == null) return;
+                Map<String, Object> res = sendMessageToCustomerWithDetails(event.psid(), message);
+                if (!Boolean.TRUE.equals(res.get("success"))) {
+                    log.warn("Không gửi được tin nhắn trạng thái {} cho đơn {} (PSID={}): {}",
+                            event.targetStatus(), event.orderNumber(), event.psid(), res.get("error"));
+                }
+            } catch (Exception ex) {
+                log.warn("Lỗi gửi tin nhắn Messenger cho đơn {}: {}", event.orderNumber(), ex.getMessage());
+            }
+        });
+    }
+
+    String buildOrderStatusMessage(OrderService.FacebookOrderStatusEvent e) {
+        String base = settings != null && settings.frontendUrl() != null && !settings.frontendUrl().isBlank()
+                ? settings.frontendUrl().replaceAll("/+$", "")
+                : "http://localhost:3000";
+        String trackingUrl = base + "/tracking/" + URLEncoder.encode(e.orderNumber(), StandardCharsets.UTF_8);
+        String moneyText = NumberFormat.getInstance(Locale.forLanguageTag("vi-VN")).format(e.totalAmount()) + " ₫";
+
+        return switch (e.targetStatus()) {
+            case "AWAITING_PICKUP" ->
+                "✅ Đơn hàng " + e.orderNumber()
+                        + " đã được shop xác nhận và đang chuẩn bị hàng để giao đến bạn.\n"
+                        + "🔍 Theo dõi đơn tại: " + trackingUrl;
+            case "REJECTED" -> {
+                String reasonLine = (e.reason() != null && !e.reason().isBlank())
+                        ? "Lý do: " + e.reason() + "\n"
+                        : "";
+                String refundLine;
+                if (e.refundPending()) {
+                    refundLine = e.refundAccountKnown()
+                            ? "💰 Cửa hàng sẽ hoàn lại " + moneyText + " vào tài khoản ngân hàng của bạn trong thời gian sớm nhất.\n"
+                            : "💰 Đơn đã thanh toán " + moneyText
+                                    + ". Bạn vui lòng nhắn giúp shop Thông tin tài khoản ngân hàng (Tên ngân hàng + Số tài khoản + Tên chủ TK) ngay tại đây để shop chuyển khoản hoàn tiền nhé!\n";
+                } else {
+                    refundLine = "Xin lỗi bạn vì sự bất tiện này. Nếu cần đổi sang mẫu khác, bạn nhắn shop hỗ trợ nhé!\n";
+                }
+                yield "❌ Đơn hàng " + e.orderNumber() + " đã bị từ chối.\n"
+                        + reasonLine + refundLine
+                        + "🔍 Chi tiết đơn: " + trackingUrl;
+            }
+            case "SHIPPING" -> {
+                String via = "GHN".equals(e.carrier())
+                        ? "đã được bàn giao cho Giao Hàng Nhanh (GHN)"
+                        : "đang trên đường giao đến bạn";
+                yield "🚚 Đơn hàng " + e.orderNumber() + " " + via + ".\n"
+                        + "🔍 Theo dõi hành trình tại: " + trackingUrl;
+            }
+            case "DELIVERED" ->
+                "📦 Đơn hàng " + e.orderNumber()
+                        + " đã giao thành công! Cảm ơn bạn đã mua sắm tại THORS ❤️\n"
+                        + "🔍 Xem chi tiết đơn tại: " + trackingUrl;
+            case "REFUNDED" ->
+                "💸 Shop đã chuyển khoản hoàn " + moneyText + " cho đơn hàng " + e.orderNumber()
+                        + " rồi nhé! Bạn kiểm tra tài khoản giúp shop ạ.\n"
+                        + "🔍 Chi tiết đơn: " + trackingUrl;
+            default -> null;
+        };
     }
 }

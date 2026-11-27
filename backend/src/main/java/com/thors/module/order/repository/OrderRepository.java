@@ -969,6 +969,22 @@ public class OrderRepository {
         return countByStatus(customerId, orderType, null);
     }
 
+    /** PSID Messenger gắn với đơn Facebook (null nếu là đơn web, đơn cũ hoặc DB chưa chạy migration). */
+    public String findFacebookPsid(int orderId) {
+        try {
+            List<String> rows =
+                    db.query(
+                            "SELECT facebook_psid FROM orders WHERE order_id = ?",
+                            (rs, i) -> rs.getString("facebook_psid"),
+                            orderId);
+            if (rows.isEmpty()) return null;
+            String psid = rows.get(0);
+            return psid == null || psid.isBlank() ? null : psid.trim();
+        } catch (org.springframework.jdbc.BadSqlGrammarException e) {
+            return null;
+        }
+    }
+
     /** Số đơn theo từng trạng thái, có thể lọc thêm theo nguồn (WEB hoặc FACEBOOK). */
     public Map<String, Long> countByStatus(Integer customerId, String orderType, String sourceFilter) {
         var sql = new StringBuilder("SELECT o.order_status, COUNT(*) AS n FROM orders o WHERE o.order_type = ?");

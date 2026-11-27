@@ -38,7 +38,12 @@ import DeliveryChoice from './DeliveryChoice';
 import { ghnReady } from './GhnAddressFields';
 import { customerActionsFor, formatVnd, orderStatusMeta, orderPaymentMeta, paymentMethodLabel, preparationMeta, shipmentStatusLabel, withinReturnWindow } from './constants';
 import PayOSPaymentModal from './components/PayOSPaymentModal';
-import RefundAccountForm, { initialRefundAccount, validateRefundAccount } from './components/RefundAccountForm';
+import RefundAccountForm, {
+  initialRefundAccount,
+  isLikelyIntermediaryAccount,
+  isUsableRefundAccount,
+  validateRefundAccount
+} from './components/RefundAccountForm';
 import { generateVietQrUrl } from 'utils/vietqr';
 
 // "Vietcombank · 0123456789 · NGUYEN VAN A"
@@ -69,10 +74,12 @@ function OwnerRefundAccount({ order, onSave }) {
     }
   };
 
+  const usableRefund = isUsableRefundAccount(order.refundAccount);
+
   if (!open) {
     return (
       <Button size="small" onClick={() => setOpen(true)} sx={{ mt: 1, textTransform: 'none', fontWeight: 600 }}>
-        {order.refundAccount ? 'Sửa tài khoản nhận hoàn' : 'Nhập tài khoản nhận hoàn của khách'}
+        {usableRefund ? 'Sửa tài khoản nhận hoàn' : 'Nhập tài khoản nhận hoàn của khách'}
       </Button>
     );
   }
@@ -130,18 +137,23 @@ function CustomerRefundBox({ order, onSave }) {
     }
   };
 
+  const usableRefund = isUsableRefundAccount(order.refundAccount);
+  const hasBlockedRefund = Boolean(order.refundAccount?.accountNumber) && !usableRefund;
+
   return (
     <>
       <Box sx={{ mt: 1, fontSize: 14, color: C.muted }}>
-        {order.refundAccount ? (
+        {usableRefund ? (
           <>
             Nhận tiền hoàn vào: <strong>{accountText(order.refundAccount)}</strong>
           </>
+        ) : hasBlockedRefund ? (
+          'Tài khoản ghi nhận trước đó là tài khoản trung gian (không có tên người nhận). Vui lòng nhập STK ngân hàng cá nhân của bạn.'
         ) : (
           'Bạn chưa gửi tài khoản nhận tiền hoàn.'
         )}{' '}
         <Button size="small" onClick={openDialog} sx={{ textTransform: 'none', fontWeight: 700, color: C.accent }}>
-          {order.refundAccount ? 'Sửa' : 'Nhập tài khoản'}
+          {usableRefund ? 'Sửa' : 'Nhập tài khoản'}
         </Button>
       </Box>
 
@@ -169,7 +181,7 @@ function CustomerRefundBox({ order, onSave }) {
             value={form}
             onChange={setForm}
             disabled={saving}
-            prefilled={!order.refundAccount && Boolean(order.payerAccount)}
+            prefilled={!isUsableRefundAccount(order.refundAccount) && isUsableRefundAccount(order.payerAccount)}
           />
           {error && (
             <Typography color="error" variant="body2" sx={{ mt: 1 }}>
@@ -598,36 +610,43 @@ function StaffView({
             </Info>
             {order.orderStatus === 'AWAITING_PAYMENT' && order.paymentExpiresAt && <Info label="Hạn thanh toán">{dateTime(order.paymentExpiresAt)}</Info>}
             {/* Đã thanh toán online nhưng bị hủy / từ chối: chủ shop chuyển khoản trả lại rồi xác nhận */}
-            {order.paymentStatus === 'REFUND_PENDING' && (
-              <Alert
-                severity="warning"
-                sx={{ mt: 1.5, fontSize: 13 }}
-                action={
-                  canRefund &&
-                  order.refundAccount && (
-                    <Button
-                      color="inherit"
-                      size="small"
-                      disabled={refundBusy}
-                      onClick={onMarkRefunded}
-                      sx={{ fontWeight: 700, textTransform: 'none', whiteSpace: 'nowrap' }}
-                    >
-                      {refundBusy ? 'Đang lưu…' : 'Đã hoàn tiền'}
-                    </Button>
-                  )
-                }
-              >
-                Cần hoàn <strong>{formatVnd(order.totalAmount)}</strong> cho khách.{' '}
-                {order.refundAccount
-                  ? 'Quét mã VietQR bên dưới bằng app ngân hàng để chuyển trả, rồi bấm "Đã hoàn tiền".'
-                  : `Chưa có tài khoản nhận hoàn: chờ khách nhập trong chi tiết đơn, hoặc gọi khách (${order.deliveryPhone || 'SĐT trong đơn'}) rồi nhập giúp bên dưới.`}
-              </Alert>
-            )}
+            {order.paymentStatus === 'REFUND_PENDING' && (() => {
+              const refundReady = isUsableRefundAccount(order.refundAccount);
+              const blockedIntermediary = Boolean(order.refundAccount?.accountNumber) && !refundReady;
+              const intermediaryPayer = !order.refundAccount && isLikelyIntermediaryAccount(order.payerAccount);
+              return (
+                <Alert
+                  severity={blockedIntermediary ? 'error' : 'warning'}
+                  sx={{ mt: 1.5, fontSize: 13 }}
+                  action={
+                    canRefund &&
+                    refundReady && (
+                      <Button
+                        color="inherit"
+                        size="small"
+                        disabled={refundBusy}
+                        onClick={onMarkRefunded}
+                        sx={{ fontWeight: 700, textTransform: 'none', whiteSpace: 'nowrap' }}
+                      >
+                        {refundBusy ? 'Đang lưu…' : 'Đã hoàn tiền'}
+                      </Button>
+                    )
+                  }
+                >
+                  Cần hoàn <strong>{formatVnd(order.totalAmount)}</strong> cho khách.{' '}
+                  {refundReady
+                    ? 'Quét mã VietQR bên dưới bằng app ngân hàng để chuyển trả, rồi bấm "Đã hoàn tiền".'
+                    : blockedIntermediary || intermediaryPayer
+                      ? `Khách thanh toán qua ví điện tử (như MoMo/ZaloPay) nên STK PayOS trả về chỉ là tài khoản trung gian, không dùng để hoàn tiền trực tiếp được. Hãy gọi/nhắn khách (${order.deliveryPhone || 'SĐT trong đơn'}) xin STK ngân hàng cá nhân rồi nhập bên dưới.`
+                      : `Chưa có tài khoản nhận hoàn: chờ khách nhập trong chi tiết đơn, hoặc gọi khách (${order.deliveryPhone || 'SĐT trong đơn'}) rồi nhập giúp bên dưới.`}
+                </Alert>
+              );
+            })()}
             {/* Owner nhập / sửa tài khoản nhận hoàn của khách -> ra mã VietQR */}
             {order.paymentStatus === 'REFUND_PENDING' && canRefund && (
               <OwnerRefundAccount order={order} onSave={onSaveRefund} />
             )}
-            {order.paymentStatus === 'REFUND_PENDING' && order.refundAccount && (
+            {order.paymentStatus === 'REFUND_PENDING' && isUsableRefundAccount(order.refundAccount) && (
               <Box sx={{ mt: 1.5, display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
                 {/* Mã VietQR có sẵn số tiền + nội dung "Hoan tien DH..." */}
                 <Box
@@ -1135,7 +1154,7 @@ export default function OrderDetailPage() {
                   value={refundForm}
                   onChange={setRefundForm}
                   disabled={busy}
-                  prefilled={Boolean(order.payerAccount?.accountNumber)}
+                  prefilled={isUsableRefundAccount(order.payerAccount)}
                 />
               </Box>
             )}

@@ -4,9 +4,27 @@ import { VIETNAMESE_BANKS } from 'utils/vietqr';
 
 // Tài khoản nhận tiền hoàn: { bankBin, bankName, accountNumber, accountName }
 
-/** Tài khoản rỗng; nếu PayOS đã gửi tài khoản người chuyển (payer) thì điền sẵn từ đó. */
+const INTERMEDIARY_KEYWORDS = ['CONG TY', 'DICH VU DI DONG', 'M_SERVICE', 'ZALOPAY', 'SHOPEEPAY', 'VNPAY'];
+
+export function isLikelyIntermediaryAccount(account) {
+  if (!account?.accountNumber) return false;
+  const name = String(account.accountName || '').trim().toUpperCase();
+  if (!name) return true;
+  return INTERMEDIARY_KEYWORDS.some((kw) => name.includes(kw));
+}
+
+export function isUsableRefundAccount(account) {
+  return Boolean(
+    account?.bankBin &&
+      /^\d{6,19}$/.test(String(account.accountNumber || '').replace(/\s/g, '')) &&
+      String(account.accountName || '').trim() &&
+      !isLikelyIntermediaryAccount(account)
+  );
+}
+
+/** Tài khoản rỗng; chỉ điền sẵn nếu PayOS trả về tài khoản ngân hàng cá nhân đầy đủ (bỏ qua ví trung gian). */
 export function initialRefundAccount(payer) {
-  if (payer?.accountNumber) {
+  if (isUsableRefundAccount(payer)) {
     const bank = VIETNAMESE_BANKS.find((b) => b.bin === String(payer.bankBin || ''));
     return {
       bankBin: payer.bankBin || '',
@@ -25,6 +43,9 @@ export function validateRefundAccount(account) {
     return 'Số tài khoản chỉ gồm 6–19 chữ số.';
   }
   if (!String(account.accountName || '').trim()) return 'Vui lòng nhập tên chủ tài khoản.';
+  if (isLikelyIntermediaryAccount(account)) {
+    return 'Không dùng tài khoản trung gian ví điện tử. Hãy nhập tài khoản ngân hàng cá nhân của khách.';
+  }
   return '';
 }
 
