@@ -7,7 +7,29 @@ import static org.mockito.Mockito.*;
 import com.cloudinary.Cloudinary;
 import com.cloudinary.Uploader;
 import com.thors.common.ApiException;
+import com.thors.config.Settings;
 import com.thors.module.account.dto.AccountDetail;
+import com.thors.module.account.dto.AccountPage;
+import com.thors.module.account.dto.AccountSummary;
+import com.thors.module.account.dto.AuditLogViews.Filter;
+import com.thors.module.account.dto.AuditLogViews.Item;
+import com.thors.module.account.dto.AuditLogViews.Page;
+import com.thors.module.account.dto.AuditLogViews.Summary;
+import com.thors.module.account.repository.AuditLogRepository;
+import com.thors.module.account.service.AccountMailService;
+import com.thors.module.account.service.AuditLogService;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import org.mockito.ArgumentCaptor;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowCallbackHandler;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.mail.MailSendException;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
 import com.thors.module.account.dto.AccountRequests.Create;
 import com.thors.module.account.dto.AccountRequests.Edit;
 import com.thors.module.account.dto.AccountRequests.Password;
@@ -40,7 +62,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 
 /**
  * Unit test cho các chức năng tài khoản, viết theo sheet "Account" của Report-5.1_Unit Test
- * (UTC-ACC-001..084). Bộ test case trong sheet được lập từ 11 sequence diagram của Account (hồ sơ cá nhân,
+ * (UTC-ACC-001..115; riêng 087..095 nằm ở com.thors.module.auth.controller.AuthServiceUnitTest). Bộ test case trong sheet được lập từ 11 sequence diagram của Account (hồ sơ cá nhân,
  * ảnh đại diện, tạo / sửa / đổi trạng thái / khóa / mở khóa tài khoản, đặt lại mật khẩu); mỗi test mang
  * đúng mã Test Case ID trong sheet.
  */
@@ -92,6 +114,12 @@ class AccountServiceUnitTest {
     when(users.lock(a.id())).thenReturn(a);
     when(users.byId(a.id())).thenReturn(Optional.of(a));
     return a;
+  }
+
+  private static ApiException apiStatus(int status, Executable call) {
+    ApiException e = assertThrows(ApiException.class, call);
+    assertEquals(status, e.status);
+    return e;
   }
 
   private static ApiException api(int status, String code, Executable call) {
@@ -942,6 +970,424 @@ class AccountServiceUnitTest {
     void acc084() {
       stored(account(21, "STAFF", "ACTIVE", 5));
       api(403, "OWNERSHIP", "Không được quản lý tài khoản này.", () -> service.resetByManager(owner, 21, good));
+    }
+  }
+
+  // ================================================================== AccountMailService.sendAccountCreated
+
+  @Nested
+  @DisplayName("AccountMailService.sendAccountCreated(Account account, String rawPassword)")
+  class SendAccountCreatedTests {
+    private final Account created = new Account(30, "STAFF", "Trần Văn C", HASH, "staff@shop.com", null, null,
+            null, "PENDING_VERIFICATION", CREATED, null, null, 0, 2);
+    private JavaMailSender sender;
+    private AccountMailService mails;
+
+    @BeforeEach
+    @SuppressWarnings("unchecked")
+    void setUp() {
+      sender = mock(JavaMailSender.class);
+      ObjectProvider<JavaMailSender> provider = mock(ObjectProvider.class);
+      when(provider.getIfAvailable()).thenReturn(sender);
+      var settings = new Settings("http://localhost:3000/", null,
+              new Settings.Delivery(true, "no-reply@thors.vn", false, "", "", ""), null, null, null);
+      mails = new AccountMailService(settings, provider);
+    }
+
+    @Test
+    @DisplayName("UTC-ACC-085: Gửi email tài khoản mới kèm email đăng nhập và mật khẩu được cấp")
+    void acc085() {
+      assertTrue(mails.sendAccountCreated(created, GOOD));
+
+      var captor = ArgumentCaptor.forClass(SimpleMailMessage.class);
+      verify(sender, times(1)).send(captor.capture());
+      SimpleMailMessage m = captor.getValue();
+      assertArrayEquals(new String[] {"staff@shop.com"}, m.getTo());
+      assertTrue(m.getText().contains("staff@shop.com"));
+      assertTrue(m.getText().contains(GOOD));
+    }
+
+    @Test
+    @DisplayName("UTC-ACC-086: MailServer lỗi thì trả false, không ném lỗi")
+    void acc086() {
+      doThrow(new MailSendException("SMTP down")).when(sender).send(any(SimpleMailMessage.class));
+      boolean[] sent = {true};
+      assertDoesNotThrow(() -> sent[0] = mails.sendAccountCreated(created, GOOD));
+      assertFalse(sent[0]);
+    }
+  }
+
+  // ================================================================== AccountService.summary
+
+  /** Dòng kết quả JDBC giả: cột chuỗi và cột số. */
+  private static ResultSet row(Map<String, Object> values) throws SQLException {
+    ResultSet rs = mock(ResultSet.class);
+    for (var e : values.entrySet()) {
+      if (e.getValue() instanceof Long n) when(rs.getLong(e.getKey())).thenReturn(n);
+      else when(rs.getString(e.getKey())).thenReturn((String) e.getValue());
+    }
+    return rs;
+  }
+
+  /** SQL và tham số của các lần JdbcTemplate.query(sql, RowCallbackHandler, args...). */
+  private record Sql(String sql, List<Object> args) {}
+
+  private static List<Sql> feedCallback(JdbcTemplate db, List<ResultSet> rows) {
+    List<Sql> calls = new ArrayList<>();
+    doAnswer(inv -> {
+      Object[] raw = inv.getRawArguments();
+      calls.add(new Sql((String) raw[0], raw.length > 2 ? List.of((Object[]) raw[2]) : List.of()));
+      RowCallbackHandler h = inv.getArgument(1);
+      for (ResultSet rs : rows) h.processRow(rs);
+      return null;
+    }).when(db).query(anyString(), any(RowCallbackHandler.class), any(Object[].class));
+    return calls;
+  }
+
+  private static ResultSet countRow(String role, String status, long n) throws SQLException {
+    return row(Map.of("role_name", role, "account_status", status, "n", n));
+  }
+
+  @Nested
+  @DisplayName("AccountService.summary(Account actor)")
+  class SummaryTests {
+    private JdbcTemplate db;
+    private AccountRepository repo;
+    private AccountService summaryService;
+
+    @BeforeEach
+    void setUp() {
+      db = mock(JdbcTemplate.class);
+      repo = spy(new AccountRepository(db));
+      summaryService = new AccountService(repo, codes, mock(PasswordEncoder.class), notices, passwordChanges);
+    }
+
+    @Test
+    @DisplayName("UTC-ACC-096: Admin xem thống kê toàn hệ thống")
+    void acc096() throws Exception {
+      var calls = feedCallback(db, List.of(
+              countRow("ADMIN", "ACTIVE", 1L),
+              countRow("OWNER", "ACTIVE", 1L),
+              countRow("OWNER", "LOCKED", 1L),
+              countRow("FAMILY_MEMBER", "ACTIVE", 2L),
+              countRow("FAMILY_MEMBER", "DISABLED", 1L),
+              countRow("CUSTOMER", "ACTIVE", 2L),
+              countRow("CUSTOMER", "LOCKED", 1L),
+              countRow("CUSTOMER", "DISABLED", 1L)));
+
+      AccountSummary s = summaryService.summary(admin);
+
+      verify(repo).summary(admin);
+      assertEquals(1, calls.size());
+      String sql = calls.get(0).sql();
+      assertTrue(sql.contains("SELECT r.role_name, u.account_status, COUNT(*)"));
+      assertTrue(sql.contains("GROUP BY"));
+      assertFalse(sql.contains("ACCOUNT_CREATE"), "Admin không bị giới hạn phạm vi");
+      assertTrue(calls.get(0).args().isEmpty());
+      assertEquals(10, s.total());
+      assertEquals(Map.of("ADMIN", 1L, "OWNER", 2L, "FAMILY_MEMBER", 3L, "CUSTOMER", 4L), s.byRole());
+      assertEquals(Map.of("ACTIVE", 6L, "LOCKED", 2L, "DISABLED", 2L), s.byStatus());
+    }
+
+    @Test
+    @DisplayName("UTC-ACC-097: Owner chỉ thấy STAFF / FAMILY_MEMBER do mình tạo")
+    void acc097() throws Exception {
+      var calls = feedCallback(db, List.of(
+              countRow("STAFF", "ACTIVE", 2L),
+              countRow("FAMILY_MEMBER", "ACTIVE", 1L)));
+
+      AccountSummary s = summaryService.summary(owner);
+
+      verify(repo).summary(owner);
+      String sql = calls.get(0).sql();
+      assertTrue(sql.contains("r.role_name IN ('STAFF','FAMILY_MEMBER')"));
+      assertTrue(sql.contains("a.action_type='ACCOUNT_CREATE' AND a.user_id=?"));
+      assertEquals(List.of(2), calls.get(0).args());
+      assertEquals(3, s.total());
+      assertNull(s.byRole().get("CUSTOMER"));
+    }
+
+    @Test
+    @DisplayName("UTC-ACC-098: Khách hàng không có quyền xem thống kê")
+    void acc098() {
+      api(403, "ROLE", "Không có quyền quản lý tài khoản.",
+              () -> summaryService.summary(account(20, "CUSTOMER", "ACTIVE", null)));
+      verify(repo, never()).summary(any());
+      verifyNoInteractions(db);
+    }
+  }
+
+  // ================================================================== AccountService.list
+
+  @Nested
+  @DisplayName("AccountService.list(Account actor, String role, String status, String q, int page, int size)")
+  class ListTests {
+    @Test
+    @DisplayName("UTC-ACC-099: Owner xem danh sách tài khoản mình tạo, không lọc")
+    void acc099() {
+      when(users.search(owner, null, null, null, 0, 10)).thenReturn(new AccountRepository.Page(
+              List.of(account(20, "STAFF", "ACTIVE", 2), account(21, "STAFF", "ACTIVE", 2),
+                      account(22, "FAMILY_MEMBER", "ACTIVE", 2)), 3));
+
+      AccountPage p = service.list(owner, null, null, null, 0, 10);
+
+      verify(users).search(owner, null, null, null, 0, 10);
+      assertEquals(3, p.items().size());
+      assertEquals(3, p.total());
+    }
+
+    @Test
+    @DisplayName("UTC-ACC-100: Admin lọc Owner ACTIVE có email chứa 'owner'")
+    void acc100() {
+      var o1 = new Account(2, "OWNER", "Owner 1", HASH, "owner@shop.com", null, null, null, "ACTIVE",
+              CREATED, CREATED, null, 0, 1);
+      var o2 = new Account(3, "OWNER", "Owner 2", HASH, "owner2@shop.com", null, null, null, "ACTIVE",
+              CREATED, CREATED, null, 0, 1);
+      when(users.search(admin, "owner", "OWNER", "ACTIVE", 0, 10))
+              .thenReturn(new AccountRepository.Page(List.of(o1, o2), 2));
+
+      // Thứ tự tham số thật của AccountService.list là (actor, q, role, status, page, size)
+      AccountPage p = service.list(admin, "owner", "OWNER", "ACTIVE", 0, 10);
+
+      verify(users).search(admin, "owner", "OWNER", "ACTIVE", 0, 10);
+      assertEquals(2, p.items().size());
+      assertEquals(2, p.total());
+      for (var v : p.items()) {
+        assertEquals("OWNER", v.role());
+        assertEquals("ACTIVE", v.status());
+        assertTrue(v.email().contains("owner"));
+      }
+    }
+
+    @Test
+    @DisplayName("UTC-ACC-101: Trang âm")
+    void acc101() {
+      apiStatus(400, () -> service.list(admin, null, null, null, -1, 10));
+      verify(users, never()).search(any(), any(), any(), any(), anyInt(), anyInt());
+    }
+
+    @Test
+    @DisplayName("UTC-ACC-102: Trạng thái lọc không hợp lệ")
+    void acc102() {
+      apiStatus(400, () -> service.list(admin, null, null, "DELETED", 0, 10));
+      verify(users, never()).search(any(), any(), any(), any(), anyInt(), anyInt());
+    }
+
+    @Test
+    @DisplayName("UTC-ACC-103: Không có tài khoản khớp từ khóa")
+    void acc103() {
+      when(users.search(owner, "khong-ton-tai", null, null, 0, 10))
+              .thenReturn(new AccountRepository.Page(List.of(), 0));
+
+      AccountPage p = service.list(owner, "khong-ton-tai", null, null, 0, 10);
+
+      assertTrue(p.items().isEmpty());
+      assertEquals(0, p.total());
+    }
+  }
+
+  // ================================================================== AccountService.detail
+
+  @Nested
+  @DisplayName("AccountService.detail(Account actor, int id)")
+  class DetailTests {
+    @Test
+    @DisplayName("UTC-ACC-104: Owner xem chi tiết tài khoản mình tạo")
+    void acc104() {
+      when(users.byId(10)).thenReturn(Optional.of(account(10, "FAMILY_MEMBER", "ACTIVE", 2)));
+      when(users.byId(2)).thenReturn(Optional.of(new Account(2, "OWNER", "Tên Owner", HASH, "o@shop.com", null,
+              null, null, "ACTIVE", CREATED, CREATED, null, 0, 1)));
+
+      AccountDetail d = service.detail(owner, 10);
+
+      verify(users, times(2)).byId(anyInt());
+      assertEquals(10, d.id());
+      assertEquals(2, d.createdById());
+      assertEquals("Tên Owner", d.createdByName());
+    }
+
+    @Test
+    @DisplayName("UTC-ACC-105: Owner xem tài khoản do Owner khác tạo")
+    void acc105() {
+      when(users.byId(21)).thenReturn(Optional.of(account(21, "FAMILY_MEMBER", "ACTIVE", 5)));
+      api(403, "OWNERSHIP", "Không được quản lý tài khoản này.", () -> service.detail(owner, 21));
+    }
+
+    @Test
+    @DisplayName("UTC-ACC-106: Tài khoản không tồn tại")
+    void acc106() {
+      when(users.byId(99)).thenReturn(Optional.empty());
+      api(404, "ACCOUNT_NOT_FOUND", NOT_FOUND, () -> service.detail(admin, 99));
+    }
+  }
+
+  // ================================================================== AuditLogService
+
+  private static final LocalDate NOV_1 = LocalDate.of(2026, 11, 1);
+  private static final LocalDate NOV_24 = LocalDate.of(2026, 11, 24);
+
+  private static ResultSet actionCount(String action, long n) throws SQLException {
+    return row(Map.of("action_type", action, "n", n));
+  }
+
+  @Nested
+  @DisplayName("AuditLogService.summary(Account actor, LocalDate from, LocalDate to, int offset)")
+  class AuditSummaryTests {
+    private JdbcTemplate db;
+    private AuditLogRepository audits;
+    private AuditLogService logs;
+
+    @BeforeEach
+    void setUp() {
+      db = mock(JdbcTemplate.class);
+      audits = spy(new AuditLogRepository(db));
+      logs = new AuditLogService(audits);
+    }
+
+    @Test
+    @DisplayName("UTC-ACC-107: Thống kê 40 sự kiện, 3 đăng nhập sai, 1 tạm dừng đăng nhập")
+    void acc107() throws Exception {
+      var calls = feedCallback(db, List.of(
+              actionCount("LOGIN", 30L),
+              actionCount("ACCOUNT_LOCK", 6L),
+              actionCount("LOGIN_FAILED", 3L),
+              actionCount("LOGIN_COOLDOWN", 1L)));
+
+      Summary s = logs.summary(admin, NOV_1, NOV_24, 420);
+
+      verify(audits).summary(NOV_1, NOV_24, 420);
+      assertTrue(calls.get(0).sql().contains("SELECT action_type, COUNT(*)"));
+      assertTrue(calls.get(0).sql().contains("GROUP BY action_type"));
+      assertEquals(40, s.events());
+      assertEquals(3, s.failedSignIns());
+      assertEquals(1, s.pausedSignIns());
+      assertEquals(s.events(), s.successful() + s.failed());
+    }
+
+    @Test
+    @DisplayName("UTC-ACC-108: Owner không được xem thống kê nhật ký")
+    void acc108() {
+      api(403, "ROLE", ROLE_ADMIN_ONLY, () -> logs.summary(owner, NOV_1, NOV_24, 420));
+      verify(audits, never()).summary(any(), any(), anyInt());
+    }
+
+    @Test
+    @DisplayName("UTC-ACC-109: Ngày bắt đầu sau ngày kết thúc")
+    void acc109() {
+      apiStatus(400, () -> logs.summary(admin, NOV_24, NOV_1, 420));
+      verify(audits, never()).summary(any(), any(), anyInt());
+    }
+
+    @Test
+    @DisplayName("UTC-ACC-110: Khoảng 1 ngày (from = to)")
+    void acc110() throws Exception {
+      feedCallback(db, List.of(actionCount("LOGIN", 3L), actionCount("PROFILE_UPDATE", 2L)));
+
+      Summary s = logs.summary(admin, NOV_24, NOV_24, 420);
+
+      assertEquals(5, s.events());
+    }
+  }
+
+  @Nested
+  @DisplayName("AuditLogService.list(Account actor, Filter filter, int page, int size)")
+  class AuditListTests {
+    private JdbcTemplate db;
+    private AuditLogRepository audits;
+    private AuditLogService logs;
+    private final List<Sql> calls = new ArrayList<>();
+
+    @BeforeEach
+    void setUp() {
+      db = mock(JdbcTemplate.class);
+      audits = spy(new AuditLogRepository(db));
+      logs = new AuditLogService(audits);
+    }
+
+    /** COUNT trả total, truy vấn trang ánh xạ các dòng qua RowMapper thật của repository. */
+    private void feed(long total, List<ResultSet> rows) {
+      doAnswer(inv -> {
+        Object[] raw = inv.getRawArguments();
+        calls.add(new Sql((String) raw[0], List.of((Object[]) raw[2])));
+        return total;
+      }).when(db).queryForObject(anyString(), eq(Long.class), any(Object[].class));
+      doAnswer(inv -> {
+        Object[] raw = inv.getRawArguments();
+        calls.add(new Sql((String) raw[0], List.of((Object[]) raw[2])));
+        RowMapper<?> m = inv.getArgument(1);
+        List<Object> out = new ArrayList<>();
+        for (int i = 0; i < rows.size(); i++) out.add(m.mapRow(rows.get(i), i));
+        return out;
+      }).when(db).query(anyString(), any(RowMapper.class), any(Object[].class));
+    }
+
+    private ResultSet logRow(long id, String action, String newValue) throws SQLException {
+      ResultSet rs = row(Map.of("action_type", action, "new_value", newValue));
+      when(rs.getLong("log_id")).thenReturn(id);
+      return rs;
+    }
+
+    @Test
+    @DisplayName("UTC-ACC-111: Lọc theo ACCOUNT_LOCK, có trạng thái và IP tách khỏi detail")
+    void acc111() throws Exception {
+      feed(2, List.of(logRow(1, "ACCOUNT_LOCK", "IP 203.0.113.5"), logRow(2, "ACCOUNT_LOCK", "IP 198.51.100.7")));
+      var filter = new Filter("ACCOUNT_LOCK", null, null, NOV_1, NOV_24, null, null, 420);
+
+      Page p = logs.list(admin, filter, 0, 20);
+
+      verify(audits).search(any(Filter.class), eq(0), eq(20));
+      assertTrue(calls.get(0).sql().startsWith("SELECT COUNT(*)"));
+      assertTrue(calls.get(1).sql().contains("LIMIT ? OFFSET ?"));
+      assertTrue(calls.get(0).args().contains("ACCOUNT_LOCK"));
+      assertEquals(2, p.items().size());
+      assertEquals(2, p.total());
+      for (Item it : p.items()) {
+        assertEquals("ACCOUNT_LOCK", it.action());
+        assertEquals(AuditLogRepository.statusOf("ACCOUNT_LOCK"), it.status());
+      }
+      assertEquals("203.0.113.5", p.items().get(0).ip());
+      assertEquals("198.51.100.7", p.items().get(1).ip());
+    }
+
+    @Test
+    @DisplayName("UTC-ACC-112: Không lọc action thì vẫn loại các action HIDDEN")
+    void acc112() throws Exception {
+      feed(1, List.of(logRow(1, "LOGIN", "IP 203.0.113.5")));
+
+      Page p = logs.list(admin, new Filter(null, null, null, null, null, null, null, 0), 0, 20);
+
+      for (Sql c : calls) {
+        assertTrue(c.sql().contains("l.action_type NOT IN"));
+        assertTrue(c.args().containsAll(AuditLogRepository.HIDDEN));
+      }
+      assertTrue(p.items().stream().noneMatch(it -> AuditLogRepository.HIDDEN.contains(it.action())));
+    }
+
+    @Test
+    @DisplayName("UTC-ACC-113: Owner không được xem nhật ký")
+    void acc113() {
+      api(403, "ROLE", ROLE_ADMIN_ONLY,
+              () -> logs.list(owner, new Filter(null, null, null, null, null, null, null, 0), 0, 20));
+    }
+
+    @Test
+    @DisplayName("UTC-ACC-114: Trang âm")
+    void acc114() {
+      apiStatus(400,
+              () -> logs.list(admin, new Filter(null, null, null, null, null, null, null, 0), -1, 20));
+      verify(audits, never()).search(any(), anyInt(), anyInt());
+    }
+
+    @Test
+    @DisplayName("UTC-ACC-115: Không có bản ghi khớp bộ lọc")
+    void acc115() {
+      feed(0, List.of());
+
+      Page p = logs.list(admin, new Filter(null, 999, null, null, null, null, null, 0), 0, 20);
+
+      assertTrue(calls.get(0).args().contains(999));
+      assertTrue(p.items().isEmpty());
+      assertEquals(0, p.total());
     }
   }
 }

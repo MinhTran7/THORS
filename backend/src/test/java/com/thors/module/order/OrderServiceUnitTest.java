@@ -52,13 +52,18 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
 import org.mockito.ArgumentCaptor;
+import org.springframework.boot.web.client.RestTemplateBuilder;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestTemplate;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
  * Unit test cho chức năng "Cập nhật trạng thái giao hàng", viết theo sheet "Order" của Report-5.1_Unit Test
- * (UTC-ORD-001..071). Bộ test case trong sheet được lập từ 5 sequence diagram của chức năng; mỗi test mang
+ * (UTC-ORD-001..075). Bộ test case trong sheet được lập từ 5 sequence diagram của chức năng; mỗi test mang
  * đúng mã Test Case ID trong sheet.
  */
 @DisplayName("Cập nhật trạng thái giao hàng - Unit Test")
@@ -972,6 +977,83 @@ class OrderServiceUnitTest {
             poll(true);
             verify(ghn, times(100)).detail(anyString());
             verify(ghn, never()).detail("GHN101");
+        }
+    }
+
+    // ================================================================== GHN provinces / wards
+
+    /**
+     * Sheet ghi GhnShippingService.provinces() / wards(int) nhưng code thật đặt hai hàm này ở GhnClient
+     * (GhnController chỉ chuyển tiếp). Test gọi GhnClient thật, chỉ giả RestTemplate gọi HTTP.
+     */
+    @Nested
+    @DisplayName("GhnShippingService.provinces() / GhnShippingService.wards(int provinceId)")
+    class GhnAreaTests {
+        private RestTemplate http;
+        private GhnClient client;
+
+        @BeforeEach
+        void setUp() {
+            http = mock(RestTemplate.class);
+            RestTemplateBuilder builder = mock(RestTemplateBuilder.class);
+            when(builder.setConnectTimeout(any())).thenReturn(builder);
+            when(builder.setReadTimeout(any())).thenReturn(builder);
+            when(builder.build()).thenReturn(http);
+            client = new GhnClient(builder, "https://ghn.test/api", "token", "12345", 2, "CHOXEMHANGKHONGTHU",
+                    20, 15, 10);
+        }
+
+        private void ghnReturns(String pathPart, String data) {
+            when(http.exchange(contains(pathPart), eq(HttpMethod.GET), any(HttpEntity.class), eq(String.class)))
+                    .thenReturn(ResponseEntity.ok("{\"code\":200,\"data\":" + data + "}"));
+        }
+
+        @Test
+        @DisplayName("UTC-ORD-072: Lấy danh mục tỉnh/thành")
+        void ord072() {
+            ghnReturns("/v3/master-data/province/all",
+                    "[{\"_id\":\"202\",\"name\":\"Hồ Chí Minh\",\"status\":1},"
+                            + "{\"_id\":\"201\",\"name\":\"Hà Nội\",\"status\":1}]");
+
+            List<Area> provinces = client.provinces();
+
+            verify(http, times(1)).exchange(contains("/v3/master-data/province/all"), eq(HttpMethod.GET),
+                    any(HttpEntity.class), eq(String.class));
+            assertEquals(List.of("202", "201"), provinces.stream().map(Area::id).toList());
+            assertEquals(List.of("Hồ Chí Minh", "Hà Nội"), provinces.stream().map(Area::name).toList());
+        }
+
+        @Test
+        @DisplayName("UTC-ORD-073: Lấy danh mục phường/xã của tỉnh 202")
+        void ord073() {
+            ghnReturns("province_id=202",
+                    "[{\"_id\":\"20308\",\"name\":\"Phường Bến Thành\",\"status\":1},"
+                            + "{\"_id\":\"20309\",\"name\":\"Phường Sài Gòn\",\"status\":1}]");
+
+            List<Area> wards = client.wards(202);
+
+            verify(http, times(1)).exchange(contains("province_id=202"), eq(HttpMethod.GET),
+                    any(HttpEntity.class), eq(String.class));
+            assertEquals(List.of("20308", "20309"), wards.stream().map(Area::id).toList());
+        }
+
+        @Test
+        @DisplayName("UTC-ORD-074: GHN không phản hồi")
+        void ord074() {
+            when(http.exchange(anyString(), eq(HttpMethod.GET), any(HttpEntity.class), eq(String.class)))
+                    .thenThrow(new ResourceAccessException("Read timed out"));
+
+            api(502, "GHN_UNREACHABLE", "Không kết nối được GHN, vui lòng thử lại.", () -> client.provinces());
+        }
+
+        @Test
+        @DisplayName("UTC-ORD-075: Tỉnh không có phường/xã nào")
+        void ord075() {
+            ghnReturns("province_id=999", "[]");
+
+            List<Area> wards = assertDoesNotThrow(() -> client.wards(999));
+
+            assertTrue(wards.isEmpty());
         }
     }
 }
