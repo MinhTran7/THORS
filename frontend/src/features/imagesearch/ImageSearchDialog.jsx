@@ -21,7 +21,9 @@ const STATUS = {
   COLOR_UNAVAILABLE: { title: 'Có mẫu này nhưng khác màu', bg: '#FBF1DF', fg: '#7A4B00' },
   // Giống nhưng AI chưa chắc là cùng mẫu (điểm 0,808 - 0,85): không khẳng định "shop có mẫu này"
   SIMILAR: { title: 'Có sản phẩm khá giống', bg: '#EEF1F5', fg: '#2B3A4F' },
-  NOT_FOUND: { title: 'Shop chưa có mẫu này', bg: C.sand, fg: C.ink }
+  NOT_FOUND: { title: 'Shop chưa có mẫu này', bg: C.sand, fg: C.ink },
+  // Ảnh nhân vật hoạt hình, logo...: không hiện sản phẩm nào (danh sách gợi ý rỗng)
+  NOT_PRODUCT: { title: 'Không nhận ra sản phẩm trong ảnh', bg: C.sand, fg: C.ink }
 };
 
 export const CameraIcon = ({ size = 20 }) => (
