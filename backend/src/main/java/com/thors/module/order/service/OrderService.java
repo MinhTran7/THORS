@@ -108,6 +108,16 @@ public class OrderService {
         this(orders, notifications, ghnShipping, warehouse, orderMail, inStoreSales, null);
     }
 
+    public OrderService(
+            OrderRepository orders,
+            NotificationPublisher notifications,
+            GhnShippingService ghnShipping,
+            WarehouseStore warehouse,
+            OrderMailService orderMail,
+            ApplicationEventPublisher events) {
+        this(orders, notifications, ghnShipping, warehouse, orderMail, null, events);
+    }
+
     @Autowired
     public OrderService(
             OrderRepository orders,

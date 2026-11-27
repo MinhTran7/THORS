@@ -711,7 +711,9 @@ public class FacebookService {
         Integer requestedPromotionId = parsePositiveInt(req.get("promotionId"), "PROMOTION_ID",
                 "Mã giảm giá không hợp lệ.");
 
-        BiFunction<Integer, BigDecimal, BigDecimal> salePrice = pricing != null ? pricing.pricer() : (pid, p) -> p;
+        var quoter = pricing != null ? pricing.quoter() : null;
+        BiFunction<Integer, BigDecimal, BigDecimal> salePrice =
+                quoter != null ? (pid, p) -> quoter.apply(pid, p).price() : (pid, p) -> p;
         long itemsAmount = 0;
         List<Map<String, Object>> validItems = new ArrayList<>();
         Map<Integer, Integer> requestedQtyByDetail = new HashMap<>();

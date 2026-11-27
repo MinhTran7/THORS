@@ -84,17 +84,17 @@ class FacebookOrderPricingTest {
         LocalDateTime now = LocalDateTime.now();
         Promotion productPromo = new Promotion(
                 1, Promotion.PRODUCT_DISCOUNT, "Giảm 10%", null,
-                "PERCENT", BigDecimal.TEN, BigDecimal.ZERO,
+                "PERCENT", BigDecimal.TEN, BigDecimal.ZERO, null,
                 null, 0, "SPECIFIC", List.of(5),
-                now.minusDays(1), now.plusDays(1), "ACTIVE", 2);
+                now.minusDays(1), now.plusDays(1), "ACTIVE");
         when(promotionRepository.findRunningProductPromotions(any())).thenReturn(List.of(productPromo));
         when(promotionRepository.withProductIds(anyList())).thenReturn(List.of(productPromo));
 
         Promotion voucher = new Promotion(
                 7, Promotion.ORDER_VOUCHER, "Giảm 30K đơn từ 300K", null,
-                "FIXED", BigDecimal.valueOf(30_000), BigDecimal.valueOf(300_000),
+                "FIXED", BigDecimal.valueOf(30_000), BigDecimal.valueOf(300_000), null,
                 50, 5, "ALL", List.of(),
-                now.minusDays(1), now.plusDays(1), "ACTIVE", 2);
+                now.minusDays(1), now.plusDays(1), "ACTIVE");
         when(promotionRepository.lockById(7)).thenReturn(Optional.of(voucher));
         when(promotionRepository.countUsage(7)).thenReturn(5);
 
@@ -155,9 +155,9 @@ class FacebookOrderPricingTest {
         LocalDateTime now = LocalDateTime.now();
         Promotion voucher = new Promotion(
                 8, Promotion.ORDER_VOUCHER, "Giảm 50K đơn từ 500K", null,
-                "FIXED", BigDecimal.valueOf(50_000), BigDecimal.valueOf(500_000),
+                "FIXED", BigDecimal.valueOf(50_000), BigDecimal.valueOf(500_000), null,
                 null, 0, "ALL", List.of(),
-                now.minusDays(1), now.plusDays(1), "ACTIVE", 2);
+                now.minusDays(1), now.plusDays(1), "ACTIVE");
         when(promotionRepository.lockById(8)).thenReturn(Optional.of(voucher));
 
         Map<String, Object> req = new HashMap<>();
