@@ -139,8 +139,7 @@ public class ImageSearchService {
         List<ProductScore> picked = visible.stream()
                 .skip(matched ? 1 : 0)
                 .filter(s -> roots.get(s.productId()).rootCategoryId() == root.rootCategoryId())
-                // Giao diện hiện 1 danh sách: sản phẩm khớp + gợi ý. Không khớp thì lấy thêm 1 gợi ý cho đủ số ô
-                .limit(props.getSuggestions() + (matched ? 0 : 1))
+                .limit(props.getSuggestions())
                 .toList();
         List<Integer> ids = new ArrayList<>(picked.stream().map(ProductScore::productId).toList());
         if (matched) ids.add(0, best.productId());
