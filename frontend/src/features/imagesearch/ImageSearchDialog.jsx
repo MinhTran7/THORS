@@ -201,6 +201,9 @@ export default function ImageSearchDialog({ open, onClose }) {
   }, []);
 
   const status = result && (STATUS[result.status] || STATUS.NOT_FOUND);
+  // Luôn có khung sản phẩm riêng: sản phẩm khớp, hoặc (chưa có mẫu) gợi ý đầu tiên với nhãn "Gần giống nhất"
+  const featured = result ? result.product || result.suggestions?.[0] || null : null;
+  const others = result ? (result.product ? result.suggestions : result.suggestions?.slice(1)) || [] : [];
 
   return (
     <Dialog
@@ -325,22 +328,22 @@ export default function ImageSearchDialog({ open, onClose }) {
               </Box>
             </Box>
 
-            {result.product && (
+            {featured && (
               <MatchedProduct
-                product={result.product}
-                detectedColor={result.detectedColor}
+                product={featured}
+                detectedColor={result.product ? result.detectedColor : null}
                 onNavigate={onClose}
-                label={result.status === 'SIMILAR' ? 'Giống nhất' : ''}
+                label={result.product ? (result.status === 'SIMILAR' ? 'Giống nhất' : '') : 'Gần giống nhất (shop chưa có đúng mẫu này)'}
               />
             )}
 
             <Suggestions
-              items={result.suggestions}
+              items={others}
               onNavigate={onClose}
               title={
                 result.suggestionCategory
-                  ? `${result.product ? 'Sản phẩm khác' : 'Có thể bạn đang tìm'} trong danh mục ${result.suggestionCategory}`
-                  : result.product ? 'Sản phẩm khác gần giống' : 'Có thể bạn đang tìm'
+                  ? `${featured ? 'Sản phẩm khác' : 'Có thể bạn đang tìm'} trong danh mục ${result.suggestionCategory}`
+                  : featured ? 'Sản phẩm khác gần giống' : 'Có thể bạn đang tìm'
               }
             />
 
