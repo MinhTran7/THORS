@@ -54,6 +54,12 @@ public class ImageSearchProperties {
      */
     private double confidentThreshold = 0.85;
 
+    /**
+     * Ảnh có xác suất "không phải sản phẩm" (nhân vật hoạt hình, logo, con vật, đồ ăn...) từ mức này thì không trả sản phẩm nào.
+     * Thử nghiệm 27/11/2026 (nonproduct_test.py): ảnh hàng tối đa 0,14; nobi / dora / logo MU >= 0,998.
+     */
+    private double notProductThreshold = 0.5;
+
     /** Chỉ kết luận "không có màu này" khi AI chắc về màu ít nhất mức này (xác suất 0..1). */
     private double colorConfidence = 0.6;
 
@@ -90,6 +96,8 @@ public class ImageSearchProperties {
     public void setMatchThreshold(double matchThreshold) { this.matchThreshold = matchThreshold; }
     public double getConfidentThreshold() { return confidentThreshold; }
     public void setConfidentThreshold(double confidentThreshold) { this.confidentThreshold = confidentThreshold; }
+    public double getNotProductThreshold() { return notProductThreshold; }
+    public void setNotProductThreshold(double notProductThreshold) { this.notProductThreshold = notProductThreshold; }
     public double getColorConfidence() { return colorConfidence; }
     public void setColorConfidence(double colorConfidence) { this.colorConfidence = colorConfidence; }
     public int getSuggestions() { return suggestions; }

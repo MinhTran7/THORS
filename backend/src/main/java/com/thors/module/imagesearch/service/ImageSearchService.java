@@ -126,6 +126,15 @@ public class ImageSearchService {
     }
 
     ImageSearchResult answer(ImageEncoder.Vectors vectors) {
+        // Ảnh không phải sản phẩm (nhân vật hoạt hình, logo...): không trả sản phẩm nào.
+        // Thử nghiệm 27/11/2026: ảnh hàng tối đa 0,14; nobi.png / dora.jpg / mulogo.webp >= 0,998.
+        TypeClassifier.Guess typeGuess = types == null ? null : types.apply(vectors.original());
+        if (typeGuess != null && typeGuess.notProduct() >= props.getNotProductThreshold()) {
+            return new ImageSearchResult("NOT_PRODUCT",
+                    "Ảnh này không giống sản phẩm thời trang nào (giày, dép, túi, balo, quần áo...). "
+                            + "Bạn hãy chụp rõ món đồ cần tìm nhé.",
+                    null, null, List.of(), null);
+        }
         List<ProductScore> ranked = engine.index().rank(vectors);
         // Sản phẩm vừa bị ẩn khỏi web (chưa kịp cập nhật chỉ mục) thì bỏ qua
         Map<Integer, ProductRoot> roots = repository.findVisibleProductRoots().stream()
@@ -135,11 +144,11 @@ public class ImageSearchService {
         ProductScore best = visible.isEmpty() ? null : visible.get(0);
         boolean matched = best != null && best.score() >= props.getMatchThreshold();
         // Gợi ý chỉ lấy sản phẩm cùng danh mục gốc (chụp dép thì gợi ý dép, không gợi ý áo).
-        ProductRoot root = suggestionRoot(best, matched, roots, vectors);
+        ProductRoot root = suggestionRoot(best, matched, roots, typeGuess);
         List<ProductScore> picked = visible.stream()
                 .skip(matched ? 1 : 0)
                 .filter(s -> roots.get(s.productId()).rootCategoryId() == root.rootCategoryId())
-                // Giao diện hiện 1 danh sách: sản phẩm khớp + gợi ý. Không khớp thì lấy thêm 1 gợi ý cho đủ số ô
+                // Không khớp: giao diện đưa gợi ý đầu tiên lên khung "Gần giống nhất", nên lấy thêm 1 cho đủ số gợi ý bên dưới
                 .limit(props.getSuggestions() + (matched ? 0 : 1))
                 .toList();
         List<Integer> ids = new ArrayList<>(picked.stream().map(ProductScore::productId).toList());
@@ -187,12 +196,12 @@ public class ImageSearchService {
      * khác loại - giày da trắng (giay1.jpg) giống ảnh balo da trắng của p55 hơn giày của shop.
      */
     private ProductRoot suggestionRoot(ProductScore best, boolean matched, Map<Integer, ProductRoot> roots,
-                                       ImageEncoder.Vectors vectors) {
+                                       TypeClassifier.Guess typeGuess) {
         ProductRoot top = best == null ? null : roots.get(best.productId());
-        if (matched || types == null || roots.isEmpty()) {
+        if (matched || typeGuess == null || roots.isEmpty()) {
             return top;
         }
-        String guessed = ProductGroup.fold(types.apply(vectors.original()).type());
+        String guessed = ProductGroup.fold(typeGuess.type());
         return roots.values().stream()
                 .filter(r -> ProductGroup.fold(r.rootCategoryName()).equals(guessed))
                 .findFirst()

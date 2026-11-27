@@ -10,6 +10,7 @@ import java.util.List;
  *  COLOR_UNAVAILABLE  có mẫu này nhưng không có màu khách chụp
  *  SIMILAR            có sản phẩm khá giống nhưng chưa chắc cùng mẫu (product = sản phẩm giống nhất, không có detectedColor)
  *  NOT_FOUND          chưa có mẫu này (vẫn kèm sản phẩm gần giống)
+ *  NOT_PRODUCT        ảnh không phải sản phẩm (nhân vật hoạt hình, logo...): không có sản phẩm nào, suggestions rỗng
  *
  * suggestions: sản phẩm gần giống nhất CÙNG danh mục gốc với sản phẩm giống nhất (suggestionCategory, vd "Dép"),
  * để chụp dép thì không gợi ý áo. suggestionCategory null = không lọc được theo danh mục.
