@@ -97,7 +97,7 @@ function MatchedProduct({ product, detectedColor, onNavigate, label }) {
 function Suggestions({ items, onNavigate, title }) {
   if (!items?.length) return null;
   return (
-    <Box component="section" aria-label={title} sx={{ mt: 3 }}>
+    <Box component="section" aria-label={title} sx={{ mt: 2 }}>
       <Box component="h3" sx={{ m: 0, mb: 1.5, fontSize: 15, fontWeight: 600 }}>
         {title}
       </Box>
@@ -212,9 +212,23 @@ export default function ImageSearchDialog({ open, onClose }) {
       fullWidth
       maxWidth="md"
       aria-labelledby="image-search-title"
-      slotProps={{ paper: { sx: { borderRadius: 0, m: { xs: 1, sm: 4 }, width: { xs: 'calc(100% - 16px)', sm: undefined } } } }}
+      slotProps={{
+        paper: {
+          sx: {
+            borderRadius: 0,
+            mx: { xs: 1, sm: 4 },
+            my: { xs: 1, sm: 2 },
+            maxHeight: { xs: 'calc(100% - 16px)', sm: 'calc(100% - 32px)' },
+            width: { xs: 'calc(100% - 16px)', sm: undefined },
+            // Ẩn thanh cuộn (vẫn cuộn được bằng con lăn / vuốt khi màn hình nhỏ)
+            scrollbarWidth: 'none',
+            msOverflowStyle: 'none',
+            '&::-webkit-scrollbar': { display: 'none' }
+          }
+        }
+      }}
     >
-      <Box sx={{ p: { xs: 2, sm: 4 }, color: C.ink }}>
+      <Box sx={{ p: { xs: 2, sm: 3 }, color: C.ink }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, mb: 2 }}>
           <Box component="h2" id="image-search-title" sx={{ m: 0, fontFamily: SERIF, fontWeight: 400, fontSize: { xs: 24, sm: 30 } }}>
             Tìm bằng hình ảnh
@@ -298,7 +312,7 @@ export default function ImageSearchDialog({ open, onClose }) {
 
         {phase === 'result' && result && (
           <Box aria-live="polite">
-            <Box sx={{ display: 'flex', gap: 2, alignItems: 'stretch', flexWrap: { xs: 'wrap', sm: 'nowrap' }, mb: 3 }}>
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'stretch', flexWrap: { xs: 'wrap', sm: 'nowrap' }, mb: 2 }}>
               {preview && (
                 <Box sx={{ flex: '0 0 auto', width: { xs: 96, sm: 120 } }}>
                   <Box sx={{ fontSize: 12, color: C.muted, mb: 0.5 }}>Ảnh của bạn</Box>
