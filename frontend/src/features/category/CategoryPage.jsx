@@ -40,7 +40,6 @@ import {
   DownOutlined,
   EditOutlined,
   EllipsisOutlined,
-  EyeOutlined,
   FolderAddOutlined,
   PlusOutlined,
   RightOutlined,
@@ -66,6 +65,7 @@ import {
 } from 'services/categoryService';
 
 import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../shippingaddress/theme';
+import { PAGE_TYPE, pageSubtitleSx, pageTitleSx } from 'themes/pageType';
 
 const PAGE_SIZE = 5;
 
@@ -446,11 +446,12 @@ export default function CategoryPage() {
   const paginatedCategories = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE;
     const rows = [];
-    const walk = (node) => {
-      rows.push({ ...node.category, visibleChildren: node.children.length });
-      if (isFiltering || expanded.has(node.category.categoryId)) node.children.forEach(walk);
+    // STT theo cây: danh mục gốc 1, 2, 3… (đếm tiếp qua các trang), danh mục con 1.1, 1.2…
+    const walk = (node, stt) => {
+      rows.push({ ...node.category, visibleChildren: node.children.length, stt });
+      if (isFiltering || expanded.has(node.category.categoryId)) node.children.forEach((child, i) => walk(child, `${stt}.${i + 1}`));
     };
-    filteredCategories.slice(start, start + PAGE_SIZE).forEach(walk);
+    filteredCategories.slice(start, start + PAGE_SIZE).forEach((node, i) => walk(node, String(start + i + 1)));
     return rows;
   }, [filteredCategories, currentPage, expanded, isFiltering]);
 
@@ -867,14 +868,13 @@ export default function CategoryPage() {
           <Typography
             variant="h3"
             sx={{
-              fontWeight: 800,
-              color: '#0F172A',
-              fontSize: { xs: 22, sm: 26 }
+              ...pageTitleSx,
+              color: '#0F172A'
             }}
           >
             Danh mục sản phẩm
           </Typography>
-          <Typography sx={{ fontSize: 13.5, color: C.muted, mt: 0.5, lineHeight: 1.6 }}>
+          <Typography sx={{ ...pageSubtitleSx, color: C.muted, mt: 0.5 }}>
             Tổ chức và quản lý danh mục giúp khách hàng dễ dàng tìm kiếm sản phẩm
           </Typography>
         </Box>
@@ -1070,7 +1070,7 @@ export default function CategoryPage() {
               '& th': {
                 bgcolor: C.surface,
                 color: C.muted,
-                fontSize: 12,
+                fontSize: PAGE_TYPE.th,
                 fontWeight: 700,
                 textTransform: 'uppercase',
                 letterSpacing: 0.5,
@@ -1080,26 +1080,29 @@ export default function CategoryPage() {
               '& td': {
                 borderColor: C.borderLight,
                 py: 2,
-                fontSize: 13.5,
+                fontSize: PAGE_TYPE.td,
                 color: C.text
               }
             }}
           >
             <TableHead>
               <TableRow>
+                <TableCell align="center" sx={{ width: 72, pl: 2 }}>
+                  STT
+                </TableCell>
                 <TableCell sx={{ pl: 3, minWidth: 260 }}>TÊN DANH MỤC</TableCell>
                 <TableCell sx={{ minWidth: 120 }}>ĐỐI TƯỢNG</TableCell>
                 <TableCell>MÔ TẢ</TableCell>
                 <TableCell sx={{ minWidth: 140 }}>SỐ SẢN PHẨM</TableCell>
                 <TableCell sx={{ minWidth: 130 }}>TRẠNG THÁI</TableCell>
-                <TableCell align="center" sx={{ pr: 3, minWidth: 130 }}>THAO TÁC</TableCell>
+                <TableCell align="center" sx={{ pr: 3, minWidth: 100 }}>THAO TÁC</TableCell>
               </TableRow>
             </TableHead>
 
             <TableBody>
               {loading && (
                 <TableRow>
-                  <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
+                  <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
                     <CircularProgress size={32} sx={{ color: C.cyan }} />
                     <Typography fontSize={13.5} color={C.muted} sx={{ mt: 1.5 }}>
                       Đang tải danh mục...
@@ -1122,7 +1125,15 @@ export default function CategoryPage() {
                     <TableRow
                       key={category.categoryId}
                       hover
+                      // Bấm vào dòng là xem chi tiết (thay cho icon con mắt)
+                      tabIndex={0}
+                      aria-label={`Xem chi tiết danh mục ${category.categoryName}`}
+                      onClick={() => setViewCategory(category)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && e.target === e.currentTarget) setViewCategory(category);
+                      }}
                       sx={{
+                        cursor: 'pointer',
                         // Highlight dòng đích vừa nhận sản phẩm, hoặc nền cây cha/con bình thường
                         bgcolor:
                           category.categoryId === highlightedCategoryId
@@ -1144,9 +1155,21 @@ export default function CategoryPage() {
                         '&:hover': { bgcolor: '#F5FAFC' }
                       }}
                     >
+                      <TableCell align="center" sx={{ pl: 2, color: `${C.muted} !important`, opacity: category.contextOnly ? 0.6 : 1 }}>
+                        {category.stt}
+                      </TableCell>
+
                       {/* CATEGORY NAME */}
                       <TableCell
-                        onClick={canToggle && !isFiltering ? () => toggleExpanded(category.categoryId) : undefined}
+                        // Bấm tên danh mục cha để xổ / thu gọn danh mục con (không mở chi tiết)
+                        onClick={
+                          canToggle && !isFiltering
+                            ? (e) => {
+                                e.stopPropagation();
+                                toggleExpanded(category.categoryId);
+                              }
+                            : undefined
+                        }
                         sx={{
                           py: category.isChild ? 1.25 : 1.75,
                           opacity: category.contextOnly ? 0.6 : 1,
@@ -1181,14 +1204,14 @@ export default function CategoryPage() {
                           <Box>
                             <Typography
                               sx={{
-                                fontSize: category.isChild ? 13 : 14,
+                                fontSize: PAGE_TYPE.td,
                                 fontWeight: category.isChild ? (canToggle ? 600 : 500) : 700,
                                 color: category.isChild ? '#334155' : '#0F172A'
                               }}
                             >
                               {category.categoryName}
                             </Typography>
-                            {/* Chỉ hiện tên cho gọn; mã danh mục xem ở nút Xem chi tiết */}
+                            {/* Chỉ hiện tên cho gọn; mã danh mục xem khi bấm vào dòng (chi tiết) */}
                           </Box>
                         </Stack>
                       </TableCell>
@@ -1203,7 +1226,7 @@ export default function CategoryPage() {
                       <TableCell>
                         <Typography
                           sx={{
-                            fontSize: 13,
+                            fontSize: PAGE_TYPE.td,
                             color: '#475569',
                             maxWidth: 320,
                             overflow: 'hidden',
@@ -1219,7 +1242,7 @@ export default function CategoryPage() {
                       <TableCell>
                         <Typography
                           sx={{
-                            fontSize: 13.5,
+                            fontSize: PAGE_TYPE.td,
                             fontWeight: 700,
                             color: '#0F172A'
                           }}
@@ -1231,15 +1254,19 @@ export default function CategoryPage() {
                             <Typography
                               role="button"
                               tabIndex={0}
-                              onClick={() => openTransferDialog(category)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openTransferDialog(category);
+                              }}
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter' || e.key === ' ') {
                                   e.preventDefault();
+                                  e.stopPropagation();
                                   openTransferDialog(category);
                                 }
                               }}
                               sx={{
-                                fontSize: 12,
+                                fontSize: PAGE_TYPE.tdSub,
                                 color: '#B45309',
                                 fontWeight: 600,
                                 mt: 0.25,
@@ -1257,8 +1284,8 @@ export default function CategoryPage() {
                         )}
                       </TableCell>
 
-                      {/* STATUS */}
-                      <TableCell>
+                      {/* STATUS: bấm công tắc không mở chi tiết */}
+                      <TableCell onClick={(e) => e.stopPropagation()}>
                         <Stack
                           direction="row"
                           spacing={1.25}
@@ -1325,29 +1352,12 @@ export default function CategoryPage() {
                       </TableCell>
 
                       {/* ACTIONS */}
-                      <TableCell align="center" sx={{ pr: 3 }}>
+                      <TableCell align="center" sx={{ pr: 3 }} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
                         <Stack
                           direction="row"
                           spacing={0.5}
                           sx={{ alignItems: 'center', justifyContent: 'center' }}
                         >
-                          <Tooltip title="Xem chi tiết">
-                            <IconButton
-                              size="small"
-                              onClick={() => setViewCategory(category)}
-                              sx={{
-                                color: '#64748B',
-                                p: 0.75,
-                                '&:hover': {
-                                  color: '#0F172A',
-                                  bgcolor: 'transparent'
-                                }
-                              }}
-                            >
-                              <EyeOutlined style={{ fontSize: 17 }} />
-                            </IconButton>
-                          </Tooltip>
-
                           <Tooltip title="Chỉnh sửa danh mục">
                             <IconButton
                               size="small"
@@ -1394,7 +1404,7 @@ export default function CategoryPage() {
 
               {!loading && filteredCategories.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
+                  <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
                     <Typography
                       sx={{
                         fontSize: 14,

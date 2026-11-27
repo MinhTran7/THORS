@@ -100,14 +100,20 @@ export default function ReturnDispatchDialog({ doc, onClose, onDone }) {
                 <Table size="small">
                   <TableHead>
                     <TableRow>
+                      <TableCell align="center" sx={{ width: 56 }}>
+                        STT
+                      </TableCell>
                       <TableCell>Vị trí lấy hàng</TableCell>
                       <TableCell align="right">Đang có</TableCell>
                       <TableCell sx={{ width: 160 }}>Số lượng lấy</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {sources.map((s) => (
+                    {sources.map((s, sIndex) => (
                       <TableRow key={s.key}>
+                        <TableCell align="center" sx={{ color: 'text.secondary' }}>
+                          {sIndex + 1}
+                        </TableCell>
                         <TableCell>{s.label}</TableCell>
                         <TableCell align="right">{number(s.available)}</TableCell>
                         <TableCell>

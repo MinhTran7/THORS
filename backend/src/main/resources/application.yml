@@ -116,6 +116,7 @@ thors:
     cache-dir: ${IMAGE_SEARCH_CACHE_DIR:${user.home}/.thors/image-search}
     match-threshold: 0.808 # từ mức này: "có sản phẩm khá giống"
     confident-threshold: 0.85 # từ mức này mới khẳng định "shop có mẫu này"
+    not-product-threshold: 0.5 # ảnh nhân vật hoạt hình / logo... từ mức này thì không trả sản phẩm nào
     color-confidence: 0.6
     background-removal: true # xóa nền (chỉ giữ sản phẩm) trước khi so, cả ảnh khách lẫn ảnh shop
     suggestions: 5

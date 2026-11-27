@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Autocomplete, Box, CircularProgress, Typography } from '@mui/material';
-import { ExportOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import { InfoCircleOutlined } from '@ant-design/icons';
 import { useCrumbs } from 'layouts/crumbs';
 import { AnnouncementBar, StoreFooter } from 'layouts/StorefrontLayout';
 import { brand, cardSx, fs } from 'features/account/tokens';
@@ -202,11 +202,6 @@ export default function WebsiteSettingsPage() {
       <PageHeader
         title="Website"
         subtitle="Thông tin chung hiển thị trên website bán hàng: thanh thông báo, giới thiệu, liên hệ ở chân trang."
-        action={
-          <OutlineButton component="a" href="/" target="_blank" rel="noopener" startIcon={<ExportOutlined />}>
-            Xem website
-          </OutlineButton>
-        }
       />
 
       {loadError && (

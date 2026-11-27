@@ -579,6 +579,9 @@ export default function OrderTrackingPage() {
           <Table size="small">
             <TableHead sx={{ bgcolor: '#F8FAFC' }}>
               <TableRow>
+                <TableCell align="center" sx={{ fontSize: 12, fontWeight: 700, color: COLORS.muted, width: 56 }}>
+                  STT
+                </TableCell>
                 <TableCell sx={{ fontSize: 12, fontWeight: 700, color: COLORS.muted }}>SẢN PHẨM</TableCell>
                 <TableCell align="right" sx={{ fontSize: 12, fontWeight: 700, color: COLORS.muted }}>
                   ĐƠN GIÁ
@@ -592,8 +595,13 @@ export default function OrderTrackingPage() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {order.items?.map((item) => (
+              {order.items?.map((item, index) => (
                 <TableRow key={item.orderItemId} hover>
+                  <TableCell align="center">
+                    <Typography fontSize={12} color={COLORS.muted}>
+                      {index + 1}
+                    </Typography>
+                  </TableCell>
                   <TableCell>
                     <Typography fontSize={13} fontWeight={600} color={COLORS.text}>
                       {item.productName}

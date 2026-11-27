@@ -57,6 +57,42 @@ public class WarehouseStore {
         return sql.replace("TIER_LABEL", tierLabel("r", "t"));
     }
 
+    /**
+     * Danh mục {@code id} cùng mọi danh mục con, cháu của nó, để lọc theo danh mục cha thì ra cả hàng của
+     * nhánh con (giống bộ lọc danh mục trang khách). {@code null} khi không lọc theo danh mục.
+     */
+    public Set<Integer> categoryBranch(Integer id) {
+        if (id == null) return null;
+        var branch = new HashSet<Integer>();
+        branch.add(id);
+        List<Map<String, Object>> links;
+        try {
+            links = db.queryForList("SELECT category_id,parent_id FROM category WHERE parent_id IS NOT NULL");
+        } catch (org.springframework.dao.DataAccessException e) {
+            return branch; // DB chưa chạy migration 2026-11-10_category_hierarchy.sql: chưa có danh mục con
+        }
+        for (boolean grew = true; grew; ) {
+            grew = false;
+            for (var l : links)
+                if (branch.contains(num(l, "parent_id")) && branch.add(num(l, "category_id"))) grew = true;
+        }
+        return branch;
+    }
+
+    /** Hàng có danh mục thuộc nhánh {@link #categoryBranch} không ({@code branch == null}: không lọc). */
+    public static boolean inCategoryBranch(Set<Integer> branch, Map<String, Object> row) {
+        return branch == null || (row.get("category_id") != null && branch.contains(num(row, "category_id")));
+    }
+
+    /** Danh mục cho ô lọc dạng cây ở trang kho: category_id, category_name, parent_id (nếu DB đã có cột). */
+    public List<Map<String, Object>> categoryOptions() {
+        try {
+            return db.queryForList("SELECT category_id,category_name,parent_id FROM category ORDER BY category_name");
+        } catch (org.springframework.dao.DataAccessException e) {
+            return db.queryForList("SELECT category_id,category_name FROM category ORDER BY category_name");
+        }
+    }
+
     public Map<String, Object> one(String sql, Object... args) {
         var rows = db.queryForList(sql, args);
         if (rows.isEmpty()) throw new ApiException(404, "NOT_FOUND", "Không tìm thấy dữ liệu kho.");

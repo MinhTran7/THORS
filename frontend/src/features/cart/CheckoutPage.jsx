@@ -325,7 +325,12 @@ export default function CheckoutPage() {
     if (new Date(p.endDate) <= now) return { reason: 'Mã đã hết hạn sử dụng' };
     if (subtotal < Number(p.minOrderValue)) return {};
     const value = Number(p.discountValue);
-    return { eligible: true, discount: p.discountType === 'PERCENT' ? Math.round((subtotal * value) / 100) : Math.min(value, subtotal) };
+    const percent = Math.round((subtotal * value) / 100);
+    // Mã giảm % có thể bị chặn bởi mức giảm tối đa (backend tính giống vậy khi đặt hàng)
+    return {
+      eligible: true,
+      discount: p.discountType === 'PERCENT' ? Math.min(percent, Number(p.maxDiscountAmount) || percent) : Math.min(value, subtotal)
+    };
   };
 
   const voucherResult = voucher && voucherStatus(voucher);
@@ -763,6 +768,7 @@ export default function CheckoutPage() {
                         {voucher.discountType === 'PERCENT'
                           ? `Giảm ${voucher.discountValue}%`
                           : `Giảm ${new Intl.NumberFormat('vi-VN').format(voucher.discountValue)} ₫`}
+                        {voucher.maxDiscountAmount > 0 && ` · Tối đa ${new Intl.NumberFormat('vi-VN').format(voucher.maxDiscountAmount)} ₫`}
                         {voucher.minOrderValue > 0 && ` · Đơn từ ${new Intl.NumberFormat('vi-VN').format(voucher.minOrderValue)} ₫`}
                       </Typography>
                     </Box>
@@ -931,6 +937,11 @@ export default function CheckoutPage() {
                           </Typography>
                           <Typography sx={{ fontSize: 12.5, color: '#6B7280', mt: 0.5 }}>
                             Đơn tối thiểu: <strong>{money(p.minOrderValue)}</strong>
+                            {isPercentType && p.maxDiscountAmount > 0 && (
+                              <>
+                                {' · '}Tối đa <strong>{money(p.maxDiscountAmount)}</strong>
+                              </>
+                            )}
                           </Typography>
                           {status.reason && (
                             <Typography sx={{ fontSize: 12, color: '#8A2B2B', fontWeight: 600, mt: 0.75 }}>
@@ -995,6 +1006,7 @@ export default function CheckoutPage() {
                             <Typography sx={{ fontSize: 11.5, color: '#6B7280' }}>Mức ưu đãi</Typography>
                             <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: '#8A2B2B' }}>
                               {isPercentType ? `Giảm ${dVal}%` : `Giảm ${money(dVal)}`}
+                              {isPercentType && p.maxDiscountAmount > 0 && `, tối đa ${money(p.maxDiscountAmount)}`}
                             </Typography>
                           </Box>
                           <Box>

@@ -287,6 +287,9 @@ export default function CreateReturnDialog({ open, onClose, onSuccess }) {
                 <TableHead sx={{ bgcolor: '#F7F9FC' }}>
                   <TableRow>
                     <TableCell padding="checkbox" />
+                    <TableCell align="center" sx={{ fontSize: 11, fontWeight: 600, color: COLORS.muted, width: 48 }}>
+                      STT
+                    </TableCell>
                     <TableCell sx={{ fontSize: 11, fontWeight: 600, color: COLORS.muted }}>SẢN PHẨM</TableCell>
                     <TableCell sx={{ fontSize: 11, fontWeight: 600, color: COLORS.muted }}>ĐƠN GIÁ</TableCell>
                     <TableCell align="center" sx={{ fontSize: 11, fontWeight: 600, color: COLORS.muted }}>ĐÃ MUA</TableCell>
@@ -299,7 +302,7 @@ export default function CreateReturnDialog({ open, onClose, onSuccess }) {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {orderData.items?.map((item) => {
+                  {orderData.items?.map((item, index) => {
                     const itemState = selectedItems[item.orderItemId] || { checked: false, quantity: 1, itemReason: '', restock: true };
                     const isReturnable = item.quantityReturnable > 0;
 
@@ -311,6 +314,11 @@ export default function CreateReturnDialog({ open, onClose, onSuccess }) {
                             disabled={!isReturnable || submitting}
                             onChange={(e) => handleItemCheck(item.orderItemId, e.target.checked)}
                           />
+                        </TableCell>
+                        <TableCell align="center">
+                          <Typography fontSize={12} color={COLORS.muted}>
+                            {index + 1}
+                          </Typography>
                         </TableCell>
                         <TableCell>
                           <Typography fontSize={12} fontWeight={600} color={COLORS.text}>

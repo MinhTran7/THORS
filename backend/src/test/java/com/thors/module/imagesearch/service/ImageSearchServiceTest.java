@@ -209,7 +209,7 @@ class ImageSearchServiceTest {
             ImageSearchResult r = service.search(jpeg());
             assertEquals("NOT_FOUND", r.status());
             assertNull(r.product());
-            // không khớp: thêm 1 gợi ý (2 + 1) để danh sách trên giao diện đủ số ô như khi khớp (sản phẩm khớp + 2 gợi ý)
+            // không khớp: thêm 1 gợi ý (2 + 1) vì giao diện đưa gợi ý đầu lên khung "Gần giống nhất"
             assertEquals(List.of(53, 61, 63), r.suggestions().stream().map(ImageSearchResult.Product::productId).toList());
             verify(shop, never()).findVariants(anyInt());
         }
@@ -229,6 +229,24 @@ class ImageSearchServiceTest {
             ImageSearchService unknown = new ImageSearchService(engine, props, repo, shop, ColorClassifier.loadDefault(),
                     v -> new TypeClassifier.Guess("Ví", 0.9));
             assertEquals("Balo", unknown.search(jpeg()).suggestionCategory());
+        }
+
+        @Test
+        @DisplayName("Ảnh không phải sản phẩm (nhân vật hoạt hình, logo): không trả sản phẩm nào, dù điểm giống cao")
+        void notProductReturnsNothing() throws Exception {
+            ImageSearchService typed = new ImageSearchService(engine, props, repo, shop, ColorClassifier.loadDefault(),
+                    v -> new TypeClassifier.Guess("Áo", 0.001, 0.998));
+            nextQuery = new float[] {0.9f, 0.43589f, 0}; // giống p53 0,9 nhưng ảnh là logo
+            ImageSearchResult r = typed.search(jpeg());
+            assertEquals("NOT_PRODUCT", r.status());
+            assertNull(r.product());
+            assertTrue(r.suggestions().isEmpty());
+            verify(repo, never()).findProductCards(anyCollection());
+
+            // dưới ngưỡng (ảnh hàng thật tối đa 0,14 trong thử nghiệm) thì tìm bình thường
+            ImageSearchService normal = new ImageSearchService(engine, props, repo, shop, ColorClassifier.loadDefault(),
+                    v -> new TypeClassifier.Guess("Balo", 0.8, 0.14));
+            assertNotEquals("NOT_PRODUCT", normal.search(jpeg()).status());
         }
 
         @Test

@@ -10,7 +10,6 @@ import {
   DialogContent,
   DialogTitle,
   FormControlLabel,
-  IconButton,
   InputAdornment,
   Radio,
   RadioGroup,
@@ -22,11 +21,10 @@ import {
   TableRow,
   Tabs,
   TextField,
-  Tooltip,
   Typography
 } from '@mui/material';
 import { Stack } from 'features/account/components/Flex';
-import { CarOutlined, EyeOutlined, InboxOutlined, SearchOutlined } from '@ant-design/icons';
+import { CarOutlined, InboxOutlined, SearchOutlined } from '@ant-design/icons';
 import { post } from 'services/http';
 import { openCustomerChat, useChatStatus } from 'features/chat/api';
 import { useCrumbs } from 'layouts/crumbs';
@@ -47,6 +45,7 @@ import {
   Pager,
   Toolbar
 } from 'features/account/components/Blocks';
+import { PAGE_TYPE } from 'themes/pageType';
 import { LIVE_SWR, ordersApi, refreshAllOrders } from './api';
 import { CUSTOMER_ACTIONS, OWNER_ACTIONS, ownerActionSlots } from './orderActions';
 import { DeliveryProofDialog, useDeliveryProofRequired } from './components/DeliveryProof';
@@ -343,14 +342,13 @@ function CustomerOrderCard({ order, onOpen, actions, onAction, busy, onRebuy, re
                 </Box>
               ))}
             {canReturn && (
-              // Mở trang chi tiết và bật sẵn hộp thoại yêu cầu trả hàng
+              // Sang trang riêng "Yêu cầu trả hàng" (/orders/:id/return), không còn mở hộp thoại
               <Box
                 component={RouterLink}
-                to={`/orders/${order.id}`}
-                state={{ openReturn: true }}
+                to={`/orders/${order.id}/return`}
                 sx={storeBtnSx(actions.some((a) => a.primary) ? 'outline' : 'dark')}
               >
-                TRẢ HÀNG
+                YÊU CẦU TRẢ HÀNG / HOÀN TIỀN
               </Box>
             )}
             {/* Mở khung chat với cửa hàng, đính kèm thẻ đơn này vào tin nhắn tiếp theo */}
@@ -364,7 +362,8 @@ function CustomerOrderCard({ order, onOpen, actions, onAction, busy, onRebuy, re
                 LIÊN HỆ NGƯỜI BÁN
               </Box>
             )}
-            {lines.length > 0 && (
+            {/* Mua lại: chỉ đơn đã hoàn thành */}
+            {lines.length > 0 && order.orderStatus === 'COMPLETED' && (
               <Box component="button" type="button" disabled={busy || rebuying} onClick={onRebuy} sx={storeBtnSx('outline')}>
                 {rebuying ? 'ĐANG THÊM…' : 'MUA LẠI'}
               </Box>
@@ -923,7 +922,7 @@ export default function OrderListPage({ fixedSource }) {
           <Table size="medium" sx={{ minWidth: 960 }}>
             <TableHead>
               <TableRow
-                sx={{ '& th': { borderBottom: '1px solid #E2E8F0', py: 1.75, bgcolor: '#F8FAFC', color: '#475569', fontSize: 13, fontWeight: 600 } }}
+                sx={{ '& th': { borderBottom: '1px solid #E2E8F0', py: 1.75, bgcolor: '#F8FAFC', color: '#475569', fontSize: PAGE_TYPE.th, fontWeight: 600 } }}
               >
                 <TableCell align="center" sx={{ width: 64 }}>
                   STT
@@ -933,7 +932,7 @@ export default function OrderListPage({ fixedSource }) {
                 <TableCell>Người nhận</TableCell>
                 <TableCell>Tổng tiền</TableCell>
                 <TableCell>Trạng thái</TableCell>
-                <TableCell align="center" sx={{ width: 32 + ACTION_WIDTH.primary + ACTION_WIDTH.secondary + 64 }}>
+                <TableCell align="center" sx={{ width: ACTION_WIDTH.primary + ACTION_WIDTH.secondary + 56 }}>
                   Thao tác
                 </TableCell>
               </TableRow>
@@ -944,30 +943,57 @@ export default function OrderListPage({ fixedSource }) {
                 const prep =
                   order.preparationStatus && order.preparationStatus !== 'NOT_STARTED' ? preparationMeta(order.preparationStatus) : null;
                 return (
+                  // Bấm vào dòng (hoặc Enter) là mở chi tiết đơn, không cần nút xem riêng
                   <TableRow
                     key={order.id}
                     hover
-                    sx={{ '&:hover': { bgcolor: '#FAFCFE' }, '& td': { borderBottom: '1px solid #F1F5F9', py: 2 } }}
+                    tabIndex={0}
+                    role="link"
+                    aria-label={`Xem chi tiết đơn ${order.orderNumber}`}
+                    onClick={() =>
+                      navigate(`/orders/${order.id}`, {
+                        state: {
+                          backTo: isFacebookPage ? '/facebook-orders' : '/orders',
+                          backLabel: isFacebookPage ? 'Quay lại đơn hàng Facebook' : 'Quay lại đơn hàng online'
+                        }
+                      })
+                    }
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && e.target === e.currentTarget) {
+                        navigate(`/orders/${order.id}`, {
+                          state: {
+                            backTo: isFacebookPage ? '/facebook-orders' : '/orders',
+                            backLabel: isFacebookPage ? 'Quay lại đơn hàng Facebook' : 'Quay lại đơn hàng online'
+                          }
+                        });
+                      }
+                    }}
+                    sx={{
+                      cursor: 'pointer',
+                      '&:hover': { bgcolor: '#FAFCFE' },
+                      '&:focus-visible': { outline: `2px solid ${brand.cyan}`, outlineOffset: '-2px' },
+                      '& td': { borderBottom: '1px solid #F1F5F9', py: 2 }
+                    }}
                   >
-                    <TableCell align="center" sx={{ fontSize: 13, color: '#64748B' }}>
+                    <TableCell align="center" sx={{ fontSize: PAGE_TYPE.td, color: '#64748B' }}>
                       {page * PAGE_SIZE + i + 1}
                     </TableCell>
 
                     {/* Mã đơn hàng */}
                     <TableCell>
-                      <Typography sx={{ fontWeight: 800, fontSize: 13.5, color: '#1E293B' }}>{order.orderNumber}</Typography>
+                      <Typography sx={{ fontWeight: 800, fontSize: PAGE_TYPE.td, color: '#1E293B' }}>{order.orderNumber}</Typography>
                     </TableCell>
 
                     {/* Thời gian đặt */}
                     <TableCell>
-                      <Typography sx={{ fontSize: 13, fontWeight: 600, color: '#1E293B' }}>{formatDate(order.orderDate)}</Typography>
-                      <Typography sx={{ fontSize: 11.5, color: '#94A3B8' }}>{formatTime(order.orderDate)}</Typography>
+                      <Typography sx={{ fontSize: PAGE_TYPE.td, fontWeight: 600, color: '#1E293B' }}>{formatDate(order.orderDate)}</Typography>
+                      <Typography sx={{ fontSize: PAGE_TYPE.tdSub, color: '#94A3B8' }}>{formatTime(order.orderDate)}</Typography>
                     </TableCell>
 
                     {/* Người nhận */}
                     <TableCell>
-                      <Typography sx={{ fontSize: 13, fontWeight: 600, color: '#1E293B' }}>{order.deliveryName || '—'}</Typography>
-                      <Typography sx={{ fontSize: 11.5, color: '#94A3B8' }}>{order.deliveryPhone || '—'}</Typography>
+                      <Typography sx={{ fontSize: PAGE_TYPE.td, fontWeight: 600, color: '#1E293B' }}>{order.deliveryName || '—'}</Typography>
+                      <Typography sx={{ fontSize: PAGE_TYPE.tdSub, color: '#94A3B8' }}>{order.deliveryPhone || '—'}</Typography>
                     </TableCell>
 
                     {/* Tổng tiền & trạng thái thanh toán (để nhận biết đơn đã vào doanh thu hay chưa) */}
@@ -984,10 +1010,10 @@ export default function OrderListPage({ fixedSource }) {
                               : paymentMethodLabel(order.paymentMethod);
                         return (
                           <>
-                            <Typography sx={{ fontWeight: 800, fontSize: 14, color: '#1E293B', whiteSpace: 'nowrap' }}>
+                            <Typography sx={{ fontWeight: 800, fontSize: PAGE_TYPE.td, color: '#1E293B', whiteSpace: 'nowrap' }}>
                               {formatVnd(order.totalAmount)}
                             </Typography>
-                            <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: payColor, whiteSpace: 'nowrap' }}>
+                            <Typography sx={{ fontSize: PAGE_TYPE.tdSub, fontWeight: 600, color: payColor, whiteSpace: 'nowrap' }}>
                               {methodShort} · {payMeta.label}
                             </Typography>
                           </>
@@ -1017,33 +1043,19 @@ export default function OrderListPage({ fixedSource }) {
                       </Stack>
                     </TableCell>
 
-                    {/* Thao tác: xem chi tiết (icon mắt như bảng tại quầy) và các nút xử lý đơn */}
-                    <TableCell>
-                      {/* Lưới cố định: con mắt | nút chính | nút phụ, nút rộng bằng nhau nên mọi dòng thẳng hàng */}
+                    {/* Thao tác: các nút xử lý đơn (bấm nút không mở chi tiết) */}
+                    <TableCell onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} sx={{ cursor: 'default' }}>
+                      {/* Lưới cố định: nút chính | nút phụ, nút rộng bằng nhau nên mọi dòng thẳng hàng */}
                       <Box
                         sx={{
                           display: 'grid',
-                          gridTemplateColumns: `32px ${ACTION_WIDTH.primary}px ${ACTION_WIDTH.secondary}px`,
+                          gridTemplateColumns: `${ACTION_WIDTH.primary}px ${ACTION_WIDTH.secondary}px`,
                           columnGap: 1,
                           alignItems: 'center',
                           justifyContent: 'center'
                         }}
                       >
-                        <Tooltip title="Xem chi tiết đơn hàng">
-                          <IconButton
-                            size="small"
-                            component={RouterLink}
-                            to={`/orders/${order.id}`}
-                            state={{
-                              backTo: isFacebookPage ? '/facebook-orders' : '/orders',
-                              backLabel: isFacebookPage ? 'Quay lại đơn hàng Facebook' : 'Quay lại đơn hàng online'
-                            }}
-                            aria-label={`Xem chi tiết đơn ${order.orderNumber}`}
-                            sx={{ color: '#64748B', p: 0.75, '&:hover': { color: '#0F172A', bgcolor: 'transparent' } }}
-                          >
-                            <EyeOutlined style={{ fontSize: 17 }} />
-                          </IconButton>
-                        </Tooltip>
+
                         {/* Luôn hiện đủ nút; nút không áp dụng cho trạng thái hiện tại chỉ bị làm mờ */}
                         {(isOwner ? ownerActionSlots(order) : []).map((action) =>
                           action.primary ? (

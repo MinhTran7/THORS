@@ -18,7 +18,6 @@ import {
 } from '@mui/material';
 
 import {
-  ArrowLeftOutlined,
   DeleteOutlined,
   LockOutlined,
   PlusOutlined,
@@ -50,6 +49,7 @@ import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../shippingaddress/
 import { formatPriceInput, parsePriceInput } from './priceInput';
 import ProductDescriptionFields from './ProductDescriptionFields';
 import ImageCropDialog from './ImageCropDialog';
+import { pageSubtitleSx, pageTitleSx } from 'themes/pageType';
 import { getImageColors, sameColor, setImageColor } from './productDescription';
 
 const inputSx = (hasError) => ({
@@ -434,35 +434,19 @@ export default function EditProductPage() {
     <Box sx={{ maxWidth: 1440, mx: 'auto', pb: 6, color: C.text }}>
       {/* HEADER */}
       <Box sx={{ mb: 3.5 }}>
-        <Button
-          startIcon={<ArrowLeftOutlined />}
-          onClick={() => navigate(`/products/${productId}`)}
-          sx={{
-            textTransform: 'none',
-            fontSize: 13,
-            color: C.muted,
-            mb: 1.5,
-            p: 0,
-            '&:hover': { bgcolor: 'transparent', color: '#0F172A' }
-          }}
-        >
-          Quay lại chi tiết sản phẩm
-        </Button>
-
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
           <Box>
             <Typography
               variant="h3"
               sx={{
-                fontWeight: 800,
-                color: '#0F172A',
-                fontSize: { xs: 22, sm: 26 }
+                ...pageTitleSx,
+                color: '#0F172A'
               }}
             >
               Chỉnh sửa sản phẩm
             </Typography>
 
-            <Typography sx={{ fontSize: 13.5, color: C.muted, mt: 0.5, lineHeight: 1.6 }}>
+            <Typography sx={{ ...pageSubtitleSx, color: C.muted, mt: 0.5 }}>
               Cập nhật thông tin chi tiết, danh mục và bảng giá các biến thể sản phẩm
             </Typography>
           </Box>

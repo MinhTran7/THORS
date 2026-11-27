@@ -24,17 +24,26 @@ public final class TypeClassifier {
 
     public static final String RESOURCE = "/imagesearch/type-text-embeddings.json";
 
-    /** Loại đoán được và độ chắc (tổng xác suất các kiểu đồ thuộc loại đó). */
-    public record Guess(String type, double probability) {}
+    /**
+     * Loại đoán được (chỉ trong các loại hàng), độ chắc (tổng xác suất các kiểu đồ thuộc loại đó) và
+     * notProduct = tổng xác suất các lớp "không phải sản phẩm" (nhân vật hoạt hình, logo, con vật, đồ ăn...).
+     */
+    public record Guess(String type, double probability, double notProduct) {
+        public Guess(String type, double probability) {
+            this(type, probability, 0);
+        }
+    }
 
     private final List<String> classTypes;
     private final float[][] vectors;
     private final double logitScale;
+    private final String notProductType;
 
-    private TypeClassifier(List<String> classTypes, float[][] vectors, double logitScale) {
+    private TypeClassifier(List<String> classTypes, float[][] vectors, double logitScale, String notProductType) {
         this.classTypes = classTypes;
         this.vectors = vectors;
         this.logitScale = logitScale;
+        this.notProductType = notProductType;
     }
 
     public static TypeClassifier loadDefault() {
@@ -52,7 +61,7 @@ public final class TypeClassifier {
             for (float[] row : m) {
                 for (int j = 0; j < dim; j++) row[j] = buf.getFloat();
             }
-            return new TypeClassifier(types, m, root.path("logitScale").asDouble());
+            return new TypeClassifier(types, m, root.path("logitScale").asDouble(), root.path("notProductType").asText("NOT_PRODUCT"));
         } catch (IOException e) {
             throw new IllegalStateException("Không đọc được " + RESOURCE, e);
         }
@@ -76,7 +85,10 @@ public final class TypeClassifier {
         for (int i = 0; i < p.length; i++) {
             byType.merge(classTypes.get(i), p[i] / total, Double::sum);
         }
-        Map.Entry<String, Double> best = byType.entrySet().stream().max(Map.Entry.comparingByValue()).orElseThrow();
-        return new Guess(best.getKey(), best.getValue());
+        double notProduct = byType.getOrDefault(notProductType, 0.0);
+        Map.Entry<String, Double> best = byType.entrySet().stream()
+                .filter(e -> !e.getKey().equals(notProductType))
+                .max(Map.Entry.comparingByValue()).orElseThrow();
+        return new Guess(best.getKey(), best.getValue(), notProduct);
     }
 }

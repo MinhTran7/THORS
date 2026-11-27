@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.util.List;
 
 public record CreateInStoreSaleRequest(
+        String requestId,
         List<ItemRequest> items,
         BigDecimal discountAmount,
         String paymentMethod,

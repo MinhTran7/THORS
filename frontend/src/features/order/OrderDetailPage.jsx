@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { useLocation, useParams, useSearchParams } from 'react-router-dom';
+import { useRef, useState, useEffect } from 'react';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import useSWR, { useSWRConfig } from 'swr';
 import {
   Alert,
@@ -31,6 +31,7 @@ import { brand, cardSx } from 'features/account/tokens';
 import { OutlineButton } from 'features/account/components/Brand';
 import { StatusPill } from 'features/account/components/Chips';
 import { bodyCellSx, headCellSx, NoticeBox, PageHeader } from 'features/account/components/Blocks';
+import { PAGE_TYPE } from 'themes/pageType';
 import { FINAL_STATUSES, LIVE_INTERVAL, LIVE_SWR, ordersApi, refreshAllOrders } from './api';
 import { CUSTOMER_ACTIONS, OWNER_ACTIONS, carrierLabel, ownerActionsFor } from './orderActions';
 import AddressNotFoundDialog, { ADDRESS_NOT_FOUND, INVALID_ADDRESS_REASON } from './AddressNotFoundDialog';
@@ -202,7 +203,6 @@ function CustomerRefundBox({ order, onSave }) {
   );
 }
 import { DeliveryProofDialog, DeliveryProofView, useDeliveryProofRequired } from './components/DeliveryProof';
-import CustomerReturnDialog from '../returns/CustomerReturnDialog';
 import {
   C,
   SANS,
@@ -564,7 +564,6 @@ function StaffView({
   return (
     <>
       <PageHeader
-        back={back}
         title={`Đơn hàng ${order.orderNumber}`}
         subtitle={`Đặt lúc ${dateTime(order.orderDate) ?? '—'}`}
         action={
@@ -769,6 +768,7 @@ function StaffView({
               <Table size="small" sx={{ minWidth: 540 }}>
                 <TableHead>
                   <TableRow>
+                    <TableCell sx={{ ...headCellSx, textAlign: 'center', width: 56 }}>STT</TableCell>
                     <TableCell sx={headCellSx}>Sản phẩm</TableCell>
                     <TableCell sx={{ ...headCellSx, textAlign: 'right' }}>Đơn giá</TableCell>
                     <TableCell sx={{ ...headCellSx, textAlign: 'right' }}>SL</TableCell>
@@ -776,8 +776,9 @@ function StaffView({
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {order.lines.map((line) => (
+                  {order.lines.map((line, index) => (
                     <TableRow key={line.orderItemId}>
+                      <TableCell sx={{ ...bodyCellSx, textAlign: 'center', color: brand.muted }}>{index + 1}</TableCell>
                       <TableCell sx={bodyCellSx}>
                         <Stack direction="row" spacing={2} alignItems="center">
                           <Box
@@ -787,10 +788,10 @@ function StaffView({
                             sx={{ width: 64, height: 64, borderRadius: '10px', objectFit: 'cover', bgcolor: brand.neutralBg, flexShrink: 0 }}
                           />
                           <Box sx={{ minWidth: 0 }}>
-                            <Typography variant="body1" sx={{ fontWeight: 600, color: brand.ink }}>
+                            <Typography variant="body1" sx={{ fontWeight: 600, color: brand.ink, fontSize: PAGE_TYPE.td }}>
                               {line.productName}
                             </Typography>
-                            <Typography variant="body2" sx={{ color: brand.muted }}>
+                            <Typography variant="body2" sx={{ color: brand.muted, fontSize: PAGE_TYPE.tdSub }}>
                               {[line.size, line.color].filter(Boolean).join(' · ') || '—'}
                             </Typography>
                           </Box>
@@ -868,18 +869,12 @@ export default function OrderDetailPage() {
   const isStore = ['OWNER', 'FAMILY_MEMBER'].includes(account.role);
   const proofRequired = useDeliveryProofRequired(isStore);
 
-  const [returnDialogOpen, setReturnDialogOpen] = useState(false);
-  // Bấm "TRẢ HÀNG" ở danh sách đơn: mở sẵn hộp thoại yêu cầu trả hàng một lần (nếu còn trong hạn)
-  const autoReturn = useRef(Boolean(location.state?.openReturn));
-  useEffect(() => {
-    if (!autoReturn.current || !order) return;
-    autoReturn.current = false;
-    if (account.role === 'CUSTOMER' && withinReturnWindow(order)) setReturnDialogOpen(true);
-  }, [order, account.role]);
+  // Yêu cầu trả hàng là trang riêng (/orders/:id/return); gửi xong quay về đây kèm thông báo trong location.state
+  const navigate = useNavigate();
   const [refundBusy, setRefundBusy] = useState(false);
   // Tài khoản nhận hoàn khi khách hủy đơn đã thanh toán (null = không cần)
   const [refundForm, setRefundForm] = useState(null);
-  const [returnSuccessMsg, setReturnSuccessMsg] = useState('');
+  const [returnSuccessMsg, setReturnSuccessMsg] = useState(() => location.state?.returnSuccess || '');
 
   // Tự động kiểm tra trạng thái thanh toán PayOS (khi quay lại ?payment=success hoặc khi mở đơn chuyển khoản chưa trả tiền)
   const orderIdVal = order?.id || Number(id);
@@ -969,7 +964,7 @@ export default function OrderDetailPage() {
   if (error && !order) {
     return (
       <Box>
-        <PageHeader back={back} title="Chi tiết đơn hàng" />
+        <PageHeader title="Chi tiết đơn hàng" />
         <NoticeBox title="Không xem được đơn hàng">{error.message}</NoticeBox>
       </Box>
     );
@@ -977,7 +972,7 @@ export default function OrderDetailPage() {
   if (isLoading || !order) {
     return (
       <Box>
-        <PageHeader back={back} title="Chi tiết đơn hàng" />
+        <PageHeader title="Chi tiết đơn hàng" />
         <Typography sx={{ color: brand.muted }}>Đang tải đơn hàng…</Typography>
       </Box>
     );
@@ -1083,7 +1078,7 @@ export default function OrderDetailPage() {
     onPayNow: handlePayNow,
     payLoading,
     payError,
-    onOpenReturn: () => setReturnDialogOpen(true)
+    onOpenReturn: () => navigate(`/orders/${order.id}/return`)
   };
 
   return (
@@ -1243,20 +1238,6 @@ export default function OrderDetailPage() {
           refreshAllOrders(globalMutate);
         }}
       />
-
-      {/* Modal Trả hàng / Hoàn tiền cho Khách hàng */}
-      {returnDialogOpen && (
-        <CustomerReturnDialog
-          open={returnDialogOpen}
-          onClose={() => setReturnDialogOpen(false)}
-          orderData={order}
-          isPublic={false}
-          onSuccess={(msg) => {
-            setReturnSuccessMsg(msg);
-            mutate();
-          }}
-        />
-      )}
     </Box>
   );
 }

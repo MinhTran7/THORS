@@ -25,7 +25,6 @@ import {
 } from '@mui/material';
 
 import {
-  ArrowLeftOutlined,
   CloudUploadOutlined,
   DeleteOutlined,
   InfoCircleOutlined,
@@ -42,6 +41,7 @@ import {
 } from '../../services/categoryService';
 import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../shippingaddress/theme';
 import CategoryPicker from './CategoryPicker';
+import { pageSubtitleSx, pageTitleSx } from 'themes/pageType';
 import ProductDescriptionFields from './ProductDescriptionFields';
 import ImageCropDialog from './ImageCropDialog';
 import { formatPriceInput, parsePriceInput } from './priceInput';
@@ -562,29 +562,13 @@ export default function AddProductPage() {
     >
       {/* PAGE HEADER */}
       <Box sx={{ mb: 3.5 }}>
-        <Button
-          startIcon={<ArrowLeftOutlined />}
-          onClick={() => navigate('/products')}
-          sx={{
-            textTransform: 'none',
-            fontSize: 13,
-            color: C.muted,
-            mb: 1.5,
-            p: 0,
-            '&:hover': { bgcolor: 'transparent', color: '#0F172A' }
-          }}
-        >
-          Quay lại danh sách sản phẩm
-        </Button>
-
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
           <Box>
             <Typography
               variant="h3"
               sx={{
-                fontWeight: 800,
-                color: '#0F172A',
-                fontSize: { xs: 22, sm: 26 }
+                ...pageTitleSx,
+                color: '#0F172A'
               }}
             >
               Thêm sản phẩm mới
@@ -592,10 +576,9 @@ export default function AddProductPage() {
 
             <Typography
               sx={{
-                fontSize: 13.5,
+                ...pageSubtitleSx,
                 color: C.muted,
-                mt: 0.5,
-                lineHeight: 1.6
+                mt: 0.5
               }}
             >
               Nhập thông tin sản phẩm, tải ảnh minh họa và thiết lập bảng biến thể kích thước / màu sắc
@@ -970,6 +953,9 @@ export default function AddProductPage() {
             >
               <TableHead>
                 <TableRow>
+                  <TableCell align="center" sx={{ width: 64, pl: 2 }}>
+                    STT
+                  </TableCell>
                   <TableCell sx={{ pl: 3 }}>SIZE</TableCell>
                   <TableCell>MÀU</TableCell>
                   <TableCell>GIÁ BÁN (₫)</TableCell>
@@ -978,8 +964,11 @@ export default function AddProductPage() {
               </TableHead>
 
               <TableBody>
-                {variants.map((variant) => (
+                {variants.map((variant, index) => (
                   <TableRow key={variant.id} hover sx={{ '&:hover': { bgcolor: '#FAFCFE' } }}>
+                    <TableCell align="center" sx={{ pl: 2, color: `${C.muted} !important` }}>
+                      {index + 1}
+                    </TableCell>
                     <TableCell sx={{ width: '26%', pl: 3 }}>
                       <TextField
                         fullWidth

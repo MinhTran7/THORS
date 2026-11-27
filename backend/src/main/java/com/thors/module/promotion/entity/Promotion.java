@@ -13,21 +13,19 @@ public record Promotion(
         String discountType,
         BigDecimal discountValue,
         BigDecimal minOrderValue,
+        BigDecimal maxDiscountAmount,
         Integer usageLimit,
         Integer usedCount,
         String applyScope,
         List<Integer> productIds,
         LocalDateTime startDate,
         LocalDateTime endDate,
-        String status,
-        Integer createdBy
+        String status
 ) {
     public static final String PRODUCT_DISCOUNT = "PRODUCT_DISCOUNT";
     public static final String ORDER_VOUCHER = "ORDER_VOUCHER";
 
     public enum Schedule { UPCOMING, ONGOING, ENDED }
-
-    // ---- Loại, trạng thái ----
 
     public boolean isOrderVoucher() {
         return ORDER_VOUCHER.equals(type);
@@ -41,14 +39,18 @@ public record Promotion(
         return usageLimit != null && usedCount != null && usedCount >= usageLimit;
     }
 
+    // Lượt còn lại của mã giảm giá online; null = không giới hạn
+    public Integer remaining() {
+        return usageLimit == null ? null : Math.max(0, usageLimit - (usedCount == null ? 0 : usedCount));
+    }
+
     public Schedule schedule(LocalDateTime now) {
         if (now.isBefore(startDate)) return Schedule.UPCOMING;
         if (!now.isBefore(endDate)) return Schedule.ENDED;
         return Schedule.ONGOING;
     }
 
-    // ---- Thao tác được phép (bảng quyết định) ----
-
+    // Thao tác được phép theo lịch và trạng thái bật/tắt
     public boolean canEdit(LocalDateTime now) {
         return schedule(now) == Schedule.UPCOMING;
     }
@@ -73,10 +75,10 @@ public record Promotion(
         return schedule(now) == Schedule.UPCOMING;
     }
 
-    // ---- Tính giảm giá ----
-
+    // Số tiền được giảm trên amount; mã giảm % có thể bị chặn bởi mức giảm tối đa
     public BigDecimal discountOf(BigDecimal amount) {
-        return discountOf(amount, discountType, discountValue);
+        BigDecimal discount = discountOf(amount, discountType, discountValue);
+        return maxDiscountAmount == null ? discount : discount.min(maxDiscountAmount);
     }
 
     public BigDecimal priceAfter(BigDecimal price) {
@@ -91,7 +93,7 @@ public record Promotion(
     }
 
     public Promotion withProductIds(List<Integer> ids) {
-        return new Promotion(promotionId, type, name, description, discountType, discountValue, minOrderValue,
-                usageLimit, usedCount, applyScope, ids, startDate, endDate, status, createdBy);
+        return new Promotion(promotionId, type, name, description, discountType, discountValue, minOrderValue, maxDiscountAmount,
+                usageLimit, usedCount, applyScope, ids, startDate, endDate, status);
     }
 }

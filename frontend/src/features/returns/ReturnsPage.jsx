@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -18,16 +18,17 @@ import {
   CircularProgress,
   Tooltip,
   Divider,
-  Paper
+  Tab,
+  Tabs
 } from '@mui/material';
-import { Pager } from 'features/account/components/Blocks';
+import { FilterField, FilterResetButton, filterInputSx, Pager, Toolbar } from 'features/account/components/Blocks';
+import { useDebounced } from 'features/account/hooks';
+import { brand, cardSx as panelSx } from 'features/account/tokens';
+import { PAGE_TYPE, pageSubtitleSx, pageTitleSx } from 'themes/pageType';
 import {
   SearchOutlined,
   PlusOutlined,
-  RollbackOutlined,
-  EyeOutlined,
   ExperimentOutlined,
-  SyncOutlined,
   AuditOutlined,
   DollarCircleOutlined
 } from '@ant-design/icons';
@@ -88,6 +89,8 @@ export default function ReturnsPage() {
   // Filters
   const [activeTab, setActiveTab] = useState('ALL');
   const [search, setSearch] = useState('');
+  // Gõ xong mới tìm (giống trang Đơn hàng online), không gọi API sau mỗi phím
+  const query = useDebounced(search.trim());
   const [page, setPage] = useState(1);
 
   // Dialogs
@@ -96,14 +99,17 @@ export default function ReturnsPage() {
   const [selectedReturn, setSelectedReturn] = useState(null);
   const [seeding, setSeeding] = useState(false);
 
-  const loadData = useCallback(async () => {
+  // silent = tải lại nền (định kỳ / quay lại tab): không hiện vòng quay, lỗi mạng thoáng qua thì bỏ qua
+  const loadData = useCallback(async (silent = false) => {
     try {
-      setLoading(true);
-      setError('');
+      if (!silent) {
+        setLoading(true);
+        setError('');
+      }
 
       const res = await getReturnRequests({
         status: activeTab,
-        search,
+        search: query,
         page,
         pageSize: PAGE_SIZE
       });
@@ -113,14 +119,27 @@ export default function ReturnsPage() {
       setTotalPages(res.totalPages || 1);
     } catch (err) {
       console.error('Failed to load return requests:', err);
-      setError(err?.message || 'Không thể tải danh sách hoàn hàng.');
+      if (!silent) setError(err?.message || 'Không thể tải danh sách hoàn hàng.');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  }, [activeTab, search, page]);
+  }, [activeTab, query, page]);
 
   useEffect(() => {
     loadData();
+  }, [loadData]);
+
+  // Không còn nút "Làm mới": danh sách tự tải lại khi quay lại tab và định kỳ khi tab đang mở (giống Đơn hàng online)
+  useEffect(() => {
+    const refresh = () => document.visibilityState === 'visible' && loadData(true);
+    const timer = setInterval(refresh, 15000);
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
   }, [loadData]);
 
   const handleSeedSampleOrder = async () => {
@@ -170,10 +189,10 @@ export default function ReturnsPage() {
         sx={{ mb: 2.5 }}
       >
         <Box>
-          <Typography sx={{ fontSize: { xs: 24, md: 28 }, fontWeight: 700, color: COLORS.text }}>
+          <Typography variant="h3" sx={{ ...pageTitleSx, color: COLORS.text }}>
             Quản lý đổi trả & hoàn hàng
           </Typography>
-          <Typography fontSize={13} color={COLORS.muted} sx={{ mt: 0.5 }}>
+          <Typography color={COLORS.muted} sx={{ ...pageSubtitleSx, mt: 0.75 }}>
             Theo dõi các yêu cầu đổi trả của khách hàng, phê duyệt, nhận hàng và tự động cập nhật lại tồn kho.
           </Typography>
         </Box>
@@ -229,66 +248,76 @@ export default function ReturnsPage() {
         </Alert>
       )}
 
-      {/* QUICK TABS */}
-      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 2.5 }}>
-        {tabs.map((tab) => {
-          const selected = activeTab === tab.key;
-          return (
-            <Button
-              key={tab.key}
-              variant="outlined"
-              onClick={() => {
-                setActiveTab(tab.key);
-                setPage(1);
-              }}
-              sx={{
-                textTransform: 'none',
-                borderColor: selected ? COLORS.cyan : COLORS.border,
-                bgcolor: selected ? COLORS.cyan : '#FFFFFF',
-                color: COLORS.text,
-                fontWeight: selected ? 700 : 500,
-                fontSize: 12,
-                px: 2,
-                '&:hover': { bgcolor: COLORS.cyanLight, borderColor: COLORS.cyan }
-              }}
-            >
-              {tab.label}
-            </Button>
-          );
-        })}
-      </Stack>
-
-      {/* SEARCH BAR */}
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mb: 2.5 }}>
-        <TextField
-          size="small"
-          fullWidth
-          placeholder="Tìm kiếm theo mã phiếu, mã đơn hàng, tên khách hàng hoặc SĐT..."
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
+      {/* TAB TRẠNG THÁI: cùng kiểu trang Đơn hàng online (thẻ trắng, gạch chân cyan, các tab giãn đều) */}
+      <Box sx={{ ...panelSx, p: 0.5, mb: 2, bgcolor: brand.surface, borderRadius: '12px' }}>
+        <Tabs
+          value={activeTab}
+          onChange={(_, value) => {
+            setActiveTab(value);
             setPage(1);
           }}
-          slotProps={{
-            input: {
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchOutlined />
-                </InputAdornment>
-              )
+          variant="scrollable"
+          scrollButtons="auto"
+          allowScrollButtonsMobile
+          aria-label="Lọc yêu cầu đổi trả theo trạng thái"
+          sx={{
+            minHeight: 44,
+            '& .MuiTabs-indicator': { bgcolor: brand.cyan, height: 3, borderRadius: '3px 3px 0 0' },
+            '& .MuiTab-root': {
+              minHeight: 44,
+              py: 1.25,
+              px: { xs: 1.5, sm: 2.25 },
+              textTransform: 'none',
+              fontWeight: 600,
+              fontSize: 14,
+              color: brand.muted,
+              transition: 'color 0.2s ease',
+              '&.Mui-selected': { color: brand.ink, fontWeight: 700 },
+              '&:hover': { color: brand.ink }
             }
           }}
-          sx={{ bgcolor: '#FFFFFF', '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
-        />
-        <Button
-          variant="outlined"
-          startIcon={<SyncOutlined />}
-          onClick={loadData}
-          sx={{ textTransform: 'none', minWidth: 100, borderColor: COLORS.border, color: COLORS.text }}
         >
-          Làm mới
-        </Button>
-      </Stack>
+          {tabs.map((tab) => (
+            <Tab key={tab.key} value={tab.key} label={tab.label} sx={{ flex: 1, minWidth: { xs: 100, sm: 120 } }} />
+          ))}
+        </Tabs>
+      </Box>
+
+      {/* THANH TÌM KIẾM: cùng kiểu thanh lọc trang Đơn hàng online (nhãn nằm trên ô, cao 44) */}
+      <Toolbar>
+        <Box sx={{ flex: 1, display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 1.5 }}>
+          <FilterField label="Tìm kiếm" grow>
+            <TextField
+              fullWidth
+              size="small"
+              placeholder="Tìm theo mã phiếu, mã đơn hàng, tên khách hàng hoặc SĐT..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              slotProps={{
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchOutlined style={{ color: '#94A3B8', fontSize: 16 }} />
+                    </InputAdornment>
+                  )
+                },
+                htmlInput: { 'aria-label': 'Tìm kiếm yêu cầu đổi trả' }
+              }}
+              sx={filterInputSx()}
+            />
+          </FilterField>
+          <FilterResetButton
+            disabled={!search}
+            onClick={() => {
+              setSearch('');
+              setPage(1);
+            }}
+          />
+        </Box>
+      </Toolbar>
 
       {/* DATA TABLE */}
       <Card sx={cardSx}>
@@ -296,11 +325,11 @@ export default function ReturnsPage() {
           <Table sx={{ minWidth: 950, '& .MuiTableCell-root': { borderColor: COLORS.border } }}>
             <TableHead>
               <TableRow sx={{ bgcolor: '#F7F9FC' }}>
-                {['Mã yêu cầu', 'Mã đơn hàng', 'Khách hàng', 'Lý do', 'Loại', 'Tiền hoàn', 'Ngày yêu cầu', 'Trạng thái', 'Thao tác'].map((label) => (
+                {['STT', 'Mã yêu cầu', 'Mã đơn hàng', 'Khách hàng', 'Lý do', 'Loại', 'Tiền hoàn', 'Ngày yêu cầu', 'Trạng thái', 'Thao tác'].map((label) => (
                   <TableCell
                     key={label}
-                    align={label === 'Thao tác' ? 'center' : label === 'Tiền hoàn' ? 'right' : 'left'}
-                    sx={{ fontSize: 11, fontWeight: 600, color: COLORS.muted, py: 1.75 }}
+                    align={label === 'Thao tác' || label === 'STT' ? 'center' : label === 'Tiền hoàn' ? 'right' : 'left'}
+                    sx={{ fontSize: PAGE_TYPE.th, fontWeight: 600, color: COLORS.muted, py: 1.75, ...(label === 'STT' ? { width: 56 } : {}) }}
                   >
                     {label.toUpperCase()}
                   </TableCell>
@@ -311,10 +340,10 @@ export default function ReturnsPage() {
             <TableBody>
               {loading && (
                 <TableRow>
-                  <TableCell colSpan={9} align="center" sx={{ py: 6 }}>
+                  <TableCell colSpan={10} align="center" sx={{ py: 6 }}>
                     <Stack alignItems="center" spacing={1}>
                       <CircularProgress size={28} />
-                      <Typography fontSize={12} color={COLORS.muted}>
+                      <Typography fontSize={PAGE_TYPE.td} color={COLORS.muted}>
                         Đang tải danh sách đổi trả...
                       </Typography>
                     </Stack>
@@ -324,11 +353,11 @@ export default function ReturnsPage() {
 
               {!loading && returnList.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={9} align="center" sx={{ py: 6 }}>
-                    <Typography fontSize={13} fontWeight={600} color={COLORS.text}>
+                  <TableCell colSpan={10} align="center" sx={{ py: 6 }}>
+                    <Typography fontSize={PAGE_TYPE.td} fontWeight={600} color={COLORS.text}>
                       Chưa có yêu cầu hoàn hàng nào
                     </Typography>
-                    <Typography fontSize={11} color={COLORS.muted} sx={{ mt: 1 }}>
+                    <Typography fontSize={PAGE_TYPE.tdSub} color={COLORS.muted} sx={{ mt: 1 }}>
                       Bấm &quot;Tạo đơn mẫu (Test)&quot; và &quot;Tạo yêu cầu hoàn hàng&quot; để trải nghiệm tính năng.
                     </Typography>
                   </TableCell>
@@ -336,38 +365,54 @@ export default function ReturnsPage() {
               )}
 
               {!loading &&
-                returnList.map((row) => (
+                returnList.map((row, index) => (
                   <TableRow
                     key={row.returnRequestId}
                     hover
-                    sx={{ cursor: 'pointer', '&:last-child td': { borderBottom: 0 } }}
+                    // Bấm vào dòng (hoặc Enter) là xem chi tiết phiếu, không cần nút "Chi tiết" riêng
+                    tabIndex={0}
+                    role="link"
+                    aria-label={`Xem chi tiết yêu cầu #${row.returnRequestId}`}
+                    sx={{
+                      cursor: 'pointer',
+                      '&:last-child td': { borderBottom: 0 },
+                      '&:focus-visible': { outline: `2px solid ${COLORS.cyan}`, outlineOffset: '-2px' }
+                    }}
                     onClick={() => handleOpenDetail(row)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && e.target === e.currentTarget) handleOpenDetail(row);
+                    }}
                   >
+                    <TableCell align="center">
+                      <Typography fontSize={PAGE_TYPE.td} color={COLORS.muted}>
+                        {(page - 1) * PAGE_SIZE + index + 1}
+                      </Typography>
+                    </TableCell>
                     <TableCell>
-                      <Typography fontSize={12} fontWeight={700} color={COLORS.text}>
+                      <Typography fontSize={PAGE_TYPE.td} fontWeight={700} color={COLORS.text}>
                         #{row.returnRequestId}
                       </Typography>
                     </TableCell>
 
                     <TableCell>
-                      <Typography fontSize={12} fontWeight={600} color="#0E7A88">
+                      <Typography fontSize={PAGE_TYPE.td} fontWeight={600} color="#0E7A88">
                         {row.orderNumber}
                       </Typography>
                     </TableCell>
 
                     <TableCell>
-                      <Typography fontSize={12} fontWeight={600} color={COLORS.text}>
+                      <Typography fontSize={PAGE_TYPE.td} fontWeight={600} color={COLORS.text}>
                         {row.customerName || 'Khách vãng lai'}
                       </Typography>
                       {row.customerPhone && (
-                        <Typography fontSize={11} color={COLORS.muted}>
+                        <Typography fontSize={PAGE_TYPE.tdSub} color={COLORS.muted}>
                           {row.customerPhone}
                         </Typography>
                       )}
                     </TableCell>
 
                     <TableCell sx={{ maxWidth: 200 }}>
-                      <Typography fontSize={12} color={COLORS.text} noWrap>
+                      <Typography fontSize={PAGE_TYPE.td} color={COLORS.text} noWrap>
                         {row.reason}
                       </Typography>
                     </TableCell>
@@ -382,13 +427,13 @@ export default function ReturnsPage() {
                     </TableCell>
 
                     <TableCell align="right">
-                      <Typography fontSize={12} fontWeight={700} color={COLORS.green}>
+                      <Typography fontSize={PAGE_TYPE.td} fontWeight={700} color={COLORS.green}>
                         {formatPrice(row.totalRefundAmount)}
                       </Typography>
                     </TableCell>
 
                     <TableCell>
-                      <Typography fontSize={11} color={COLORS.muted}>
+                      <Typography fontSize={PAGE_TYPE.td} color={COLORS.muted}>
                         {row.requestedAt ? new Date(row.requestedAt).toLocaleDateString('vi-VN') : '—'}
                       </Typography>
                     </TableCell>
@@ -432,16 +477,7 @@ export default function ReturnsPage() {
                         >
                           Nhập kho
                         </Button>
-                      ) : (
-                        <Button
-                          size="small"
-                          startIcon={<EyeOutlined />}
-                          onClick={() => handleOpenDetail(row)}
-                          sx={{ textTransform: 'none', fontSize: 11, color: COLORS.text }}
-                        >
-                          Chi tiết
-                        </Button>
-                      )}
+                      ) : null}
                     </TableCell>
                   </TableRow>
                 ))}

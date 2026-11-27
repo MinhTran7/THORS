@@ -88,10 +88,6 @@ export default function FamilyFormPage() {
   return (
     <Box>
       <PageHeader
-        back={{
-          to: editing ? `/family/${id}` : '/family',
-          label: editing ? 'Chi tiết thành viên gia đình' : 'Danh sách gia đình / Thành viên mới'
-        }}
         title={editing ? 'Sửa thành viên gia đình' : 'Biểu mẫu thành viên gia đình'}
         subtitle={editing ? 'Cập nhật tên hiển thị của tài khoản này.' : 'Tạo tài khoản an toàn cho thành viên gia đình.'}
       />

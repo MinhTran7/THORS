@@ -360,7 +360,7 @@ class ChatRagUnitTest {
         }
 
         @Test
-        @DisplayName("UTC-CHAT-060: Đoạn tốt nhất vẫn dưới 0.65 thì không lấy gì")
+        @DisplayName("UTC-CHAT-024: Đoạn tốt nhất vẫn dưới 0.65 thì không lấy gì")
         void bestBelowMin() {
             when(kRepo.loadAll()).thenReturn(List.of(new Stored("PRODUCT", "10", "SP 10", "h", new float[] {0.62f, 0.785f})));
             knowledge.reload();
@@ -432,7 +432,7 @@ class ChatRagUnitTest {
         }
 
         @Test
-        @DisplayName("UTC-CHAT-024: Tìm theo nghĩa ra sản phẩm dù tên không khớp")
+        @DisplayName("UTC-CHAT-025: Tìm theo nghĩa ra sản phẩm dù tên không khớp")
         void semantic() throws Exception {
             when(knowledge.search("đồ đi biển", Set.of(ChatKnowledge.PRODUCT), 12))
                     .thenReturn(List.of(new Hit("PRODUCT", "3", PRODUCT_3, 0.82)));
@@ -451,7 +451,7 @@ class ChatRagUnitTest {
         }
 
         @Test
-        @DisplayName("UTC-CHAT-025: Gộp kết quả theo nghĩa và theo tên, không trùng")
+        @DisplayName("UTC-CHAT-026: Gộp kết quả theo nghĩa và theo tên, không trùng")
         void mergeNoDuplicate() throws Exception {
             when(knowledge.search(any(), any(), anyInt())).thenReturn(List.of(new Hit("PRODUCT", "3", PRODUCT_3, 0.82)));
             linenProduct();
@@ -464,7 +464,7 @@ class ChatRagUnitTest {
         }
 
         @Test
-        @DisplayName("UTC-CHAT-026: Bỏ sản phẩm đã ngừng bán")
+        @DisplayName("UTC-CHAT-027: Bỏ sản phẩm đã ngừng bán")
         void skipsStopped() throws Exception {
             when(knowledge.search(any(), any(), anyInt()))
                     .thenReturn(List.of(new Hit("PRODUCT", "4", "SP 4", 0.9), new Hit("PRODUCT", "3", PRODUCT_3, 0.8)));
@@ -476,7 +476,7 @@ class ChatRagUnitTest {
         }
 
         @Test
-        @DisplayName("UTC-CHAT-027: Sản phẩm không còn biến thể bán online")
+        @DisplayName("UTC-CHAT-028: Sản phẩm không còn biến thể bán online")
         void noVariants() throws Exception {
             when(knowledge.search(any(), any(), anyInt())).thenReturn(List.of(new Hit("PRODUCT", "3", PRODUCT_3, 0.82)));
             when(shop.findProduct(3)).thenReturn(Map.of("productName", "Áo Sơ Mi Linen", "categoryName", "Áo"));
@@ -487,7 +487,7 @@ class ChatRagUnitTest {
         }
 
         @Test
-        @DisplayName("UTC-CHAT-028: Vượt ngân sách khách nêu")
+        @DisplayName("UTC-CHAT-029: Vượt ngân sách khách nêu")
         void overBudget() throws Exception {
             when(knowledge.search(any(), any(), anyInt())).thenReturn(List.of(new Hit("PRODUCT", "3", PRODUCT_3, 0.82)));
             when(shop.findProduct(3)).thenReturn(Map.of("productName", "Áo Sơ Mi Linen", "categoryName", "Áo"));
@@ -498,7 +498,7 @@ class ChatRagUnitTest {
         }
 
         @Test
-        @DisplayName("UTC-CHAT-029: Tìm theo nghĩa lỗi thì quay về tìm theo tên")
+        @DisplayName("UTC-CHAT-030: Tìm theo nghĩa lỗi thì quay về tìm theo tên")
         void fallbackToName() throws Exception {
             when(knowledge.search(any(), any(), anyInt())).thenThrow(new GeminiException("Gemini trả lỗi HTTP 429: quota", true));
             when(shop.findProducts("giày", null, null, 0, 12)).thenReturn(List.of(row(3, "Giày Da Nam", 500000, 4)));
@@ -508,11 +508,31 @@ class ChatRagUnitTest {
         }
 
         @Test
-        @DisplayName("UTC-CHAT-030: Không có gì phù hợp")
+        @DisplayName("UTC-CHAT-031: Không có gì phù hợp")
         void nothing() throws Exception {
             JsonNode r = run("search_products", "{\"query\":\"xe máy\"}");
             assertEquals(0, r.path("products").size());
             assertEquals("Không tìm thấy sản phẩm phù hợp", r.path("note").asText());
+        }
+
+        @Test
+        @DisplayName("UTC-CHAT-032: Tìm theo nghĩa ra 8 sản phẩm thì chỉ trả 6 sản phẩm điểm cao nhất")
+        void maxSixProducts() throws Exception {
+            List<Hit> hits = new ArrayList<>();
+            for (int id = 1; id <= 8; id++) {
+                hits.add(new Hit("PRODUCT", String.valueOf(id), "SP " + id, 0.95 - id * 0.01));
+                when(shop.findProduct(id)).thenReturn(Map.of("productName", "Áo " + id, "categoryName", "Áo"));
+                when(shop.findVariants(id)).thenReturn(List.of(Map.of("price", 150000, "stock", 3)));
+            }
+            when(knowledge.search("áo", Set.of(ChatKnowledge.PRODUCT), 12)).thenReturn(hits);
+
+            JsonNode r = run("search_products", "{\"query\":\"áo\"}");
+
+            List<Integer> ids = new ArrayList<>();
+            r.path("products").forEach(p -> ids.add(p.path("product_id").asInt()));
+            assertEquals(List.of(1, 2, 3, 4, 5, 6), ids);
+            assertFalse(ids.contains(7));
+            assertFalse(ids.contains(8));
         }
     }
 
@@ -531,7 +551,7 @@ class ChatRagUnitTest {
         }
 
         @Test
-        @DisplayName("UTC-CHAT-031: Trả đúng đoạn FAQ liên quan")
+        @DisplayName("UTC-CHAT-033: Trả đúng đoạn FAQ liên quan")
         void found() throws Exception {
             when(knowledge.search("có freeship không", Set.of(ChatKnowledge.FAQ, ChatKnowledge.POLICY), 3))
                     .thenReturn(List.of(new Hit("FAQ", "faq-0", FAQ_0, 0.77)));
@@ -542,21 +562,21 @@ class ChatRagUnitTest {
         }
 
         @Test
-        @DisplayName("UTC-CHAT-032: Tìm theo nghĩa lỗi thì trả toàn bộ FAQ + chính sách")
+        @DisplayName("UTC-CHAT-034: Tìm theo nghĩa lỗi thì trả toàn bộ FAQ + chính sách")
         void errorFallback() throws Exception {
             when(knowledge.search(any(), any(), anyInt())).thenThrow(new GeminiException("Gemini trả lỗi HTTP 429: quota", true));
             assertFallback(run("search_policies", "{\"query\":\"đổi trả thế nào\"}"));
         }
 
         @Test
-        @DisplayName("UTC-CHAT-033: Không đoạn nào đạt ngưỡng")
+        @DisplayName("UTC-CHAT-035: Không đoạn nào đạt ngưỡng")
         void emptyFallback() throws Exception {
             when(knowledge.search(any(), any(), anyInt())).thenReturn(List.of());
             assertFallback(run("search_policies", "{\"query\":\"shop ở đâu\"}"));
         }
 
         @Test
-        @DisplayName("UTC-CHAT-034: Không có query")
+        @DisplayName("UTC-CHAT-036: Không có query")
         void noQuery() throws Exception {
             when(knowledge.search(any(), any(), anyInt())).thenReturn(List.of());
             JsonNode r = run("search_policies", "{}");
@@ -580,7 +600,7 @@ class ChatRagUnitTest {
     @DisplayName("ChatBot.runTool(\"get_my_orders\", JsonNode args, int customerId)")
     class MyOrders extends BotTools {
         @Test
-        @DisplayName("UTC-CHAT-035: Đơn đang giao có trạng thái giao hàng và giờ cập nhật")
+        @DisplayName("UTC-CHAT-037: Đơn đang giao có trạng thái giao hàng và giờ cập nhật")
         void shipping() throws Exception {
             when(chats.recentOrders(5, 5)).thenReturn(List.of(ghnOrder()));
             JsonNode o = run("get_my_orders", "{}").path("orders").get(0);
@@ -595,7 +615,7 @@ class ChatRagUnitTest {
         }
 
         @Test
-        @DisplayName("UTC-CHAT-036: Đơn chờ xác nhận chưa có thông tin giao hàng")
+        @DisplayName("UTC-CHAT-038: Đơn chờ xác nhận chưa có thông tin giao hàng")
         void pending() throws Exception {
             when(chats.recentOrders(5, 5)).thenReturn(List.of(pendingOrder()));
             JsonNode o = run("get_my_orders", "{}").path("orders").get(0);
@@ -606,7 +626,7 @@ class ChatRagUnitTest {
         }
 
         @Test
-        @DisplayName("UTC-CHAT-037: Trạng thái giao hàng lạ giữ nguyên")
+        @DisplayName("UTC-CHAT-039: Trạng thái giao hàng lạ giữ nguyên")
         void unknownShipment() throws Exception {
             when(chats.recentOrders(5, 5)).thenReturn(List.of(new RecentOrder(100, "ORD-100", "SHIPPING",
                     LocalDateTime.of(2026, 11, 23, 2, 0), 230000, "GHN", "GHN123", null, null, "x", "XYZ", null)));
@@ -616,12 +636,30 @@ class ChatRagUnitTest {
         }
 
         @Test
-        @DisplayName("UTC-CHAT-038: Khách chưa có đơn")
+        @DisplayName("UTC-CHAT-040: Khách chưa có đơn")
         void noOrders() throws Exception {
             when(chats.recentOrders(5, 5)).thenReturn(List.of());
             JsonNode r = run("get_my_orders", "{}");
             assertEquals(0, r.path("orders").size());
             assertEquals("Khách chưa có đơn hàng online nào", r.path("note").asText());
+        }
+
+        @Test
+        @DisplayName("UTC-CHAT-041: Đơn đã giao có hạn trả hàng = ngày giao + 7 ngày")
+        void deliveredHasReturnDeadline() throws Exception {
+            // Giao lúc 03:00 UTC ngày 20/11/2026 (10:00 giờ Việt Nam).
+            when(chats.recentOrders(5, 5)).thenReturn(List.of(new RecentOrder(120, "ORD-120", "DELIVERED",
+                    LocalDateTime.of(2026, 11, 18, 2, 0), 230000, "GHN", "GHN120",
+                    LocalDateTime.of(2026, 11, 20, 3, 0), null, "Áo Thun (L Trắng) x1", "DELIVERED",
+                    LocalDateTime.of(2026, 11, 20, 3, 0))));
+
+            JsonNode o = run("get_my_orders", "{}").path("orders").get(0);
+
+            assertEquals("ORD-120", o.path("order_number").asText());
+            // putShipping đã chạy cho đơn này: có thông tin đơn vị vận chuyển và mã vận đơn
+            assertEquals("Giao Hàng Nhanh", o.path("carrier").asText());
+            assertEquals("GHN120", o.path("tracking_number").asText());
+            assertTrue(o.path("return_deadline").asText().endsWith("27/11/2026"), o.path("return_deadline").asText());
         }
     }
 
@@ -648,7 +686,7 @@ class ChatRagUnitTest {
         }
 
         @Test
-        @DisplayName("UTC-CHAT-039: Đơn GHN có hành trình đầy đủ")
+        @DisplayName("UTC-CHAT-042: Đơn GHN có hành trình đầy đủ")
         void journey() throws Exception {
             when(chats.ownOrder(5, "ORD-100")).thenReturn(Optional.of(ghnOrder()));
             ghnJourney();
@@ -661,7 +699,7 @@ class ChatRagUnitTest {
         }
 
         @Test
-        @DisplayName("UTC-CHAT-040: Mã đơn có khoảng trắng được bỏ đi")
+        @DisplayName("UTC-CHAT-043: Mã đơn có khoảng trắng được bỏ đi")
         void trims() throws Exception {
             when(chats.ownOrder(5, "ord-100")).thenReturn(Optional.of(ghnOrder()));
             ghnJourney();
@@ -671,7 +709,7 @@ class ChatRagUnitTest {
         }
 
         @Test
-        @DisplayName("UTC-CHAT-041: Sai mã hoặc đơn của khách khác")
+        @DisplayName("UTC-CHAT-044: Sai mã hoặc đơn của khách khác")
         void notOwn() throws Exception {
             when(chats.ownOrder(5, "ORD-999")).thenReturn(Optional.empty());
             JsonNode r = run("track_order", "{\"order_number\":\"ORD-999\"}");
@@ -680,7 +718,7 @@ class ChatRagUnitTest {
         }
 
         @Test
-        @DisplayName("UTC-CHAT-042: Không có mã đơn")
+        @DisplayName("UTC-CHAT-045: Không có mã đơn")
         void blank() throws Exception {
             JsonNode r = run("track_order", "{\"order_number\":\"  \"}");
             assertEquals("Vui lòng cho biết mã đơn hàng cần tra.", r.path("error").asText());
@@ -688,7 +726,7 @@ class ChatRagUnitTest {
         }
 
         @Test
-        @DisplayName("UTC-CHAT-043: GHN lỗi thì trả trạng thái trong DB")
+        @DisplayName("UTC-CHAT-046: GHN lỗi thì trả trạng thái trong DB")
         void ghnDown() throws Exception {
             when(chats.ownOrder(5, "ORD-100")).thenReturn(Optional.of(ghnOrder()));
             when(ghn.isConfigured()).thenReturn(true);
@@ -700,7 +738,7 @@ class ChatRagUnitTest {
         }
 
         @Test
-        @DisplayName("UTC-CHAT-044: GHN chưa cấu hình")
+        @DisplayName("UTC-CHAT-047: GHN chưa cấu hình")
         void ghnNotConfigured() throws Exception {
             when(chats.ownOrder(5, "ORD-100")).thenReturn(Optional.of(ghnOrder()));
             when(ghn.isConfigured()).thenReturn(false);
@@ -710,7 +748,7 @@ class ChatRagUnitTest {
         }
 
         @Test
-        @DisplayName("UTC-CHAT-045: Đơn cửa hàng tự giao")
+        @DisplayName("UTC-CHAT-048: Đơn cửa hàng tự giao")
         void selfDelivery() throws Exception {
             when(chats.ownOrder(5, "ORD-100")).thenReturn(Optional.of(new RecentOrder(100, "ORD-100", "SHIPPING",
                     LocalDateTime.of(2026, 11, 23, 2, 0), 230000, "SELF", null, null, null, "x", null, null)));
@@ -721,7 +759,7 @@ class ChatRagUnitTest {
         }
 
         @Test
-        @DisplayName("UTC-CHAT-046: Đơn chưa giao cho đơn vị vận chuyển")
+        @DisplayName("UTC-CHAT-049: Đơn chưa giao cho đơn vị vận chuyển")
         void notShipped() throws Exception {
             when(chats.ownOrder(5, "ORD-101")).thenReturn(Optional.of(pendingOrder()));
             JsonNode r = run("track_order", "{\"order_number\":\"ORD-101\"}");
@@ -731,7 +769,7 @@ class ChatRagUnitTest {
         }
 
         @Test
-        @DisplayName("UTC-CHAT-047: Trạng thái GHN lạ và thời gian không đọc được")
+        @DisplayName("UTC-CHAT-050: Trạng thái GHN lạ và thời gian không đọc được")
         void unknownStep() throws Exception {
             when(chats.ownOrder(5, "ORD-100")).thenReturn(Optional.of(ghnOrder()));
             when(ghn.isConfigured()).thenReturn(true);
@@ -743,7 +781,7 @@ class ChatRagUnitTest {
         }
 
         @Test
-        @DisplayName("UTC-CHAT-048: Bỏ qua customer_id mô hình tự đưa vào, chỉ dùng khách của cuộc chat")
+        @DisplayName("UTC-CHAT-051: Bỏ qua customer_id mô hình tự đưa vào, chỉ dùng khách của cuộc chat")
         void ignoresCustomerIdFromArgs() throws Exception {
             when(chats.ownOrder(5, "ORD-100")).thenReturn(Optional.of(ghnOrder()));
             ghnJourney();
@@ -759,7 +797,7 @@ class ChatRagUnitTest {
     @DisplayName("GhnClient.parseJourney(JsonNode data)")
     class ParseJourney {
         @Test
-        @DisplayName("UTC-CHAT-049: Sắp các mốc theo thời gian tăng dần")
+        @DisplayName("UTC-CHAT-052: Sắp các mốc theo thời gian tăng dần")
         void sorted() throws Exception {
             List<Step> steps = GhnClient.parseJourney(json.readTree(
                     "{\"log\":[{\"status\":\"picked\",\"updated_date\":\"2026-11-23T03:20:00Z\"},"
@@ -768,7 +806,7 @@ class ChatRagUnitTest {
         }
 
         @Test
-        @DisplayName("UTC-CHAT-050: log là một object")
+        @DisplayName("UTC-CHAT-053: log là một object")
         void singleObject() throws Exception {
             List<Step> steps = GhnClient.parseJourney(json.readTree(
                     "{\"log\":{\"status\":\"delivered\",\"updated_date\":\"2026-11-24T05:00:00Z\"}}"));
@@ -776,13 +814,13 @@ class ChatRagUnitTest {
         }
 
         @Test
-        @DisplayName("UTC-CHAT-051: Không có log")
+        @DisplayName("UTC-CHAT-054: Không có log")
         void noLog() throws Exception {
             assertEquals(List.of(), GhnClient.parseJourney(json.readTree("{\"status\":\"picked\"}")));
         }
 
         @Test
-        @DisplayName("UTC-CHAT-052: Bỏ mốc không có trạng thái")
+        @DisplayName("UTC-CHAT-055: Bỏ mốc không có trạng thái")
         void skipsBlankStatus() throws Exception {
             List<Step> steps = GhnClient.parseJourney(json.readTree(
                     "{\"log\":[{\"status\":\"\",\"updated_date\":\"2026-11-23T02:00:00Z\"},"
@@ -797,7 +835,7 @@ class ChatRagUnitTest {
     @DisplayName("GeminiClient.parseEmbeddings(String raw, int expected)")
     class ParseEmbeddings {
         @Test
-        @DisplayName("UTC-CHAT-053: Đọc 2 vector")
+        @DisplayName("UTC-CHAT-056: Đọc 2 vector")
         void two() {
             List<float[]> v = GeminiClient.parseEmbeddings("{\"embeddings\":[{\"values\":[0.1,0.2]},{\"values\":[0.3,0.4]}]}", 2);
             assertEquals(2, v.size());
@@ -806,7 +844,7 @@ class ChatRagUnitTest {
         }
 
         @Test
-        @DisplayName("UTC-CHAT-054: Thiếu vector")
+        @DisplayName("UTC-CHAT-057: Thiếu vector")
         void missingOne() {
             GeminiException e = assertThrows(GeminiException.class,
                     () -> GeminiClient.parseEmbeddings("{\"embeddings\":[{\"values\":[0.1,0.2]}]}", 2));
@@ -814,14 +852,14 @@ class ChatRagUnitTest {
         }
 
         @Test
-        @DisplayName("UTC-CHAT-055: Không có trường embeddings")
+        @DisplayName("UTC-CHAT-058: Không có trường embeddings")
         void noField() {
             GeminiException e = assertThrows(GeminiException.class, () -> GeminiClient.parseEmbeddings("{}", 2));
             assertEquals("Gemini trả số embedding không khớp (0/2).", e.getMessage());
         }
 
         @Test
-        @DisplayName("UTC-CHAT-056: Không phải JSON")
+        @DisplayName("UTC-CHAT-059: Không phải JSON")
         void notJson() {
             GeminiException e = assertThrows(GeminiException.class, () -> GeminiClient.parseEmbeddings("not json", 1));
             assertEquals("Không đọc được embedding của Gemini.", e.getMessage());
@@ -832,7 +870,7 @@ class ChatRagUnitTest {
     @DisplayName("GeminiClient.embed(List<String> texts, String taskType)")
     class Embed {
         @Test
-        @DisplayName("UTC-CHAT-057: Chưa có API key")
+        @DisplayName("UTC-CHAT-060: Chưa có API key")
         void noKey() {
             GeminiClient client = new GeminiClient("", null, "https://generativelanguage.googleapis.com/v1beta", null, 768);
             GeminiException e = assertThrows(GeminiException.class, () -> client.embed(List.of("áo"), "RETRIEVAL_QUERY"));
@@ -840,7 +878,7 @@ class ChatRagUnitTest {
         }
 
         @Test
-        @DisplayName("UTC-CHAT-058: Danh sách rỗng không gọi mạng")
+        @DisplayName("UTC-CHAT-061: Danh sách rỗng không gọi mạng")
         void emptyList() {
             GeminiClient client = new GeminiClient("k", null, "http://127.0.0.1:1", null, 768);
             assertEquals(List.of(), client.embed(List.of(), "RETRIEVAL_DOCUMENT"));
@@ -860,13 +898,13 @@ class ChatRagUnitTest {
     @DisplayName("ChatKnowledge.descriptionText(String raw)")
     class DescriptionText {
         @Test
-        @DisplayName("UTC-CHAT-061: Chữ thường giữ nguyên")
+        @DisplayName("UTC-CHAT-063: Chữ thường giữ nguyên")
         void plain() {
             assertEquals("Vải linen thoáng mát", ChatKnowledge.descriptionText("Vải linen thoáng mát"));
         }
 
         @Test
-        @DisplayName("UTC-CHAT-062: JSON có cấu trúc thành chữ dễ đọc")
+        @DisplayName("UTC-CHAT-064: JSON có cấu trúc thành chữ dễ đọc")
         void structured() {
             String text = ChatKnowledge.descriptionText(JSON_DESCRIPTION);
             assertEquals(JSON_DESCRIPTION_TEXT, text);
@@ -878,31 +916,31 @@ class ChatRagUnitTest {
         }
 
         @Test
-        @DisplayName("UTC-CHAT-063: JSON chỉ có ảnh theo màu")
+        @DisplayName("UTC-CHAT-065: JSON chỉ có ảnh theo màu")
         void onlyImageColors() {
             assertEquals("", ChatKnowledge.descriptionText("{\"v\":1,\"imageColors\":{\"https://x/a.jpg\":\"Be\"}}"));
         }
 
         @Test
-        @DisplayName("UTC-CHAT-064: JSON hỏng coi là chữ thường")
+        @DisplayName("UTC-CHAT-066: JSON hỏng coi là chữ thường")
         void brokenJson() {
             assertEquals("{abc", ChatKnowledge.descriptionText("{abc"));
         }
 
         @Test
-        @DisplayName("UTC-CHAT-065: JSON không có trường v coi là chữ thường")
+        @DisplayName("UTC-CHAT-067: JSON không có trường v coi là chữ thường")
         void jsonWithoutVersion() {
             assertEquals("{\"intro\":\"x\"}", ChatKnowledge.descriptionText("{\"intro\":\"x\"}"));
         }
 
         @Test
-        @DisplayName("UTC-CHAT-066: null")
+        @DisplayName("UTC-CHAT-068: null")
         void nullDescription() {
             assertEquals("", ChatKnowledge.descriptionText(null));
         }
 
         @Test
-        @DisplayName("UTC-CHAT-067: Bỏ thẻ HTML")
+        @DisplayName("UTC-CHAT-069: Bỏ thẻ HTML")
         void html() {
             assertEquals("Vải linen", ChatKnowledge.descriptionText("<p>Vải <b>linen</b></p>"));
         }
@@ -912,7 +950,7 @@ class ChatRagUnitTest {
     @DisplayName("ChatBot.runTool(\"get_product\", JsonNode args, int customerId)")
     class GetProduct extends BotTools {
         @Test
-        @DisplayName("UTC-CHAT-068: Mô tả JSON được đổi sang chữ trước khi đưa cho mô hình")
+        @DisplayName("UTC-CHAT-070: Mô tả JSON được đổi sang chữ trước khi đưa cho mô hình")
         void jsonDescription() throws Exception {
             when(shop.findProduct(17)).thenReturn(Map.of("productName", "Áo Thun Cổ Tròn Basic", "categoryName", "Áo", "description", JSON_DESCRIPTION));
             when(shop.findVariants(17)).thenReturn(List.of(Map.of("size", "L", "color", "Trắng", "price", 180000, "stock", 3)));
@@ -936,7 +974,7 @@ class ChatRagUnitTest {
         private int calls;
 
         @Test
-        @DisplayName("UTC-CHAT-069: Thành công ngay lần đầu")
+        @DisplayName("UTC-CHAT-071: Thành công ngay lần đầu")
         void firstTime() {
             String r = GeminiClient.retryOn503(() -> {
                 calls++;
@@ -948,7 +986,7 @@ class ChatRagUnitTest {
         }
 
         @Test
-        @DisplayName("UTC-CHAT-070: 503 rồi thành công ở lần 2")
+        @DisplayName("UTC-CHAT-072: 503 rồi thành công ở lần 2")
         void retriesOnce() {
             String r = GeminiClient.retryOn503(() -> {
                 if (++calls == 1) throw new GeminiException("Gemini trả lỗi HTTP 503: high demand", false, 503);
@@ -960,7 +998,7 @@ class ChatRagUnitTest {
         }
 
         @Test
-        @DisplayName("UTC-CHAT-071: 503 cả 2 lần thì ném lỗi của lần 2, không thử lần 3")
+        @DisplayName("UTC-CHAT-073: 503 cả 2 lần thì ném lỗi của lần 2, không thử lần 3")
         void twice503() {
             GeminiException e = assertThrows(GeminiException.class, () -> GeminiClient.retryOn503(() -> {
                 calls++;
@@ -972,7 +1010,7 @@ class ChatRagUnitTest {
         }
 
         @Test
-        @DisplayName("UTC-CHAT-072: 429 hết hạn mức thì không thử lại")
+        @DisplayName("UTC-CHAT-074: 429 hết hạn mức thì không thử lại")
         void quotaNoRetry() {
             GeminiException e = assertThrows(GeminiException.class, () -> GeminiClient.retryOn503(() -> {
                 calls++;
@@ -984,7 +1022,7 @@ class ChatRagUnitTest {
         }
 
         @Test
-        @DisplayName("UTC-CHAT-073: Mất kết nối thì không thử lại")
+        @DisplayName("UTC-CHAT-075: Mất kết nối thì không thử lại")
         void connectionNoRetry() {
             GeminiException e = assertThrows(GeminiException.class, () -> GeminiClient.retryOn503(() -> {
                 calls++;
@@ -1002,7 +1040,7 @@ class ChatRagUnitTest {
     @DisplayName("ChatBot.toolDeclarations(ObjectMapper json)")
     class Tools {
         @Test
-        @DisplayName("UTC-CHAT-059: Đủ 6 công cụ theo thứ tự")
+        @DisplayName("UTC-CHAT-062: Đủ 6 công cụ theo thứ tự")
         void names() {
             List<String> names = new ArrayList<>();
             ChatBot.toolDeclarations(json).forEach(t -> names.add(t.path("name").asText()));

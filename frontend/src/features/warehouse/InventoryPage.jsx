@@ -4,11 +4,12 @@ import { Alert, Box, Button, Checkbox, Chip, CircularProgress, MenuItem, Stack, 
 import { DownOutlined, RightOutlined } from '@ant-design/icons';
 import useSWR from 'swr';
 import MainCard from 'components/MainCard';
+import CategoryTreeSelect from 'components/CategoryTreeSelect';
 import { api } from 'services/http';
 import { useWarehouse } from './WarehouseContext';
 import { FilterResetButton } from 'features/account/components/Blocks';
 import { ActionDialog, DataTable, Metrics, Title } from './components';
-import { money, number, stockStateColor, stockStateLabel, tierName, variantLabel } from './model';
+import { money, number, stockStateColor, stockStateLabel, tierName, variantLabel, warehouseCategories } from './model';
 import { exportSheet } from './excelWorkbook';
 import BarcodePrintDialog from './BarcodePrintDialog';
 import BarcodeScannerDialog from './BarcodeScannerDialog';
@@ -119,7 +120,7 @@ export default function InventoryPage() {
       : [
           { ...p, _kind: 'product', _key: `p${p.product_id}`, _expanded: isOpen(p.product_id) },
           ...(isOpen(p.product_id)
-            ? p.variants.map((v) => ({ ...v, _kind: 'variant', _key: `v${v.detail_id}`, _sx: { bgcolor: 'action.hover' } }))
+            ? p.variants.map((v) => ({ ...v, _kind: 'variant', _key: `v${v.detail_id}`, _sx: { bgcolor: 'action.hover' }, _noIndex: true }))
             : [])
         ]
   );
@@ -252,10 +253,15 @@ export default function InventoryPage() {
             sx={{ flex: 1, minWidth: 240 }}
             slotProps={{ htmlInput: { 'aria-label': 'Tìm tồn kho' } }}
           />
+          <CategoryTreeSelect
+            categories={warehouseCategories(data?.categories)}
+            value={value('categoryId')}
+            onChange={(id) => update({ categoryId: id })}
+            sx={{ minWidth: 170 }}
+          />
           {[
             ['color', 'Màu', (data?.colors || []).map((c) => [c, c])],
             ['size', 'Size', (data?.sizes || []).map((c) => [c, c])],
-            ['categoryId', 'Danh mục', (data?.categories || []).map((c) => [String(c.category_id), c.category_name])],
             ['shelfId', 'Vị trí', shelves.map((t) => [String(t.id), t.label])]
           ].map(([key, label, options]) => (
             <TextField

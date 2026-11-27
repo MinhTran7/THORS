@@ -17,7 +17,6 @@ import {
   InputAdornment,
   ListItemIcon,
   Menu,
-  Select,
   Snackbar,
   Stack,
   Table,
@@ -46,7 +45,9 @@ import {
 
 import { getProducts, changeProductStatus, setProductOnline } from '../../services/productService';
 
-import { categoryFullName, getCategories, sortCategoriesAsTree } from '../../services/categoryService';
+import { getCategories, sortCategoriesAsTree } from '../../services/categoryService';
+import CategoryTreeSelect from 'components/CategoryTreeSelect';
+import { PAGE_TYPE, pageSubtitleSx, pageTitleSx } from 'themes/pageType';
 import { primaryButtonSx, outlineButtonSx } from '../shippingaddress/theme';
 import ProductExcelDialog from './ProductExcelDialog';
 
@@ -78,16 +79,6 @@ const chipSx = (bg, color) => ({
   bgcolor: bg,
   color
 });
-
-const filterSelectSx = {
-  bgcolor: C.surface,
-  borderRadius: 2.5,
-  height: 44,
-  fontSize: 13.5,
-  '& .MuiOutlinedInput-notchedOutline': { borderColor: C.border },
-  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: C.cyan },
-  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: C.cyan }
-};
 
 function formatPrice(price) {
   if (price === null || price === undefined) {
@@ -520,14 +511,13 @@ export default function ProductPage() {
           <Typography
             variant="h3"
             sx={{
-              fontWeight: 800,
-              color: '#0F172A',
-              fontSize: { xs: 22, sm: 26 }
+              ...pageTitleSx,
+              color: '#0F172A'
             }}
           >
             Danh sách sản phẩm
           </Typography>
-          <Typography sx={{ fontSize: 13.5, color: C.muted, mt: 0.5, lineHeight: 1.6 }}>
+          <Typography sx={{ ...pageSubtitleSx, color: C.muted, mt: 0.5 }}>
             Quản lý tồn kho, giá bán và trạng thái mở bán online cho các sản phẩm
           </Typography>
         </Box>
@@ -651,26 +641,18 @@ export default function ProductPage() {
           }}
         />
 
-        <Select
-          fullWidth
-          size="small"
+        {/* Cây danh mục giống ô danh mục ở trang khách: bấm tên để lọc, bấm mũi tên để xem danh mục con */}
+        <CategoryTreeSelect
+          categories={categories}
           disabled={busy}
-          value={categoryFilter}
-          onChange={(event) => {
-            setCategoryFilter(event.target.value);
+          value={categoryFilter === 'ALL' ? '' : categoryFilter}
+          onChange={(id) => {
+            setCategoryFilter(id || 'ALL');
             resetPage();
           }}
-          MenuProps={{ slotProps: { paper: { sx: { maxHeight: 360 } } } }}
-          sx={{ ...filterSelectSx, height: 42 }}
-        >
-          <MenuItem value="ALL">Tất cả danh mục</MenuItem>
-          {categories.map((category) => (
-            <MenuItem key={category.categoryId} value={String(category.categoryId)} sx={{ pl: 2 + (category.depth || 0) * 2 }}>
-              {category.parentId ? categoryFullName(category) : category.categoryName}
-              {category.status !== 'ACTIVE' ? ' (Đã ngưng)' : ''}
-            </MenuItem>
-          ))}
-        </Select>
+          height={42}
+          sx={{ width: '100%', minWidth: 0, bgcolor: C.surface, borderColor: C.border, borderRadius: 2.5, '&:hover': { borderColor: C.cyan } }}
+        />
       </Box>
 
       {/* ─── KHỐI BẢNG DANH SÁCH SẢN PHẨM ─── */}
@@ -692,7 +674,7 @@ export default function ProductPage() {
               '& th': {
                 bgcolor: C.surface,
                 color: C.muted,
-                fontSize: 12,
+                fontSize: PAGE_TYPE.th,
                 fontWeight: 700,
                 textTransform: 'uppercase',
                 letterSpacing: 0.5,
@@ -702,7 +684,7 @@ export default function ProductPage() {
               '& td': {
                 borderColor: C.borderLight,
                 py: 2,
-                fontSize: 13.5,
+                fontSize: PAGE_TYPE.td,
                 color: C.text
               }
             }}
@@ -710,6 +692,9 @@ export default function ProductPage() {
             {/* TABLE HEADER */}
             <TableHead>
               <TableRow>
+                <TableCell align="center" sx={{ width: 64, pl: 2 }}>
+                  STT
+                </TableCell>
                 <TableCell sx={{ pl: 3 }}>SẢN PHẨM</TableCell>
                 <TableCell sx={{ width: 200 }}>GIÁ BÁN</TableCell>
                 <TableCell sx={{ width: 130 }}>TỒN KHO</TableCell>
@@ -722,7 +707,7 @@ export default function ProductPage() {
             <TableBody>
               {loading && (
                 <TableRow>
-                  <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
+                  <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
                     <Stack alignItems="center" spacing={1.5}>
                       <CircularProgress size={32} sx={{ color: C.cyan }} />
                       <Typography fontSize={13.5} color={C.muted}>
@@ -734,7 +719,7 @@ export default function ProductPage() {
               )}
 
               {!loading &&
-                paginatedProducts.map((product) => {
+                paginatedProducts.map((product, index) => {
                   const isActive = product.status === 'ACTIVE';
                   const isOnline = isOnlineProduct(product);
                   const alert = stockAlert(product);
@@ -749,8 +734,14 @@ export default function ProductPage() {
                     <TableRow
                       key={product.productId}
                       hover={!busy}
+                      // Bấm vào dòng là xem chi tiết (không còn mục "Xem chi tiết" trong menu ⋯)
+                      tabIndex={busy ? -1 : 0}
+                      aria-label={`Xem chi tiết sản phẩm ${product.productName}`}
                       onClick={() => {
                         if (!busy) viewProduct(product.productId);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && e.target === e.currentTarget && !busy) viewProduct(product.productId);
                       }}
                       sx={{
                         cursor: busy ? 'default' : 'pointer',
@@ -758,6 +749,10 @@ export default function ProductPage() {
                         '&:hover': { bgcolor: '#FAFCFE' }
                       }}
                     >
+                      <TableCell align="center" sx={{ pl: 2, color: `${C.muted} !important` }}>
+                        {(currentPage - 1) * PAGE_SIZE + index + 1}
+                      </TableCell>
+
                       {/* PRODUCT NAME */}
                       <TableCell sx={{ pl: 3, py: 2 }}>
                         <Stack direction="row" spacing={1.75} alignItems="center">
@@ -779,11 +774,11 @@ export default function ProductPage() {
                           </Avatar>
 
                           <Box sx={{ minWidth: 0 }}>
-                            <Typography sx={{ fontSize: 13.5, fontWeight: 800, color: '#0F172A' }} noWrap>
+                            <Typography sx={{ fontSize: PAGE_TYPE.td, fontWeight: 800, color: '#0F172A' }} noWrap>
                               {product.productName}
                             </Typography>
                             {/* Dòng phụ: danh mục · mã biến thể đầu (+N) · số biến thể */}
-                            <Typography sx={{ fontSize: 12, color: '#94A3B8', mt: 0.25 }} noWrap>
+                            <Typography sx={{ fontSize: PAGE_TYPE.tdSub, color: '#94A3B8', mt: 0.25 }} noWrap>
                               {[
                                 product.categoryName,
                                 codes.length ? `${codes[0]}${codes.length > 1 ? ` +${codes.length - 1}` : ''}` : null,
@@ -798,7 +793,7 @@ export default function ProductPage() {
 
                       {/* SELLING PRICE */}
                       <TableCell>
-                        <Typography sx={{ fontSize: 13.5, fontWeight: 800, color: '#0F172A' }}>{displayPrice(product)}</Typography>
+                        <Typography sx={{ fontSize: PAGE_TYPE.td, fontWeight: 800, color: '#0F172A' }}>{displayPrice(product)}</Typography>
                       </TableCell>
 
                       {/* STOCK — tồn của biến thể đang hoạt động; có thể bán = tồn − đang giữ cho đơn */}
@@ -818,9 +813,9 @@ export default function ProductPage() {
                             component="span"
                             sx={
                               alert?.level === 'NEW'
-                                ? { fontSize: 13, fontWeight: 600, color: C.subtle }
+                                ? { fontSize: PAGE_TYPE.td, fontWeight: 600, color: C.subtle }
                                 : {
-                                    fontSize: 13.5,
+                                    fontSize: PAGE_TYPE.td,
                                     fontWeight: 700,
                                     color: alert?.level === 'OUT' ? '#DC2626' : alert?.level === 'LOW' ? '#B45309' : C.text
                                   }
@@ -828,7 +823,7 @@ export default function ProductPage() {
                           >
                             {alert?.level === 'NEW' ? 'Chưa nhập' : totalStock}
                             {sellable !== totalStock && (
-                              <Box component="span" sx={{ fontSize: 12, fontWeight: 600, color: C.muted, ml: 0.75 }}>
+                              <Box component="span" sx={{ fontSize: PAGE_TYPE.tdSub, fontWeight: 600, color: C.muted, ml: 0.75 }}>
                                 (bán được {sellable})
                               </Box>
                             )}
@@ -853,7 +848,7 @@ export default function ProductPage() {
                       </TableCell>
 
                       {/* ACTIONS */}
-                      <TableCell align="right" sx={{ pr: 3 }}>
+                      <TableCell align="right" sx={{ pr: 3 }} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
                         <Stack direction="row" alignItems="center" justifyContent="flex-end" spacing={0.5}>
                           <Tooltip title="Chỉnh sửa">
                             <IconButton
@@ -898,7 +893,7 @@ export default function ProductPage() {
 
               {!loading && filteredProducts.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
+                  <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
                     <Typography sx={{ fontSize: 14, fontWeight: 800, color: '#0F172A' }}>
                       {products.length === 0 ? 'Chưa có sản phẩm nào trong kho' : 'Không tìm thấy sản phẩm phù hợp'}
                     </Typography>
@@ -935,7 +930,7 @@ export default function ProductPage() {
         </Typography>
       </Box>
 
-      {/* MENU ⋯: xem, ẩn/hiện, bật/tắt bán online (mở hộp thoại xác nhận như trước) */}
+      {/* MENU ⋯: ẩn/hiện, bật/tắt bán online (mở hộp thoại xác nhận như trước); xem chi tiết = bấm vào dòng */}
       <Menu
         anchorEl={menuAnchor}
         open={Boolean(menuAnchor)}
@@ -945,19 +940,6 @@ export default function ProductPage() {
         slotProps={{ paper: { sx: { borderRadius: 2.5, minWidth: 220, mt: 0.5 } } }}
       >
         {menuProduct && [
-          <MenuItem
-            key="view"
-            onClick={() => {
-              setMenuAnchor(null);
-              viewProduct(menuProduct.productId);
-            }}
-            sx={{ fontSize: 13.5, fontWeight: 600 }}
-          >
-            <ListItemIcon>
-              <EyeOutlined />
-            </ListItemIcon>
-            Xem chi tiết
-          </MenuItem>,
           <MenuItem
             key="online"
             disabled={menuProduct.status !== 'ACTIVE'}

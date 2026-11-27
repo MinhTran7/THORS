@@ -105,6 +105,9 @@ export default function OrdersPage() {
           <Table size="small">
             <TableHead>
               <TableRow>
+                <TableCell align="center" sx={{ width: 56 }}>
+                  STT
+                </TableCell>
                 <TableCell>Mã phiếu</TableCell>
                 <TableCell>Nhà cung cấp</TableCell>
                 <TableCell>Ngày đặt</TableCell>
@@ -114,8 +117,11 @@ export default function OrdersPage() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {rows.map((d) => (
+              {rows.map((d, i) => (
                 <TableRow key={d.receipt_id} hover sx={{ cursor: 'pointer' }} onClick={() => setDetail(d.receipt_id)}>
+                  <TableCell align="center" sx={{ color: 'text.secondary' }}>
+                    {page * size + i + 1}
+                  </TableCell>
                   <TableCell>
                     <Typography color="primary" variant="subtitle2">
                       {orderCode(d.receipt_id)}
@@ -148,7 +154,7 @@ export default function OrdersPage() {
               ))}
               {!rows.length && !isLoading && (
                 <TableRow>
-                  <TableCell colSpan={6} sx={{ py: 5, textAlign: 'center', color: 'text.secondary' }}>
+                  <TableCell colSpan={7} sx={{ py: 5, textAlign: 'center', color: 'text.secondary' }}>
                     Chưa có phiếu đặt phù hợp.
                   </TableCell>
                 </TableRow>

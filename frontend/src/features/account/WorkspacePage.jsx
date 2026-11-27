@@ -10,7 +10,6 @@ import {
   CircularProgress,
   Divider,
   Grid,
-  IconButton,
   LinearProgress,
   Stack,
   Table,
@@ -33,7 +32,6 @@ import {
   FacebookOutlined,
   GlobalOutlined,
   PlusOutlined,
-  ReloadOutlined,
   ShopOutlined,
   ShoppingOutlined,
   TeamOutlined,
@@ -42,7 +40,9 @@ import {
 
 import { useAuth } from 'features/auth/AuthProvider';
 import { getDashboardSummary } from '../../services/dashboardService';
+import { DATE_PRESETS, DateRangeFilter, presetRange } from './components/Blocks';
 import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../shippingaddress/theme';
+import { PAGE_TYPE, pageSubtitleSx, pageTitleSx } from 'themes/pageType';
 
 // Màu bổ sung theo Design System (PromotionPage.jsx)
 const T = {
@@ -61,28 +61,10 @@ const CHANNELS = [
   { key: 'FACEBOOK', label: 'Facebook', color: '#FCD34D', tint: '#FFF7AE', iconColor: '#713F12', icon: <FacebookOutlined /> }
 ];
 
-const RANGES = [
-  { key: 'today', label: 'Hôm nay' },
-  { key: '7d', label: '7 ngày' },
-  { key: '30d', label: '30 ngày' },
-  { key: 'month', label: 'Tháng này' }
-];
-
 // ==========================================
 // HELPERS
 // ==========================================
 
-const pad = (n) => String(n).padStart(2, '0');
-const isoDate = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-
-function rangeDates(key) {
-  const today = new Date();
-  const from = new Date(today);
-  if (key === '7d') from.setDate(today.getDate() - 6);
-  if (key === '30d') from.setDate(today.getDate() - 29);
-  if (key === 'month') from.setDate(1);
-  return { from: isoDate(from), to: isoDate(today) };
-}
 
 const toNumber = (v) => Number(v ?? 0) || 0;
 const money = (v) => `${toNumber(v).toLocaleString('vi-VN')} ₫`;
@@ -222,37 +204,59 @@ const linkButtonSx = {
 
 function StoreDashboard({ account }) {
   const owner = account?.role === 'OWNER';
-  const [rangeKey, setRangeKey] = useState('7d');
+  const [range, setRange] = useState(() => presetRange('7d'));
+  // Xóa trống một ô ngày thì lấy lại khoảng 7 ngày (bảng điều khiển luôn cần một khoảng)
+  const changeRange = ({ from, to }) => setRange(from && to ? { from, to } : presetRange('7d'));
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [updatedAt, setUpdatedAt] = useState(null);
 
-  const load = useCallback(async (key, isActive = () => true) => {
+  // silent = tải lại nền (định kỳ / quay lại tab): không hiện thanh tải, lỗi mạng thoáng qua thì bỏ qua
+  const load = useCallback(async (dates, isActive = () => true, silent = false) => {
     try {
-      setLoading(true);
-      setError('');
-      const result = await getDashboardSummary(rangeDates(key));
+      if (!silent) {
+        setLoading(true);
+        setError('');
+      }
+      const result = await getDashboardSummary(dates);
       if (!isActive()) return;
       setData(result);
-      setUpdatedAt(new Date());
     } catch (err) {
-      if (isActive()) setError(err?.message || 'Không thể tải số liệu bảng điều khiển.');
+      if (isActive() && !silent) setError(err?.message || 'Không thể tải số liệu bảng điều khiển.');
     } finally {
-      if (isActive()) setLoading(false);
+      if (isActive() && !silent) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     let active = true;
-    load(rangeKey, () => active);
+    const dates = { from: range.from, to: range.to };
+    load(dates, () => active);
+    // Không còn nút "Làm mới": số liệu tự cập nhật khi quay lại tab và mỗi phút khi tab đang mở
+    const refresh = () => document.visibilityState === 'visible' && load(dates, () => active, true);
+    const timer = setInterval(refresh, 60000);
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
     return () => {
       active = false;
+      clearInterval(timer);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
     };
-  }, [rangeKey, load]);
+  }, [range.from, range.to, load]);
 
   const firstName = account?.fullName?.trim().split(/\s+/).slice(-1)[0] || 'bạn';
-  const rangeLabel = RANGES.find((r) => r.key === rangeKey)?.label.toLowerCase();
+  // "7 ngày", "tháng này"… hoặc "khoảng 01/11/2026 – 15/11/2026" khi chọn tay
+  const presetHit = DATE_PRESETS.find((p) => {
+    const r = presetRange(p.key);
+    return r.from === range.from && r.to === range.to;
+  });
+  const viDate = (iso) => iso.split('-').reverse().join('/');
+  const rangeLabel = presetHit
+    ? presetHit.label.toLowerCase()
+    : range.from === range.to
+      ? `ngày ${viDate(range.from)}`
+      : `khoảng ${viDate(range.from)} – ${viDate(range.to)}`;
 
   const sales = data?.sales;
   const stock = data?.stock;
@@ -374,52 +378,19 @@ function StoreDashboard({ account }) {
           <Typography sx={{ fontSize: 11.5, fontWeight: 800, color: T.cyanText, letterSpacing: 1, mb: 0.5, textTransform: 'uppercase' }}>
             Hệ thống quản lý THORS
           </Typography>
-          <Typography variant="h3" sx={{ fontSize: { xs: 22, sm: 26 }, fontWeight: 800, color: T.title }}>
+          <Typography variant="h3" sx={{ ...pageTitleSx, color: T.title }}>
             Bảng điều khiển tổng quan
           </Typography>
-          <Typography sx={{ fontSize: 13.5, color: C.muted, mt: 0.5, lineHeight: 1.6 }}>
+          <Typography sx={{ ...pageSubtitleSx, color: C.muted, mt: 0.5, lineHeight: 1.6 }}>
             Xin chào, <strong>{firstName}</strong>! {owner ? 'Số liệu toàn cửa hàng' : 'Số liệu các đơn do bạn tạo (tại quầy, Facebook)'}{' '}
             trong {rangeLabel}.
           </Typography>
         </Box>
 
-        <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
-          {RANGES.map((r) => {
-            const active = r.key === rangeKey;
-            return (
-              <Button
-                key={r.key}
-                onClick={() => setRangeKey(r.key)}
-                disabled={loading && active}
-                sx={{
-                  ...outlineButtonSx,
-                  height: 38,
-                  px: 2,
-                  fontSize: 13,
-                  bgcolor: active ? C.cyan : C.surface,
-                  borderColor: active ? C.cyan : C.border,
-                  color: T.title,
-                  fontWeight: active ? 700 : 600,
-                  '&:hover': { bgcolor: active ? C.cyanHover : C.borderLight }
-                }}
-              >
-                {r.label}
-              </Button>
-            );
-          })}
-
-          <Tooltip title={updatedAt ? `Cập nhật lúc ${updatedAt.toLocaleTimeString('vi-VN')}` : 'Làm mới'}>
-            <span>
-              <IconButton
-                onClick={() => load(rangeKey)}
-                disabled={loading}
-                sx={{ width: 38, height: 38, border: `1px solid ${C.border}`, borderRadius: 2.5, color: C.muted }}
-              >
-                <ReloadOutlined spin={loading} style={{ fontSize: 15 }} />
-              </IconButton>
-            </span>
-          </Tooltip>
-        </Stack>
+        {/* Ô lọc ngày dùng chung: Hôm nay / 7 ngày / 30 ngày / Tháng này hoặc Từ ngày – Đến ngày */}
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 1.5, width: { xs: '100%', md: 'auto' } }}>
+          <DateRangeFilter from={range.from} to={range.to} height={40} width={140} presetWidth={140} allowAll={false} onChange={changeRange} />
+        </Box>
       </Box>
 
       {error && (
@@ -427,7 +398,7 @@ function StoreDashboard({ account }) {
           severity="error"
           sx={{ mb: 2.5, borderRadius: 2.5, fontSize: 13.5, fontWeight: 600 }}
           action={
-            <Button color="inherit" size="small" onClick={() => load(rangeKey)} sx={{ textTransform: 'none', fontWeight: 700 }}>
+            <Button color="inherit" size="small" onClick={() => load(range)} sx={{ textTransform: 'none', fontWeight: 700 }}>
               Thử lại
             </Button>
           }
@@ -595,13 +566,13 @@ function StoreDashboard({ account }) {
                   <Table size="small">
                     <TableHead>
                       <TableRow>
-                        {['#', 'Sản phẩm', 'Số lượng', 'Tiền hàng'].map((h, i) => (
+                        {['STT', 'Sản phẩm', 'Số lượng', 'Tiền hàng'].map((h, i) => (
                           <TableCell
                             key={h}
-                            align={i >= 2 ? 'right' : 'left'}
+                            align={i >= 2 ? 'right' : i === 0 ? 'center' : 'left'}
                             sx={{
                               bgcolor: C.surface,
-                              fontSize: 12,
+                              fontSize: PAGE_TYPE.th,
                               fontWeight: 700,
                               letterSpacing: 0.5,
                               color: C.muted,
@@ -617,7 +588,7 @@ function StoreDashboard({ account }) {
                     <TableBody>
                       {data.topProducts.map((p, index) => (
                         <TableRow key={p.productId} hover sx={{ '&:hover': { bgcolor: '#FAFCFE' } }}>
-                          <TableCell sx={{ py: 1.75, width: 48, fontWeight: 800, color: index === 0 ? T.cyanText : C.muted }}>
+                          <TableCell align="center" sx={{ py: 1.75, width: 56, fontWeight: 800, color: index === 0 ? T.cyanText : C.muted }}>
                             {index + 1}
                           </TableCell>
                           <TableCell sx={{ py: 1.75, fontSize: 13.5, fontWeight: 600, color: C.text }}>{p.productName}</TableCell>
@@ -799,10 +770,10 @@ export default function WorkspacePage() {
 
   return (
     <Box sx={{ maxWidth: 1000, mx: 'auto', py: 4, color: C.text }}>
-      <Typography variant="h3" sx={{ fontWeight: 800, color: T.title, fontSize: { xs: 22, sm: 26 }, mb: 1 }}>
+      <Typography variant="h3" sx={{ ...pageTitleSx, color: T.title, mb: 1 }}>
         Xin chào, {account?.fullName || 'Người dùng'}
       </Typography>
-      <Typography sx={{ fontSize: 13.5, color: C.muted, mb: 3 }}>Bạn đã đăng nhập thành công vào hệ thống quản lý THORS.</Typography>
+      <Typography sx={{ ...pageSubtitleSx, color: C.muted, mb: 3 }}>Bạn đã đăng nhập thành công vào hệ thống quản lý THORS.</Typography>
 
       <Card sx={cardSx}>
         <CardContent sx={{ p: { xs: 2.5, sm: 4 } }}>

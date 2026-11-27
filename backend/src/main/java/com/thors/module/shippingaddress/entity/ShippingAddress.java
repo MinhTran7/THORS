@@ -1,7 +1,5 @@
 package com.thors.module.shippingaddress.entity;
 
-import java.time.LocalDateTime;
-
 public record ShippingAddress(
         int addressId,
         int userId,
@@ -12,7 +10,10 @@ public record ShippingAddress(
         String wardCode,
         String wardName,
         String addressDetail,
-        boolean isDefault,
-        LocalDateTime createdAt,
-        LocalDateTime updatedAt) {
+        boolean isDefault) {
+
+    public ShippingAddress withDefault(boolean value) {
+        return new ShippingAddress(addressId, userId, recipientName, phone, provinceCode, provinceName,
+                wardCode, wardName, addressDetail, value);
+    }
 }

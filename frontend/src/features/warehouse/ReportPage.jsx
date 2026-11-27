@@ -1,12 +1,13 @@
 import { useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
-import { Alert, Button, Checkbox, CircularProgress, FormControlLabel, MenuItem, Stack, TextField, Typography } from '@mui/material';
+import { useSearchParams } from 'react-router-dom';
+import { Alert, Button, Checkbox, CircularProgress, FormControlLabel, Stack, TextField, Typography } from '@mui/material';
 import useSWR from 'swr';
 import MainCard from 'components/MainCard';
+import CategoryTreeSelect from 'components/CategoryTreeSelect';
 import { api } from 'services/http';
 import { DateRangeFilter, FilterResetButton } from 'features/account/components/Blocks';
 import { DataTable, Metrics, Title } from './components';
-import { money, number } from './model';
+import { money, number, warehouseCategories } from './model';
 import { exportSheet } from './excelWorkbook';
 
 const today = () => new Date().toLocaleDateString('sv-SE');
@@ -102,9 +103,6 @@ export default function ReportPage() {
         subtitle="Số hàng nhập, xuất và tồn trong khoảng thời gian bạn chọn."
         action={
           <Stack direction="row" spacing={1}>
-            <Button variant="outlined" component={Link} to="/warehouse/inventory">
-              Quay lại kho
-            </Button>
             <Button variant="outlined" disabled={!data?.items?.length} onClick={exportExcel}>
               Xuất Excel
             </Button>
@@ -114,7 +112,7 @@ export default function ReportPage() {
       <MainCard sx={{ mb: 2 }}>
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} useFlexGap flexWrap="wrap" sx={{ alignItems: { md: 'flex-end' } }}>
           {/* Ô lọc ngày dùng chung; để trống thì về mặc định đầu tháng → hôm nay */}
-          <DateRangeFilter from={from} to={to} height={40} onChange={(range) => set(range)} />
+          <DateRangeFilter from={from} to={to} height={40} allowAll={false} onChange={(range) => set(range)} />
           <TextField
             size="small"
             placeholder="Tìm tên, mã SP, mã vạch"
@@ -125,21 +123,8 @@ export default function ReportPage() {
             sx={{ flex: { xs: 1, md: '1 1 220px' } }}
             slotProps={{ htmlInput: { 'aria-label': 'Tìm trong báo cáo' } }}
           />
-          <TextField
-            select
-            size="small"
-            value={categoryId}
-            onChange={(e) => set({ categoryId: e.target.value })}
-            sx={{ minWidth: 160 }}
-            slotProps={{ select: { displayEmpty: true, inputProps: { 'aria-label': 'Danh mục' } } }}
-          >
-            <MenuItem value="">Tất cả danh mục</MenuItem>
-            {(inv?.categories || []).map((c) => (
-              <MenuItem key={c.category_id} value={String(c.category_id)}>
-                {c.category_name}
-              </MenuItem>
-            ))}
-          </TextField>
+          <CategoryTreeSelect categories={warehouseCategories(inv?.categories)} value={categoryId} onChange={(id) => set({ categoryId: id })} />
+
           <FormControlLabel
             control={<Checkbox checked={!onlyMoving} onChange={(e) => set({ all: e.target.checked ? '1' : '' })} />}
             label="Gồm biến thể không phát sinh"

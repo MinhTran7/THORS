@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link as RouterLink } from 'react-router-dom';
 import useSWR from 'swr';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import { Alert, Box, CircularProgress, Typography } from '@mui/material';
 import { Stack } from '../components/Flex';
-import { ArrowLeftOutlined, CloudUploadOutlined, InfoCircleOutlined, UserOutlined } from '@ant-design/icons';
+import { CloudUploadOutlined, InfoCircleOutlined, UserOutlined } from '@ant-design/icons';
 import { useAuth } from 'features/auth/AuthProvider';
 import { useCrumbs } from 'layouts/crumbs';
 import { imageError } from 'services/imageUpload';
@@ -206,12 +205,6 @@ export default function UpdateProfilePage() {
           </Typography>
         </Box>
       </Box>
-      {/* Khách đã có link quay lại ở đầu trang */}
-      {!isCustomer && (
-        <OutlineButton component={RouterLink} to="/profile" startIcon={<ArrowLeftOutlined />} sx={{ mt: 4, fontSize: fs.body }}>
-          Quay lại hồ sơ
-        </OutlineButton>
-      )}
       {toast}
     </Shell>
   );

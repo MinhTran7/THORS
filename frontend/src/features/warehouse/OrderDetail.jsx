@@ -95,6 +95,9 @@ export default function OrderDetail({ id, onClose, onEdit, onAction, onOpenDocum
             <Table size="small">
               <TableHead>
                 <TableRow>
+                  <TableCell align="center" sx={{ width: 56 }}>
+                    STT
+                  </TableCell>
                   <TableCell>Sản phẩm · màu · size</TableCell>
                   <TableCell align="right">Đơn giá đặt</TableCell>
                   <TableCell align="right">Đặt</TableCell>
@@ -108,8 +111,11 @@ export default function OrderDetail({ id, onClose, onEdit, onAction, onOpenDocum
                 </TableRow>
               </TableHead>
               <TableBody>
-                {d.items.map((i) => (
+                {d.items.map((i, index) => (
                   <TableRow key={i.receipt_item_id}>
+                    <TableCell align="center" sx={{ color: 'text.secondary' }}>
+                      {index + 1}
+                    </TableCell>
                     <TableCell>{variantLabel(i)}</TableCell>
                     <TableCell align="right">{money(i.unit_price)}</TableCell>
                     <TableCell align="right">{number(i.ordered_quantity)}</TableCell>

@@ -420,6 +420,9 @@ export default function ExcelImportDialog({
                     <Table size="small" stickyHeader>
                       <TableHead>
                         <TableRow>
+                          <TableCell align="center" sx={{ width: 56 }}>
+                            STT
+                          </TableCell>
                           <TableCell>Dòng Excel</TableCell>
                           <TableCell>Dữ liệu gốc</TableCell>
                           <TableCell sx={{ minWidth: 240 }}>
@@ -444,13 +447,16 @@ export default function ExcelImportDialog({
                             currentPage * 20,
                             currentPage * 20 + 20
                           )
-                          .map((row) => (
+                          .map((row, rowIndex) => (
                             <TableRow
                               key={row.rowNumber}
                               sx={{
                                 opacity: row.skipped ? 0.5 : 1
                               }}
                             >
+                              <TableCell align="center" sx={{ color: 'text.secondary' }}>
+                                {currentPage * 20 + rowIndex + 1}
+                              </TableCell>
                               <TableCell>
                                 {row.rowNumber}
                               </TableCell>

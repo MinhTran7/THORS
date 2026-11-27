@@ -98,13 +98,19 @@ function formatPrice(val) {
   return `${Number(val).toLocaleString('vi-VN')} ₫`;
 }
 
+/**
+ * Form yêu cầu trả hàng & hoàn tiền của khách.
+ * asPage = true: hiện thẳng trong một trang (OrderReturnPage, /orders/:id/return) thay vì hộp thoại;
+ * khi đó onClose = nút "Hủy bỏ" (quay lại trang trước), open bị bỏ qua.
+ */
 export default function CustomerReturnDialog({
   open,
   onClose,
   orderData,
   isPublic = false,
   verifiedPhone = '',
-  onSuccess
+  onSuccess,
+  asPage = false
 }) {
   const [selectedReasonKey, setSelectedReasonKey] = useState('DEFECT');
   const [customReasonNote, setCustomReasonNote] = useState('');
@@ -304,7 +310,9 @@ export default function CustomerReturnDialog({
         await createReturnRequest(payload);
       }
 
-      handleClose();
+      // Dạng trang: không gọi onClose (trang tự chuyển đi trong onSuccess)
+      resetDialog();
+      if (!asPage) onClose();
       if (onSuccess) {
         onSuccess(
           `Yêu cầu hoàn hàng cho đơn ${orderData.orderNumber} đã gửi thành công! Cửa hàng sẽ kiểm tra và phản hồi sớm nhất.`
@@ -318,19 +326,34 @@ export default function CustomerReturnDialog({
     }
   };
 
+  // Cùng một nội dung, khung bao ngoài là hộp thoại hoặc khối trong trang (kiểu cố định theo asPage nên không mất focus khi gõ)
+  const Root = asPage ? Box : Dialog;
+  const Head = asPage ? Box : DialogTitle;
+  const Body = asPage ? Box : DialogContent;
+  const Foot = asPage ? Box : DialogActions;
+  const rootProps = asPage ? {} : { open, onClose: handleClose, maxWidth: 'md', fullWidth: true };
+  const headProps = asPage ? { sx: { mb: 2.5 } } : { sx: { fontWeight: 700, color: COLORS.text, pb: 1 } };
+  const bodyProps = asPage ? {} : { dividers: true, sx: { pt: 2 } };
+  const footProps = asPage
+    ? { sx: { display: 'flex', justifyContent: 'flex-end', flexWrap: 'wrap', gap: 1.5, mt: 3 } }
+    : { sx: { px: 3, py: 2 } };
+
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
-      <DialogTitle sx={{ fontWeight: 700, color: COLORS.text, pb: 1 }}>
-        <Stack direction="row" alignItems="center" spacing={1}>
-          <RollbackOutlined style={{ color: COLORS.primary }} />
-          <span>Yêu cầu Trả hàng & Hoàn tiền</span>
-        </Stack>
-        <Typography fontSize={13} color={COLORS.muted} sx={{ mt: 0.5 }}>
+    <Root {...rootProps}>
+      <Head {...headProps}>
+        {/* Dạng trang đã có tiêu đề trang riêng */}
+        {!asPage && (
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <RollbackOutlined style={{ color: COLORS.primary }} />
+            <span>Yêu cầu Trả hàng & Hoàn tiền</span>
+          </Stack>
+        )}
+        <Typography fontSize={13} color={COLORS.muted} sx={{ mt: asPage ? 0 : 0.5 }}>
           Đơn hàng: <strong>{orderData?.orderNumber}</strong> • Khách hàng: {orderData?.customerName || 'Khách hàng'}
         </Typography>
-      </DialogTitle>
+      </Head>
 
-      <DialogContent dividers sx={{ pt: 2 }}>
+      <Body {...bodyProps}>
         {/* POLICY ALERT BANNER - OPTION 1 TRANSPARENT POLICY */}
         <Paper
           elevation={0}
@@ -370,6 +393,9 @@ export default function CustomerReturnDialog({
             <TableHead sx={{ bgcolor: '#F8FAFC' }}>
               <TableRow>
                 <TableCell padding="checkbox" />
+                <TableCell align="center" sx={{ fontSize: 12, fontWeight: 700, color: COLORS.muted, width: 48 }}>
+                  STT
+                </TableCell>
                 <TableCell sx={{ fontSize: 12, fontWeight: 700, color: COLORS.muted }}>SẢN PHẨM</TableCell>
                 <TableCell align="right" sx={{ fontSize: 12, fontWeight: 700, color: COLORS.muted }}>ĐƠN GIÁ</TableCell>
                 <TableCell align="center" sx={{ fontSize: 12, fontWeight: 700, color: COLORS.muted }}>ĐÃ MUA</TableCell>
@@ -379,7 +405,7 @@ export default function CustomerReturnDialog({
               </TableRow>
             </TableHead>
             <TableBody>
-              {normalizedItems.map((item) => {
+              {normalizedItems.map((item, index) => {
                 const itemState = selectedItems[item.orderItemId] || { checked: false, quantity: 1 };
                 const canReturn = (item.quantityReturnable || 0) > 0;
                 const subTotal = Number(item.unitPrice || 0) * (itemState.quantity || 1);
@@ -392,6 +418,11 @@ export default function CustomerReturnDialog({
                         disabled={!canReturn || submitting}
                         onChange={(e) => handleItemCheck(item.orderItemId, e.target.checked)}
                       />
+                    </TableCell>
+                    <TableCell align="center">
+                      <Typography fontSize={12} color={COLORS.muted}>
+                        {index + 1}
+                      </Typography>
                     </TableCell>
                     <TableCell>
                       <Typography fontSize={13} fontWeight={600} color={COLORS.text}>
@@ -452,7 +483,7 @@ export default function CustomerReturnDialog({
         </Typography>
 
         <Grid container spacing={2} sx={{ mb: 2.5 }}>
-          <Grid item xs={12} sm={8}>
+          <Grid size={{ xs: 12, sm: 8 }}>
             <FormControl fullWidth size="small">
               <InputLabel id="reason-label">Chọn lý do</InputLabel>
               <Select
@@ -470,7 +501,7 @@ export default function CustomerReturnDialog({
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} sm={4}>
+          <Grid size={{ xs: 12, sm: 4 }}>
             <Paper
               elevation={0}
               sx={{
@@ -490,7 +521,7 @@ export default function CustomerReturnDialog({
               </Typography>
             </Paper>
           </Grid>
-          <Grid item xs={12}>
+          <Grid size={12}>
             <TextField
               size="small"
               fullWidth
@@ -511,7 +542,7 @@ export default function CustomerReturnDialog({
 
         <Paper elevation={0} sx={{ p: 2, mb: 2.5, bgcolor: '#FAFAFA', border: `1px solid ${COLORS.border}`, borderRadius: 2 }}>
           <Grid container spacing={2}>
-            <Grid item xs={12} sm={4}>
+            <Grid size={{ xs: 12, sm: 4 }}>
               <FormControl fullWidth size="small">
                 <InputLabel id="bank-select-label">Ngân hàng</InputLabel>
                 <Select
@@ -529,7 +560,7 @@ export default function CustomerReturnDialog({
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={12} sm={4}>
+            <Grid size={{ xs: 12, sm: 4 }}>
               <TextField
                 size="small"
                 fullWidth
@@ -540,7 +571,7 @@ export default function CustomerReturnDialog({
                 onChange={(e) => setBankAccountNumber(e.target.value)}
               />
             </Grid>
-            <Grid item xs={12} sm={4}>
+            <Grid size={{ xs: 12, sm: 4 }}>
               <TextField
                 size="small"
                 fullWidth
@@ -554,7 +585,7 @@ export default function CustomerReturnDialog({
 
             {/* VERIFY PHONE FOR PUBLIC / GUEST USERS IF NOT ALREADY VERIFIED */}
             {isPublic && !orderData?.verified && (
-              <Grid item xs={12}>
+              <Grid size={12}>
                 <TextField
                   size="small"
                   fullWidth
@@ -569,7 +600,7 @@ export default function CustomerReturnDialog({
             )}
 
             {/* DIRECT FILE UPLOAD ZONE (PHOTOS / VIDEOS) */}
-            <Grid item xs={12}>
+            <Grid size={12}>
               <Box sx={{ mt: 1 }}>
                 <Typography fontSize={13} fontWeight={600} color={COLORS.text} sx={{ mb: 0.5 }}>
                   {activeReason.requireEvidence
@@ -745,9 +776,9 @@ export default function CustomerReturnDialog({
             {submitError}
           </Alert>
         )}
-      </DialogContent>
+      </Body>
 
-      <DialogActions sx={{ px: 3, py: 2 }}>
+      <Foot {...footProps}>
         <Button onClick={handleClose} disabled={submitting} color="inherit">
           Hủy bỏ
         </Button>
@@ -765,7 +796,7 @@ export default function CustomerReturnDialog({
         >
           {submitting ? 'Đang gửi...' : 'Gửi yêu cầu hoàn hàng'}
         </Button>
-      </DialogActions>
-    </Dialog>
+      </Foot>
+    </Root>
   );
 }

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { pageSubtitleSx, pageTitleSx } from 'themes/pageType';
 import {
   Alert,
   Box,
@@ -59,8 +60,10 @@ export function Title({ title, subtitle, action }) {
   return (
     <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ justifyContent: 'space-between', gap: 2, mb: 3 }}>
       <Box>
-        <Typography variant="h3">{title}</Typography>
-        <Typography color="text.secondary" sx={{ mt: 0.75 }}>
+        <Typography variant="h3" sx={pageTitleSx}>
+          {title}
+        </Typography>
+        <Typography color="text.secondary" sx={{ ...pageSubtitleSx, mt: 0.75 }}>
           {subtitle}
         </Typography>
       </Box>
@@ -136,12 +139,18 @@ export function DataTable({ columns, rows, empty = 'Chưa có dữ liệu.', onR
   const page = server ? server.page : localPage;
   const current = server ? page : Math.min(page, Math.max(0, Math.ceil(rows.length / size) - 1));
   const visible = server ? rows : rows.slice(current * size, (current + 1) * size);
+  // Cột STT (mọi bảng đều có): đếm tiếp theo trang; dòng con (_noIndex, vd biến thể xổ ra dưới sản phẩm) không đánh số
+  let counter = current * size;
+  const numbers = visible.map((row) => (row._noIndex ? '' : ++counter));
   return (
     <>
       <TableContainer>
         <Table size="small">
           <TableHead>
             <TableRow>
+              <TableCell align="center" sx={{ width: 56 }}>
+                STT
+              </TableCell>
               {columns.map((c) => (
                 <TableCell key={c.key} align={c.align}>
                   {c.label}
@@ -152,7 +161,7 @@ export function DataTable({ columns, rows, empty = 'Chưa có dữ liệu.', onR
           <TableBody>
             {!rows.length ? (
               <TableRow>
-                <TableCell colSpan={columns.length} sx={{ py: 5, textAlign: 'center', color: 'text.secondary' }}>
+                <TableCell colSpan={columns.length + 1} sx={{ py: 5, textAlign: 'center', color: 'text.secondary' }}>
                   {empty}
                 </TableCell>
               </TableRow>
@@ -165,6 +174,9 @@ export function DataTable({ columns, rows, empty = 'Chưa có dữ liệu.', onR
                   onClick={onRow ? () => onRow(row) : undefined}
                   sx={{ cursor: onRow ? 'pointer' : 'default', ...row._sx }}
                 >
+                  <TableCell align="center" sx={{ color: 'text.secondary' }}>
+                    {numbers[index]}
+                  </TableCell>
                   {columns.map((c) => (
                     <TableCell key={c.key} align={c.align}>
                       {c.render ? c.render(row) : row[c.key]}

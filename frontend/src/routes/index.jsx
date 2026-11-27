@@ -3,7 +3,7 @@ import { Button } from '@mui/material';
 import WarehousePage, { warehouseRoutes } from 'features/warehouse/WarehousePage';
 
 // Authentication
-import RequireAuth from 'features/auth/RequireAuth';
+import RequireAuth, { GuestOrCustomer } from 'features/auth/RequireAuth';
 import { useAuth } from 'features/auth/AuthProvider';
 import OptionalLayout from 'layouts/OptionalLayout';
 import LoginPage from 'features/auth/pages/LoginPage';
@@ -32,6 +32,7 @@ import NotificationDetailPage from 'features/notification/NotificationDetailPage
 // Online Order Management
 import OrderListPage from 'features/order/OrderListPage';
 import OrderDetailPage from 'features/order/OrderDetailPage';
+import OrderReturnPage from 'features/order/OrderReturnPage';
 import OrderTrackingPage from 'features/order/OrderTrackingPage';
 
 // Category Management
@@ -44,13 +45,13 @@ import ProductDetailPage from 'features/product/ProductDetailPage';
 import EditProductPage from 'features/product/EditProductPage';
 
 // Sales
-import InStoreSalesPage from 'features/sales/InStoreSalesPage';
-import InStoreSalesHistoryPage from 'features/sales/InStoreSalesHistoryPage';
-import InStoreSaleDetailPage from 'features/sales/InStoreSaleDetailPage';
-import PromotionPage from 'features/promotion/PromotionPage';
-import AddPromotionPage from 'features/promotion/AddPromotionPage';
-import PromotionDetailPage from 'features/promotion/PromotionDetailPage';
-import EditPromotionPage from 'features/promotion/EditPromotionPage';
+import InStoreSalesPage from 'features/sales/pages/InStoreSalesPage';
+import InStoreSalesHistoryPage from 'features/sales/pages/InStoreSalesHistoryPage';
+import InStoreSaleDetailPage from 'features/sales/pages/InStoreSaleDetailPage';
+import PromotionPage from 'features/promotion/pages/PromotionPage';
+import AddPromotionPage from 'features/promotion/pages/AddPromotionPage';
+import PromotionDetailPage from 'features/promotion/pages/PromotionDetailPage';
+import EditPromotionPage from 'features/promotion/pages/EditPromotionPage';
 
 // Returns Management (Đổi trả / Hoàn hàng)
 import ReturnsPage from 'features/returns/ReturnsPage';
@@ -58,9 +59,9 @@ import FacebookPOSPage from 'features/facebook/FacebookPOSPage';
 import StoreChatPage from 'features/chat/StoreChatPage';
 import ChatSettingsPage from 'features/chat/ChatSettingsPage';
 // Customer Addresses
-import CustomerAddressPage from 'features/shippingaddress/CustomerAddressPage';
-import AddAddressPage from 'features/shippingaddress/AddAddressPage';
-import EditAddressPage from 'features/shippingaddress/EditAddressPage';
+import CustomerAddressPage from 'features/shippingaddress/pages/CustomerAddressPage';
+import AddAddressPage from 'features/shippingaddress/pages/AddAddressPage';
+import EditAddressPage from 'features/shippingaddress/pages/EditAddressPage';
 // Số đo cơ thể (gợi ý size / thử đồ ảo)
 import BodyProfilePage from 'features/fitting/BodyProfilePage';
 import TryOnHistoryPage from 'features/tryon/TryOnHistoryPage';
@@ -98,15 +99,21 @@ export default createBrowserRouter([
     // Trang shop mở được cho cả khách chưa đăng nhập; các trang còn lại bắt buộc đăng nhập (RequireAuth).
     element: <OptionalLayout />,
     children: [
-      { path: '/', element: <ShopPage /> },
-      { path: '/shop/products/:productId', element: <ShopProductPage /> },
-      { path: '/shop/category/:categoryId', element: <ShopCollectionPage /> },
-      { path: '/shop/best-sellers', element: <ShopCollectionPage key="best" collection="best_selling" /> },
-      { path: '/shop/new-arrivals', element: <ShopCollectionPage key="new" collection="newest" /> },
-      { path: '/shop/sale', element: <ShopCollectionPage key="sale" collection="sale" /> },
-      // Phối đồ theo dịp / ngân sách (module outfit)
-      { path: '/outfit', element: <OutfitPage /> },
-      { path: '/tracking/:orderNumber', element: <OrderTrackingPage /> },
+      {
+        // Trang cửa hàng: khách chưa đăng nhập và khách hàng; tài khoản quản trị bị đưa về Bảng điều khiển
+        element: <GuestOrCustomer />,
+        children: [
+          { path: '/', element: <ShopPage /> },
+          { path: '/shop/products/:productId', element: <ShopProductPage /> },
+          { path: '/shop/category/:categoryId', element: <ShopCollectionPage /> },
+          { path: '/shop/best-sellers', element: <ShopCollectionPage key="best" collection="best_selling" /> },
+          { path: '/shop/new-arrivals', element: <ShopCollectionPage key="new" collection="newest" /> },
+          { path: '/shop/sale', element: <ShopCollectionPage key="sale" collection="sale" /> },
+          // Phối đồ theo dịp / ngân sách (module outfit)
+          { path: '/outfit', element: <OutfitPage /> },
+          { path: '/tracking/:orderNumber', element: <OrderTrackingPage /> }
+        ]
+      },
       {
         element: <RequireAuth />,
         children: [
@@ -122,6 +129,8 @@ export default createBrowserRouter([
             children: [
               { path: '/cart', element: <CartPage /> },
               { path: '/checkout', element: <CheckoutPage /> },
+              // Khách gửi yêu cầu trả hàng & hoàn tiền (trang riêng, trước là hộp thoại ở chi tiết đơn)
+              { path: '/orders/:id/return', element: <OrderReturnPage /> },
               { path: '/order-success', element: <OrderSuccessPage /> }
             ]
           },

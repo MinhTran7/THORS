@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import {
   Alert,
   Autocomplete,
@@ -439,9 +439,6 @@ export default function CountsPage() {
         }
         action={
           <Stack direction="row" spacing={1}>
-            <Button variant="outlined" component={Link} to="/warehouse/inventory">
-              Quay lại kho
-            </Button>
             <Button variant="contained" onClick={() => setForm({ variant })}>
               Lập phiếu kiểm kê
             </Button>

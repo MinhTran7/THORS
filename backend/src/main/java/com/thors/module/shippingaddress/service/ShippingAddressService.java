@@ -1,7 +1,6 @@
 package com.thors.module.shippingaddress.service;
 
 import com.thors.common.ApiException;
-import com.thors.module.account.entity.Account;
 import com.thors.module.shippingaddress.dto.ShippingAddressRequest;
 import com.thors.module.shippingaddress.dto.ShippingAddressResponse;
 import com.thors.module.shippingaddress.entity.ShippingAddress;
@@ -15,91 +14,76 @@ import java.util.List;
 public class ShippingAddressService {
 
     private static final int MAX_ADDRESSES = 5;
+
     private final ShippingAddressRepository addresses;
+    private final ShippingAddressValidator validator;
 
-    public ShippingAddressService(ShippingAddressRepository addresses) {
+    public ShippingAddressService(ShippingAddressRepository addresses, ShippingAddressValidator validator) {
         this.addresses = addresses;
+        this.validator = validator;
     }
 
-    public List<ShippingAddressResponse> list(Account actor) {
-        return addresses.findAll(customerId(actor)).stream().map(ShippingAddressResponse::from).toList();
+    public List<ShippingAddressResponse> list(int userId) {
+        return addresses.findAll(userId).stream().map(ShippingAddressResponse::from).toList();
     }
 
-    public ShippingAddressResponse detail(Account actor, int addressId) {
-        return ShippingAddressResponse.from(find(customerId(actor), addressId));
-    }
-
-    @Transactional
-    public ShippingAddressResponse create(Account actor, ShippingAddressRequest request) {
-        int userId = customerId(actor);
-        ShippingAddressRequest data = validate(request);
-        int count = addresses.count(userId);
-        if (count >= MAX_ADDRESSES) {
-            throw new ApiException(409, "ADDRESS_LIMIT", "Bạn chỉ được lưu tối đa 5 địa chỉ giao hàng.");
-        }
-        boolean makeDefault = count == 0 || Boolean.TRUE.equals(data.isDefault());
-        if (makeDefault) addresses.clearDefault(userId);
-        int id = addresses.insert(userId, data, makeDefault);
-        return ShippingAddressResponse.from(find(userId, id));
-    }
-
-    @Transactional
-    public ShippingAddressResponse update(Account actor, int addressId, ShippingAddressRequest request) {
-        int userId = customerId(actor);
-        find(userId, addressId);
-        ShippingAddressRequest data = validate(request);
-        addresses.update(userId, addressId, data);
-        if (Boolean.TRUE.equals(data.isDefault())) {
-            addresses.setDefault(userId, addressId);
-        }
+    public ShippingAddressResponse detail(int userId, int addressId) {
         return ShippingAddressResponse.from(find(userId, addressId));
     }
 
     @Transactional
-    public void delete(Account actor, int addressId) {
-        int userId = customerId(actor);
-        if (find(userId, addressId).isDefault()) {
+    public void create(int userId, ShippingAddressRequest request) {
+        ShippingAddress address = validator.validate(userId, 0, request);
+        addresses.lockCustomer(userId);
+        int count = addresses.count(userId);
+        if (count >= MAX_ADDRESSES) {
+            throw new ApiException(409, "ADDRESS_LIMIT", "Bạn chỉ được lưu tối đa " + MAX_ADDRESSES + " địa chỉ giao hàng.");
+        }
+        if (count == 0) {
+            address = address.withDefault(true);
+        } else if (address.isDefault()) {
+            addresses.clearDefault(userId);
+        }
+        addresses.insert(address);
+    }
+
+    @Transactional
+    public void update(int userId, int addressId, ShippingAddressRequest request) {
+        ShippingAddress address = validator.validate(userId, addressId, request);
+        lockAndFind(userId, addressId);
+        addresses.update(address);
+        if (address.isDefault()) {
+            makeDefault(userId, addressId);
+        }
+    }
+
+    @Transactional
+    public void setDefault(int userId, int addressId) {
+        lockAndFind(userId, addressId);
+        makeDefault(userId, addressId);
+    }
+
+    @Transactional
+    public void delete(int userId, int addressId) {
+        if (lockAndFind(userId, addressId).isDefault()) {
             throw new ApiException(409, "DEFAULT_ADDRESS_CANNOT_DELETE",
                     "Không thể xóa địa chỉ mặc định. Vui lòng chọn địa chỉ khác làm mặc định trước.");
         }
         addresses.softDelete(userId, addressId);
     }
 
-    private static int customerId(Account actor) {
-        if (actor == null || !"CUSTOMER".equals(actor.role())) {
-            throw new ApiException(403, "CUSTOMER_ONLY", "Chỉ khách hàng mới được quản lý địa chỉ giao hàng.");
-        }
-        return actor.id();
+    private ShippingAddress lockAndFind(int userId, int addressId) {
+        addresses.lockCustomer(userId);
+        return find(userId, addressId);
+    }
+
+    private void makeDefault(int userId, int addressId) {
+        addresses.clearDefault(userId);
+        addresses.markDefault(userId, addressId);
     }
 
     private ShippingAddress find(int userId, int addressId) {
         return addresses.findById(userId, addressId)
                 .orElseThrow(() -> new ApiException(404, "ADDRESS_NOT_FOUND", "Không tìm thấy địa chỉ giao hàng."));
-    }
-
-    private static ShippingAddressRequest validate(ShippingAddressRequest r) {
-        if (r == null) throw new ApiException(400, "ADDRESS_REQUIRED", "Vui lòng nhập thông tin địa chỉ.");
-        String phone = text(r.phone(), "Số điện thoại", 1, 20).replaceAll("[\\s.-]", "");
-        if (!phone.matches("0\\d{9}")) {
-            throw new ApiException(400, "PHONE_INVALID", "Số điện thoại phải gồm 10 chữ số và bắt đầu bằng số 0.");
-        }
-        return new ShippingAddressRequest(
-                text(r.recipientName(), "Họ và tên người nhận", 2, 100),
-                phone,
-                text(r.provinceCode(), "Tỉnh/Thành phố", 1, 20),
-                text(r.provinceName(), "Tỉnh/Thành phố", 1, 100),
-                text(r.wardCode(), "Phường/Xã", 1, 20),
-                text(r.wardName(), "Phường/Xã", 1, 100),
-                text(r.addressDetail(), "Số nhà, tên đường", 2, 255),
-                r.isDefault());
-    }
-
-    private static String text(String value, String label, int min, int max) {
-        String result = value == null ? "" : value.trim();
-        if (result.isEmpty()) throw new ApiException(400, "ADDRESS_INVALID", label + " là bắt buộc.");
-        if (result.length() < min || result.length() > max) {
-            throw new ApiException(400, "ADDRESS_INVALID", label + " phải từ " + min + " đến " + max + " ký tự.");
-        }
-        return result;
     }
 }

@@ -29,6 +29,7 @@ import { brand, cardSx, fs } from '../tokens';
 import { OutlineButton } from '../components/Brand';
 import { RoleChip, StatusPill } from '../components/Chips';
 import { EmptyRow, FilterSelect, PageHeader, Pager, SearchField, bodyCellSx, headCellSx } from '../components/Blocks';
+import { PAGE_TYPE } from 'themes/pageType';
 import ResetPasswordDialog from '../components/ResetPasswordDialog';
 import { useToast } from '../components/Toast';
 import UserAvatar from '../components/UserAvatar';
@@ -44,6 +45,7 @@ const cellSx = { ...bodyCellSx, py: 1 };
 
 // Độ rộng theo phần trăm: cột cố định (không xê dịch giữa các trang) mà vẫn dàn đều hết chiều ngang.
 const COLUMNS = [
+  ['STT', 56],
   ['Tài khoản', '22%'],
   ['Email', '25%'],
   ['Vai trò', '15%'],
@@ -221,30 +223,33 @@ export default function AccountListPage() {
             <TableHead>
               <TableRow>
                 {COLUMNS.map(([label, width]) => (
-                  <TableCell key={label} sx={{ ...headCellSx, width }}>
+                  <TableCell key={label} align={label === 'STT' ? 'center' : undefined} sx={{ ...headCellSx, width }}>
                     {label}
                   </TableCell>
                 ))}
               </TableRow>
             </TableHead>
             <TableBody>
-              {items.map((account) => {
+              {items.map((account, index) => {
                 const locked = account.status === 'LOCKED';
                 const state = lockState(account);
                 const hasRequest = requested.has(account.id);
                 const meta = ACCOUNT_STATUS[account.status];
                 return (
                   <TableRow key={account.id} hover>
+                    <TableCell align="center" sx={{ ...cellSx, color: brand.muted }}>
+                      {page * PAGE_SIZE + index + 1}
+                    </TableCell>
                     <TableCell sx={cellSx}>
                       <Stack direction="row" spacing={1.5} alignItems="center">
                         <UserAvatar name={account.fullName} src={account.avatarUrl} size={32} />
-                        <Typography noWrap title={account.fullName} sx={{ fontWeight: 600, color: brand.ink, fontSize: fs.body, minWidth: 0 }}>
+                        <Typography noWrap title={account.fullName} sx={{ fontWeight: 600, color: brand.ink, fontSize: PAGE_TYPE.td, minWidth: 0 }}>
                           {account.fullName}
                         </Typography>
                       </Stack>
                     </TableCell>
                     <TableCell sx={cellSx}>
-                      <Typography noWrap title={account.email} sx={{ color: brand.muted, fontSize: fs.body }}>
+                      <Typography noWrap title={account.email} sx={{ color: brand.muted, fontSize: PAGE_TYPE.td }}>
                         {account.email}
                       </Typography>
                     </TableCell>
@@ -304,7 +309,7 @@ export default function AccountListPage() {
                   </TableRow>
                 );
               })}
-              {!list.isLoading && items.length === 0 && <EmptyRow colSpan={5}>Không có tài khoản nào khớp với tìm kiếm.</EmptyRow>}
+              {!list.isLoading && items.length === 0 && <EmptyRow colSpan={6}>Không có tài khoản nào khớp với tìm kiếm.</EmptyRow>}
             </TableBody>
           </Table>
         </Box>

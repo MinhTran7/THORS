@@ -264,7 +264,7 @@ try {
   await draftDialog.getByText(/còn thiếu —/).waitFor();
   assert.equal(await draftDialog.getByRole('cell', { name: '—', exact: true }).count() >= 1, true);
   const cells = await draftDialog.getByRole('row').nth(1).getByRole('cell').allInnerTexts();
-  assert.equal(cells[4], '—', `"Còn thiếu" of a draft is "—", not 0 (row: ${cells.join(' | ')})`);
+  assert.equal(cells[5], '—', `"Còn thiếu" of a draft is "—", not 0 (row: ${cells.join(' | ')})`);
   assert.equal(await draftDialog.getByRole('button', { name: 'Gửi xác nhận', exact: true }).count(), 0);
   await draftDialog.getByRole('button', { name: 'Sao chép thành phiếu nháp', exact: true }).waitFor();
   await draftDialog.getByRole('button', { name: 'Xác nhận đặt hàng', exact: true }).click();

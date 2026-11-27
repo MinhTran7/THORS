@@ -26,7 +26,7 @@ const shortTime = (value) => {
  * chưa đọc) bên trái, khung trò chuyện bên phải. Chủ shop và người nhà dùng chung.
  */
 export default function StoreChatPage() {
-  useCrumbs(['Bán hàng', 'Tin nhắn']);
+  useCrumbs(['Tin nhắn']);
   const { account } = useAuth();
   const isOwner = account?.role === 'OWNER';
   const { mutate } = useSWRConfig();

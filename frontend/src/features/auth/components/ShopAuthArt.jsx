@@ -8,8 +8,20 @@ const STARS = [
   [546, 262, 1.7],
   [256, 424, 0.9],
   [516, 420, 1.1],
-  [560, 170, 0.7, '#FFE27A']
+  [560, 170, 0.7, '#E9C98A']
 ];
+
+// Màu hình thẻ treo theo trang bán hàng (đỏ rượu + kem), thay cho tông hồng / xanh cũ
+const ART = {
+  ribbonFrom: '#6E1F1F',
+  ribbonTo: '#8A2B2B',
+  tag: '#F3E3DF',
+  tagLines: '#E3BDB6',
+  badge: '#FFFFFF',
+  flower: '#8A2B2B',
+  star: '#D9A441',
+  shadow: '#4A1717'
+};
 
 export function ThorsLogo({ size = 40 }) {
   return (
@@ -65,11 +77,11 @@ export default function ShopAuthArt() {
     <svg className="shop-auth__art" viewBox="200 40 360 430" aria-hidden="true">
       <defs>
         <linearGradient id="shopRibbon" x1="0" x2="1">
-          <stop offset="0" stopColor="#3E4C85" />
-          <stop offset="1" stopColor="#5566A6" />
+          <stop offset="0" stopColor={ART.ribbonFrom} />
+          <stop offset="1" stopColor={ART.ribbonTo} />
         </linearGradient>
         <filter id="shopShadow" x="-50%" y="-50%" width="200%" height="200%">
-          <feDropShadow dx="0" dy="12" stdDeviation="10" floodColor="#6B4A30" floodOpacity="0.16" />
+          <feDropShadow dx="0" dy="12" stdDeviation="10" floodColor={ART.shadow} floodOpacity="0.14" />
         </filter>
       </defs>
 
@@ -81,8 +93,8 @@ export default function ShopAuthArt() {
           strokeWidth="9"
           strokeLinecap="round"
         />
-        <rect x="0" y="40" width="140" height="196" rx="4" fill="#FBD3DF" filter="url(#shopShadow)" />
-        <g opacity="0.35" stroke="#F4AFC6" strokeWidth="1.5" fill="none">
+        <rect x="0" y="40" width="140" height="196" rx="4" fill={ART.tag} filter="url(#shopShadow)" />
+        <g opacity="0.5" stroke={ART.tagLines} strokeWidth="1.5" fill="none">
           {Array.from({ length: 9 }, (_, i) => (
             <path key={i} d={`M${8 + i * 15} 70l6 8 6-8M${8 + i * 15} 82l6 8 6-8`} />
           ))}
@@ -93,9 +105,9 @@ export default function ShopAuthArt() {
         <text x="70" y="172" textAnchor="middle" className="shop-auth__art-tagline">
           STYLE · EVERYDAY
         </text>
-        <circle cx="128" cy="62" r="54" fill="#F3EFE8" filter="url(#shopShadow)" />
-        <path d={FLOWER} fill="#E7849F" />
-        <circle cx="96" cy="40" r="5" fill="#F3EFE8" />
+        <circle cx="128" cy="62" r="54" fill={ART.badge} filter="url(#shopShadow)" />
+        <path d={FLOWER} fill={ART.flower} />
+        <circle cx="96" cy="40" r="5" fill={ART.badge} />
         <g transform="rotate(-20 128 62)" fill="#fff" textAnchor="middle">
           <text x="128" y="58" className="shop-auth__art-thanks">
             thank you!
@@ -106,7 +118,7 @@ export default function ShopAuthArt() {
         </g>
       </g>
 
-      {STARS.map(([x, y, s, color = '#FFD43B']) => (
+      {STARS.map(([x, y, s, color = ART.star]) => (
         <path key={`${x}-${y}`} d={STAR} transform={`translate(${x} ${y}) scale(${s})`} fill={color} />
       ))}
     </svg>

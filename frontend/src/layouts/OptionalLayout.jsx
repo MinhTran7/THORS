@@ -24,6 +24,7 @@ const STOREFRONT_PATHS = [
 const CUSTOMER_STOREFRONT_PATHS = [
   '/orders',
   '/orders/:id',
+  '/orders/:id/return',
   '/profile',
   '/profile/edit',
   '/profile/password',

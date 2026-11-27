@@ -21,17 +21,17 @@ import {
 } from '@mui/material';
 
 import {
-  ArrowLeftOutlined,
   EditOutlined,
   InfoCircleOutlined,
   PictureOutlined
 } from '@ant-design/icons';
 
 import { getProductById, setVariantOnline } from '../../services/productService';
+import { PAGE_TYPE, pageSubtitleSx, pageTitleSx } from 'themes/pageType';
 import { useAuth } from 'features/auth/AuthProvider';
 import SizeChartEditor from 'features/fitting/SizeChartEditor';
 import ProductStyleEditor from 'features/outfit/ProductStyleEditor';
-import { C, cardSx, outlineButtonSx, primaryButtonSx } from '../shippingaddress/theme';
+import { C, cardSx, primaryButtonSx } from '../shippingaddress/theme';
 import { descriptionToText } from './productDescription';
 
 // Switch thu nhỏ theo Design System
@@ -254,13 +254,6 @@ export default function ProductDetailPage() {
         <Alert severity="error" sx={{ mb: 2.5, borderRadius: 2.5, fontSize: 13.5, fontWeight: 600 }}>
           {error || 'Không tìm thấy thông tin sản phẩm.'}
         </Alert>
-
-        <Button
-          onClick={() => navigate('/products')}
-          sx={outlineButtonSx}
-        >
-          Quay lại danh sách sản phẩm
-        </Button>
       </Box>
     );
   }
@@ -323,29 +316,13 @@ export default function ProductDetailPage() {
     >
       {/* PAGE HEADER */}
       <Box sx={{ mb: 3.5 }}>
-        <Button
-          startIcon={<ArrowLeftOutlined />}
-          onClick={() => navigate('/products')}
-          sx={{
-            textTransform: 'none',
-            fontSize: 13,
-            color: C.muted,
-            mb: 1.5,
-            p: 0,
-            '&:hover': { bgcolor: 'transparent', color: '#0F172A' }
-          }}
-        >
-          Quay lại danh sách sản phẩm
-        </Button>
-
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
           <Box>
             <Typography
               variant="h3"
               sx={{
-                fontWeight: 800,
-                color: '#0F172A',
-                fontSize: { xs: 22, sm: 26 }
+                ...pageTitleSx,
+                color: '#0F172A'
               }}
             >
               Chi tiết sản phẩm
@@ -353,10 +330,9 @@ export default function ProductDetailPage() {
 
             <Typography
               sx={{
-                fontSize: 13.5,
+                ...pageSubtitleSx,
                 color: C.muted,
-                mt: 0.5,
-                lineHeight: 1.6
+                mt: 0.5
               }}
             >
               Xem toàn bộ thông tin giá bán, hình ảnh, ma trận biến thể và tồn kho của sản phẩm
@@ -616,7 +592,7 @@ export default function ProductDetailPage() {
                   '& th': {
                     bgcolor: C.surface,
                     color: C.muted,
-                    fontSize: 12,
+                    fontSize: PAGE_TYPE.th,
                     fontWeight: 700,
                     textTransform: 'uppercase',
                     letterSpacing: 0.5,
@@ -626,13 +602,16 @@ export default function ProductDetailPage() {
                   '& td': {
                     borderColor: C.borderLight,
                     py: 2,
-                    fontSize: 13.5,
+                    fontSize: PAGE_TYPE.td,
                     color: C.text
                   }
                 }}
               >
                 <TableHead>
                   <TableRow>
+                    <TableCell align="center" sx={{ width: 64, pl: 2 }}>
+                      STT
+                    </TableCell>
                     <TableCell sx={{ pl: 3 }}>SIZE</TableCell>
                     <TableCell>MÀU</TableCell>
                     <TableCell>MÃ BIẾN THỂ</TableCell>
@@ -650,7 +629,7 @@ export default function ProductDetailPage() {
                 </TableHead>
 
                 <TableBody>
-                  {variants.map((variant) => {
+                  {variants.map((variant, index) => {
                     const stock = Number(variant.stockQuantity ?? 0);
                     const sellable = Number(variant.sellableQuantity ?? stock);
                     // Ngưỡng tối thiểu đặt ở màn hình Tồn kho (null = chưa đặt => không báo "sắp hết")
@@ -689,17 +668,19 @@ export default function ProductDetailPage() {
                         hover
                         sx={{ '&:hover': { bgcolor: '#FAFCFE' } }}
                       >
-                        <TableCell sx={{ pl: 3, fontSize: 13.5, fontWeight: 700, color: '#0F172A' }}>
+                        <TableCell align="center" sx={{ pl: 2, color: `${C.muted} !important` }}>
+                          {index + 1}
+                        </TableCell>
+                        <TableCell sx={{ pl: 3, fontWeight: 700, color: '#0F172A' }}>
                           {variant.size || '—'}
                         </TableCell>
 
-                        <TableCell sx={{ fontSize: 13.5, color: '#334155' }}>
+                        <TableCell sx={{ color: '#334155' }}>
                           {variant.color || '—'}
                         </TableCell>
 
                         <TableCell
                           sx={{
-                            fontSize: 12.5,
                             color: C.muted
                           }}
                         >
@@ -712,19 +693,19 @@ export default function ProductDetailPage() {
                           )}
                         </TableCell>
 
-                        <TableCell sx={{ fontSize: 13.5, fontWeight: 800, color: '#0F172A' }}>
+                        <TableCell sx={{ fontWeight: 800, color: '#0F172A' }}>
                           {formatPrice(variant.price)}
                         </TableCell>
 
-                        <TableCell sx={{ fontSize: 13.5, fontWeight: 800, color: stock <= 0 ? '#DC2626' : '#0F172A' }}>
+                        <TableCell sx={{ fontWeight: 800, color: stock <= 0 ? '#DC2626' : '#0F172A' }}>
                           {stock}
                           {sellable !== stock && (
-                            <Box component="span" sx={{ fontSize: 12, fontWeight: 600, color: C.muted, ml: 0.75 }}>
+                            <Box component="span" sx={{ fontSize: PAGE_TYPE.tdSub, fontWeight: 600, color: C.muted, ml: 0.75 }}>
                               (bán được {sellable})
                             </Box>
                           )}
                           {minStock != null && (
-                            <Typography sx={{ fontSize: 11.5, color: C.muted, fontWeight: 500 }}>
+                            <Typography sx={{ fontSize: PAGE_TYPE.tdSub, color: C.muted, fontWeight: 500 }}>
                               Ngưỡng tối thiểu: {minStock}
                             </Typography>
                           )}
@@ -733,7 +714,7 @@ export default function ProductDetailPage() {
                         {/* VỊ TRÍ KỆ: kệ + tầng đang chứa hàng (xếp kệ ở module Kho), phần còn lại = chưa xếp kệ */}
                         <TableCell>
                           {shelves.length === 0 && stock <= 0 ? (
-                            <Typography sx={{ fontSize: 13, color: '#94A3B8' }}>—</Typography>
+                            <Typography sx={{ fontSize: PAGE_TYPE.td, color: '#94A3B8' }}>—</Typography>
                           ) : (
                             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignItems: 'center' }}>
                               {shelves.map((item) => (
@@ -763,7 +744,7 @@ export default function ProductDetailPage() {
                                 </Tooltip>
                               ))}
                               {unshelved > 0 && (
-                                <Typography component="span" sx={{ fontSize: 12, color: '#B45309', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                <Typography component="span" sx={{ fontSize: PAGE_TYPE.tdSub, color: '#B45309', fontWeight: 600, whiteSpace: 'nowrap' }}>
                                   {shelves.length ? `+${unshelved} chưa xếp kệ` : `Chưa xếp kệ (${unshelved})`}
                                 </Typography>
                               )}
@@ -825,7 +806,7 @@ export default function ProductDetailPage() {
                   {variants.length === 0 && (
                     <TableRow>
                       <TableCell
-                        colSpan={8}
+                        colSpan={9}
                         align="center"
                         sx={{ py: 5 }}
                       >

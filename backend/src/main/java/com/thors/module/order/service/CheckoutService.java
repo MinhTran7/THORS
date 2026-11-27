@@ -6,7 +6,8 @@ import com.thors.module.order.dto.CreateOrderRequest;
 import com.thors.module.order.repository.CheckoutRepository;
 import com.thors.module.promotion.entity.Promotion;
 import com.thors.module.promotion.repository.PromotionRepository;
-import com.thors.module.promotion.service.PromotionService;
+import com.thors.module.promotion.dto.SalePrice;
+import com.thors.module.promotion.service.PricingService;
 
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
@@ -36,27 +37,27 @@ public class CheckoutService {
     private final CartRepository cartRepository;
     private final AddressRepository addressRepository;
     private final PromotionRepository promotionRepository;
-    private final PromotionService promotionService;
+    private final PricingService pricing;
     private final OrderService orderService;
 
     public CheckoutService(CheckoutRepository checkoutRepository,
                            CartRepository cartRepository,
                            AddressRepository addressRepository,
                            PromotionRepository promotionRepository,
-                           PromotionService promotionService,
+                           PricingService pricing,
                            OrderService orderService) {
         this.checkoutRepository = checkoutRepository;
         this.cartRepository = cartRepository;
         this.addressRepository = addressRepository;
         this.promotionRepository = promotionRepository;
-        this.promotionService = promotionService;
+        this.pricing = pricing;
         this.orderService = orderService;
     }
 
     private record Receiver(String name, String phone, String address) {
     }
 
-    private record Line(int detailId, int quantity, BigDecimal unitPrice, Map<String, Object> detail) {
+    private record Line(int detailId, int quantity, SalePrice price, Map<String, Object> detail) {
     }
 
     @Transactional
@@ -101,7 +102,7 @@ public class CheckoutService {
 
         BigDecimal itemsAmount = BigDecimal.ZERO;
         for (Line line : lines) {
-            itemsAmount = itemsAmount.add(line.unitPrice().multiply(BigDecimal.valueOf(line.quantity())));
+            itemsAmount = itemsAmount.add(line.price().price().multiply(BigDecimal.valueOf(line.quantity())));
         }
 
         Integer promotionId = null;
@@ -151,7 +152,7 @@ public class CheckoutService {
 
         for (Line line : lines) {
             Map<String, Object> d = line.detail();
-            checkoutRepository.insertItem(orderId, line.detailId(), line.quantity(), line.unitPrice(),
+            checkoutRepository.insertItem(orderId, line.detailId(), line.quantity(), line.price(),
                     String.valueOf(d.get("productName")), String.valueOf(d.get("size")), String.valueOf(d.get("color")));
         }
 
@@ -198,8 +199,8 @@ public class CheckoutService {
         if (quantity > stock) {
             throw new IllegalArgumentException("\"" + name + "\" chỉ còn " + stock + " sản phẩm trong kho.");
         }
-        BigDecimal unitPrice = promotionService.salePrice(((Number) detail.get("productId")).intValue(), toMoney(detail.get("price")));
-        return new Line(detailId, quantity, unitPrice, detail);
+        SalePrice price = pricing.quote(((Number) detail.get("productId")).intValue(), toMoney(detail.get("price")));
+        return new Line(detailId, quantity, price, detail);
     }
 
     private Receiver resolveReceiver(int userId, CreateOrderRequest request) {
