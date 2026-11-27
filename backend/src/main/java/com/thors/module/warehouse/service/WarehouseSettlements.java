@@ -11,6 +11,7 @@ import java.time.LocalDate;
 import java.util.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -302,7 +303,8 @@ public class WarehouseSettlements {
     }
 
     /** Entries of a return (source) or a receipt (target / exchange source), debt and supplier credit. */
-    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    // Chỉ đọc: chạy chung transaction nếu đã có, không tự mở transaction mới (mỗi transaction tốn thêm ~7 lượt gửi lệnh tới DB cloud)
+    @Transactional(propagation = Propagation.SUPPORTS)
     public Map<String, Object> forDocument(Account a, int id) {
         policy.view(a);
         var doc =
@@ -337,7 +339,8 @@ public class WarehouseSettlements {
      * Per supplier: payments, refunds, offsets, held credit balance and purchase debt. Debt only sums
      * receipts whose pre-tracking payment is declared; the others are counted separately.
      */
-    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    // Chỉ đọc: chạy chung transaction nếu đã có, không tự mở transaction mới (mỗi transaction tốn thêm ~7 lượt gửi lệnh tới DB cloud)
+    @Transactional(propagation = Propagation.SUPPORTS)
     public List<Map<String, Object>> credits(Account a) {
         policy.view(a);
         var bySupplier = new LinkedHashMap<String, Map<String, Object>>();

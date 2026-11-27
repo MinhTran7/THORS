@@ -42,19 +42,33 @@ public class ConfiguredOtpSender implements OtpSender {
           503,
           "DELIVERY_NOT_CONFIGURED",
           "Kênh gửi OTP chưa được cấu hình. Vui lòng liên hệ người quản trị.");
+    // 300 giây -> 5 phút; số lẻ phút thì vẫn ghi theo giây.
+    boolean minutes = seconds % 60 == 0;
+    int amount = minutes ? seconds / 60 : seconds;
+    // SMS giữ không dấu (tin có dấu bị tính nhiều tin hơn); email viết có dấu.
     String text =
         "THORS: Ma xac minh cua ban la "
             + code
             + ". Co hieu luc "
-            + seconds
-            + " giay. Khong chia se ma nay.";
+            + amount
+            + (minutes ? " phut" : " giay")
+            + ". Khong chia se ma nay.";
     try {
       if ("EMAIL".equals(channel)) {
         var m = new SimpleMailMessage();
         m.setFrom(settings.delivery().emailFrom());
         m.setTo(dest);
         m.setSubject("THORS - Mã xác minh tài khoản");
-        m.setText(text);
+        m.setText(
+            "Xin chào,\n\n"
+                + "Mã xác minh THORS của bạn là: "
+                + code
+                + "\n\nMã có hiệu lực trong "
+                + amount
+                + (minutes ? " phút" : " giây")
+                + ". Vui lòng không chia sẻ mã này với bất kỳ ai.\n\n"
+                + "Nếu bạn không yêu cầu mã này, hãy bỏ qua email.\n\n"
+                + "Trân trọng,\nTHORS");
         mail.getObject().send(m);
       } else {
         var d = settings.delivery();

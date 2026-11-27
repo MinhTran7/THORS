@@ -26,7 +26,7 @@ const schema = Yup.object({
 
 function requirementsFor(value) {
   return [
-    { label: 'Ít nhất 10 ký tự', ok: value.length >= 10 },
+    { label: 'Ít nhất 6 ký tự', ok: value.length >= 6 },
     { label: 'Có chữ hoa và chữ thường', ok: isUppercaseChar(value) && isLowercaseChar(value) },
     { label: 'Có một chữ số', ok: isNumber(value) },
     { label: 'Có một ký tự đặc biệt', ok: isSpecialChar(value) }

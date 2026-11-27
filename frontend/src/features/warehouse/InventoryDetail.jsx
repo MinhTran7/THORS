@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import {
   Alert,
   Box,
@@ -66,6 +66,9 @@ function Threshold({ variant, onSaved }) {
     run(() => api(`/warehouse/inventory/${variant.detail_id}/threshold`, { method: 'PUT', body: { min } }), 'Đã lưu ngưỡng tồn tối thiểu.')
       .then(onSaved)
       .catch(() => {});
+  // Chỉ hiện 1 nút: chưa có ngưỡng hoặc đang sửa sang số khác → "Lưu ngưỡng"; đã lưu và không sửa → "Bỏ ngưỡng"
+  const saved = variant.min_stock_quantity;
+  const editing = saved == null || (value !== '' && Number(value) !== Number(saved));
   return (
     <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { sm: 'center' } }}>
       <TextField
@@ -77,21 +80,24 @@ function Threshold({ variant, onSaved }) {
         slotProps={{ htmlInput: { min: 0, step: 1 } }}
         helperText="So với số có thể bán. Để trống = chưa thiết lập; 0 là một ngưỡng."
       />
-      <Button
-        variant="contained"
-        disabled={busy || value === '' || Number(value) < 0 || !Number.isInteger(Number(value))}
-        onClick={() => save(Number(value))}
-      >
-        Lưu ngưỡng
-      </Button>
-      <Button disabled={busy || variant.min_stock_quantity == null} onClick={() => (setValue(''), save(null))}>
-        Bỏ ngưỡng
-      </Button>
+      {editing ? (
+        <Button
+          variant="contained"
+          disabled={busy || value === '' || Number(value) < 0 || !Number.isInteger(Number(value))}
+          onClick={() => save(Number(value))}
+        >
+          Lưu ngưỡng
+        </Button>
+      ) : (
+        <Button disabled={busy} onClick={() => (setValue(''), save(null))}>
+          Bỏ ngưỡng
+        </Button>
+      )}
     </Stack>
   );
 }
 
-function StockCard({ id, kind }) {
+function StockCard({ id, kind, variant }) {
   const [page, setPage] = useState(0);
   const [size, setSize] = useState(20);
   const [type, setType] = useState('');
@@ -148,8 +154,18 @@ function StockCard({ id, kind }) {
       <Typography variant="caption" color="text.secondary">
         {moves
           ? 'Chuyển vị trí không làm thay đổi tổng tồn.'
-          : 'Chỉ các nghiệp vụ làm thay đổi tổng tồn. “Tồn sau” tính ngược từ tồn hiện tại theo các biến động đã ghi.'}
+          : 'Chỉ các nghiệp vụ làm thay đổi tổng tồn. “Tồn sau” tính ngược từ tồn hiện tại theo các biến động đã ghi. Cột “Vị trí lúc ghi” là nơi hàng vào/ra tại thời điểm đó; xếp hoặc chuyển kệ sau này xem ở tab “Lịch sử chuyển vị trí”.'}
       </Typography>
+      {!moves && variant && (
+        // Vị trí HIỆN TẠI của biến thể, để không nhầm với cột "Vị trí lúc ghi" của từng dòng lịch sử
+        <Alert severity="info" icon={false}>
+          Hiện tại: tồn {number(variant.stock_quantity)} ·{' '}
+          {[
+            ...variant.location_rows.filter((l) => l.quantity > 0).map((l) => `${l.label}: ${number(l.quantity)}`),
+            ...(variant.unassigned_quantity > 0 ? [`Chưa xếp: ${number(variant.unassigned_quantity)}`] : [])
+          ].join(' · ') || 'chưa có hàng'}
+        </Alert>
+      )}
       {data?.ledger_gap ? (
         <Alert severity="info">
           Có {number(data.ledger_gap)} sản phẩm có từ trước khi hệ thống ghi lịch sử nên không có phiếu đi kèm.
@@ -189,7 +205,7 @@ function StockCard({ id, kind }) {
                     )
                   },
                   { key: 'balance_after', label: 'Tồn sau', align: 'right', render: (m) => number(m.balance_after) },
-                  { key: 'place', label: 'Vị trí', render: (m) => m.source_label || m.destination_label || 'Chưa xếp' },
+                  { key: 'place', label: 'Vị trí lúc ghi', render: (m) => m.source_label || m.destination_label || 'Chưa xếp' },
                   { key: 'actor_name', label: 'Người thực hiện' },
                   { key: 'reason', label: 'Ghi chú' }
                 ]
@@ -203,9 +219,15 @@ function StockCard({ id, kind }) {
 /** Variant detail (Tồn kho → Chi tiết): figures, locations, holds/orders, stock card and moves. */
 export default function InventoryDetail({ id, onClose, onChanged }) {
   const { owner } = useWarehouse();
-  const [tab, setTab] = useState(0);
+  const [rawTab, setTab] = useState(0);
   const [printing, setPrinting] = useState(false);
   const { data: v, error, mutate } = useSWR(`/warehouse/inventory/${id}`, api);
+  const hasOrders = Boolean(v && (v.holds.length || v.incoming.length || v.unheld_pending.length));
+  // Đang ở tab "Đơn giữ & đang đặt" mà tab bị làm mờ (hết đơn) thì quay về Tổng quan
+  const tab = rawTab === 2 && !hasOrders ? 0 : rawTab;
+  // Đường dẫn trang hiện tại (đang mở chi tiết) để trang Vị trí kho có nút "Quay lại chi tiết"
+  const here = useLocation();
+  const backQs = `&back=${encodeURIComponent(here.pathname + here.search)}`;
   return (
     <>
     <Dialog open onClose={onClose} fullWidth maxWidth="lg">
@@ -236,21 +258,19 @@ export default function InventoryDetail({ id, onClose, onChanged }) {
         ) : (
           <>
             <Tabs value={tab} onChange={(_, t) => setTab(t)} variant="scrollable" sx={{ mb: 2 }}>
-              <Tab label="Tổng quan" />
-              <Tab label={`Vị trí (${v.location_rows.filter((l) => l.quantity > 0).length})`} />
-              <Tab label={`Đơn giữ & đang đặt (${v.holds.length + v.incoming.length})`} />
-              <Tab label="Lịch sử biến động tồn kho" />
-              <Tab label="Lịch sử chuyển vị trí" />
+              <Tab value={0} label="Tổng quan" />
+              <Tab value={1} label={`Vị trí (${v.location_rows.filter((l) => l.quantity > 0).length})`} />
+              {/* Không có đơn giữ / phiếu đặt nào thì làm mờ tab này, không bấm vào được */}
+              <Tab value={2} disabled={!hasOrders} label={`Đơn giữ & đang đặt (${v.holds.length + v.incoming.length})`} />
+              <Tab value={3} label="Lịch sử biến động tồn kho" />
+              <Tab value={4} label="Lịch sử chuyển vị trí" />
             </Tabs>
             {tab === 0 && (
               <Stack spacing={2}>
-                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', sm: 'repeat(3, minmax(0, 1fr))', lg: 'repeat(6, minmax(0, 1fr))' }, gap: 1 }}>
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', sm: 'repeat(3, minmax(0, 1fr))' }, gap: 1 }}>
                   <Figure label="Tổng tồn" value={number(v.stock_quantity)} />
                   <Figure label="Đã xếp vị trí" value={number(v.assigned_quantity)} />
                   <Figure label="Chưa xếp vị trí" value={number(v.unassigned_quantity)} />
-                  <Figure label="Đang giữ cho đơn" value={number(v.held_quantity)} />
-                  <Figure label="Có thể bán" value={number(v.available_quantity)} hint="Tổng tồn − đang giữ" />
-                  <Figure label="Đang đặt chưa nhận" value={number(v.incoming_quantity)} hint="Không cộng vào tồn" />
                 </Box>
                 <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                   <Chip color={stockStateColor[v.stock_state]} variant="outlined" label={stockStateLabel[v.stock_state]} />
@@ -268,7 +288,7 @@ export default function InventoryDetail({ id, onClose, onChanged }) {
                     severity="warning"
                     action={
                       owner && (
-                        <Button color="inherit" size="small" component={Link} to={`/warehouse/locations?variant=${v.detail_id}&place=1`}>
+                        <Button color="inherit" size="small" component={Link} to={`/warehouse/locations?variant=${v.detail_id}&place=1${backQs}`}>
                           Xếp lên kệ
                         </Button>
                       )
@@ -299,11 +319,11 @@ export default function InventoryDetail({ id, onClose, onChanged }) {
                 )}
                 <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
                   {owner && (
-                    <Button variant="contained" component={Link} to={`/warehouse/locations?variant=${v.detail_id}&move=1`}>
+                    <Button variant="contained" component={Link} to={`/warehouse/locations?variant=${v.detail_id}&move=1${backQs}`}>
                       Xếp / chuyển vị trí
                     </Button>
                   )}
-                  <Button variant="outlined" component={Link} to={`/warehouse/locations?variant=${v.detail_id}`}>
+                  <Button variant="outlined" component={Link} to={`/warehouse/locations?variant=${v.detail_id}${backQs}`}>
                     Xem trên sơ đồ kho
                   </Button>
                   <Button variant="outlined" component={Link} to={`/warehouse/counts?variant=${v.detail_id}&new=1`}>
@@ -331,7 +351,7 @@ export default function InventoryDetail({ id, onClose, onChanged }) {
                           align: 'right',
                           render: (l) =>
                             l._key === 'unplaced' && l.quantity > 0 ? (
-                              <Button size="small" component={Link} to={`/warehouse/locations?variant=${v.detail_id}&place=1`}>
+                              <Button size="small" component={Link} to={`/warehouse/locations?variant=${v.detail_id}&place=1${backQs}`}>
                                 Xếp lên kệ
                               </Button>
                             ) : null
@@ -394,7 +414,7 @@ export default function InventoryDetail({ id, onClose, onChanged }) {
                 />
               </Stack>
             )}
-            {tab === 3 && <StockCard id={id} kind="stock" />}
+            {tab === 3 && <StockCard id={id} kind="stock" variant={v} />}
             {tab === 4 && <StockCard id={id} kind="move" />}
           </>
         )}

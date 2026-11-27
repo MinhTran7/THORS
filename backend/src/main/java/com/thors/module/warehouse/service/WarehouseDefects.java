@@ -10,6 +10,7 @@ import com.thors.module.account.entity.Account;
 import java.util.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -49,7 +50,8 @@ public class WarehouseDefects {
     }
 
     /** Mẫu lỗi để chọn: lỗi mặc định rồi đến các lỗi tự gõ đã từng dùng. */
-    @Transactional(readOnly = true)
+    // Chỉ đọc: chạy chung transaction nếu đã có, không tự mở transaction mới (mỗi transaction tốn thêm ~7 lượt gửi lệnh tới DB cloud)
+    @Transactional(propagation = Propagation.SUPPORTS)
     public List<String> types(Account a) {
         policy.view(a);
         requireColumns();
@@ -170,7 +172,8 @@ public class WarehouseDefects {
     }
 
     /** Danh sách chiếc lỗi theo trạng thái lỗi (mặc định đang lỗi), tìm theo mã hàng / tên sản phẩm. */
-    @Transactional(readOnly = true)
+    // Chỉ đọc: chạy chung transaction nếu đã có, không tự mở transaction mới (mỗi transaction tốn thêm ~7 lượt gửi lệnh tới DB cloud)
+    @Transactional(propagation = Propagation.SUPPORTS)
     public Map<String, Object> list(Account a, String status, String q) {
         policy.view(a);
         requireColumns();

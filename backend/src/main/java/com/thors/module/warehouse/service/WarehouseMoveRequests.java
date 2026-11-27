@@ -83,6 +83,8 @@ public class WarehouseMoveRequests {
         return row;
     }
 
+    // Chỉ đọc: chạy chung transaction nếu đã có, không tự mở transaction mới (mỗi transaction tốn thêm lượt gửi lệnh tới DB cloud)
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.SUPPORTS)
     public List<Map<String, Object>> list(Account a, String status) {
         policy.view(a);
         return s.migrated(() -> s.jdbc().queryForList(select() + " WHERE m.request_status IS NOT NULL AND (? IS NULL OR m.request_status=?)"
